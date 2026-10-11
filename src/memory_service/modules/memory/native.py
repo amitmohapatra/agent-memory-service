@@ -4,12 +4,14 @@ The rules are complete on their own and conservative on purpose: when the servic
 sure a sentence is memory-worthy it stores nothing (the raw message is still in the thread
 and the archive), and when it is not sure two memories are the same it keeps both. The
 release gate for this module is the *false-merge rate*, so every merge/supersede decision
-needs positive evidence (identical normalized text, identical subject+predicate, or an
-explicit replacement signal), and disagreeing numbers or negation always block a merge.
+needs positive evidence (identical normalized text, the same subject - the subject matcher's
+SAME, ``modules/memory/subjects.py`` - and predicate, or an explicit replacement signal), and
+disagreeing numbers or negation always block a merge.
 
 An optional ``LLMAssist`` extracts facts from the sentences no rule matched
-(``contextual_extraction``) and adjudicates the grey band of consolidation
-(``conflict_adjudication``); every consultation falls back to the native result, and with
+(``contextual_extraction``) and adjudicates what consolidation leaves open
+(``conflict_adjudication``): a stored memory on the same, or possibly the same, subject that
+no rule settled (ADR 0035). Every consultation falls back to the native result, and with
 assist disabled the module behaves exactly as without it.
 """
 
@@ -32,9 +34,10 @@ from memory_service.domain.enums import (
 from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.ids import content_hash
 from memory_service.domain.language import is_english
-from memory_service.domain.memory import CanonicalMemory, unverified_representation
+from memory_service.domain.memory import CanonicalMemory, lasting, unverified_representation
 from memory_service.domain.observation import Observation
 from memory_service.domain.predicates import is_single_valued
+from memory_service.domain.subjects import SubjectVerdict
 from memory_service.domain.text import ACKNOWLEDGEMENT, SENTENCE_BREAK, normalise_number
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.narrative import (
@@ -43,6 +46,14 @@ from memory_service.modules.memory.narrative import (
 )
 from memory_service.modules.memory.source_facts import CONFIDENCE as SOURCE_FACT_CONFIDENCE
 from memory_service.modules.memory.source_facts import extract_source_facts
+from memory_service.modules.memory.statements import (
+    RULE_KINDS,
+    Lexicon,
+    StatementLabel,
+    StatementLabeller,
+    most_salient,
+)
+from memory_service.modules.memory.subjects import NO_SUBJECT, SubjectMatcher, SubjectPair
 from memory_service.ports.intelligence import (
     ConsolidationOutcome,
     ContextualExtractor,
@@ -188,6 +199,48 @@ def _has_sentence_content(text: str) -> bool:
     return any(char.isalpha() for char in text) and not ACKNOWLEDGEMENT.fullmatch(text)
 
 
+def _sentence_spans(text: str, max_chars: int) -> list[tuple[int, int]]:
+    """``(start, end)`` of each sentence of ``text``, a sentence longer than ``max_chars``
+    cut at its last space before the limit (at the limit when it has none)."""
+    bounds = [0, *(i for brk in SENTENCE_BREAK.finditer(text) for i in brk.span()), len(text)]
+    spans: list[tuple[int, int]] = []
+    for first, end in zip(bounds[::2], bounds[1::2], strict=True):
+        start = first
+        while end - start > max_chars:
+            cut = text.rfind(" ", start + 1, start + max_chars + 1)
+            cut = cut if cut > start else start + max_chars
+            spans.append((start, cut))
+            start = cut
+        if end > start:
+            spans.append((start, end))
+    return spans
+
+
+#: The most verbatim pieces one turn keeps (``verbatim_windows``): twelve thousand characters
+#: at the default piece size, which covers anything said in a conversation. A pasted corpus
+#: is not a statement - a 2.1-million-character turn would have made a thousand permanent
+#: memories in one job - and the message itself keeps the rest (the thread, its archive, and
+#: the document path for files). A constant, not a setting.
+VERBATIM_MAX_PIECES = 6
+
+
+def verbatim_windows(text: str, max_chars: int) -> list[str]:
+    """``text`` in consecutive verbatim pieces of at most ``max_chars``, cut at sentence ends.
+
+    Each piece is a slice of ``text`` itself, never a re-joined or re-spaced copy, so an
+    exact value reads in a piece exactly as it was said.
+    """
+    if len(text) <= max_chars:
+        return [text] if text.strip() else []
+    pieces: list[tuple[int, int]] = []
+    for start, end in _sentence_spans(text, max_chars):
+        if pieces and end - pieces[-1][0] <= max_chars:
+            pieces[-1] = (pieces[-1][0], end)
+        else:
+            pieces.append((start, end))
+    return [piece for start, end in pieces if (piece := text[start:end].strip())]
+
+
 _CLAUSE_SPLIT = re.compile(
     r"\s*(?:,|;)?\s+(?:and|but)\s+(?=(?:my|i|i'm|we|please|call me)\b)", re.IGNORECASE
 )
@@ -236,14 +289,6 @@ _PREFERENCE = re.compile(
     r"can't stand|never use|always use|only use)\s+(.+)",
     re.IGNORECASE,
 )
-#: An imperative that says it is standing: "always ...", "never ...", "don't ever ...",
-#: "from now on ...". Unlike a bare imperative ("do not invent a sales number"), the
-#: sentence itself says it outlives the task, so it is kept as a lasting rule.
-_STANDING_RULE = re.compile(
-    r"^(?:please\s+)?(?:(?:always|never)\b|(?:don't|do not)\s+ever\b|"
-    r"(?:from now on|going forward|in (?:the )?future)\b[,:]?)\s*(.+)",
-    re.IGNORECASE,
-)
 _PREF_PLEASE = re.compile(
     r"^(?:please\s+)?(always|never|don't|do not|stop|keep)\s+(.+)", re.IGNORECASE
 )
@@ -267,19 +312,61 @@ _TASK = re.compile(
     r"tomorrow))\b",
     re.IGNORECASE,
 )
+#: The subject is a noun phrase of up to twelve words: "The master lock code for the
+#: hazardous materials cage in Warehouse 3 is 8492" names its thing in ten. It stopped at five,
+#: which left every precise name - a code, a supplier, a room - as a turn no rule could read.
+#: A subject longer than five words must read as a noun phrase (``_LONG_SUBJECT_STOP``).
 _FACT = re.compile(
-    r"^(?P<subject>(?:[Tt]he\s+)?[A-Za-z0-9][\w&.\-]*(?:\s+[A-Za-z0-9][\w&.\-]*){0,4}?)"
+    r"^(?P<subject>(?:[Tt]he\s+)?[A-Za-z0-9][\w&.\-]*(?:\s+[A-Za-z0-9][\w&.\-]*){0,11}?)"
     r"\s+(?P<pred>is|are|was|were|has|have|costs?|uses?|runs? on|belongs? to|owns?|reports? to|"
     r"is owned by|is located in|is due|starts?|ends?|expires?)\s+(?P<object>.+)$"
 )
+#: Words that make a long "subject" a clause rather than a noun phrase: a pronoun, a
+#: subordinating word or a conjunction means the text before the verb already says something
+#: ("The kids and I went to the beach and it was great", "The guy we hired last week is
+#: great", "Deployed the payment service to prod and the dashboard is green").
+_LONG_SUBJECT_STOP = frozenset(
+    {
+        *("i", "me", "we", "us", "you", "he", "him", "she", "her", "it", "they", "them"),
+        *("who", "whom", "whose", "which", "that", "when", "where", "while", "because"),
+        *("if", "although", "though", "unless", "whether", "and", "but"),
+    }
+)
+#: Possessives name an owner inside a clause ("...sent his report"), but the one that opens a
+#: phrase is its determiner: "Our primary supplier for heavy-duty pallets is Uline".
+_POSSESSIVES = frozenset({"my", "our", "your", "his", "her", "their"})
+_SHORT_SUBJECT_WORDS = 5
+
+
+def _noun_phrase(subject: str) -> bool:
+    """Whether the fact rule's subject reads as a thing rather than a clause: any subject of up
+    to five words (the rule's reach before long subjects); a longer one only with no pronoun,
+    conjunction or subordinating word, no possessive after its first word, and nothing that
+    reads as an event (``_EVENT_HINT``: "Yesterday John Smith sent the report and..."). A
+    sentence it refuses falls through to the rules after it. English only, like the rule:
+    no other language has a fact pattern to guard."""
+    words = subject.lower().split()
+    if len(words) <= _SHORT_SUBJECT_WORDS:
+        return True
+    return not (
+        _LONG_SUBJECT_STOP.intersection(words)
+        or _POSSESSIVES.intersection(words[1:])
+        or _EVENT_HINT.search(subject)
+    )
+
+
 _EVENT_HINT = re.compile(
     r"\b(yesterday|today|this morning|last night|just now|we shipped|we deployed|deployed|"
     r"released|failed|outage|incident|rolled back|merged|launched|migrated|happened)\b",
     re.IGNORECASE,
 )
-_QUESTION = re.compile(
-    r"[?\uff1f\u061f]\s*$|^(?:what|why|how|when|where|who|can you|could you|do you)\b", re.I
-)
+
+
+def is_question(sentence: str) -> bool:
+    """A question carries no fact to keep (``statements.Lexicon.is_question``): "When I ask
+    for a stock audit, always use a table" is not one."""
+    return Lexicon.default().is_question(sentence)
+
 
 _LIFETIME_BY_TYPE = {
     MemoryType.PREFERENCE: Lifetime.LONG_TERM,
@@ -314,7 +401,12 @@ _IMPORTANCE_BY_TYPE = {
 # --------------------------------------------------------------------------- llm assist
 
 _ASSIST_MAX_CHARS = 2000
+#: A pair with no subject on one side has nothing for the subject matcher to compare: it is
+#: worth asking about when it shares this much of its wording, as before ADR 0035.
 _ASSIST_MIN_SIMILARITY = 0.5
+#: a memory the adjudicator may be asked about: the memory, its lexical similarity, and the
+#: subject matcher's view of the pair
+_Uncertain = tuple[CanonicalMemory, float, SubjectPair]
 _ADJUDICATION_SYSTEM = (
     "Compare a NEW memory with an EXISTING one and answer with a verdict: 'same' when both "
     "state the same fact (paraphrase, no new information); 'update' when the new one gives a "
@@ -383,33 +475,54 @@ def _user_subject(ctx: MemoryExecutionContext) -> str:
     return f"user:{ctx.user_id}" if ctx.user_id else ctx.principal_id
 
 
-def default_visibility(mt: MemoryType, ctx: MemoryExecutionContext) -> Visibility:
-    """Who may read a memory of this type when the writer did not say."""
+#: Observations whose text is what the person said: a message, a decision they recorded,
+#: feedback they gave. An EVENT, an IMPORT or a FILE is a record the request carried rather
+#: than the user's own statement, and keeps the audience it always had.
+_STATEMENT_KINDS = frozenset(
+    {ObservationKind.MESSAGE, ObservationKind.DECISION, ObservationKind.FEEDBACK}
+)
+
+
+def said_by_user(observation: Observation) -> bool:
+    """Whether ``observation`` is a user's own words: written by the user rather than by an
+    agent (``Observation.agent_authored``), including a user's turn an agent harness relays."""
+    return (
+        bool(observation.user_id)
+        and observation.kind in _STATEMENT_KINDS
+        and not observation.agent_authored
+    )
+
+
+def default_visibility(
+    mt: MemoryType, ctx: MemoryExecutionContext, *, user_statement: bool = False
+) -> Visibility:
+    """Who may read a memory of this type when the writer did not say.
+
+    What a user says follows that user. ``user_statement`` (the memory is the user's own
+    words, ``said_by_user``) makes it USER: readable in every conversation of theirs and by
+    every agent acting for them, never by another user, wherever it was said. It used to be
+    the conversation's (THREAD), so "the cage code is 8492" said on Monday was out of reach
+    in Tuesday's chat. Sharing wider is explicit (WORKSPACE, TENANT), and so is keeping a
+    statement to one conversation (THREAD). What an agent writes keeps the rules below: its
+    working types stay with its run, its tasks and episodes with itself.
+    """
     if mt in (MemoryType.USER, MemoryType.PREFERENCE):
-        visibility = Visibility.USER if ctx.user_id else Visibility.PRIVATE
-    elif mt in (MemoryType.AGENT, MemoryType.TOOL, MemoryType.WORKING):
+        return Visibility.USER if ctx.user_id else Visibility.PRIVATE
+    if mt in (MemoryType.AGENT, MemoryType.TOOL, MemoryType.WORKING):
         # hand-off context flows down the run tree (child runs read it); nothing else does
-        visibility = Visibility.RUN if ctx.agent_run_id else Visibility.PRIVATE
-    elif mt is MemoryType.SHARED:
-        visibility = (
-            Visibility.AGENT_GROUP
-            if ctx.agent_group_id
-            else Visibility.THREAD
-            if ctx.thread_id
-            else Visibility.TENANT
-        )
-    elif ctx.thread_id:
-        visibility = Visibility.THREAD
-    elif ctx.user_id:
-        visibility = Visibility.USER
-    else:
-        visibility = Visibility.TENANT
-    if ctx.is_agent and mt not in (MemoryType.USER, MemoryType.PREFERENCE):
+        return Visibility.RUN if ctx.agent_run_id else Visibility.PRIVATE
+    if mt is MemoryType.SHARED:
+        if ctx.agent_group_id:
+            return Visibility.AGENT_GROUP
+        return Visibility.THREAD if ctx.thread_id else Visibility.TENANT
+    if user_statement and ctx.user_id:
+        return Visibility.USER
+    if ctx.is_agent and mt in (MemoryType.TASK, MemoryType.EPISODIC):
         # an agent's own working notes stay private unless the type is explicitly shared
-        visibility = (
-            Visibility.PRIVATE if mt in (MemoryType.TASK, MemoryType.EPISODIC) else visibility
-        )
-    return visibility
+        return Visibility.PRIVATE
+    if ctx.thread_id:
+        return Visibility.THREAD
+    return Visibility.USER if ctx.user_id else Visibility.TENANT
 
 
 class NativeMemoryIntelligence:
@@ -426,14 +539,29 @@ class NativeMemoryIntelligence:
         *,
         assist: LLMAssist | None = None,
         contextual_extractor: ContextualExtractor | None = None,
+        labeller: StatementLabeller | None = None,
+        subjects: SubjectMatcher | None = None,
     ) -> None:
         self.cfg = settings
         self.embedding = embedding
         self.assist = assist or LLMAssist.disabled()
         self.contextual_extractor = contextual_extractor
+        #: what each user sentence does (ADR 0037); the lexicon alone unless the wiring gives
+        #: it the NLI head
+        self.labeller = labeller or StatementLabeller(assist=self.assist)
+        #: whether two statements share a subject: the slot rules and the adjudicator's gate
+        self.subjects = subjects or SubjectMatcher(embedding)
 
     # -- extraction -----------------------------------------------------------------
     async def extract(
+        self, observation: Observation, ctx: MemoryExecutionContext
+    ) -> list[MemoryCandidate]:
+        candidates = await self._extract(observation, ctx)
+        if not said_by_user(observation):
+            return candidates
+        return [c.model_copy(update={"said_by_user": True}) for c in candidates]
+
+    async def _extract(
         self, observation: Observation, ctx: MemoryExecutionContext
     ) -> list[MemoryCandidate]:
         if observation.hints.skip_extraction or not observation.content.strip():
@@ -495,10 +623,16 @@ class NativeMemoryIntelligence:
         out: list[MemoryCandidate] = []
         seen: set[str] = set()
         sentences = split_sentences(text)
+        labels = await self.labeller.label(
+            sentences, models=kind is ObservationKind.MESSAGE and not observation.agent_authored
+        )
         contextual = await self._contextual_candidates(observation, ctx, evidence, sentences)
-        for sentence in sentences:
-            for clause in split_clauses(sentence):
-                cand = self._from_sentence(clause, ctx, evidence, kind=kind)
+        for sentence, label in zip(sentences, labels, strict=True):
+            clauses = split_clauses(sentence)
+            for clause in clauses:
+                cand = self._from_sentence(
+                    clause, ctx, evidence, kind=kind, label=label if len(clauses) == 1 else None
+                )
                 if cand is None:
                     continue
                 key = normalized_hash(cand.content)
@@ -513,9 +647,28 @@ class NativeMemoryIntelligence:
                 continue
             seen.add(key)
             out.append(cand)
-        verbatim = self._verbatim(text, observation, ctx, evidence)
-        if verbatim is not None and normalized_hash(verbatim.content) not in seen:
-            out.append(verbatim)
+        # Kept beside a rule's reading in the same words unless that reading is lasting
+        # (``domain.memory.lasting``: a profile attribute, a preference, a standing rule),
+        # which already keeps the words for good and is superseded when they change. Any
+        # other reading is not the turn: a task or an instruction lapses in seven days, a
+        # fact can be merged into older wording or fade unused, and none is restated or
+        # keyed with the question it answers. Dropping the turn whenever a rule matched all
+        # of it lost exactly the single-sentence statements users ask back for: "All
+        # seasonal merchandise must go to Facility B" became a seven-day task and nothing
+        # else. Retrieval gives the twins one slot (``engine._twin_context``).
+        held = {
+            normalized_hash(c.content)
+            for c in out
+            if lasting(c.category, c.memory_type, c.lifetime)
+        }
+        # the turn carries the kind of its most telling sentence ("No, our system was
+        # updated. We now use /shrinkage." is a correction as a whole)
+        turn_kind = most_salient(label.kind for label in labels)
+        out.extend(
+            turn.model_copy(update={"statement_kind": turn_kind})
+            for turn in self._verbatim(text, observation, ctx, evidence)
+            if normalized_hash(turn.content) not in held
+        )
         return out
 
     async def _contextual_candidates(
@@ -541,7 +694,7 @@ class NativeMemoryIntelligence:
         eligible = {
             index
             for index, sentence in enumerate(sentences)
-            if not _QUESTION.search(sentence)
+            if not is_question(sentence)
             and not ACKNOWLEDGEMENT.match(sentence)
             and any(
                 self._from_sentence(clause, ctx, evidence, kind=observation.kind) is None
@@ -578,7 +731,7 @@ class NativeMemoryIntelligence:
         eligible = {
             index
             for index, sentence in enumerate(sentences)
-            if not _QUESTION.search(sentence) and not ACKNOWLEDGEMENT.match(sentence)
+            if not is_question(sentence) and not ACKNOWLEDGEMENT.match(sentence)
         }
         facts = await extract_source_facts(self.assist, sentences, eligible)
         return [
@@ -624,7 +777,7 @@ class NativeMemoryIntelligence:
         observation: Observation,
         ctx: MemoryExecutionContext,
         evidence: list[EvidenceRef],
-    ) -> MemoryCandidate | None:
+    ) -> list[MemoryCandidate]:
         """The turn as it was said, so that what no rule matched is still retrievable.
 
         The rules above are first-person: "I work at X", "my favourite is Y". A conversation
@@ -638,9 +791,14 @@ class NativeMemoryIntelligence:
         excluded from supersession and reflection, so a verbatim turn can never be mistaken
         for an asserted fact or merged with one. Any other memory type here would quietly
         feed raw chatter into the consolidation machinery.
+
+        A turn longer than ``verbatim_max_chars`` is kept in consecutive pieces cut at
+        sentence ends (``verbatim_windows``), each one a verbatim turn of the same message, up
+        to ``VERBATIM_MAX_PIECES``. It used to be cut off at the first piece, and a code or an
+        amount said after the cut survived only if a rule happened to parse its sentence.
         """
         if not self.cfg.keep_verbatim_turns or observation.kind is not ObservationKind.MESSAGE:
-            return None
+            return []
         # An agent's own messages are its working chatter: classify() gives a generic
         # OBSERVATION thread/workspace visibility, which leaked "Thinking: ..." into the
         # user's memory the first time this ran without a guard
@@ -650,10 +808,7 @@ class NativeMemoryIntelligence:
         # ranked retrieval. Keep this guard about authorship, not the presence of agent
         # lineage or thread_id; a harness can relay a user's own words.
         if observation.agent_authored:
-            return None
-        body = text.strip()
-        if not body:
-            return None
+            return []
         # Reuse the noise rules the extractor already trusts rather than inventing a second
         # notion of "not worth keeping". A bare question or a greeting carries no fact, so
         # storing it verbatim only dilutes retrieval — which is the one risk this whole
@@ -662,23 +817,27 @@ class NativeMemoryIntelligence:
         # Per sentence, not per turn: "Did you hear? I moved from Sweden four years ago."
         # ends in a question mark only in its first sentence. Judged whole, 199 of 788
         # LoCoMo turns were dropped and 21 of 79 wrong answers had their gold in that set.
-        if not any(
-            not _QUESTION.search(s) and not ACKNOWLEDGEMENT.match(s) for s in split_sentences(body)
-        ):
-            return None
-        return MemoryCandidate(
-            content=body[: self.cfg.verbatim_max_chars],
-            memory_type=MemoryType.OBSERVATION,
-            lifetime=Lifetime.LONG_TERM,
-            subject=_user_subject(ctx),
-            predicate="said",
-            evidence=evidence,
-            # Below every rule-extracted candidate: a parsed fact outranks the raw turn it
-            # came from, so ranking prefers the answer over the transcript when both match.
-            importance=0.25,
-            confidence=0.99,  # nobody is guessing what was said
-            category="verbatim_turn",
-        )
+        return [
+            MemoryCandidate(
+                content=piece,
+                memory_type=MemoryType.OBSERVATION,
+                lifetime=Lifetime.LONG_TERM,
+                subject=_user_subject(ctx),
+                predicate="said",
+                evidence=evidence,
+                # Below every rule-extracted candidate: a parsed fact outranks the raw turn it
+                # came from, so ranking prefers the answer over the transcript when both match.
+                importance=0.25,
+                confidence=0.99,  # nobody is guessing what was said
+                category="verbatim_turn",
+            )
+            for piece in verbatim_windows(text.strip(), self.cfg.verbatim_max_chars)[
+                :VERBATIM_MAX_PIECES
+            ]
+            if any(
+                not is_question(s) and not ACKNOWLEDGEMENT.match(s) for s in split_sentences(piece)
+            )
+        ]
 
     def _decision(
         self,
@@ -719,9 +878,25 @@ class NativeMemoryIntelligence:
         evidence: list[EvidenceRef],
         *,
         kind: ObservationKind = ObservationKind.MESSAGE,
+        label: StatementLabel | None = None,
     ) -> MemoryCandidate | None:
-        if _QUESTION.search(s) or ACKNOWLEDGEMENT.match(s):
+        if is_question(s) or ACKNOWLEDGEMENT.match(s):
             return None
+        label = label or self.labeller.lexical(s)
+        cand = self._candidate(s, ctx, evidence, kind=kind, label=label)
+        if cand is None:
+            return None
+        return cand.model_copy(update={"statement_kind": label.kind})
+
+    def _candidate(
+        self,
+        s: str,
+        ctx: MemoryExecutionContext,
+        evidence: list[EvidenceRef],
+        *,
+        kind: ObservationKind,
+        label: StatementLabel,
+    ) -> MemoryCandidate | None:
         negates = bool(_REPLACEMENT.search(s))
         vf_m, vt_m = _VALID_FROM.search(s), _VALID_TO.search(s)
         vf = parse_date(vf_m.group(1)) if vf_m else None
@@ -822,10 +997,16 @@ class NativeMemoryIntelligence:
                 category="preference",
                 **common,
             )
-        if rule := _STANDING_RULE.match(s):
-            # A standing rule ("Never suggest recipes with cilantro", "Always write Python
-            # with strict type hints") says so in its own words, so it is durable on sight:
-            # a lasting PREFERENCE the user profile is kept from, not a seven-day
+        if label.kind in RULE_KINDS and label.standing:
+            # A standing rule ("Never suggest recipes with cilantro", "Whenever I ask for a
+            # stock audit, always use a table", "Nunca me sugieras recetas con cilantro")
+            # says so in its own words, so it is durable on sight: a lasting PREFERENCE the
+            # user profile is kept from, not a seven-day instruction that lapses unless
+            # restated. The labeller finds it wherever the standing word sits ("For weekly
+            # overviews, never ...") and keeps its trigger and its exception. A conditional
+            # instruction that does not say it is for every time ("Tell me if the price
+            # drops", "Don't use bullet points unless I ask") keeps its kind as metadata
+            # only and takes the path below, as it did before the labeller: a SHORT_TERM
             # instruction that lapses unless restated.
             return MemoryCandidate(
                 content=s,
@@ -837,11 +1018,13 @@ class NativeMemoryIntelligence:
                 # drops as a time phrase ("from now on, reply in German")
                 object=(
                     _clean_object(re.sub(r"^please\s+", "", s, flags=re.IGNORECASE))
-                    or _clean_object(rule.group(1))
+                    or _clean_object(label.instruction or s)
                 )[:300],
                 importance=0.8,
                 confidence=0.85,
                 category="rule",
+                rule_trigger=label.trigger,
+                rule_exception=label.exception,
                 **common,
             )
         if m := _PREF_PLEASE.match(s):
@@ -914,7 +1097,7 @@ class NativeMemoryIntelligence:
                 negates_prior=negates,
                 valid_from=vf,
             )
-        if m := _FACT.match(s):
+        if (m := _FACT.match(s)) and _noun_phrase(m.group("subject")):
             subject = m.group("subject").strip()
             # First person is the speaker; any other pronoun has no referent here and is
             # left to the verbatim copy of the turn rather than stored as a fact about "it".
@@ -967,7 +1150,7 @@ class NativeMemoryIntelligence:
             # genuinely standing instruction earns its keep by being restated.
             lifetime = Lifetime.SHORT_TERM
         importance = _IMPORTANCE_BY_TYPE.get(mt, candidate.importance)
-        visibility = default_visibility(mt, ctx)
+        visibility = default_visibility(mt, ctx, user_statement=candidate.said_by_user)
         return candidate.model_copy(
             update={
                 "lifetime": lifetime,
@@ -995,8 +1178,13 @@ class NativeMemoryIntelligence:
         generated = unverified_representation(
             {"category": candidate.category, "provider": candidate.provider}
         )
+        transcript = candidate.category == "verbatim_turn"
         best: ConsolidationOutcome | None = None
-        grey: tuple[CanonicalMemory, float] | None = None
+        adjudicating = self.assist.wants("conflict_adjudication")
+        #: memories the conflict adjudicator may be asked about: neither a duplicate nor a
+        #: slot rule settled them and no hard block (numbers, negation) stands in the way.
+        #: Which one is asked is the subject matcher's call, after the loop.
+        askable: list[tuple[CanonicalMemory, float]] = []
         #: Memories whose lexical similarity puts them in the band where a dense comparison
         #: decides. They are collected rather than embedded here: each one used to cost its
         #: own single-text round trip through the encoder's one-caller gate - up to
@@ -1007,6 +1195,7 @@ class NativeMemoryIntelligence:
         # a principal's own memories are matched first: "actually, X is now Y" corrects the
         # writer's own earlier finding before it is compared with anyone else's
         ordered = sorted(existing, key=lambda m: m.owner_principal != ctx.principal_id)
+        pairs = self.subjects.pairs(candidate, ordered, statements=adjudicating)
         for mem in ordered:
             if (
                 mem.temporal.status.value != "CURRENT"
@@ -1017,6 +1206,11 @@ class NativeMemoryIntelligence:
             if generated != unverified_representation(mem.system_metadata):
                 # Never let a generated rewrite reinforce or replace an asserted source,
                 # even when its text happens to be identical.
+                continue
+            if transcript != (mem.system_metadata.get("category") == "verbatim_turn"):
+                # A turn as said and a rule's reading of it are two memories even in the same
+                # words: the turn is kept beside the fact it yields (``extract``), and either
+                # one reinforcing the other would drop the turn or freeze the fact's clock.
                 continue
             # 1. identical normalized content -> reinforce
             if mem.normalized_hash == c_hash:
@@ -1036,11 +1230,12 @@ class NativeMemoryIntelligence:
                 or (mem.system_metadata.get("category") in {"verbatim_turn", "narrative_unit"})
             ):
                 continue
+            # the same subject however it is written ("Forklift 4", "forklift #4"), never
+            # across identifiers ("Forklift #3"): the subject matcher's SAME
             same_slot = (
-                candidate.subject
-                and candidate.predicate
-                and mem.subject == candidate.subject
+                candidate.predicate
                 and mem.predicate == candidate.predicate
+                and pairs[mem.memory_id].subject.verdict is SubjectVerdict.SAME
             )
             if same_slot:
                 m_obj = _clean_object(mem.object or "")
@@ -1100,7 +1295,12 @@ class NativeMemoryIntelligence:
             #    numbers or negation (those are the classic false merges)
             m_tokens = tokens(mem.content)
             sim = jaccard(c_tokens, m_tokens)
-            if sim >= self.cfg.dedup_lexical_threshold:
+            # "Dock 3 door 4" and "Dock 4 door 3", "Tower A" and "Tower": however alike the
+            # sentences (the words above ignore one-letter codes and digit order), two subjects
+            # not known to be one are never merged by their wording - the adjudicator may
+            # still be asked about them below
+            apart = pairs[mem.memory_id].apart
+            if sim >= self.cfg.dedup_lexical_threshold and not apart:
                 if numbers(mem.content) != c_numbers or has_negation(mem.content) != c_neg:
                     continue
                 decision = DedupDecision.MERGE if c_tokens - m_tokens else DedupDecision.REINFORCE
@@ -1115,19 +1315,18 @@ class NativeMemoryIntelligence:
                     best = outcome
                 continue
             if (
-                sim >= _ASSIST_MIN_SIMILARITY
-                and (grey is None or sim > grey[1])
-                and self.assist.wants("conflict_adjudication")
+                adjudicating
                 and numbers(mem.content) == c_numbers
                 and has_negation(mem.content) == c_neg
             ):
-                grey = (mem, sim)
+                askable.append((mem, sim))
             # 3. dense similarity (only with a real embedding provider; the hash stand-in is
             #    excluded because it would merge unrelated sentences sharing a few tokens)
             if (
                 self.embedding is not None
                 and not self.embedding.fingerprint().startswith("hash-")
                 and sim >= 0.5
+                and not apart
             ):
                 dense_band.append(mem)
         # 3. dense similarity, in one pass (only with a real embedding provider; the hash
@@ -1156,10 +1355,11 @@ class NativeMemoryIntelligence:
         create = ConsolidationOutcome(
             decision=DedupDecision.CREATE, candidate=candidate, reason="no match"
         )
-        if best is None and grey is not None:
-            # similar wording but below the merge threshold: the native answer is "keep both";
+        grey = await self._uncertain(candidate, pairs, askable) if best is None else None
+        if grey is not None:
+            # about the same subject but not a duplicate: the native answer is "keep both";
             # the model may recognise a paraphrase, an update or a contradiction
-            mem, sim = grey
+            mem, sim, pair = grey
             same = ConsolidationOutcome(
                 decision=DedupDecision.MERGE
                 if c_tokens - tokens(mem.content)
@@ -1167,10 +1367,52 @@ class NativeMemoryIntelligence:
                 candidate=candidate,
                 target_memory_id=mem.memory_id,
                 score=sim,
-                reason=f"lexical similarity {sim:.2f}",
+                reason=f"subject {pair.statement.verdict.value}: {pair.statement.reason}; "
+                f"lexical similarity {sim:.2f}",
             )
             return await self._adjudicate(candidate, mem, ctx, native=create, same=same)
         return best or create
+
+    async def _uncertain(
+        self,
+        candidate: MemoryCandidate,
+        pairs: dict[str, SubjectPair],
+        askable: list[tuple[CanonicalMemory, float]],
+    ) -> _Uncertain | None:
+        """The one memory worth asking the adjudicator about: the closest of ``askable``
+        whose statement the subject matcher does not call DIFFERENT (SAME before POSSIBLE,
+        then the matcher's score, then the wording). When the words leave every pair
+        undecided, the encoder is asked too - only here, so a write without the model never
+        pays for it."""
+        if not askable:
+            return None
+
+        def closest(by: dict[str, SubjectPair]) -> _Uncertain | None:
+            ranked = [
+                (mem, sim, by[mem.memory_id])
+                for mem, sim in askable
+                if by[mem.memory_id].statement.verdict is not SubjectVerdict.DIFFERENT
+                or (
+                    by[mem.memory_id].statement.reason == NO_SUBJECT
+                    and sim >= _ASSIST_MIN_SIMILARITY
+                )
+            ]
+            return max(
+                ranked,
+                key=lambda r: (
+                    r[2].statement.verdict is SubjectVerdict.SAME,
+                    r[2].statement.score,
+                    r[1],
+                ),
+                default=None,
+            )
+
+        found = closest(pairs)
+        if found is None:
+            # only the memories that could be asked about are encoded
+            asked = [mem for mem, _ in askable]
+            found = closest(await self.subjects.with_vectors(candidate, asked, pairs))
+        return found
 
     async def _adjudicate(
         self,

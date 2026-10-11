@@ -37,7 +37,7 @@ from memory_service.modules.memory.pipeline import (
     keys_for,
     supersede,
 )
-from memory_service.modules.memory.revisions import bump_memory_revisions, retract
+from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.modules.tenancy.gate import guard_workspace_visibility
 from memory_service.ports.intelligence import MemoryCandidate
 from memory_service.ports.tasks import JobSpec, Queue
@@ -110,7 +110,9 @@ class MemoryService:
             content=content,
             memory_type=memory_type,
             lifetime=lifetime,
-            visibility=visibility or default_visibility(memory_type, ctx),
+            # a user stating something is that user's own memory; an agent's keeps its rules
+            visibility=visibility
+            or default_visibility(memory_type, ctx, user_statement=not ctx.is_agent),
             subject=subject or (f"user:{ctx.user_id}" if about_user else None),
             valid_from=valid_from,
             valid_to=valid_to,
@@ -190,13 +192,20 @@ class MemoryService:
             created_at=now,
             updated_at=now,
         )
+        # the same statement kept twice (a turn and a rule's reading in its words) is
+        # replaced once: both close at the new version
+        closed = [old, *await uow.memories.twins(ctx.tenant_id, old)]
         supersede(old, new, now=now)
-        old.system_metadata["supersede_reason"] = reason
+        for twin in closed[1:]:
+            supersede(twin, new.model_copy(), now=now)
+        for memory in closed:
+            memory.system_metadata["supersede_reason"] = reason
         # the new version keeps exactly the audience the old one had
         audience = await uow.memories.visibility_keys(ctx.tenant_id, memory_id)
         await uow.memories.add(new, visibility_keys=audience)
-        await uow.memories.update(old)
-        await self._index(uow, ctx, [new, old], key=f"memidx:supersede:{new.memory_id}")
+        for memory in closed:
+            await uow.memories.update(memory)
+        await self._index(uow, ctx, [new, *closed], key=f"memidx:supersede:{new.memory_id}")
         return new
 
     async def _index(
@@ -359,21 +368,6 @@ class MemoryService:
             before = (rows[-1].created_at, rows[-1].memory_id)
         return out
 
-    async def retract(
-        self, uow: UnitOfWork, ctx: MemoryExecutionContext, memory_id: str, *, reason: str
-    ) -> CanonicalMemory:
-        """Withdraw a memory that is no longer true without replacing it: it leaves retrieval
-        and stays readable in a temporal view. Same rule as supersede: the owner (or the user
-        an agent acts for, or a tenant admin), and only while it is CURRENT."""
-        memory = await self.get_memory(uow, ctx, memory_id)
-        await self._require_owner(ctx, memory, "retract")
-        if memory.temporal.status is not TemporalStatus.CURRENT:
-            raise Conflict(f"memory {memory_id} is {memory.temporal.status.value}, not CURRENT")
-        memory.system_metadata["retract_reason"] = reason
-        await retract(uow, memory, now=datetime.now(UTC))
-        await self._index(uow, ctx, [memory], key=f"memidx:retract:{memory_id}")
-        return memory
-
     async def restore(
         self,
         uow: UnitOfWork,
@@ -399,6 +393,10 @@ class MemoryService:
             return None
         memory = await self.get_memory(uow, ctx, memory_id)
         await self._require_owner(ctx, memory, "forget")
-        await uow.memories.forget(ctx.tenant_id, memory_id)
-        await self._index(uow, ctx, [memory], key=f"memidx:forget:{memory_id}")
+        # the same statement kept twice (a turn and a rule's reading in its words) is
+        # forgotten once: the twin left behind would still answer with the forgotten words
+        twins = await uow.memories.twins(ctx.tenant_id, memory, current_only=False)
+        for gone in (memory, *twins):
+            await uow.memories.forget(ctx.tenant_id, gone.memory_id)
+        await self._index(uow, ctx, [memory, *twins], key=f"memidx:forget:{memory_id}")
         return memory

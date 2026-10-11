@@ -362,13 +362,33 @@ class SqlMemoryRepository:
         ).first()
         return _to_domain(row) if row is not None else None
 
+    async def twins(
+        self, tenant_id: str, memory: CanonicalMemory, *, current_only: bool = True
+    ) -> list[CanonicalMemory]:
+        conds = [
+            MemoryRow.tenant_id == tenant_id,
+            MemoryRow.normalized_hash == memory.normalized_hash,
+            MemoryRow.owner_principal == memory.owner_principal,
+            MemoryRow.memory_id != memory.memory_id,
+            MemoryRow.deleted_at.is_(None),
+        ]
+        if current_only:
+            conds.append(MemoryRow.temporal_status == TemporalStatus.CURRENT.value)
+        rows = (await self.s.scalars(select(MemoryRow).where(*conds))).all()
+        sources = {(ev.source_type, ev.source_id) for ev in memory.evidence}
+        return [
+            twin
+            for twin in map(_to_domain, rows)
+            if sources & {(ev.source_type, ev.source_id) for ev in twin.evidence}
+        ]
+
     async def candidates(
         self,
         tenant_id: str,
         *,
         scope_key: str,
         normalized_hash: str | None = None,
-        subject: str | None = None,
+        subjects: Sequence[str] = (),
         limit: int = 20,
     ) -> list[CanonicalMemory]:
         conds = [
@@ -380,8 +400,8 @@ class SqlMemoryRepository:
         any_of = []
         if normalized_hash:
             any_of.append(MemoryRow.normalized_hash == normalized_hash)
-        if subject:
-            any_of.append(MemoryRow.subject == subject)
+        if subjects:
+            any_of.append(MemoryRow.subject.in_(list(subjects)))
         exact = []
         if any_of:
             exact = list(
@@ -394,20 +414,25 @@ class SqlMemoryRepository:
                     )
                 ).all()
             )
-        recent = list(
-            (
+        # The most recent of each kind: a statement's turn is kept beside its reading (ADR
+        # 0036), so one window over both held half as many readings as before, and a turn
+        # still belongs in it - the memories at hand are what a tenant's own definitions
+        # ("the cross-dock facility (CDF)") are learned from.
+        turn = MemoryRow.system_metadata["category"].astext == "verbatim_turn"
+        recent: list[MemoryRow] = []
+        for kind in (turn.is_(False) | turn.is_(None), turn.is_(True)):
+            recent += (
                 await self.s.scalars(
                     select(MemoryRow)
-                    .where(*conds)
+                    .where(*conds, kind)
                     .order_by(MemoryRow.updated_at.desc())
                     .limit(limit)
                 )
             ).all()
-        )
         seen: dict[str, MemoryRow] = {}
         for r in exact + recent:
             seen.setdefault(r.memory_id, r)
-        return [_to_domain(r) for r in list(seen.values())[: max(limit, len(exact))]]
+        return [_to_domain(r) for r in seen.values()]
 
     async def about_user(
         self, tenant_id: str, user_id: str, *, memory_types: Sequence[str], limit: int

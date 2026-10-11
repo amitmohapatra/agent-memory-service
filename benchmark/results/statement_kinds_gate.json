@@ -1,0 +1,1469 @@
+{
+  "gate": "statement_kinds",
+  "golden_set": "statement_kinds_v1",
+  "representative": true,
+  "nli_provider": "nli-onnx-b867968c260265cf8b1f55da",
+  "threshold": {
+    "english_test_macro_f1": 0.85,
+    "false_rules": 0,
+    "blind2_macro_f1": 0.75,
+    "blind2_below_baseline": 0
+  },
+  "dev": {
+    "n": 361,
+    "macro_f1": 0.9513,
+    "macro_f1_with_none": 0.946,
+    "accuracy": 0.9446,
+    "per_kind_f1": {
+      "FACT": 0.9508,
+      "RULE": 0.9792,
+      "CONDITIONAL_RULE": 0.8696,
+      "STATUS": 1.0,
+      "CORRECTION": 0.95,
+      "LIFECYCLE": 0.9583,
+      "NONE": 0.9143
+    },
+    "per_language": {
+      "ar": {
+        "n": 52,
+        "macro_f1": 0.8948,
+        "macro_f1_with_none": 0.8873,
+        "accuracy": 0.8846,
+        "per_kind_f1": {
+          "FACT": 0.8889,
+          "RULE": 0.9231,
+          "CONDITIONAL_RULE": 0.7143,
+          "STATUS": 1.0,
+          "CORRECTION": 0.9091,
+          "LIFECYCLE": 0.9333,
+          "NONE": 0.8421
+        }
+      },
+      "de": {
+        "n": 52,
+        "macro_f1": 0.9255,
+        "macro_f1_with_none": 0.9218,
+        "accuracy": 0.9231,
+        "per_kind_f1": {
+          "FACT": 0.9412,
+          "RULE": 1.0,
+          "CONDITIONAL_RULE": 0.7692,
+          "STATUS": 1.0,
+          "CORRECTION": 0.9091,
+          "LIFECYCLE": 0.9333,
+          "NONE": 0.9
+        }
+      },
+      "en": {
+        "n": 152,
+        "macro_f1": 0.9798,
+        "macro_f1_with_none": 0.9757,
+        "accuracy": 0.9737,
+        "per_kind_f1": {
+          "FACT": 0.9804,
+          "RULE": 0.9756,
+          "CONDITIONAL_RULE": 0.9231,
+          "STATUS": 1.0,
+          "CORRECTION": 1.0,
+          "LIFECYCLE": 1.0,
+          "NONE": 0.9508
+        }
+      },
+      "es": {
+        "n": 53,
+        "macro_f1": 0.9443,
+        "macro_f1_with_none": 0.9297,
+        "accuracy": 0.9245,
+        "per_kind_f1": {
+          "FACT": 0.9,
+          "RULE": 1.0,
+          "CONDITIONAL_RULE": 0.9231,
+          "STATUS": 1.0,
+          "CORRECTION": 0.9091,
+          "LIFECYCLE": 0.9333,
+          "NONE": 0.8421
+        }
+      },
+      "hi": {
+        "n": 52,
+        "macro_f1": 0.9609,
+        "macro_f1_with_none": 0.9597,
+        "accuracy": 0.9615,
+        "per_kind_f1": {
+          "FACT": 1.0,
+          "RULE": 1.0,
+          "CONDITIONAL_RULE": 0.9231,
+          "STATUS": 1.0,
+          "CORRECTION": 0.9091,
+          "LIFECYCLE": 0.9333,
+          "NONE": 0.9524
+        }
+      }
+    },
+    "rules_on_none": 10,
+    "false_rules": 0,
+    "false_rule_items": [],
+    "false_rule_kinds": 10,
+    "sources": {
+      "lexicon": 331,
+      "nli": 30
+    },
+    "latency_ms_per_sentence": {
+      "p50": 0.165,
+      "p95": 48.763,
+      "mean": 4.432
+    },
+    "errors": [
+      {
+        "id": "dev-en-038",
+        "lang": "en",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "We never ship hazardous goods on Fridays."
+      },
+      {
+        "id": "dev-de-020",
+        "lang": "de",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "Runde Preise immer auf ,99, außer bei Abverkaufsware."
+      },
+      {
+        "id": "dev-de-029",
+        "lang": "de",
+        "gold": "CORRECTION",
+        "predicted": "LIFECYCLE",
+        "source": "nli",
+        "text": "Eigentlich haben wir den Vertrag mit Uline gestern gekündigt."
+      },
+      {
+        "id": "dev-es-029",
+        "lang": "es",
+        "gold": "CORRECTION",
+        "predicted": "LIFECYCLE",
+        "source": "nli",
+        "text": "En realidad, ayer rescindimos el contrato con Uline."
+      },
+      {
+        "id": "dev-ar-013",
+        "lang": "ar",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "أجب دائمًا باللغة العربية."
+      },
+      {
+        "id": "dev-ar-020",
+        "lang": "ar",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "قرّب الأسعار دائمًا إلى .99 باستثناء أصناف التصفية."
+      },
+      {
+        "id": "dev-ar-029",
+        "lang": "ar",
+        "gold": "CORRECTION",
+        "predicted": "LIFECYCLE",
+        "source": "nli",
+        "text": "في الواقع، أنهينا عقدنا مع Uline أمس."
+      },
+      {
+        "id": "dev-hi-029",
+        "lang": "hi",
+        "gold": "CORRECTION",
+        "predicted": "LIFECYCLE",
+        "source": "nli",
+        "text": "दरअसल, हमने कल Uline के साथ अपना कॉन्ट्रैक्ट खत्म कर दिया।"
+      },
+      {
+        "id": "dev-oneoff-en-01",
+        "lang": "en",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "Please send the report when it's ready."
+      },
+      {
+        "id": "dev-oneoff-en-02",
+        "lang": "en",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "Let me know when the shipment arrives."
+      },
+      {
+        "id": "dev-oneoff-en-03",
+        "lang": "en",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "Tell me if the price drops."
+      },
+      {
+        "id": "dev-oneoff-de-03",
+        "lang": "de",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "Gib mir Bescheid, wenn die Lieferung ankommt."
+      },
+      {
+        "id": "dev-oneoff-de-04",
+        "lang": "de",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "Erinnere mich daran, wenn es Zeit zum Gehen ist."
+      },
+      {
+        "id": "dev-oneoff-es-02",
+        "lang": "es",
+        "gold": "NONE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Llámame cuando leas esto."
+      },
+      {
+        "id": "dev-oneoff-es-03",
+        "lang": "es",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "Avísame cuando llegue el pedido."
+      },
+      {
+        "id": "dev-oneoff-es-04",
+        "lang": "es",
+        "gold": "NONE",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "Mándame el informe cuando esté listo."
+      },
+      {
+        "id": "dev-oneoff-ar-01",
+        "lang": "ar",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "أخبرني عندما تصل."
+      },
+      {
+        "id": "dev-oneoff-ar-03",
+        "lang": "ar",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "أرسل لي التقرير عندما يكون جاهزًا."
+      },
+      {
+        "id": "dev-oneoff-ar-04",
+        "lang": "ar",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "nli",
+        "text": "أخبرني إذا انخفض السعر."
+      },
+      {
+        "id": "dev-oneoff-hi-04",
+        "lang": "hi",
+        "gold": "NONE",
+        "predicted": "CONDITIONAL_RULE",
+        "source": "lexicon",
+        "text": "अगर कीमत गिरे तो मुझे बताना।"
+      }
+    ]
+  },
+  "test": {
+    "n": 154,
+    "macro_f1": 0.9616,
+    "macro_f1_with_none": 0.9671,
+    "accuracy": 0.9675,
+    "per_kind_f1": {
+      "FACT": 0.898,
+      "RULE": 1.0,
+      "CONDITIONAL_RULE": 1.0,
+      "STATUS": 1.0,
+      "CORRECTION": 0.8718,
+      "LIFECYCLE": 1.0,
+      "NONE": 1.0
+    },
+    "per_language": {
+      "ar": {
+        "n": 21,
+        "macro_f1": 0.9429,
+        "macro_f1_with_none": 0.951,
+        "accuracy": 0.9524,
+        "per_kind_f1": {
+          "FACT": 0.8571,
+          "RULE": 1.0,
+          "CONDITIONAL_RULE": 1.0,
+          "STATUS": 1.0,
+          "CORRECTION": 0.8,
+          "LIFECYCLE": 1.0,
+          "NONE": 1.0
+        }
+      },
+      "de": {
+        "n": 21,
+        "macro_f1": 0.9429,
+        "macro_f1_with_none": 0.951,
+        "accuracy": 0.9524,
+        "per_kind_f1": {
+          "FACT": 0.8571,
+          "RULE": 1.0,
+          "CONDITIONAL_RULE": 1.0,
+          "STATUS": 1.0,
+          "CORRECTION": 0.8,
+          "LIFECYCLE": 1.0,
+          "NONE": 1.0
+        }
+      },
+      "en": {
+        "n": 70,
+        "macro_f1": 0.9833,
+        "macro_f1_with_none": 0.9857,
+        "accuracy": 0.9857,
+        "per_kind_f1": {
+          "FACT": 0.9524,
+          "RULE": 1.0,
+          "CONDITIONAL_RULE": 1.0,
+          "STATUS": 1.0,
+          "CORRECTION": 0.9474,
+          "LIFECYCLE": 1.0,
+          "NONE": 1.0
+        }
+      },
+      "es": {
+        "n": 21,
+        "macro_f1": 0.9429,
+        "macro_f1_with_none": 0.951,
+        "accuracy": 0.9524,
+        "per_kind_f1": {
+          "FACT": 0.8571,
+          "RULE": 1.0,
+          "CONDITIONAL_RULE": 1.0,
+          "STATUS": 1.0,
+          "CORRECTION": 0.8,
+          "LIFECYCLE": 1.0,
+          "NONE": 1.0
+        }
+      },
+      "hi": {
+        "n": 21,
+        "macro_f1": 0.9429,
+        "macro_f1_with_none": 0.951,
+        "accuracy": 0.9524,
+        "per_kind_f1": {
+          "FACT": 0.8571,
+          "RULE": 1.0,
+          "CONDITIONAL_RULE": 1.0,
+          "STATUS": 1.0,
+          "CORRECTION": 0.8,
+          "LIFECYCLE": 1.0,
+          "NONE": 1.0
+        }
+      }
+    },
+    "rules_on_none": 0,
+    "false_rules": 0,
+    "false_rule_items": [],
+    "false_rule_kinds": 0,
+    "sources": {
+      "lexicon": 148,
+      "nli": 6
+    },
+    "latency_ms_per_sentence": {
+      "p50": 0.149,
+      "p95": 0.474,
+      "mean": 2.05
+    },
+    "errors": [
+      {
+        "id": "test-en-041",
+        "lang": "en",
+        "gold": "CORRECTION",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "Actually, the meeting was moved to Thursday."
+      },
+      {
+        "id": "test-de-013",
+        "lang": "de",
+        "gold": "CORRECTION",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "Eigentlich wurde das Meeting auf Donnerstag verschoben."
+      },
+      {
+        "id": "test-es-013",
+        "lang": "es",
+        "gold": "CORRECTION",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "En realidad, la reunión se cambió al jueves."
+      },
+      {
+        "id": "test-ar-013",
+        "lang": "ar",
+        "gold": "CORRECTION",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "في الواقع، تم نقل الاجتماع إلى يوم الخميس."
+      },
+      {
+        "id": "test-hi-013",
+        "lang": "hi",
+        "gold": "CORRECTION",
+        "predicted": "FACT",
+        "source": "nli",
+        "text": "दरअसल, मीटिंग गुरुवार को शिफ्ट कर दी गई है।"
+      }
+    ]
+  },
+  "blind": {
+    "blind1": {
+      "role": "dev",
+      "noise_rate": 0.228,
+      "labeller": {
+        "n": 254,
+        "macro_f1": 0.8935,
+        "macro_f1_with_none": 0.8943,
+        "accuracy": 0.8898,
+        "per_kind_f1": {
+          "FACT": 0.7907,
+          "RULE": 0.8679,
+          "CONDITIONAL_RULE": 0.8571,
+          "STATUS": 0.9351,
+          "CORRECTION": 0.9434,
+          "LIFECYCLE": 0.9667,
+          "NONE": 0.8991
+        },
+        "per_language": {
+          "ar": {
+            "n": 42,
+            "macro_f1": 0.7601,
+            "macro_f1_with_none": 0.7825,
+            "accuracy": 0.8571,
+            "per_kind_f1": {
+              "FACT": 0.8696,
+              "RULE": 0.0,
+              "CONDITIONAL_RULE": 0.75,
+              "STATUS": 0.9412,
+              "CORRECTION": 1.0,
+              "LIFECYCLE": 1.0,
+              "NONE": 0.9167
+            }
+          },
+          "de": {
+            "n": 55,
+            "macro_f1": 0.8358,
+            "macro_f1_with_none": 0.8367,
+            "accuracy": 0.8364,
+            "per_kind_f1": {
+              "FACT": 0.75,
+              "RULE": 0.75,
+              "CONDITIONAL_RULE": 0.8889,
+              "STATUS": 0.7692,
+              "CORRECTION": 0.9231,
+              "LIFECYCLE": 0.9333,
+              "NONE": 0.8421
+            }
+          },
+          "en": {
+            "n": 65,
+            "macro_f1": 0.9712,
+            "macro_f1_with_none": 0.9669,
+            "accuracy": 0.9692,
+            "per_kind_f1": {
+              "FACT": 0.875,
+              "RULE": 1.0,
+              "CONDITIONAL_RULE": 1.0,
+              "STATUS": 1.0,
+              "CORRECTION": 0.9524,
+              "LIFECYCLE": 1.0,
+              "NONE": 0.9412
+            }
+          },
+          "es": {
+            "n": 54,
+            "macro_f1": 0.8928,
+            "macro_f1_with_none": 0.9081,
+            "accuracy": 0.9074,
+            "per_kind_f1": {
+              "FACT": 0.8,
+              "RULE": 0.9333,
+              "CONDITIONAL_RULE": 0.7143,
+              "STATUS": 1.0,
+              "CORRECTION": 0.9091,
+              "LIFECYCLE": 1.0,
+              "NONE": 1.0
+            }
+          },
+          "hi": {
+            "n": 38,
+            "macro_f1": 0.9223,
+            "macro_f1_with_none": 0.6483,
+            "accuracy": 0.8421,
+            "per_kind_f1": {
+              "FACT": 0.0,
+              "RULE": 0.0,
+              "CONDITIONAL_RULE": 0.8571,
+              "STATUS": 0.9231,
+              "CORRECTION": 1.0,
+              "LIFECYCLE": 0.9091,
+              "NONE": 0.8485
+            }
+          }
+        },
+        "rules_on_none": 0,
+        "false_rules": 0,
+        "false_rule_items": [],
+        "false_rule_kinds": 4,
+        "sources": {
+          "lexicon": 236,
+          "nli": 18
+        },
+        "latency_ms_per_sentence": {
+          "p50": 0.189,
+          "p95": 54.04,
+          "mean": 4.292
+        },
+        "errors": [
+          {
+            "id": "blind1-055",
+            "lang": "en",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "AI, thank you for filtering these emails - they're looking quite manageable now."
+          },
+          {
+            "id": "blind1-065",
+            "lang": "de",
+            "gold": "RULE",
+            "predicted": "CONDITIONAL_RULE",
+            "source": "lexicon",
+            "text": "Auf keinen Fall die aktuelle Produkt-Roadmap missen, wenn wir Diskussionen darüber führen."
+          },
+          {
+            "id": "blind1-070",
+            "lang": "de",
+            "gold": "RULE",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "Erinnere mich bitte, jeden Bestellvorgang nachzuprüfen, bevor ich abschließe."
+          },
+          {
+            "id": "blind1-078",
+            "lang": "de",
+            "gold": "FACT",
+            "predicted": "CONDITIONAL_RULE",
+            "source": "nli",
+            "text": "Sobald die Bestände knapp werden, bin ich für dich bereit."
+          },
+          {
+            "id": "blind1-085",
+            "lang": "de",
+            "gold": "STATUS",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Das Reparaturverspätung meines Tablets ist leider noch bestehen."
+          },
+          {
+            "id": "blind1-086",
+            "lang": "de",
+            "gold": "STATUS",
+            "predicted": "LIFECYCLE",
+            "source": "lexicon",
+            "text": "Die Reparatur meiner Smartwatch ist abgeschlossen, sie funktioniert nun wieder."
+          },
+          {
+            "id": "blind1-093",
+            "lang": "de",
+            "gold": "CORRECTION",
+            "predicted": "FACT",
+            "source": "nli",
+            "text": "Tatsächlich sollten wir den Blutdruckmessung durchführen, bevor wir zur nächsten Ebene gehen."
+          },
+          {
+            "id": "blind1-101",
+            "lang": "de",
+            "gold": "STATUS",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Ein Produkt wurde ausgesetzt..."
+          },
+          {
+            "id": "blind1-105",
+            "lang": "de",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Entschuldige, benötige deine Hilfe bei der Erstellung dieser Präsentation."
+          },
+          {
+            "id": "blind1-107",
+            "lang": "de",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Vielen Dank, wichtig ist es, diese Code-Modifikation jetzt durchzuführen."
+          },
+          {
+            "id": "blind1-126",
+            "lang": "es",
+            "gold": "RULE",
+            "predicted": "CONDITIONAL_RULE",
+            "source": "lexicon",
+            "text": "Siempre informa cualquier desperdicio o daño en los productos cada vez que realices una inspección."
+          },
+          {
+            "id": "blind1-132",
+            "lang": "es",
+            "gold": "FACT",
+            "predicted": "CONDITIONAL_RULE",
+            "source": "nli",
+            "text": "Cuando un paciente no se presente para su cita, envío un recordatorio por SMS."
+          },
+          {
+            "id": "blind1-133",
+            "lang": "es",
+            "gold": "FACT",
+            "predicted": "CONDITIONAL_RULE",
+            "source": "nli",
+            "text": "Si el sistema de la clinica falla y no puedo acceder a los registros del paciente, pongo en contacto al departamento de TI."
+          },
+          {
+            "id": "blind1-134",
+            "lang": "es",
+            "gold": "FACT",
+            "predicted": "CONDITIONAL_RULE",
+            "source": "nli",
+            "text": "Si el tiempo se vuelve extremadamente frío y los pacientes tienen miedo de ir a la clínica, envío un correo electrónico a la comunidad local para informar sobre nuestros protocolos de seguridad."
+          },
+          {
+            "id": "blind1-148",
+            "lang": "es",
+            "gold": "CORRECTION",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Debes actualizar la información del producto, ya que esa tarifa es inaccesible. El descuento es del 15%."
+          },
+          {
+            "id": "blind1-175",
+            "lang": "ar",
+            "gold": "RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "عملياً، احرص على توفير الحالة الحالية للمخزون كلما تتمكن"
+          },
+          {
+            "id": "blind1-177",
+            "lang": "ar",
+            "gold": "RULE",
+            "predicted": "CONDITIONAL_RULE",
+            "source": "lexicon",
+            "text": "إذا تمكنت، فتذكر دائمًا توضيح الحلقات الزراعية والممثلة للعملاء"
+          },
+          {
+            "id": "blind1-180",
+            "lang": "ar",
+            "gold": "RULE",
+            "predicted": "CONDITIONAL_RULE",
+            "source": "nli",
+            "text": "لا تتجنب التحقق من دواء المريض عند استخدام الروبوت"
+          },
+          {
+            "id": "blind1-181",
+            "lang": "ar",
+            "gold": "RULE",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "لا تقلل من تقييم الأعراض في تقييمنا باستخدام الروبوت"
+          },
+          {
+            "id": "blind1-193",
+            "lang": "ar",
+            "gold": "STATUS",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "احتاج إلى إصلاح."
+          },
+          {
+            "id": "blind1-201",
+            "lang": "ar",
+            "gold": "FACT",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "لا تنسى، الاستعلامات المستمرة تساعد في تحسين الخدمة والرضا الضيف"
+          },
+          {
+            "id": "blind1-238",
+            "lang": "hi",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "AI, असली प्रतिक्रिया होने तक ही मरीजों के प्रश्नों का उत्तर दें।"
+          },
+          {
+            "id": "blind1-242",
+            "lang": "hi",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "किसी व्यक्ति के निजी जीवन में परिवर्तन होते हैं, तो AI, मुझे सूचित रखें।"
+          },
+          {
+            "id": "blind1-247",
+            "lang": "hi",
+            "gold": "STATUS",
+            "predicted": "LIFECYCLE",
+            "source": "lexicon",
+            "text": "मेरा स्वास्थ्य ऐप परीक्षण उपकरणों के लिए अब आपूर्ति समाप्त हो गया है।"
+          },
+          {
+            "id": "blind1-252",
+            "lang": "en",
+            "gold": "FACT",
+            "predicted": "CORRECTION",
+            "source": "lexicon",
+            "text": "No, realistically speaking, you shouldn't rely solely on AI for personal life advice. It's crucial to seek human counsel as well."
+          },
+          {
+            "id": "blind1-257",
+            "lang": "hi",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Haan, aapne kharidaar ki tarah product display ki hai."
+          },
+          {
+            "id": "blind1-258",
+            "lang": "hi",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Haan, aapne product stock update ke liye AI ki help le li."
+          },
+          {
+            "id": "blind1-259",
+            "lang": "hi",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Haan, aapne product price check ke liye camera system use kiya."
+          }
+        ]
+      },
+      "baseline": {
+        "n": 254,
+        "macro_f1": 0.1378,
+        "macro_f1_with_none": 0.2305,
+        "accuracy": 0.3425,
+        "per_kind_f1": {
+          "FACT": 0.3265,
+          "RULE": 0.5,
+          "CONDITIONAL_RULE": 0.0,
+          "STATUS": 0.0,
+          "CORRECTION": 0.0,
+          "LIFECYCLE": 0.0,
+          "NONE": 0.7872
+        },
+        "per_language": {
+          "ar": {
+            "n": 42,
+            "macro_f1": 0.0833,
+            "macro_f1_with_none": 0.2,
+            "accuracy": 0.4762,
+            "per_kind_f1": {
+              "FACT": 0.5,
+              "RULE": 0.0,
+              "CONDITIONAL_RULE": 0.0,
+              "STATUS": 0.0,
+              "CORRECTION": 0.0,
+              "LIFECYCLE": 0.0,
+              "NONE": 0.9
+            }
+          },
+          "de": {
+            "n": 55,
+            "macro_f1": 0.0565,
+            "macro_f1_with_none": 0.1556,
+            "accuracy": 0.2909,
+            "per_kind_f1": {
+              "FACT": 0.339,
+              "RULE": 0.0,
+              "CONDITIONAL_RULE": 0.0,
+              "STATUS": 0.0,
+              "CORRECTION": 0.0,
+              "LIFECYCLE": 0.0,
+              "NONE": 0.75
+            }
+          },
+          "en": {
+            "n": 65,
+            "macro_f1": 0.1943,
+            "macro_f1_with_none": 0.2777,
+            "accuracy": 0.3846,
+            "per_kind_f1": {
+              "FACT": 0.2963,
+              "RULE": 0.8696,
+              "CONDITIONAL_RULE": 0.0,
+              "STATUS": 0.0,
+              "CORRECTION": 0.0,
+              "LIFECYCLE": 0.0,
+              "NONE": 0.7778
+            }
+          },
+          "es": {
+            "n": 54,
+            "macro_f1": 0.0643,
+            "macro_f1_with_none": 0.198,
+            "accuracy": 0.3519,
+            "per_kind_f1": {
+              "FACT": 0.386,
+              "RULE": 0.0,
+              "CONDITIONAL_RULE": 0.0,
+              "STATUS": 0.0,
+              "CORRECTION": 0.0,
+              "LIFECYCLE": 0.0,
+              "NONE": 1.0
+            }
+          },
+          "hi": {
+            "n": 38,
+            "macro_f1": 0.0,
+            "macro_f1_with_none": 0.0833,
+            "accuracy": 0.1842,
+            "per_kind_f1": {
+              "FACT": 0.0,
+              "RULE": 0.0,
+              "CONDITIONAL_RULE": 0.0,
+              "STATUS": 0.0,
+              "CORRECTION": 0.0,
+              "LIFECYCLE": 0.0,
+              "NONE": 0.5833
+            }
+          }
+        }
+      },
+      "below_baseline": []
+    },
+    "blind2": {
+      "role": "held_out",
+      "noise_rate": 0.245,
+      "labeller": {
+        "n": 241,
+        "macro_f1": 0.8292,
+        "macro_f1_with_none": 0.8409,
+        "accuracy": 0.8133,
+        "per_kind_f1": {
+          "FACT": 0.6154,
+          "RULE": 0.9545,
+          "CONDITIONAL_RULE": 0.8308,
+          "STATUS": 0.8254,
+          "CORRECTION": 0.878,
+          "LIFECYCLE": 0.871,
+          "NONE": 0.9111
+        },
+        "per_language": {
+          "ar": {
+            "n": 36,
+            "macro_f1": 0.6099,
+            "macro_f1_with_none": 0.6581,
+            "accuracy": 0.7222,
+            "per_kind_f1": {
+              "FACT": 0.6429,
+              "RULE": 0.8,
+              "CONDITIONAL_RULE": 0.0,
+              "STATUS": 0.75,
+              "CORRECTION": 0.8,
+              "LIFECYCLE": 0.6667,
+              "NONE": 0.9474
+            }
+          },
+          "de": {
+            "n": 53,
+            "macro_f1": 0.8084,
+            "macro_f1_with_none": 0.8199,
+            "accuracy": 0.8113,
+            "per_kind_f1": {
+              "FACT": 0.5,
+              "RULE": 0.8889,
+              "CONDITIONAL_RULE": 1.0,
+              "STATUS": 0.7143,
+              "CORRECTION": 0.8,
+              "LIFECYCLE": 0.9474,
+              "NONE": 0.8889
+            }
+          },
+          "en": {
+            "n": 54,
+            "macro_f1": 0.9606,
+            "macro_f1_with_none": 0.9662,
+            "accuracy": 0.963,
+            "per_kind_f1": {
+              "FACT": 0.875,
+              "RULE": 1.0,
+              "CONDITIONAL_RULE": 0.9474,
+              "STATUS": 0.9412,
+              "CORRECTION": 1.0,
+              "LIFECYCLE": 1.0,
+              "NONE": 1.0
+            }
+          },
+          "es": {
+            "n": 56,
+            "macro_f1": 0.7865,
+            "macro_f1_with_none": 0.8011,
+            "accuracy": 0.7679,
+            "per_kind_f1": {
+              "FACT": 0.6286,
+              "RULE": 1.0,
+              "CONDITIONAL_RULE": 0.5,
+              "STATUS": 0.9333,
+              "CORRECTION": 0.8,
+              "LIFECYCLE": 0.8571,
+              "NONE": 0.8889
+            }
+          },
+          "hi": {
+            "n": 42,
+            "macro_f1": 0.7852,
+            "macro_f1_with_none": 0.7933,
+            "accuracy": 0.7619,
+            "per_kind_f1": {
+              "FACT": 0.4444,
+              "RULE": 1.0,
+              "CONDITIONAL_RULE": 1.0,
+              "STATUS": 0.6667,
+              "CORRECTION": 1.0,
+              "LIFECYCLE": 0.6,
+              "NONE": 0.8421
+            }
+          }
+        },
+        "rules_on_none": 0,
+        "false_rules": 0,
+        "false_rule_items": [],
+        "false_rule_kinds": 0,
+        "sources": {
+          "lexicon": 218,
+          "nli": 23
+        },
+        "latency_ms_per_sentence": {
+          "p50": 0.203,
+          "p95": 52.019,
+          "mean": 5.373
+        },
+        "errors": [
+          {
+            "id": "blind2-019",
+            "lang": "en",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Unless there's a major sale, maintain the current pricing strategy for our best-sellers."
+          },
+          {
+            "id": "blind2-029",
+            "lang": "en",
+            "gold": "STATUS",
+            "predicted": "FACT",
+            "source": "nli",
+            "text": "The point-of-sale system has gone unavailable."
+          },
+          {
+            "id": "blind2-058",
+            "lang": "de",
+            "gold": "FACT",
+            "predicted": "STATUS",
+            "source": "lexicon",
+            "text": "Der Lagerbestand an Lebensmitteln im Magazin hat sich auf 15.000 kg reduziert."
+          },
+          {
+            "id": "blind2-060",
+            "lang": "de",
+            "gold": "LIFECYCLE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Die neue Route für den Express-Transport nach Oslo wird ab nächster Woche starten."
+          },
+          {
+            "id": "blind2-064",
+            "lang": "de",
+            "gold": "RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Vergessen Sie nie, den Kunden über die Reparaturstatus zu informieren"
+          },
+          {
+            "id": "blind2-065",
+            "lang": "de",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Müsste ich immer vor jeder Neuanschaffung ein Fahrzeugprüfergebnis einholen."
+          },
+          {
+            "id": "blind2-082",
+            "lang": "de",
+            "gold": "STATUS",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Die Lokomotive ist ausgesfallen."
+          },
+          {
+            "id": "blind2-083",
+            "lang": "de",
+            "gold": "STATUS",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Der Maschinenkühler hat eine Reparatur erforderlich."
+          },
+          {
+            "id": "blind2-084",
+            "lang": "de",
+            "gold": "STATUS",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Die Führungsmaschine arbeitet jetzt einwandfrei."
+          },
+          {
+            "id": "blind2-087",
+            "lang": "de",
+            "gold": "CORRECTION",
+            "predicted": "FACT",
+            "source": "nli",
+            "text": "Tatsächlich meine ich..."
+          },
+          {
+            "id": "blind2-091",
+            "lang": "de",
+            "gold": "CORRECTION",
+            "predicted": "FACT",
+            "source": "nli",
+            "text": "Tatsächlich müssen Sie Ihre Rezeptur vor dem Zahnarzt abgeben."
+          },
+          {
+            "id": "blind2-092",
+            "lang": "de",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Ihr Verstoß gegen die Medikamentenverordnung ist korrekt, danke für den Hinweis."
+          },
+          {
+            "id": "blind2-117",
+            "lang": "es",
+            "gold": "FACT",
+            "predicted": "CORRECTION",
+            "source": "nli",
+            "text": "La máquina de soldadura ha generado un error de 2% en la tasa de soldadura."
+          },
+          {
+            "id": "blind2-127",
+            "lang": "es",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Programar una reunión si un envío se retrasa"
+          },
+          {
+            "id": "blind2-128",
+            "lang": "es",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Notificarme si se produce un desperdicio"
+          },
+          {
+            "id": "blind2-129",
+            "lang": "es",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Verifique el estado de los vehículos si se produce un accidente"
+          },
+          {
+            "id": "blind2-130",
+            "lang": "es",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Informeme sobre el monto de depósito si el valor de la bolsa cae..."
+          },
+          {
+            "id": "blind2-132",
+            "lang": "es",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Verifique si existe un fraude si se identifica una transacción sospechosa..."
+          },
+          {
+            "id": "blind2-133",
+            "lang": "es",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Deténgame si el tipo de cambio supera el 1.20 dolares."
+          },
+          {
+            "id": "blind2-140",
+            "lang": "es",
+            "gold": "STATUS",
+            "predicted": "FACT",
+            "source": "nli",
+            "text": "El sistema de rastreo de envídos está funcionando nuevamente."
+          },
+          {
+            "id": "blind2-143",
+            "lang": "es",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Debes introducir la cantidad de 1000 euros para el préstamo personal."
+          },
+          {
+            "id": "blind2-147",
+            "lang": "es",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "nli",
+            "text": "Realmente, debo ver el estado actual de la entrega 12345."
+          },
+          {
+            "id": "blind2-148",
+            "lang": "es",
+            "gold": "CORRECTION",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "De hecho, la ruta más rápida para llegar al puerto es a través del puente 901."
+          },
+          {
+            "id": "blind2-153",
+            "lang": "es",
+            "gold": "LIFECYCLE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "El sistema de gestión se ha decomisionado."
+          },
+          {
+            "id": "blind2-157",
+            "lang": "es",
+            "gold": "LIFECYCLE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "El sistema de diagnóstico del software se ha decomisado."
+          },
+          {
+            "id": "blind2-176",
+            "lang": "ar",
+            "gold": "RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "اقدم لي قائمة المنتجات المستعدة للتخزين كل ثلاث دقائق"
+          },
+          {
+            "id": "blind2-186",
+            "lang": "ar",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "التحدث إلى المستخدم إذا كانت المخزونة تنخفض أدنى"
+          },
+          {
+            "id": "blind2-187",
+            "lang": "ar",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "إرجاع المعلومات إذا وقعت أي تأخير في التوصيل"
+          },
+          {
+            "id": "blind2-189",
+            "lang": "ar",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "تحذير المستخدمين إذا كان هناك نقص في المواد المطلوبة للخدمة المستقبلية"
+          },
+          {
+            "id": "blind2-193",
+            "lang": "ar",
+            "gold": "STATUS",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "لا يزال معدات التدريس الإلكترونية مؤقتًا محدودة في الغرفة التعليمية."
+          },
+          {
+            "id": "blind2-196",
+            "lang": "ar",
+            "gold": "FACT",
+            "predicted": "STATUS",
+            "source": "lexicon",
+            "text": "المواد الدوائية المتوقفة عن توصيل قد تبدأ في العودة."
+          },
+          {
+            "id": "blind2-203",
+            "lang": "ar",
+            "gold": "CORRECTION",
+            "predicted": "FACT",
+            "source": "nli",
+            "text": "في الواقع، تحتاج إلى تصليح الأشبات الأمامية."
+          },
+          {
+            "id": "blind2-206",
+            "lang": "ar",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "شكراً على إنشاء عربة الشحن المتقدمة، كانت عملية التعاون ناجحة"
+          },
+          {
+            "id": "blind2-210",
+            "lang": "ar",
+            "gold": "LIFECYCLE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "العقود التعاقب عليها تنتهي"
+          },
+          {
+            "id": "blind2-217",
+            "lang": "ar",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "شيء نزلي: قم بإبلاغي عندما تكون هناك تحديثات حول الإنترنت."
+          },
+          {
+            "id": "blind2-228",
+            "lang": "hi",
+            "gold": "FACT",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "मेरे कार्यालय में आज ही 'एसएमए' की 100 पैकेट आएंगे, जानें"
+          },
+          {
+            "id": "blind2-247",
+            "lang": "hi",
+            "gold": "STATUS",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "पेलोड लैंडर 2 आउट ऑफ-सर्विस में है."
+          },
+          {
+            "id": "blind2-248",
+            "lang": "hi",
+            "gold": "STATUS",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "परिवहन रखरखाव पाइपलाइन में एक समस्या है, यह जारी रहने वाली है."
+          },
+          {
+            "id": "blind2-250",
+            "lang": "hi",
+            "gold": "STATUS",
+            "predicted": "FACT",
+            "source": "nli",
+            "text": "ATM मशीन अप्रत्याशित रूप से बंद है"
+          },
+          {
+            "id": "blind2-261",
+            "lang": "hi",
+            "gold": "FACT",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "Realistically, कर्मचारियों का उपयोग आपको काम पर पर्याप्त सुरक्षा सुनिश्चित करने के लिए जरूरी है, न कि अनावश्यक दक्षता के लिए।"
+          },
+          {
+            "id": "blind2-263",
+            "lang": "hi",
+            "gold": "LIFECYCLE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "उत्पाद का सेवानिवृत्ति हो गया."
+          },
+          {
+            "id": "blind2-264",
+            "lang": "hi",
+            "gold": "LIFECYCLE",
+            "predicted": "FACT",
+            "source": "nli",
+            "text": "शॉप बंद हो गया अंतिम रूप से."
+          },
+          {
+            "id": "blind2-265",
+            "lang": "hi",
+            "gold": "LIFECYCLE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "प्रणाली डीकमिशन हो गई."
+          },
+          {
+            "id": "blind2-269",
+            "lang": "hi",
+            "gold": "LIFECYCLE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "इस प्रणाली को संचालन से हटाया जा रहा है..."
+          },
+          {
+            "id": "blind2-272",
+            "lang": "hi",
+            "gold": "NONE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "हाँ, मैं तुम्हें इस हवाई जाने के लिए एक ईमेल टेम्प्लेट बनाना चाहूंगा।"
+          }
+        ]
+      },
+      "baseline": {
+        "n": 241,
+        "macro_f1": 0.1048,
+        "macro_f1_with_none": 0.2108,
+        "accuracy": 0.3361,
+        "per_kind_f1": {
+          "FACT": 0.3431,
+          "RULE": 0.2857,
+          "CONDITIONAL_RULE": 0.0,
+          "STATUS": 0.0,
+          "CORRECTION": 0.0,
+          "LIFECYCLE": 0.0,
+          "NONE": 0.8471
+        },
+        "per_language": {
+          "ar": {
+            "n": 36,
+            "macro_f1": 0.0855,
+            "macro_f1_with_none": 0.1909,
+            "accuracy": 0.4722,
+            "per_kind_f1": {
+              "FACT": 0.5128,
+              "RULE": 0.0,
+              "CONDITIONAL_RULE": 0.0,
+              "STATUS": 0.0,
+              "CORRECTION": 0.0,
+              "LIFECYCLE": 0.0,
+              "NONE": 0.8235
+            }
+          },
+          "de": {
+            "n": 53,
+            "macro_f1": 0.0392,
+            "macro_f1_with_none": 0.1606,
+            "accuracy": 0.2642,
+            "per_kind_f1": {
+              "FACT": 0.2353,
+              "RULE": 0.0,
+              "CONDITIONAL_RULE": 0.0,
+              "STATUS": 0.0,
+              "CORRECTION": 0.0,
+              "LIFECYCLE": 0.0,
+              "NONE": 0.8889
+            }
+          },
+          "en": {
+            "n": 54,
+            "macro_f1": 0.1719,
+            "macro_f1_with_none": 0.2744,
+            "accuracy": 0.3519,
+            "per_kind_f1": {
+              "FACT": 0.3043,
+              "RULE": 0.7273,
+              "CONDITIONAL_RULE": 0.0,
+              "STATUS": 0.0,
+              "CORRECTION": 0.0,
+              "LIFECYCLE": 0.0,
+              "NONE": 0.8889
+            }
+          },
+          "es": {
+            "n": 56,
+            "macro_f1": 0.0667,
+            "macro_f1_with_none": 0.1841,
+            "accuracy": 0.3571,
+            "per_kind_f1": {
+              "FACT": 0.4,
+              "RULE": 0.0,
+              "CONDITIONAL_RULE": 0.0,
+              "STATUS": 0.0,
+              "CORRECTION": 0.0,
+              "LIFECYCLE": 0.0,
+              "NONE": 0.8889
+            }
+          },
+          "hi": {
+            "n": 42,
+            "macro_f1": 0.0465,
+            "macro_f1_with_none": 0.1419,
+            "accuracy": 0.2619,
+            "per_kind_f1": {
+              "FACT": 0.2791,
+              "RULE": 0.0,
+              "CONDITIONAL_RULE": 0.0,
+              "STATUS": 0.0,
+              "CORRECTION": 0.0,
+              "LIFECYCLE": 0.0,
+              "NONE": 0.7143
+            }
+          }
+        }
+      },
+      "below_baseline": []
+    }
+  },
+  "provenance": {
+    "timestamp": "2026-10-11T04:05:33.027700+00:00",
+    "git_commit": "8c1a893aabaaf151af953943f7e8fcad5187f916",
+    "host_load": {
+      "loadavg_1m": 1.85,
+      "loadavg_5m": 2.08,
+      "loadavg_15m": 2.21,
+      "load_per_core": 0.46
+    },
+    "python": "3.13.14",
+    "platform": "Linux-6.18.44-fc-v114-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "cpu_count": 4,
+    "memory_gb": 15.7,
+    "packages": {
+      "fastapi": "0.141.1",
+      "sqlalchemy": "2.0.53",
+      "qdrant-client": "1.19.0",
+      "procrastinate": "3.9.0",
+      "zstandard": "0.25.0",
+      "sentence-transformers": "6.0.1",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "onnxruntime": "1.30.0",
+      "docling": "2.127.0"
+    },
+    "models": {
+      "bekko-embedding-v1-a8m": {
+        "repo": "hotchpotch/bekko-embedding-v1-a8m",
+        "revision": "c721113d59a1d91b447450324f51c4b3332c924a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "mdeberta-v3-base-xnli-multilingual-nli-2mil7": {
+        "repo": "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7",
+        "revision": "b5113eb38ab63efdd7f280f8c144ea8b13f978ce"
+      },
+      "mxbai-edge-colbert-v0-32m": {
+        "repo": "mixedbread-ai/mxbai-edge-colbert-v0-32m",
+        "revision": "bb13a29ec9b1e7edd4ba8f7a0776c48b55cbad66"
+      }
+    },
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    }
+  }
+}

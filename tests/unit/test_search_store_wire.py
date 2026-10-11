@@ -62,6 +62,9 @@ _NOT_FROM_A_READ = {"record_id", "tenant_id"}
 # Relations are assembled by the graph stage, not indexed as Qdrant records.
 # Their source-memory lineage is read only when filtering fact candidates.
 _GRAPH_ONLY_FIELDS = {"memory_id"}
+#: Written onto a hit by ranking itself and read back in the same request (``_dedup`` records
+#: the twins it collapsed, ``in_hand`` reads them): never stored, so never projected.
+_IN_PROCESS_FIELDS = {"duplicates"}
 
 
 class _PayloadKeys(ast.NodeVisitor):
@@ -145,7 +148,7 @@ def test_the_projection_is_exactly_what_the_readers_read() -> None:
     """The include list is a duplicate of knowledge that lives in six other files, so it is
     re-derived here rather than trusted. A key added to a reader and not here comes back as
     None from Qdrant while every test that uses a fake store keeps passing."""
-    read = _keys_read_in_src() - _GRAPH_ONLY_FIELDS
+    read = _keys_read_in_src() - _GRAPH_ONLY_FIELDS - _IN_PROCESS_FIELDS
     projected = set(PAYLOAD_FIELDS)
     assert read - projected == set(), (
         f"payload keys read in src but not requested from the store: {sorted(read - projected)}"

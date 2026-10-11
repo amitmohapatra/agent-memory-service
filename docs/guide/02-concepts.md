@@ -106,6 +106,80 @@ with real facts:
 Forgetting a fact therefore does not forget the sentence it came from; the turn stays
 searchable until it is forgotten too ([USAGE §4](../USAGE.md#4-correcting-supersede-forget-restore)).
 
+### What a statement does
+
+Each sentence of a user's message is also labelled with what it **does**, a `StatementKind`
+(`domain/enums.py`, ADR 0037), stored on every memory it produced as
+`system_metadata["statement_kind"]` (read it with `domain.memory.statement_kind_of`):
+
+| Kind | The sentence | Example |
+|---|---|---|
+| `FACT` | states something | "Our primary supplier for heavy-duty pallets is Uline." |
+| `RULE` | gives a standing instruction | "Whenever I ask for a stock audit, always format the response as a markdown table." |
+| `CONDITIONAL_RULE` | gives one with an exception or a condition about the world | "Never include zero-stock items unless I type 'include out of stock'." |
+| `STATUS` | reports the state of a thing | "Forklift #4 has been repaired and is back on the floor." |
+| `CORRECTION` | revises something said before | "No, our system was updated. We now use the /shrinkage command." |
+| `LIFECYCLE` | says a thing or a relationship began or ended | "The temporary refrigeration unit has been dismantled." |
+
+A question, a greeting or a one-off request gets no kind; a verbatim turn carries the most
+telling kind of its sentences (a correction outranks a rule, a rule a lifecycle change, then a
+status, then a fact). A rule that says it is for every time - a standing word ("always",
+"never", "from now on"), a recurring trigger ("whenever", "every time") or a universal
+obligation ("All X must") - is stored as a lasting rule wherever that word sits ("For weekly
+overviews, never ...") and in any of the labeller's languages, with its trigger and its
+exception as said (`rule_trigger`, `rule_exception`). A conditional instruction that does not
+say so ("Tell me if the price drops", "Don't use bullet points unless I ask") keeps its kind
+as metadata only and is stored as it was before the labeller.
+
+The labeller (`modules/memory/statements.py`) reads cue words from data packs
+(`modules/memory/lexicon/generic.json` and the default domain pack `retail.json`) and leaves
+what they cannot settle to the grounding model's NLI head and, when the tenant's policy
+allows `contextual_extraction`, to the model - whose proposal counts only if the NLI head
+confirms it; when the head fails, the lexicon's label stands and the message is stored as
+usual. Nothing reads the kind yet: retrieval, consolidation and the bundle are unchanged. It
+is recorded so that later stages can act on it.
+
+### When two statements are about the same thing
+
+Consolidation reinforces, replaces or links a memory only when the new statement is about the
+same **subject** (ADR 0035, `domain/subjects.py`). A subject is compared by what decides its
+identity, not by how it is spelled:
+
+- **Identifiers block.** Every number, code, unit, date and month is an identifier, and so is
+  a short code ("LA", "IN", "Block A", "C#", "A+", "Sales SE") - never mistaken for the word
+  or company form it looks like.
+  "Forklift #3" and "Forklift #4", "Warehouse 3" and "Warehouse 13", "Store LA" and "Store
+  AL", "Dock 3 door 4" and "Dock 4 door 3", "5 kg" and "5 lb", "1,5 kg" and "15 kg", "Level
+  -1" and "Level 1", "Q3" and "Q4" are different subjects however alike the rest is, and
+  nothing - no vector, no model - joins them. Neither do two different titles ("Mrs Patel",
+  "Mr Patel"), directions ("Shipment to Berlin", "Shipment from Berlin") or legal forms ("Acme
+  Inc", "Acme Ltd"), nor a code alone and a name ("LA", "Berlin Hub").
+- **Spelling and shorthand do not.** Letter case (of words; a short code keeps it),
+  punctuation, "#", "No.", "Nr.", "núm.", "رقم", "नंबर" before a number, spacing, digits of
+  any script and a leading article (not one that is part of a name, as in "El Salvador") are
+  ignored: "Forklift 4" is "forklift #4" is "FORKLIFT-4", "Acme Logistics GmbH" is "Acme
+  Logistics". Abbreviations
+  and aliases from two vocabulary packs (data in `domain/vocabulary/`, a generic one and a
+  retail one, both always on) are read as what they stand for: "OOS" is "out of stock", "PO
+  4471" is "purchase order 4471", "DC 3" is "Distribution Centre 3", "hazmat" is "hazardous
+  materials".
+- **A tenant's own shorthand is learned from its own text**, with nothing to configure: once a
+  stored memory says "cross-dock facility (CDF)" or "WOS stands for weeks of supply", the two
+  forms name one subject in that memory's neighbourhood - even when a pack reads the short
+  form otherwise. A short form defined as two things is not learned.
+- **Uncertain is not the same.** What matches only with a plural folded, a title or a
+  connective dropped or the words reordered ("John Roberts" / "John Robert", "Dr. Priya
+  Sharma" / "Priya Sharma", "Bank of China" / "China Bank"), a code on one side only ("Sales
+  SE" / "Sales"), a short form ("Acme" for "Acme Logistics"), a likely typo
+  ("Jonathon"), an initialism ("GFS") or a translation ("Gabelstapler 4") is only
+  *possible*: the service never merges it on its own. With the `conflict_adjudication` model
+  use enabled (chapter 8), the closest such memory is what the model is asked about.
+
+A memory about a person or anchor (`user:…`, `thread:…`) is about that identity: two of them
+share a subject in the same single-valued slot (one city, one employer), or when their topics
+share words ("tabs over spaces", "spaces instead of tabs"). Which values replace which is
+[chapter 3](03-time.md)'s.
+
 ---
 
 ## A memory is classified on several axes at once
@@ -135,7 +209,11 @@ When the writer gives no lifetime, the type decides (`_LIFETIME_BY_TYPE` in
 
 One sentence-level exception: an imperative ("do not invent a sales number") is a
 `PREFERENCE` by shape but is given `SHORT_TERM`, so a one-off instruction does not become
-permanent; restating it restarts its clock (`classify` in `modules/memory/native.py`).
+permanent; restating it restarts its clock (`classify` in `modules/memory/native.py`). A
+rule that says it is standing ("never suggest recipes with cilantro", "whenever I ask for a
+stock audit, use a table") is `LONG_TERM` on sight; any other conditional instruction ("don't
+use bullet points unless I ask") is the imperative above, `SHORT_TERM`, whatever kind it was
+given.
 
 ---
 
@@ -154,7 +232,17 @@ When the writer does not say, the visibility follows the type and the request
 | `USER`, `PREFERENCE` | `USER` when the request names a user, else `PRIVATE` |
 | `AGENT`, `TOOL`, `WORKING` | `RUN` when the request carries an agent run, else `PRIVATE` |
 | `SHARED` | `AGENT_GROUP` with a group id, else `THREAD` with a thread, else `TENANT` |
+| anything else, from a user's own words | `USER` |
 | anything else | `THREAD` with a thread, else `USER` with a user, else `TENANT` |
+
+**What a user says follows that user** (ADR 0036). A user's own words are their message, a
+decision or feedback they record, or a `remember` they make themselves, including a turn an
+agent harness relays for them (`said_by_user`). Everything made from those words is `USER`:
+read in every conversation of theirs and by every agent acting for them, never by another
+person, wherever it was said. Sharing wider is explicit (`WORKSPACE`, `TENANT`), and so is
+keeping a statement to the conversation it was said in (`THREAD`). What an agent or the
+assistant writes, and an `EVENT` or `IMPORT` record, keeps the rows below the first three.
+The conversation window and the thread summary stay with their thread.
 
 An agent writing a `TASK` or `EPISODIC` memory keeps it `PRIVATE` unless it says otherwise:
 an agent's working notes are not shared by accident (ADR 0013).

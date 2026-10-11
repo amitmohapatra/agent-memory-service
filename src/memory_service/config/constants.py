@@ -25,6 +25,7 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from memory_service.domain.enums import StatementKind
 from memory_service.domain.fiscal import FiscalCalendar
 from memory_service.ports.search import VectorName
 
@@ -553,6 +554,57 @@ class NLISettings(BaseModel):
 
 
 NLI = NLISettings()
+
+
+class StatementLabellerSettings(BaseModel):
+    """The statement labeller (``modules.memory.statements``, ADR 0037): which lexicon packs
+    it reads, and how the frozen NLI head (``FROZEN_MODELS.nli``) decides what the packs
+    leave open. The hypotheses are English for every language - the head is cross-lingual."""
+
+    model_config = ConfigDict(frozen=True)
+
+    #: generic cue words first, then the domain pack (``modules/memory/lexicon/*.json``)
+    packs: tuple[str, ...] = ("generic", "retail")
+    #: One hypothesis per kind the lexicon may suspect; the head scores the suspected one
+    #: only (one pair a sentence). Chosen on the generalisation dev set (the cleaned first
+    #: blind set and the golden dev half) from cached head scores, preferring, among the
+    #: choices within one dev item of the best, the one that fires least on chat (LoCoMo): a
+    #: rule of either kind is "an instruction" - the lexicon has already found its
+    #: condition - and "The speaker is correcting an earlier mistake." was dropped because it
+    #: holds for 47% of chat sentences (ADR 0037).
+    hypotheses: dict[StatementKind, str] = Field(
+        default_factory=lambda: {
+            StatementKind.RULE: "This is an instruction.",
+            StatementKind.CONDITIONAL_RULE: "This is an instruction.",
+            StatementKind.STATUS: "Something is broken, not working, or unavailable.",
+            StatementKind.LIFECYCLE: "Something has ended, been terminated, or newly started.",
+            StatementKind.CORRECTION: "Something said earlier was wrong.",
+        }
+    )
+    #: entailment at or above which the head confirms the suspected kind: the rule kinds at
+    #: the top of the dev plateau (0.4-0.7 within one item), the weak-word kinds where they
+    #: lose nothing on dev and confirm nothing in a sample of 800 chat sentences
+    thresholds: dict[StatementKind, float] = Field(
+        default_factory=lambda: {
+            StatementKind.RULE: 0.7,
+            StatementKind.CONDITIONAL_RULE: 0.7,
+            StatementKind.STATUS: 0.9,
+            StatementKind.LIFECYCLE: 0.9,
+            StatementKind.CORRECTION: 0.8,
+        }
+    )
+    #: entailment at or above which a kind the tenant's model proposed is accepted
+    llm_confirm_min: float = Field(default=0.4, ge=0.0, le=1.0)
+    #: open sentences scored per observation (a pasted document is not labelled whole)
+    nli_max_sentences: int = Field(default=12, ge=0)
+    nli_max_chars: int = Field(default=400, ge=1)
+    #: a longer "sentence" (a pasted log, a run-on dump) is a fact without being read: the
+    #: lexicon's cost grows with the text (about 14 us a character), and nothing that long
+    #: is one instruction
+    lexicon_max_chars: int = Field(default=2000, ge=1)
+
+
+STATEMENT_LABELLER = StatementLabellerSettings()
 
 
 class MemoryIntelligenceSettings(BaseModel):

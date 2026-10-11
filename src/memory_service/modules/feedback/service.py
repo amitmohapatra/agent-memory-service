@@ -547,8 +547,12 @@ class FeedbackService:
     async def _retract(
         self, uow: UnitOfWork, memory: CanonicalMemory, record: Feedback, *, now: datetime
     ) -> FeedbackProjection:
-        await retract(uow, memory, now=now)
-        await self._reindex(uow, memory)
+        # the same statement kept twice (a turn and a rule's reading in its words) is
+        # withdrawn once: the twin left behind would still assert it
+        twins = await uow.memories.twins(memory.tenant_id, memory)
+        for wrong in (memory, *twins):
+            await retract(uow, wrong, now=now)
+        await self._reindex(uow, memory, *twins)
         return FeedbackProjection(
             action=ProjectionAction.MEMORY_RETRACTED, memory_id=memory.memory_id, projected_at=now
         )
@@ -601,10 +605,14 @@ class FeedbackService:
             }
         )
         keys = list(memory.system_metadata.get("visibility_keys", []))
+        # the same statement kept twice is corrected once: its twin closes at the correction
+        twins = await uow.memories.twins(memory.tenant_id, memory)
         # link first: ``add`` copies the temporal state into the row as it is at that moment
         await supersede(uow, memory, corrected, now=now)
+        for twin in twins:
+            await supersede(uow, twin, corrected.model_copy(), now=now)
         await uow.memories.add(corrected, visibility_keys=keys)
-        await self._reindex(uow, memory, corrected)
+        await self._reindex(uow, memory, corrected, *twins)
         return FeedbackProjection(
             action=ProjectionAction.MEMORY_SUPERSEDED,
             memory_id=memory.memory_id,
