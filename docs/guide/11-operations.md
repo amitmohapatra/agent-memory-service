@@ -159,14 +159,22 @@ re-measure on a real corpus).
 Every job is registered in one place, `modules/jobs/registry.py`, and every enqueued task name
 must have a handler there (`tests/unit/test_job_registration.py`). Jobs run on named queues;
 interactive work is prioritised over indexing, summaries and imports (`QUEUE_PRIORITY` in
-`ports/tasks.py`).
+`ports/tasks.py`). The worker runs three pools (`worker_pools`): the `embedding` queue, whose
+jobs make a write findable, on slots of its own (`TASKS.indexing_concurrency`, 2); the `graph`
+queue on slots of its own (`TASKS.graph_concurrency`, 2); and every other queue on
+`tasks.worker_concurrency`. In one pool, jobs waiting on a slow model held every slot and
+indexing waited minutes behind them, and a graph backlog (an import queues thousands of
+enrichment jobs, which outrank parsing, archiving, reconciliation and summaries) held every slot
+until it drained. Each pool keeps one listening connection outside the queue pool.
 
 | Job | Queue | Triggered by | Retries | Does |
 |---|---|---|---|---|
 | `memory.process_observation` | `chat-fast` | each message | 5 | the memory pipeline (chapter 10) |
-| `memory.index` | `embedding` | every memory change | 5 | index or remove, enrich the graph, bump revisions, queue a profile refresh |
+| `memory.index` | `embedding` | every memory change | 5 | index or remove, bump revisions, queue a profile refresh and the graph enrichment |
+| `graph.enrich_memories` | `graph` | `memory.index` | 5 | the memories' entities and relations; one at a time per tenant when a model is reachable |
 | `document.parse` | `document-parse` | upload | 3 | parse, hierarchy, chunks, Document Context Graph |
-| `document.index` | `embedding` | parse | 5 | index chunks and summaries, enrich the graph |
+| `document.index` | `embedding` | parse | 5 | index chunks and summaries, mark the document `READY`, queue the graph enrichment |
+| `graph.enrich_document` | `graph` | `document.index` | 5 | the document's entities and relations; one at a time per tenant when a model is reachable |
 | `archive.stage_message` | `archive` | each message, 60 s coalesced per thread | 10 | compress, upload, verify, manifest (ADR 0006) |
 | `feedback.project` | `reconcile` | an applied verdict | 3 | apply it (chapter 6) |
 | `summary.refresh` | `summary` | every 20 messages | 3 | the thread's durable summary, then its searchable episode |
@@ -272,9 +280,22 @@ way with several workers, the banner says the series are one worker's share
 `memory_queue_depth` and `memory_queue_oldest_lag_seconds` per queue,
 `memory_outbox_backlog`, `memory_jobs_failed_terminal` per queue, `memory_worker_running_jobs`
 and `memory_worker_last_sample_timestamp_seconds` (sampled every 15 s; a stale value is a
-worker that cannot reach its database). The compose healthcheck reads that port. On SIGTERM
-the worker stops fetching, gives running jobs 30 s, then aborts and releases the rest for a
-retry; compose's `stop_grace_period` for it is 45 s.
+worker that cannot reach its database), `memory_worker_db_retries_total` per operation
+(`query`, `listen`) and `memory_worker_db_unavailable_seconds`. The compose healthcheck reads
+that port. On SIGTERM the worker stops fetching, gives running jobs 30 s, then aborts and
+releases the rest for a retry; compose's `stop_grace_period` for it is 45 s. A database that
+cannot do a queue statement - no connection free in the queue pool, a full disk or no memory
+(SQLSTATE class 53), a lost or refused connection (class 08, 57P01-57P03), the LISTEN
+connection lost - is ridden out for 90 s (`TASKS.worker_db_outage_seconds`): each retry is
+logged (`worker.db_retry`) and counted, after a pause growing from 0.5 s to 10 s, and the
+gauge says for how long. Those statements did not take effect (never ran, or rolled back), and
+Procrastinate's claim, finish and retry statements act only from the status they expect, so a
+retry never applies one twice. Past 90 s (`worker.db_unavailable`), or when one of its pools
+stops on its own, the worker logs `worker.failed` and exits non-zero for its supervisor to
+restart it (compose: `restart: on-failure`). One pool timeout in a heartbeat, or one job-status
+write to a full disk, used to stop it, and the process exited as if asked to. A log line that
+cannot be written (stdout's disk full) is lost and counted (`memory_log_lines_dropped_total`),
+never raised into the code that logged it.
 
 **Overload.** A read (GET, `/v1/context`, `/v1/recall`, `/v1/tools/hints`) that runs past
 5 s, a write past 15 s, `/v1/verify` past 15 s is answered `504` `TIMEOUT` (retryable);

@@ -82,7 +82,7 @@ covers the connection budget, PgBouncer and online migrations.
 
 | Variable | Default | Example | Auto | What it does |
 |---|---|---|---|---|
-| `MEMORY__TASKS__WORKER_CONCURRENCY` | auto | `4` | yes: one per available CPU, 1-8 | jobs one worker process runs at once, 1-8 |
+| `MEMORY__TASKS__WORKER_CONCURRENCY` | auto | `4` | yes: one per available CPU, 1-8 | jobs one worker process runs at once, 1-8, beside the 2 slots of its indexing pool and the 2 of its graph pool |
 | `MEMORY__TASKS__METRICS_PORT` | `9464` | `9464` | no | where the job worker serves its Prometheus series and healthcheck (1-65535). It cannot be switched off from the environment |
 
 ## Authentication

@@ -48,7 +48,7 @@ the agent harness that consumes the service (ADR 0020).
 | Process | Entry point | Does |
 |---|---|---|
 | API | `memory-api` → `__main__.py:run_api`: `service.workers` uvicorn processes (default: one per available CPU, 1-8) | every HTTP route; each process builds its own container, model set and pools |
-| Worker | `memory-worker` → `worker.py`: Procrastinate, `tasks.worker_concurrency` jobs at once (default: one per available CPU, 1-8) | every background job (chapter 11) |
+| Worker | `memory-worker` → `worker.py`: Procrastinate, `tasks.worker_concurrency` jobs at once (default: one per available CPU, 1-8), and the `embedding` and `graph` queues on 2 slots each of their own | every background job (chapter 11) |
 
 | Store | Holds | If lost |
 |---|---|---|
@@ -148,8 +148,8 @@ Step by step:
    `CURRENT` memories are encoded under both keys in every dense space, BM25 and ColBERT
    and upserted with their payload — audience keys, type, subject, dates, resolved relative
    dates — and `SUPERSEDED` ones as history; every other state is deleted from the index.
-   The same job enriches the graph (chapter 5) and **bumps the revisions again** now that the
-   memory is findable: the first bump happened while the job was being enqueued, so a context
+   The same job **bumps the revisions again** now that the memory is findable, then queues its
+   graph enrichment as a job of its own (`graph.enrich_memories`, chapter 5): the first bump happened while the job was being enqueued, so a context
    built in between would otherwise cache a bundle that cannot see the memory for the whole
    cache TTL (`_bump_for` in `modules/jobs/registry.py`). A `USER` or `PREFERENCE` memory also
    queues a refresh of the user's pinned profile block.
@@ -161,8 +161,8 @@ The other writes take the same shape:
   once, searchable when the job lands.
 - **`POST /v1/documents`** stages the bytes in PostgreSQL (`file_staging`) in the accept
   transaction, deduplicated by SHA-256 within the tenant; `document.parse` builds the
-  hierarchy, chunks and Document Context Graph; `document.index` indexes chunks and summaries
-  and enriches the graph; the raw file is archived immutably and verified before the staged
+  hierarchy, chunks and Document Context Graph; `document.index` indexes chunks and summaries,
+  marks the document `READY` and queues its graph enrichment (`graph.enrich_document`); the raw file is archived immutably and verified before the staged
   bytes are purged (ADR 0007).
 - **`POST /v1/feedback`** stores the verdict and, if it is applied rather than pending,
   its `feedback.project` job in one transaction (chapter 6).

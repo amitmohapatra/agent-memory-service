@@ -137,7 +137,9 @@ artifact says so: `nli_provider: lexical-nli-v2`, `representative: false`
 **Recorded on a run.** With a `run_id` (or the scope's agent run), the report is written as
 the service's own judge feedback on that run (`modules/grounding/judge.py`): `confirm` when no
 claim is unsupported or contradicted, else `reject`; score `1 − per_claim_hallucination_rate`;
-the memories behind supported claims as its evidence. Its id is derived from the run, the
+the memories behind supported claims as its evidence. An answer with no checkable claim, or a
+context that held no evidence, records nothing: against nothing every claim is unsupported,
+one the run's own tools returned too. Its id is derived from the run, the
 bundle and the answer, so verifying the same answer twice records one verdict. This is the
 one verdict applied without review (next section), because the service wrote it.
 

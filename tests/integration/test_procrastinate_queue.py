@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
 import pytest
 
 from memory_service.adapters.tasks.procrastinate_queue import ProcrastinateTaskQueue
 from memory_service.domain.enums import JobStatus
-from memory_service.ports.tasks import JobSpec, Queue
+from memory_service.ports.tasks import JobSpec, Queue, worker_pools
 from tests.integration.conftest import requires_pg
 
 pytestmark = [pytest.mark.integration, requires_pg]
@@ -101,6 +102,173 @@ async def test_handler_timeout_is_enforced(queue: ProcrastinateTaskQueue) -> Non
 
 async def test_ping(queue: ProcrastinateTaskQueue) -> None:
     assert await queue.ping() is True
+
+
+async def test_a_pools_long_jobs_never_hold_another_pools_slots(
+    queue: ProcrastinateTaskQueue,
+) -> None:
+    """The worker's pools (``worker_pools``). A graph backlog takes the graph pool's slots
+    only: a reconcile job (a run's feedback, a learned skill), which ranks below enrichment,
+    still runs at once. With the shared pool's slots taken by jobs that wait (a slow
+    model's), an indexing job still runs at once. In one pool both waited for a slot, which
+    on a CPU model took minutes."""
+    release = asyncio.Event()
+    started: list[str] = []
+    ran: dict[str, asyncio.Event] = {"learn": asyncio.Event(), "index": asyncio.Event()}
+
+    async def slow(payload):
+        started.append(payload["n"])
+        await release.wait()
+
+    async def done(payload):
+        ran[payload["n"]].set()
+
+    async def until(count: int) -> None:
+        for _ in range(100):
+            if len(started) >= count:
+                return
+            await asyncio.sleep(0.1)
+
+    queue.register("test.enrich", Queue.GRAPH, slow)
+    queue.register("test.extract", Queue.CHAT_FAST, slow)
+    queue.register("test.learn", Queue.RECONCILE, done)
+    queue.register("test.index", Queue.EMBEDDING, done)
+    for n in ("g1", "g2", "g3"):
+        await queue.enqueue(JobSpec(task_name="test.enrich", queue=Queue.GRAPH, payload={"n": n}))
+    pools = worker_pools(concurrency=1, indexing=1, graph=1)
+    assert pools[0] == ([Queue.EMBEDDING], 1) and pools[1] == ([Queue.GRAPH], 1)
+    assert Queue.GRAPH not in pools[2][0] and Queue.RECONCILE in pools[2][0]
+    worker = asyncio.create_task(queue.run_pools(pools, shutdown_grace_seconds=5))
+    try:
+        await until(1)
+        await asyncio.sleep(1)
+        assert started == ["g1"], "the graph pool's one slot runs the backlog, one at a time"
+        await queue.enqueue(
+            JobSpec(task_name="test.learn", queue=Queue.RECONCILE, payload={"n": "learn"})
+        )
+        await asyncio.wait_for(ran["learn"].wait(), timeout=10)
+
+        await queue.enqueue(
+            JobSpec(task_name="test.extract", queue=Queue.CHAT_FAST, payload={"n": "x"})
+        )
+        await until(2)
+        assert started == ["g1", "x"], "the shared pool's one slot is taken"
+        await queue.enqueue(
+            JobSpec(task_name="test.index", queue=Queue.EMBEDDING, payload={"n": "index"})
+        )
+        await asyncio.wait_for(ran["index"].wait(), timeout=10)
+    finally:
+        release.set()
+        worker.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker
+
+
+#: The ``queue`` fixture opens its pool on the session's loop (``asyncio_default_fixture_loop_scope``):
+#: a test that needs the pool to open more connections runs there too, or the pool's
+#: background workers, which open them, never run.
+ON_THE_POOLS_LOOP = pytest.mark.asyncio(loop_scope="session")
+
+
+async def _until(check, seconds: float = 20) -> None:
+    for _ in range(int(seconds * 10)):
+        if check():
+            return
+        await asyncio.sleep(0.1)
+    raise AssertionError("not within the time")
+
+
+def _db_retries() -> float:
+    from memory_service.observability.metrics import REGISTRY
+
+    found = REGISTRY.get_sample_value("memory_worker_db_retries_total", {"operation": "query"})
+    return found or 0.0
+
+
+@ON_THE_POOLS_LOOP
+async def test_a_queue_pool_timeout_is_ridden_out_and_the_worker_goes_on(
+    queue: ProcrastinateTaskQueue,
+) -> None:
+    """Every connection of the queue pool taken for longer than the pool's timeout - the
+    database out of reach under memory pressure - and the worker's job fetch times out. It
+    used to raise out of the worker, and the process ended; now it is retried with a growing
+    pause, counted, and the next job runs once a connection is free again."""
+    from memory_service.config.constants import DATABASE
+
+    ran: list[int] = []
+
+    async def job(payload):
+        ran.append(payload["n"])
+
+    queue.register("test.job", Queue.RECONCILE, job)
+    worker = asyncio.create_task(
+        queue.run_pools([([Queue.RECONCILE], 1)], shutdown_grace_seconds=5, db_outage_seconds=60)
+    )
+    try:
+        await queue.enqueue(JobSpec(task_name="test.job", queue=Queue.RECONCILE, payload={"n": 1}))
+        await _until(lambda: ran == [1])
+        before = _db_retries()
+        pool = queue.app.connector.pool  # type: ignore[attr-defined]
+        async with contextlib.AsyncExitStack() as held:
+            for _ in range(pool.max_size):
+                await held.enter_async_context(pool.connection())
+            await asyncio.sleep(DATABASE.pool_timeout_seconds + 4)
+            assert not worker.done(), "the worker rides the outage out"
+        assert _db_retries() > before, "each retry is counted"
+        await queue.enqueue(JobSpec(task_name="test.job", queue=Queue.RECONCILE, payload={"n": 2}))
+        await _until(lambda: ran == [1, 2])
+        assert not worker.done()
+    finally:
+        worker.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker
+
+
+@ON_THE_POOLS_LOOP
+async def test_a_database_out_of_reach_past_the_budget_ends_the_worker_with_an_error(
+    queue: ProcrastinateTaskQueue,
+) -> None:
+    """Past ``db_outage_seconds`` the pool timeout is raised: the worker process exits
+    non-zero, for its supervisor to start a fresh one."""
+    ran: list[bool] = []
+
+    async def job(payload):
+        ran.append(True)
+
+    queue.register("test.job", Queue.RECONCILE, job)
+    worker = asyncio.create_task(
+        queue.run_pools([([Queue.RECONCILE], 1)], shutdown_grace_seconds=5, db_outage_seconds=1)
+    )
+    try:
+        await queue.enqueue(JobSpec(task_name="test.job", queue=Queue.RECONCILE))
+        await _until(lambda: ran == [True])  # the worker is up
+        pool = queue.app.connector.pool  # type: ignore[attr-defined]
+        async with contextlib.AsyncExitStack() as held:
+            for _ in range(pool.max_size):
+                await held.enter_async_context(pool.connection())
+            with pytest.raises(Exception) as raised:  # noqa: PT011 - the connector's own error
+                await asyncio.wait_for(worker, timeout=60)
+        assert type(raised.value.__cause__).__name__ == "PoolTimeout", raised.value
+    finally:
+        worker.cancel()
+        with contextlib.suppress(BaseException):
+            await worker
+
+
+async def test_a_worker_that_stops_unasked_ends_the_pools_with_an_error(
+    queue: ProcrastinateTaskQueue, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Procrastinate stops a worker whose heartbeat or deferrer failed and returns as if it
+    had been asked to; the pools then raise instead of returning, so the process does not exit
+    0 as a clean stop would."""
+    from memory_service.adapters.tasks.procrastinate_queue import WorkerStoppedError
+
+    async def stopped_on_its_own(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(queue, "run_worker", stopped_on_its_own)
+    with pytest.raises(WorkerStoppedError, match="worker:reconcile"):
+        await asyncio.wait_for(queue.run_pools([([Queue.RECONCILE], 1)]), timeout=10)
 
 
 async def _stop_mid_job(queue_database: str, tmp_path, *, seconds: float, grace: float):

@@ -115,9 +115,12 @@ until they do, `INVALIDATED` is a status the read filters honour and nothing wri
 
 ## How it is built
 
-Enrichment runs inside the jobs that index the source — `memory.index` for memories,
-`document.index` for documents (`modules/jobs/registry.py`) — never on the request that wrote
-the data. (`docs/ARCHITECTURE.md` draws it as `graph.enrich`; there is no job of that name.)
+Enrichment is a job of its own, queued by the job that indexes the source once the source is
+findable — `graph.enrich_memories` after `memory.index`, `graph.enrich_document` after
+`document.index` (`modules/jobs/registry.py`) — never on the request that wrote the data. It
+runs on the `graph` queue, below indexing, in a worker pool of its own, and one job at a time
+per tenant when a model is reachable: it asks the model, and on a slow one, run inside the
+index jobs, it held every worker slot while writes waited minutes to become findable.
 
 ```mermaid
 flowchart LR

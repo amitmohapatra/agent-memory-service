@@ -109,8 +109,8 @@ class DocumentResponse(BaseModel):
     checksum: str = Field(description="SHA-256 of the bytes, hex.")
     status: DocumentStatus = Field(
         ...,
-        description="STAGED: accepted, parse job queued or running; READY: parsed and "
-        "indexed, retrievable; FAILED: the parse job gave up, see last_error.",
+        description="STAGED: accepted, its parse or index job queued or running; READY: "
+        "parsed and indexed, retrievable; FAILED: the parse job gave up, see last_error.",
     )
     archive_status: ArchiveStatus = Field(
         ...,

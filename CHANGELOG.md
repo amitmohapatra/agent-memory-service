@@ -24,6 +24,45 @@ each entry says which one moved. Decisions behind each change are in the
   only ([past conversations](docs/guide/04-retrieval.md#past-conversations)).
 
 ### Fixed
+- A document is `READY` only once it is findable. The parse job set `READY` before the index job
+  it chains had embedded a chunk, so `wait_ready` returned while `search` and `context` still
+  found nothing; with the worker busy (LLM-assisted enrichment on a slow model), the index job
+  ran seconds later and the question asked at `READY` answered "Memory holds nothing". The
+  document now stays `STAGED` through parsing and indexing, and the index job marks it `READY`
+  after the embeddings are written, before graph enrichment
+  ([documents](docs/api/documents.md)).
+- `/v1/verify` records no verdict on a run whose context held no evidence. Against an empty
+  context every claim is "unsupported" - one the run's own tools returned too - so the judge
+  rejected such runs, their outcome became a failure, and an agent sampled for grounding
+  (`TRELLIS_GROUNDING_SAMPLE`, 10 % by default) never learned a skill from them
+  ([trust](docs/guide/06-trust.md)).
+- The worker runs the `embedding` queue - the jobs that make a memory, a document's chunks or a
+  tool findable - and the `graph` queue on slots of their own (2 each, beside
+  `tasks.worker_concurrency` for every other queue). With a slow model, observation extraction
+  and graph enrichment held every slot, and a tool catalog published just before a question
+  waited 14 s to be searchable; and a graph backlog - an import queues thousands of enrichment
+  jobs, which outrank parsing, archiving, reconciliation and summaries - held every slot until
+  it drained ([operations](docs/guide/11-operations.md#workers-and-periodic-jobs)).
+- The job worker rides out a database that cannot do its queue statements for up to 90 s: no
+  connection free in the queue pool, a full disk or no memory, a lost connection, a lost LISTEN
+  connection. Each is retried with a growing pause, logged (`worker.db_retry`) and counted
+  (`memory_worker_db_retries_total`; `memory_worker_db_unavailable_seconds` says for how long).
+  Under memory pressure one pool timeout in a heartbeat made Procrastinate stop the worker and
+  the process exited 0, so a supervisor restarting on failure left it down; and a job-status
+  write to a full disk stopped it too. Past the 90 s, or when a pool stops on its own, it now
+  logs `worker.failed` and exits non-zero, and compose restarts it (`restart: on-failure`). A
+  log line that cannot be written is lost and counted (`memory_log_lines_dropped_total`)
+  instead of raising into the code that logged it
+  ([operations](docs/guide/11-operations.md#observability)). The API is unchanged: its
+  enqueue goes through the outbox, whose sweep dispatches what a failed enqueue missed.
+- A write is findable within seconds while the graph is enriched by a slow model. Graph
+  enrichment ran inside `memory.index` and `document.index`, and with an LLM enabled each such
+  job held a worker slot for the model's calls (up to minutes on a small CPU model): with every
+  slot taken, indexing, parsing and the other jobs waited up to six minutes, and a memory
+  remembered just before a question was not in its context. Enrichment is now a job of its own,
+  `graph.enrich_memories` / `graph.enrich_document`, queued once the source is indexed, on the
+  `graph` queue below indexing, and one at a time per tenant when a model is reachable
+  ([operations](docs/guide/11-operations.md#workers-and-periodic-jobs)).
 - A document uploaded into a thread that did not exist yet reached `READY` but was never
   returned by `search` or `context`: its THREAD audience named a thread nobody had been
   granted. The upload now creates the thread for the uploader, as a first message does

@@ -234,6 +234,9 @@ services:
     # SIGTERM stops the fetch loop; running jobs get 30 s (OVERLOAD.worker_shutdown_grace_
     # seconds) before they are aborted and released for a retry, inside this window
     stop_grace_period: 45s
+    # The worker exits non-zero when its database stays out of reach past
+    # TASKS.worker_db_outage_seconds or a pool stops on its own: start a fresh one
+    restart: on-failure
     # Prometheus series (queue depth, oldest-job lag, outbox backlog, failed jobs)
     ports: ["9464:9464"]
     healthcheck:

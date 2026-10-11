@@ -7,6 +7,7 @@ can assert what would have been queued and drain them explicitly.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from memory_service.domain.enums import JobStatus
@@ -106,6 +107,16 @@ class RecordingTaskQueue:
         concurrency: int = 4,
         install_signal_handlers: bool = False,
         shutdown_grace_seconds: float | None = None,
+    ) -> None:
+        await self.drain()
+
+    async def run_pools(
+        self,
+        pools: Sequence[tuple[list[Queue], int]],
+        *,
+        install_signal_handlers: bool = False,
+        shutdown_grace_seconds: float | None = None,
+        db_outage_seconds: float | None = None,
     ) -> None:
         await self.drain()
 

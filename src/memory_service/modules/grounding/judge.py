@@ -49,8 +49,11 @@ async def judge_run(
     supported: Sequence[str],
 ) -> str | None:
     """Record the report on ``run_id``; returns the feedback id. An answer with no checkable
-    claim (a greeting, a question back) is no verdict on the run: nothing is recorded."""
-    if not report.claims:
+    claim (a greeting, a question back) is no verdict on the run, and neither is a context
+    that held no evidence: every claim is "unsupported" against nothing, including one the
+    run's own tools returned, and rejecting such a run made its outcome a failure, so the
+    agent never learned from it. Nothing is recorded for either."""
+    if not report.claims or report.evidence_count == 0:
         return None
     record = Feedback(
         feedback_id=f"fb_{stable_key(ctx.tenant_id, run_id, bundle_id, content_hash(answer))}",

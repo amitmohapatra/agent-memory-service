@@ -127,3 +127,16 @@ def test_the_outbox_sweep_is_scheduled_not_merely_registered() -> None:
     )
     # Every minute: this is the floor on how late a missed write can become a memory.
     assert 'Queue.RECONCILE, outbox_sweep, cron="* * * * *"' in source
+
+
+def test_the_worker_runs_every_queue_in_exactly_one_pool() -> None:
+    """Indexing and graph enrichment on slots of their own (``worker_pools``), every other
+    queue in the shared pool: a queue in no pool is never worked, one in two is worked by
+    both."""
+    from memory_service.ports.tasks import Queue, worker_pools
+
+    pools = worker_pools(4, 2, 2)
+    assert pools[:2] == [([Queue.EMBEDDING], 2), ([Queue.GRAPH], 2)]
+    assert pools[2][1] == 4
+    listed = [q for queues, _ in pools for q in queues]
+    assert sorted(listed) == sorted(Queue), "each queue in exactly one pool"

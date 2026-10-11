@@ -6,8 +6,9 @@ Accept path (synchronous, one transaction):
     -> outbox job document.parse -> COMMIT -> 202 FileHandle
 
 Parse job (async): parser -> nodes/chunks/edges persisted (replacing older versions)
--> document READY -> outbox job document.index (M6) -> raw file archived to the file bucket
-(immutable + verified) -> staged bytes purged.
+-> outbox job document.index (M6) -> raw file archived to the file bucket (immutable +
+verified) -> staged bytes purged. The index job embeds the chunks and only then marks the
+document READY (``mark_indexed``): READY means findable.
 """
 
 from __future__ import annotations
@@ -320,10 +321,12 @@ class IngestionService:
                     await uow.documents.add_nodes(parsed.nodes)
                     await uow.documents.add_chunks(chunks)
                     await uow.documents.add_edges(parsed.edges)
+                    # STAGED until the index job has embedded these chunks: READY means
+                    # findable, and callers ask as soon as they see it (mark_indexed)
                     await uow.documents.set_status(
                         tenant_id,
                         document_id,
-                        status="READY",
+                        status="STAGED",
                         current_version_id=version.document_version_id,
                     )
                     await uow.revisions.bump(tenant_id, RevisionKind.DOCUMENT, document_id)
@@ -353,6 +356,20 @@ class IngestionService:
         )
         await self.archive_raw_file(tenant_id, document_id)
         return {"nodes": len(parsed.nodes), "chunks": len(chunks), "edges": len(parsed.edges)}
+
+    async def mark_indexed(
+        self, tenant_id: str, document_id: str, document_version_id: str | None
+    ) -> None:
+        """The index job embedded this version's chunks: the document is READY, findable by
+        ``search`` and ``context``. An index job for a version a later parse replaced leaves
+        the status to that version's own index job."""
+        async with self.uow_factory() as uow:
+            document = await uow.documents.get(tenant_id, document_id)
+            if document is None or document.current_version_id != document_version_id:
+                return
+            await uow.documents.set_status(tenant_id, document_id, status="READY")
+            await uow.revisions.bump(tenant_id, RevisionKind.DOCUMENT, document_id)
+            await uow.commit()
 
     async def _parse(self, document: Document, data: bytes) -> ParsedDocument:
         """Parse with the parser for the media type; a failure marks the document FAILED."""

@@ -7,7 +7,7 @@ outbox). Queues are bulkheads: a 500-page PDF must never starve chat memory.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
@@ -27,6 +27,27 @@ class Queue(StrEnum):
     EVALUATION = "evaluation"
     IMPORT = "import"
     RECONCILE = "reconcile"
+
+
+#: The queues whose jobs make a write findable (memories, chunks, tools): the worker runs
+#: them in a pool of their own (``TaskQueue.run_pools``). In one pool, a slow model's jobs -
+#: observation extraction, graph enrichment, summaries - held every slot and indexing waited
+#: behind them for minutes, so a write was not found when it was asked for.
+INDEXING_QUEUES: tuple[Queue, ...] = (Queue.EMBEDDING,)
+#: Graph enrichment runs in a pool of its own too. Its backlog grows with every write - an
+#: import queues thousands of jobs - and outranks parsing, archiving, reconciliation and
+#: summaries (``QUEUE_PRIORITY``), so in the shared pool a backlog held every slot until it
+#: drained: a document's parse, a run's feedback and the skill learned from it waited behind
+#: it, and on a slow model each enrichment held its slot for minutes.
+GRAPH_QUEUES: tuple[Queue, ...] = (Queue.GRAPH,)
+
+
+def worker_pools(concurrency: int, indexing: int, graph: int) -> list[tuple[list[Queue], int]]:
+    """The worker's pools: the indexing queues with ``indexing`` slots, the graph queues with
+    ``graph``, every other queue with ``concurrency``."""
+    own = (*INDEXING_QUEUES, *GRAPH_QUEUES)
+    rest = [q for q in Queue if q not in own]
+    return [(list(INDEXING_QUEUES), indexing), (list(GRAPH_QUEUES), graph), (rest, concurrency)]
 
 
 # interactive > indexing > summaries > eval/import
@@ -96,6 +117,20 @@ class TaskQueue(Protocol):
     ) -> None:
         """Run jobs; with ``install_signal_handlers``, SIGTERM/SIGINT stop it gracefully,
         waiting up to ``shutdown_grace_seconds`` for running jobs before releasing them."""
+        ...
+
+    async def run_pools(
+        self,
+        pools: Sequence[tuple[list[Queue], int]],
+        *,
+        install_signal_handlers: bool = False,
+        shutdown_grace_seconds: float | None = None,
+        db_outage_seconds: float | None = None,
+    ) -> None:
+        """Run one worker per pool (its queues, its slots), so one pool's long jobs never
+        hold another's; SIGTERM/SIGINT stop them all as ``run_worker`` stops. The queue's
+        database out of reach is ridden out for ``db_outage_seconds``; a worker that ends
+        without being asked to raises, so the process exits non-zero."""
         ...
 
     async def ping(self) -> bool: ...

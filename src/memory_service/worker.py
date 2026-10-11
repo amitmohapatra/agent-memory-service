@@ -8,6 +8,17 @@ closes the container - flushing what services buffered while the pool is still o
 to run with Procrastinate's signal handling switched off, so SIGTERM killed it mid-job and
 the job sat in ``doing`` until the stalled-job reconciler noticed thirty seconds later.
 
+It runs three pools (``ports.tasks.worker_pools``): the indexing queues and the graph queue
+on slots of their own, every other queue on ``tasks.worker_concurrency``, so jobs that wait
+on a slow model never hold the slots that make a write findable, and a graph backlog never
+holds the slots of parsing, feedback, learning and summaries.
+
+A database out of reach (no connection free in the queue pool, the LISTEN connection lost) is
+ridden out for ``TASKS.worker_db_outage_seconds``, each retry logged and counted
+(``memory_worker_db_retries_total``). Past that, or when a pool's worker stops on its own,
+the process exits non-zero for its supervisor to restart it: under memory pressure one pool
+timeout in a heartbeat stopped the worker, and the process exited as if asked to.
+
 ``tasks.metrics_port`` serves the worker's Prometheus series - queue depth, oldest-job lag,
 outbox backlog, terminally failed jobs, running jobs, the last sample time - and is what the
 compose healthcheck reads.
@@ -20,11 +31,12 @@ import contextlib
 
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
-from memory_service.config.constants import OVERLOAD, SERVICE_NAME
+from memory_service.config.constants import OVERLOAD, SERVICE_NAME, TASKS
 from memory_service.config.settings import get_settings
 from memory_service.observability.logging import configure_logging, get_logger
 from memory_service.observability.metrics import serve_worker_metrics
 from memory_service.observability.tracing import configure_tracing
+from memory_service.ports.tasks import worker_pools
 
 log = get_logger(__name__)
 
@@ -47,14 +59,25 @@ async def main() -> None:
         log.info(
             "worker.started",
             concurrency=settings.tasks.worker_concurrency,
+            indexing_concurrency=TASKS.indexing_concurrency,
+            graph_concurrency=TASKS.graph_concurrency,
             metrics_port=settings.tasks.metrics_port,
         )
-        await container.tasks.run_worker(
-            concurrency=settings.tasks.worker_concurrency,
+        await container.tasks.run_pools(
+            worker_pools(
+                settings.tasks.worker_concurrency,
+                TASKS.indexing_concurrency,
+                TASKS.graph_concurrency,
+            ),
             install_signal_handlers=True,
             shutdown_grace_seconds=OVERLOAD.worker_shutdown_grace_seconds,
+            db_outage_seconds=TASKS.worker_db_outage_seconds,
         )
         log.info("worker.stopped")
+    except Exception as exc:
+        # non-zero exit, for the supervisor to restart the worker
+        log.error("worker.failed", error=repr(exc))
+        raise
     finally:
         if sampler is not None:
             sampler.cancel()

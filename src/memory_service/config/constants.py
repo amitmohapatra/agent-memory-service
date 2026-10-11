@@ -340,6 +340,20 @@ class TaskTuning:
     #: How long ``memory_reads`` keeps who-read-what. Long enough for an annual access
     #: review with a quarter's slack; the table grows with every recall otherwise.
     read_audit_retention_days: int = 400
+    #: Worker slots of the indexing pool, the ``embedding`` queue's own (``worker_pools``),
+    #: beside ``tasks.worker_concurrency`` for the shared pool.
+    indexing_concurrency: int = 2
+    #: Worker slots of the graph pool, the ``graph`` queue's own (``worker_pools``). With a
+    #: model reachable, enrichment is one job at a time per tenant on top of this.
+    graph_concurrency: int = 2
+    #: How long the worker rides out a database it cannot reach - no connection free in its
+    #: queue pool, its LISTEN connection lost - retrying with a growing pause (``backoff``)
+    #: before it gives up and exits non-zero for its supervisor to restart it. Shorter than
+    #: ``stalled_after_seconds``: a worker that cannot heartbeat for that long has its jobs
+    #: re-queued by another anyway. A pool timeout in one heartbeat used to stop the worker.
+    worker_db_outage_seconds: float = 90
+    #: the first pause and the longest one between those retries
+    worker_db_backoff_seconds: tuple[float, float] = (0.5, 10.0)
 
 
 TASKS = TaskTuning()

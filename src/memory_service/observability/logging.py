@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import sys
 from contextvars import ContextVar
-from typing import Any
+from typing import Any, TextIO
 
 import structlog
 
@@ -28,6 +28,31 @@ def _inject_context(_: Any, __: str, event_dict: dict[str, Any]) -> dict[str, An
     return event_dict
 
 
+class LossySink:
+    """Where the structured logs are written (stdout), losing a line rather than raising
+    when it cannot be written: a log call raised ``OSError`` into whatever code made it when
+    stdout's disk was full, and a worker whose job or heartbeat logged a warning then stopped
+    with nothing in its log to say why. A lost line is counted
+    (``memory_log_lines_dropped_total``)."""
+
+    def __init__(self, stream: TextIO) -> None:
+        self.stream = stream
+
+    def write(self, text: str) -> int:
+        try:
+            return self.stream.write(text)
+        except OSError:
+            return 0
+
+    def flush(self) -> None:
+        try:
+            self.stream.flush()
+        except OSError:
+            from memory_service.observability.metrics import log_lines_dropped_total
+
+            log_lines_dropped_total.inc()
+
+
 def configure_logging(level: str = "INFO", json_output: bool = True) -> None:
     shared: list[Any] = [
         structlog.contextvars.merge_contextvars,
@@ -46,7 +71,7 @@ def configure_logging(level: str = "INFO", json_output: bool = True) -> None:
         wrapper_class=structlog.make_filtering_bound_logger(
             logging.getLevelNamesMapping().get(level.upper(), logging.INFO)
         ),
-        logger_factory=structlog.PrintLoggerFactory(sys.stdout),
+        logger_factory=structlog.PrintLoggerFactory(LossySink(sys.stdout)),  # type: ignore[arg-type]
         cache_logger_on_first_use=False,
     )
     logging.basicConfig(level=level.upper(), stream=sys.stdout, format="%(message)s")
