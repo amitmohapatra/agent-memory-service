@@ -95,8 +95,8 @@
         "implicit_personalization",
         "explicit_personalization"
       ],
-      "enrich_seconds": 0,
-      "note": "The PR gate (make eval-capabilities-gate SET=core): every capability but scale, every language and the code-switched phrasings, every phrasing kind, every surface. Questions start once indexing is done (no wait for graph enrichment, which on a shared worker trails by hours); its own baseline (nollm/core)."
+      "enrich_seconds": 900,
+      "note": "The PR gate (make eval-capabilities-isolated MODE=nollm SET=core): every capability but scale, every language and the code-switched phrasings, every phrasing kind, every surface; its own baseline (nollm/core). On the isolated store the worker's queues hold only the run's own work, so it asks once all of it - summaries and graph enrichment included - has drained (bounded at 15 minutes; about 4 minutes in practice)."
     },
     "scale": {
       "capabilities": [

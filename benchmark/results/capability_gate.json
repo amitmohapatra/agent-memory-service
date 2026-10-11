@@ -1045,18 +1045,765 @@
         "benchmark/results/capabilities/nollm_repeat.json",
         "benchmark/results/capabilities/nollm_latency.json"
       ]
+    },
+    "nollm/core": {
+      "cells": {
+        "context/new_session/abstention/ar": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "context/new_session/abstention/de": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "context/new_session/abstention/en": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "context/new_session/abstention/es": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "context/new_session/abstention/hi": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "context/new_session/abstention/mixed": {
+          "accuracy": 1.0,
+          "n": 4
+        },
+        "context/new_session/explicit_personalization/ar": {
+          "accuracy": 0.0,
+          "n": 110
+        },
+        "context/new_session/explicit_personalization/de": {
+          "accuracy": 0.0,
+          "n": 110
+        },
+        "context/new_session/explicit_personalization/en": {
+          "accuracy": 0.2727,
+          "n": 110
+        },
+        "context/new_session/explicit_personalization/es": {
+          "accuracy": 0.0,
+          "n": 110
+        },
+        "context/new_session/explicit_personalization/hi": {
+          "accuracy": 0.0,
+          "n": 110
+        },
+        "context/new_session/explicit_personalization/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "context/new_session/forgetting_decay/ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/forgetting_decay/de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/forgetting_decay/en": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/forgetting_decay/es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/forgetting_decay/hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/forgetting_decay/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "context/new_session/implicit_personalization/ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/implicit_personalization/de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/implicit_personalization/en": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/implicit_personalization/es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/implicit_personalization/hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/implicit_personalization/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "context/new_session/multi_hop/ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/multi_hop/de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/multi_hop/en": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/multi_hop/es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/multi_hop/hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/multi_hop/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "context/new_session/procedural_skill/ar": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "context/new_session/procedural_skill/de": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "context/new_session/procedural_skill/en": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "context/new_session/procedural_skill/es": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "context/new_session/procedural_skill/hi": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "context/new_session/procedural_skill/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "context/new_session/single_fact_recall/ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/single_fact_recall/de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/single_fact_recall/en": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "context/new_session/single_fact_recall/es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/single_fact_recall/hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/single_fact_recall/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "context/new_session/temporal_recency/ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/temporal_recency/de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/temporal_recency/en": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/temporal_recency/es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/temporal_recency/hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/temporal_recency/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "context/new_session/test_time_learning/ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/test_time_learning/de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/test_time_learning/en": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/test_time_learning/es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/test_time_learning/hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/test_time_learning/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "context/new_session/update_contradiction/ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/update_contradiction/de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/update_contradiction/en": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "context/new_session/update_contradiction/es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/update_contradiction/hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/new_session/update_contradiction/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "context/same_session/abstention/ar": {
+          "accuracy": 0.21,
+          "n": 100
+        },
+        "context/same_session/abstention/de": {
+          "accuracy": 0.18,
+          "n": 100
+        },
+        "context/same_session/abstention/en": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "context/same_session/abstention/es": {
+          "accuracy": 0.11,
+          "n": 100
+        },
+        "context/same_session/abstention/hi": {
+          "accuracy": 0.16,
+          "n": 100
+        },
+        "context/same_session/abstention/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "context/same_session/explicit_personalization/ar": {
+          "accuracy": 0.3091,
+          "n": 110
+        },
+        "context/same_session/explicit_personalization/de": {
+          "accuracy": 0.4364,
+          "n": 110
+        },
+        "context/same_session/explicit_personalization/en": {
+          "accuracy": 0.9091,
+          "n": 110
+        },
+        "context/same_session/explicit_personalization/es": {
+          "accuracy": 0.4364,
+          "n": 110
+        },
+        "context/same_session/explicit_personalization/hi": {
+          "accuracy": 0.3909,
+          "n": 110
+        },
+        "context/same_session/explicit_personalization/mixed": {
+          "accuracy": 1.0,
+          "n": 4
+        },
+        "context/same_session/forgetting_decay/ar": {
+          "accuracy": 0.18,
+          "n": 100
+        },
+        "context/same_session/forgetting_decay/de": {
+          "accuracy": 0.2,
+          "n": 100
+        },
+        "context/same_session/forgetting_decay/en": {
+          "accuracy": 0.2,
+          "n": 100
+        },
+        "context/same_session/forgetting_decay/es": {
+          "accuracy": 0.2,
+          "n": 100
+        },
+        "context/same_session/forgetting_decay/hi": {
+          "accuracy": 0.18,
+          "n": 100
+        },
+        "context/same_session/forgetting_decay/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "context/same_session/implicit_personalization/ar": {
+          "accuracy": 0.35,
+          "n": 100
+        },
+        "context/same_session/implicit_personalization/de": {
+          "accuracy": 0.44,
+          "n": 100
+        },
+        "context/same_session/implicit_personalization/en": {
+          "accuracy": 0.41,
+          "n": 100
+        },
+        "context/same_session/implicit_personalization/es": {
+          "accuracy": 0.49,
+          "n": 100
+        },
+        "context/same_session/implicit_personalization/hi": {
+          "accuracy": 0.19,
+          "n": 100
+        },
+        "context/same_session/implicit_personalization/mixed": {
+          "accuracy": 1.0,
+          "n": 4
+        },
+        "context/same_session/multi_hop/ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/same_session/multi_hop/de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/same_session/multi_hop/en": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "context/same_session/multi_hop/es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/same_session/multi_hop/hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/same_session/multi_hop/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "context/same_session/procedural_skill/ar": {
+          "accuracy": 0.14,
+          "n": 100
+        },
+        "context/same_session/procedural_skill/de": {
+          "accuracy": 0.29,
+          "n": 100
+        },
+        "context/same_session/procedural_skill/en": {
+          "accuracy": 0.39,
+          "n": 100
+        },
+        "context/same_session/procedural_skill/es": {
+          "accuracy": 0.3,
+          "n": 100
+        },
+        "context/same_session/procedural_skill/hi": {
+          "accuracy": 0.16,
+          "n": 100
+        },
+        "context/same_session/procedural_skill/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "context/same_session/single_fact_recall/ar": {
+          "accuracy": 0.3,
+          "n": 100
+        },
+        "context/same_session/single_fact_recall/de": {
+          "accuracy": 0.3,
+          "n": 100
+        },
+        "context/same_session/single_fact_recall/en": {
+          "accuracy": 0.4,
+          "n": 100
+        },
+        "context/same_session/single_fact_recall/es": {
+          "accuracy": 0.3,
+          "n": 100
+        },
+        "context/same_session/single_fact_recall/hi": {
+          "accuracy": 0.28,
+          "n": 100
+        },
+        "context/same_session/single_fact_recall/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "context/same_session/temporal_recency/ar": {
+          "accuracy": 0.92,
+          "n": 100
+        },
+        "context/same_session/temporal_recency/de": {
+          "accuracy": 0.96,
+          "n": 100
+        },
+        "context/same_session/temporal_recency/en": {
+          "accuracy": 0.96,
+          "n": 100
+        },
+        "context/same_session/temporal_recency/es": {
+          "accuracy": 0.94,
+          "n": 100
+        },
+        "context/same_session/temporal_recency/hi": {
+          "accuracy": 0.95,
+          "n": 100
+        },
+        "context/same_session/temporal_recency/mixed": {
+          "accuracy": 1.0,
+          "n": 4
+        },
+        "context/same_session/test_time_learning/ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/same_session/test_time_learning/de": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/same_session/test_time_learning/en": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/same_session/test_time_learning/es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/same_session/test_time_learning/hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "context/same_session/test_time_learning/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "context/same_session/update_contradiction/ar": {
+          "accuracy": 0.83,
+          "n": 100
+        },
+        "context/same_session/update_contradiction/de": {
+          "accuracy": 0.95,
+          "n": 100
+        },
+        "context/same_session/update_contradiction/en": {
+          "accuracy": 0.93,
+          "n": 100
+        },
+        "context/same_session/update_contradiction/es": {
+          "accuracy": 0.94,
+          "n": 100
+        },
+        "context/same_session/update_contradiction/hi": {
+          "accuracy": 0.84,
+          "n": 100
+        },
+        "context/same_session/update_contradiction/mixed": {
+          "accuracy": 1.0,
+          "n": 4
+        },
+        "search/new_session/explicit_personalization/ar": {
+          "accuracy": 0.2727,
+          "n": 110
+        },
+        "search/new_session/explicit_personalization/de": {
+          "accuracy": 0.2727,
+          "n": 110
+        },
+        "search/new_session/explicit_personalization/en": {
+          "accuracy": 0.2727,
+          "n": 110
+        },
+        "search/new_session/explicit_personalization/es": {
+          "accuracy": 0.2727,
+          "n": 110
+        },
+        "search/new_session/explicit_personalization/hi": {
+          "accuracy": 0.2727,
+          "n": 110
+        },
+        "search/new_session/explicit_personalization/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "search/new_session/forgetting_decay/ar": {
+          "accuracy": 0.5,
+          "n": 100
+        },
+        "search/new_session/forgetting_decay/de": {
+          "accuracy": 0.5,
+          "n": 100
+        },
+        "search/new_session/forgetting_decay/en": {
+          "accuracy": 0.5,
+          "n": 100
+        },
+        "search/new_session/forgetting_decay/es": {
+          "accuracy": 0.5,
+          "n": 100
+        },
+        "search/new_session/forgetting_decay/hi": {
+          "accuracy": 0.5,
+          "n": 100
+        },
+        "search/new_session/forgetting_decay/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "search/new_session/implicit_personalization/ar": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "search/new_session/implicit_personalization/de": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "search/new_session/implicit_personalization/en": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "search/new_session/implicit_personalization/es": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "search/new_session/implicit_personalization/hi": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "search/new_session/implicit_personalization/mixed": {
+          "accuracy": 1.0,
+          "n": 4
+        },
+        "search/new_session/multi_hop/ar": {
+          "accuracy": 0.6,
+          "n": 100
+        },
+        "search/new_session/multi_hop/de": {
+          "accuracy": 0.6,
+          "n": 100
+        },
+        "search/new_session/multi_hop/en": {
+          "accuracy": 0.6,
+          "n": 100
+        },
+        "search/new_session/multi_hop/es": {
+          "accuracy": 0.6,
+          "n": 100
+        },
+        "search/new_session/multi_hop/hi": {
+          "accuracy": 0.6,
+          "n": 100
+        },
+        "search/new_session/multi_hop/mixed": {
+          "accuracy": 1.0,
+          "n": 4
+        },
+        "search/new_session/procedural_skill/ar": {
+          "accuracy": 0.5,
+          "n": 100
+        },
+        "search/new_session/procedural_skill/de": {
+          "accuracy": 0.48,
+          "n": 100
+        },
+        "search/new_session/procedural_skill/en": {
+          "accuracy": 0.5,
+          "n": 100
+        },
+        "search/new_session/procedural_skill/es": {
+          "accuracy": 0.5,
+          "n": 100
+        },
+        "search/new_session/procedural_skill/hi": {
+          "accuracy": 0.5,
+          "n": 100
+        },
+        "search/new_session/procedural_skill/mixed": {
+          "accuracy": 1.0,
+          "n": 4
+        },
+        "search/new_session/single_fact_recall/ar": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "search/new_session/single_fact_recall/de": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "search/new_session/single_fact_recall/en": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "search/new_session/single_fact_recall/es": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "search/new_session/single_fact_recall/hi": {
+          "accuracy": 1.0,
+          "n": 100
+        },
+        "search/new_session/single_fact_recall/mixed": {
+          "accuracy": 1.0,
+          "n": 4
+        },
+        "search/new_session/temporal_recency/ar": {
+          "accuracy": 0.1,
+          "n": 100
+        },
+        "search/new_session/temporal_recency/de": {
+          "accuracy": 0.01,
+          "n": 100
+        },
+        "search/new_session/temporal_recency/en": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "search/new_session/temporal_recency/es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "search/new_session/temporal_recency/hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "search/new_session/temporal_recency/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "search/new_session/test_time_learning/ar": {
+          "accuracy": 0.27,
+          "n": 100
+        },
+        "search/new_session/test_time_learning/de": {
+          "accuracy": 0.32,
+          "n": 100
+        },
+        "search/new_session/test_time_learning/en": {
+          "accuracy": 0.12,
+          "n": 100
+        },
+        "search/new_session/test_time_learning/es": {
+          "accuracy": 0.19,
+          "n": 100
+        },
+        "search/new_session/test_time_learning/hi": {
+          "accuracy": 0.18,
+          "n": 100
+        },
+        "search/new_session/test_time_learning/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        },
+        "search/new_session/update_contradiction/ar": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "search/new_session/update_contradiction/de": {
+          "accuracy": 0.02,
+          "n": 100
+        },
+        "search/new_session/update_contradiction/en": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "search/new_session/update_contradiction/es": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "search/new_session/update_contradiction/hi": {
+          "accuracy": 0.0,
+          "n": 100
+        },
+        "search/new_session/update_contradiction/mixed": {
+          "accuracy": 0.0,
+          "n": 4
+        }
+      },
+      "git_commit": "7869b4f4bb74dcfa497a6851f84526fffec998d5",
+      "latency": {
+        "context_p50_ms": 37.8,
+        "context_p95_ms": 54.07,
+        "max_load_per_core": 0.78,
+        "max_rise": 0.1,
+        "trustworthy": true
+      },
+      "macro_accuracy": 0.1193,
+      "repeat_runs": 2,
+      "retail_track": 0.1089,
+      "run_date": "2026-10-11",
+      "sample": "core",
+      "scale": "standard",
+      "selection": {
+        "capabilities": [
+          "single_fact_recall",
+          "multi_hop",
+          "temporal_recency",
+          "update_contradiction",
+          "abstention",
+          "forgetting_decay",
+          "procedural_skill",
+          "test_time_learning",
+          "implicit_personalization",
+          "explicit_personalization"
+        ],
+        "domains": "all",
+        "kinds": "all",
+        "languages": [
+          "en",
+          "de",
+          "es",
+          "ar",
+          "hi",
+          "mixed"
+        ],
+        "scenario_ids": null,
+        "scenarios_per_capability": null,
+        "scenarios_per_domain": null,
+        "split": "all"
+      },
+      "source": "benchmark/results/capabilities/nollm_core.json",
+      "sources": [
+        "benchmark/results/capabilities/nollm_core.json",
+        "benchmark/results/capabilities/nollm_core_repeat.json"
+      ]
     }
   },
   "dataset_sha256": "600b1e5d758fa3efc5e697265d37cbc92ac89ae5ee635321c8612642cd70ec03",
   "gate": "capability",
   "provenance": {
     "cpu_count": 4,
-    "git_commit": "da5a637b4916c872fa1315c2cfdaeed548bc8dae",
+    "git_commit": "7869b4f4bb74dcfa497a6851f84526fffec998d5",
     "host_load": {
-      "load_per_core": 0.52,
-      "loadavg_15m": 1.81,
-      "loadavg_1m": 2.08,
-      "loadavg_5m": 1.98
+      "load_per_core": 0.56,
+      "loadavg_15m": 2.63,
+      "loadavg_1m": 2.26,
+      "loadavg_5m": 2.45
     },
     "llm": {
       "enabled": false,
@@ -1094,9 +1841,9 @@
       "transformers": "5.17.0",
       "zstandard": "0.25.0"
     },
-    "platform": "Linux-6.18.44-fc-v80-x86_64-with-glibc2.39",
+    "platform": "Linux-6.18.44-fc-v114-x86_64-with-glibc2.39",
     "python": "3.13.14",
-    "timestamp": "2026-10-08T16:17:33.207847+00:00"
+    "timestamp": "2026-10-11T01:17:21.521845+00:00"
   },
   "rule": "every cell >= its recorded accuracy; context p95 <= recorded x (1 + max_rise)"
 }

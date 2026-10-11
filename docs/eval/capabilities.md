@@ -229,7 +229,7 @@ on a fast set, and the full set runs nightly:
 
 | Set | What it runs | Baseline | When |
 |---|---|---|---|
-| `SET=core` | every capability but scale; all five languages and the code-switched phrasings; every phrasing kind and every surface. Questions start once indexing is done, without waiting for graph enrichment | its own, `nollm/core` (cells and context p95), two runs merged | every PR that touches capability work |
+| `SET=core` | every capability but scale; all five languages and the code-switched phrasings; every phrasing kind and every surface. On the isolated store the worker's queues hold only the run's own work, so the questions start once all of it, summaries and graph enrichment included, has drained (bounded at 15 minutes). (about 4 minutes in practice). A core run takes about 17 minutes end to end, the isolated stack's start and teardown included. Even with every queue drained, two runs differ in 14 of 174 cells, all same-session, by at most 0.05 (personalization, procedures, recency, updates). That variance is the service's own, a finding for the blocks that touch the same-session context. The baseline keeps the lower value of each cell, so a PR that fails on one of those cells alone is rerun once before it counts as a regression | its own, `nollm/core` (cells and context p95), two runs merged | every PR that touches capability work |
 | `SET=scale` | capability 7 alone, every language | held to the full baseline's scale cells; its latency is not compared | the PR of a change that targets scale, and nightly |
 | `SET=full` (default) | everything | `nollm` | nightly, and before a baseline is re-recorded |
 
