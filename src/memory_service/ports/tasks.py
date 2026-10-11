@@ -47,11 +47,16 @@ WORKER_POOL_COUNT: int = 3
 
 
 def worker_pools(concurrency: int, indexing: int, graph: int) -> list[tuple[list[Queue], int]]:
-    """The worker's pools: the indexing queues with ``indexing`` slots, the graph queues with
-    ``graph``, every other queue with ``concurrency``."""
+    """The worker's pools. ``concurrency`` (one per CPU the worker may use) is shared between
+    the two pools whose jobs compute - the indexing queues, up to ``indexing`` slots and at
+    most half, and every other queue, the rest (at least one) - so the slots that run models
+    never outnumber the CPUs. The graph queues get ``graph`` slots on top: enrichment waits on
+    the database and the LLM, one job per tenant at a time when a model is reachable."""
+    embedding = min(indexing, max(1, concurrency // 2))
+    shared = max(1, concurrency - embedding)
     own = (*INDEXING_QUEUES, *GRAPH_QUEUES)
     rest = [q for q in Queue if q not in own]
-    return [(list(INDEXING_QUEUES), indexing), (list(GRAPH_QUEUES), graph), (rest, concurrency)]
+    return [(list(INDEXING_QUEUES), embedding), (list(GRAPH_QUEUES), graph), (rest, shared)]
 
 
 #: Called with a job's payload and the error it last failed with, once it will not be retried.

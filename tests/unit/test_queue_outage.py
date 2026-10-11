@@ -144,10 +144,16 @@ async def test_a_starting_worker_never_takes_the_jobs_of_one_riding_an_outage_ou
     """A worker starting prunes the workers silent for ``stalled_worker_timeout`` and their
     running jobs are re-queued. Procrastinate's 30 s is shorter than the outage a worker rides
     out (plus a heartbeat interval), so a replica starting meanwhile ran its jobs twice."""
-    from memory_service.config.constants import TASKS
+    from memory_service.config.constants import OVERLOAD, TASKS
 
-    heartbeat_seconds = 10.0  # Procrastinate's update_heartbeat_interval
-    assert TASKS.worker_db_outage_seconds + heartbeat_seconds < TASKS.stalled_after_seconds
+    # the longest a live worker is silent: its last heartbeat's age, the outage it rides
+    # out, then the grace its running jobs get when it stops
+    silent = (
+        TASKS.worker_heartbeat_seconds
+        + TASKS.worker_db_outage_seconds
+        + OVERLOAD.worker_shutdown_grace_seconds
+    )
+    assert TASKS.stalled_after_seconds > silent
 
     queue = pq.ProcrastinateTaskQueue("")
     given: dict[str, Any] = {}
@@ -162,3 +168,4 @@ async def test_a_starting_worker_never_takes_the_jobs_of_one_riding_an_outage_ou
     queue.app.run_worker_async = run_worker_async  # type: ignore[method-assign]
     await queue.run_worker([pq.Queue.RECONCILE], concurrency=1)
     assert given["stalled_worker_timeout"] == TASKS.stalled_after_seconds
+    assert given["update_heartbeat_interval"] == TASKS.worker_heartbeat_seconds

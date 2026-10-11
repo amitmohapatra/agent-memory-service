@@ -440,6 +440,7 @@ class ProcrastinateTaskQueue:
             # outage a worker rides out (TASKS.worker_db_outage_seconds): a replica starting
             # meanwhile took a live worker's jobs, and they ran twice.
             stalled_worker_timeout=TASKS.stalled_after_seconds,
+            update_heartbeat_interval=TASKS.worker_heartbeat_seconds,
         )
 
     async def run_pools(

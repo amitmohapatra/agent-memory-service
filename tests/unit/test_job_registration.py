@@ -137,6 +137,10 @@ def test_the_worker_runs_every_queue_in_exactly_one_pool() -> None:
 
     pools = worker_pools(4, 2, 2)
     assert pools[:2] == [([Queue.EMBEDDING], 2), ([Queue.GRAPH], 2)]
-    assert pools[2][1] == 4
+    assert pools[2][1] == 2, "the slots that run models share the 4 CPUs: 2 + 2"
     listed = [q for queues, _ in pools for q in queues]
     assert sorted(listed) == sorted(Queue), "each queue in exactly one pool"
+    for cpus in range(1, 9):
+        embedding, _, shared = (slots for _, slots in worker_pools(cpus, 2, 2))
+        assert embedding >= 1 and shared >= 1
+        assert embedding + shared == max(2, cpus), "models never get more slots than CPUs"

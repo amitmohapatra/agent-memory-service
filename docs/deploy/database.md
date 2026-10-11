@@ -32,7 +32,7 @@ The job worker runs three Procrastinate workers (one per pool: indexing, graph, 
 one queue pool; each fetches, finishes, heartbeats, polls for aborts and defers periodic jobs,
 so the pool gets two connections per worker, and each worker's LISTEN connection, opened
 outside the pool, counts against the budget too. A worker pod's share is at least 13 (4 + 3
-per worker), whatever the budget says.
+per worker): a smaller budget is raised to it, and the worker logs a warning naming both.
 
 Unset, a process keeps the pools it had before the budget existed: requests 8 + 8, graph
 4 + 4, queue 4 (28). Overflow counts against the budget because a burst is exactly when the

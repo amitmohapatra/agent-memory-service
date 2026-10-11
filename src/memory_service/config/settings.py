@@ -193,14 +193,26 @@ class DatabaseSettings(BaseModel):
         runs ``queue_workers`` Procrastinate workers on one queue pool, each with its fetch,
         finishes, heartbeat, abort poll and periodic deferrer: two pooled connections each,
         or their checkouts time out under load. Its share is at least ``4 + 3 *
-        queue_workers`` (13 for three), whatever the budget says.
+        queue_workers`` (13 for three): a smaller budget is raised to it, with a warning.
         """
         processes = max(1, processes)
         if self.connection_budget is None:
             per_process = _CONNECTIONS_PER_PROCESS
         else:
             per_process = max(6, self.connection_budget // processes)
-        per_process = max(per_process, 4 + 3 * queue_workers)
+        floor = 4 + 3 * queue_workers
+        if per_process < floor:
+            from memory_service.observability.logging import get_logger
+
+            get_logger(__name__).warning(
+                "database.connection_budget_below_worker_floor",
+                connection_budget=self.connection_budget,
+                per_process=per_process,
+                worker_floor=floor,
+                message=f"connection_budget gives this worker {per_process} connections; it "
+                f"needs {floor} (4 + 3 per queue worker) and takes {floor}",
+            )
+            per_process = floor
         pooled = per_process - queue_workers
         queue = max(2, pooled // 7, 2 * queue_workers)
         graph = max(2, 2 * pooled // 7)

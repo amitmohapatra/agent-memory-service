@@ -330,8 +330,8 @@ class TaskTuning:
     default_retries: int = 5
     job_timeout_seconds: int = 600
     periodic_reconcile_seconds: int = 300
-    #: a job whose worker stopped heartbeating for this long is re-queued
-    stalled_after_seconds: float = 120
+    #: how often a worker records that it is alive (Procrastinate's heartbeat)
+    worker_heartbeat_seconds: float = 10
     #: How long a dispatched outbox row is kept. It is a receipt once the queue owns the
     #: job, but keeping it briefly makes a relay crash debuggable; rows marked dead are
     #: never purged. Measured before this existed: 734 rows for 788 ingested turns, growing
@@ -340,25 +340,41 @@ class TaskTuning:
     #: How long ``memory_reads`` keeps who-read-what. Long enough for an annual access
     #: review with a quarter's slack; the table grows with every recall otherwise.
     read_audit_retention_days: int = 400
-    #: Worker slots of the indexing pool, the ``embedding`` queue's own (``worker_pools``),
-    #: beside ``tasks.worker_concurrency`` for the shared pool. With the graph pool's that is
-    #: 8 slots on a 4-CPU box, on purpose: a slot is a coroutine, not a core. Each model runs
-    #: on one thread of its own (``adapters/models/_runner.py``), so the two indexing slots
-    #: take turns on the embedder - one embeds while the other reads and writes - and the
-    #: graph and shared slots mostly wait on the database or the LLM.
+    #: At most this many of the worker's ``tasks.worker_concurrency`` slots (one per CPU it
+    #: may use) go to the indexing pool, the ``embedding`` queue's own, and never more than
+    #: half; the rest are the shared pool's (``worker_pools``). Both run models, and each
+    #: model computes on 2 threads of its own (``adapters/models/_runner.py``) - the encoder,
+    #: ColBERT, NLI and docling each - so the slots that compute are sized to the CPUs: 4
+    #: CPUs, 2 + 2. Only the graph pool's slots come on top: they wait on the LLM.
     indexing_concurrency: int = 2
-    #: Worker slots of the graph pool, the ``graph`` queue's own (``worker_pools``). With a
-    #: model reachable, enrichment is one job at a time per tenant on top of this.
+    #: Worker slots of the graph pool, the ``graph`` queue's own (``worker_pools``), on top of
+    #: ``tasks.worker_concurrency``: enrichment waits on the database and the LLM, and with a
+    #: model reachable it is one job at a time per tenant.
     graph_concurrency: int = 2
     #: How long the worker rides out a database that cannot do its queue statements - no
     #: connection free in its queue pool, a full disk, a server going away, its LISTEN
     #: connection lost - retrying with a growing pause (``backoff``)
-    #: before it gives up and exits non-zero for its supervisor to restart it. Shorter than
-    #: ``stalled_after_seconds``: a worker that cannot heartbeat for that long has its jobs
-    #: re-queued by another anyway. A pool timeout in one heartbeat used to stop the worker.
+    #: before it gives up and exits non-zero for its supervisor to restart it.
+    #: ``stalled_after_seconds`` is derived from it, so no worker prunes one riding it out.
+    #: A pool timeout in one heartbeat used to stop the worker.
     worker_db_outage_seconds: float = 90
     #: the first pause and the longest one between those retries
     worker_db_backoff_seconds: tuple[float, float] = (0.5, 10.0)
+
+    @property
+    def stalled_after_seconds(self) -> float:
+        """A worker silent for this long is gone: a starting worker prunes it and its running
+        jobs are re-queued (``stalled_worker_timeout``), and the periodic reconcile re-queues
+        jobs whose worker stopped heartbeating. It must exceed the longest a live worker can
+        stay silent - its last heartbeat's age, the database outage it rides out, then the
+        shutdown grace its running jobs get - or its jobs run twice. 140 s; a worker killed
+        with -9 has its jobs re-queued after that long."""
+        silent = (
+            self.worker_heartbeat_seconds
+            + self.worker_db_outage_seconds
+            + OVERLOAD.worker_shutdown_grace_seconds
+        )
+        return silent + self.worker_heartbeat_seconds
 
 
 TASKS = TaskTuning()

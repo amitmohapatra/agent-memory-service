@@ -8,10 +8,11 @@ closes the container - flushing what services buffered while the pool is still o
 to run with Procrastinate's signal handling switched off, so SIGTERM killed it mid-job and
 the job sat in ``doing`` until the stalled-job reconciler noticed thirty seconds later.
 
-It runs three pools (``ports.tasks.worker_pools``): the indexing queues and the graph queue
-on slots of their own, every other queue on ``tasks.worker_concurrency``, so jobs that wait
-on a slow model never hold the slots that make a write findable, and a graph backlog never
-holds the slots of parsing, feedback, learning and summaries.
+It runs three pools (``ports.tasks.worker_pools``): the indexing queues and every other queue
+share ``tasks.worker_concurrency`` (they run models), the graph queue has slots of its own on
+top (it waits on the LLM), so jobs that wait on a slow model never hold the slots that make
+a write findable, and a graph backlog never holds the slots of parsing, feedback, learning
+and summaries.
 
 A database out of reach (no connection free in the queue pool, the LISTEN connection lost) is
 ridden out for ``TASKS.worker_db_outage_seconds``, each retry logged and counted

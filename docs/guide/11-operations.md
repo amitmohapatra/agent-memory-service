@@ -159,10 +159,11 @@ re-measure on a real corpus).
 Every job is registered in one place, `modules/jobs/registry.py`, and every enqueued task name
 must have a handler there (`tests/unit/test_job_registration.py`). Jobs run on named queues;
 interactive work is prioritised over indexing, summaries and imports (`QUEUE_PRIORITY` in
-`ports/tasks.py`). The worker runs three pools (`worker_pools`): the `embedding` queue, whose
-jobs make a write findable, on slots of its own (`TASKS.indexing_concurrency`, 2); the `graph`
-queue on slots of its own (`TASKS.graph_concurrency`, 2); and every other queue on
-`tasks.worker_concurrency`. In one pool, jobs waiting on a slow model held every slot and
+`ports/tasks.py`). The worker runs three pools (`worker_pools`). The `embedding` queue, whose
+jobs make a write findable, and every other queue share `tasks.worker_concurrency` (one per
+CPU) on slots of their own - the `embedding` queue up to `TASKS.indexing_concurrency` (2) and at
+most half, the rest the shared pool's - because both run models, each on 2 threads of its own.
+The `graph` queue has `TASKS.graph_concurrency` (2) slots on top: enrichment waits on the LLM. In one pool, jobs waiting on a slow model held every slot and
 indexing waited minutes behind them, and a graph backlog (an import queues thousands of
 enrichment jobs, which outrank parsing, archiving, reconciliation and summaries) held every slot
 until it drained. Each pool keeps one listening connection outside the queue pool.
@@ -188,7 +189,7 @@ flowchart TB
     OS["periodic.outbox_sweep<br/>re-dispatch outbox rows the fast path missed"]
   end
   subgraph five[Every 5 minutes]
-    RC["periodic.reconcile: outbox sweep, archive repair,<br/>re-queue jobs whose worker stopped heartbeating (120 s)"]
+    RC["periodic.reconcile: outbox sweep, archive repair,<br/>re-queue jobs whose worker stopped heartbeating (140 s)"]
     PQ["periodic.profile_queries: due standing questions"]
     PL["periodic.prefetch_learn: what pulls teach the push"]
     TL["periodic.tools_learn: procedures and procedural edges"]
@@ -290,9 +291,10 @@ connection lost - is ridden out for 90 s (`TASKS.worker_db_outage_seconds`): eac
 logged (`worker.db_retry`) and counted, after a pause growing from 0.5 s to 10 s, and the
 gauge says for how long. Those statements did not take effect (never ran, or rolled back), so a retry
 never applies one twice. A connection lost mid-statement is not retried (whether it committed
-is unknown): the worker exits non-zero. A worker starting prunes only workers silent for 120 s
-(`TASKS.stalled_after_seconds`, longer than the 90 s), so it never takes the jobs of one that
-is riding an outage out. Past 90 s (`worker.db_unavailable`), or when one of its pools
+is unknown): the worker exits non-zero. A worker starting prunes only workers silent for 140 s
+(`TASKS.stalled_after_seconds`: a heartbeat's 10 s + the 90 s outage + the 30 s shutdown grace
++ 10 s), so it never takes the jobs of one that is riding an outage out; the price is that the
+jobs of a worker killed with -9 are re-queued after 140 s, not 30 s. Past 90 s (`worker.db_unavailable`), or when one of its pools
 stops on its own, the worker logs `worker.failed` and exits non-zero for its supervisor to
 restart it (compose: `restart: on-failure`). One pool timeout in a heartbeat, or one job-status
 write to a full disk, used to stop it, and the process exited as if asked to. A log line that

@@ -190,6 +190,22 @@ def test_the_job_worker_has_queue_connections_for_each_of_its_pools(budget: int 
     assert database.pool_plan(1).listeners == 0, "the API listens for nothing"
 
 
+def test_a_budget_below_the_workers_floor_is_raised_with_a_warning() -> None:
+    """The worker cannot run its pools on fewer than 4 + 3 per queue worker connections: it
+    takes them, and says so naming both numbers rather than exceeding the budget silently."""
+    from structlog.testing import capture_logs
+
+    database = Settings(_env_file=None, database={"connection_budget": 6}).database
+    with capture_logs() as logs:
+        plan = database.pool_plan(1, queue_workers=3)
+    assert plan.total == 13
+    [warned] = [e for e in logs if e["event"] == "database.connection_budget_below_worker_floor"]
+    assert (warned["per_process"], warned["worker_floor"]) == (6, 13)
+    with capture_logs() as quiet:
+        database.pool_plan(1)  # the API's floor is the budget's own
+    assert not quiet
+
+
 def test_the_compose_app_goes_through_pgbouncer_and_the_queue_does_not() -> None:
     """Transaction pooling breaks LISTEN/NOTIFY and session parameters, so the request path
     goes through PgBouncer and the session work (queue, graph traversal, migrations) direct."""
