@@ -368,6 +368,67 @@ def test_spellings_cover_identifier_joins_and_aliases() -> None:
     assert spellings("user:Alice") == ["user:Alice"] and spellings("") == []
 
 
+@pytest.mark.parametrize(
+    ("stored", "asked"),
+    [
+        # every join of a word and its number, from any one of them, in any case
+        ("forklift-4", "forklift 4"),
+        ("forklift4", "forklift 4"),
+        ("forklift 4", "forklift-4"),
+        ("forklift 4", "forklift4"),
+        ("Forklift-4", "Forklift 4"),
+        ("sku-1001", "SKU 1001"),
+        ("sku 1001", "SKU1001"),
+        ("sku1001", "sku-1001"),
+        ("po-4471", "PO #4471"),
+        ("order 55", "order no. 55"),
+        ("dock b12", "dock b-12"),
+        ("lager-3 halle-7", "Lager 3 Halle 7"),
+        # German, Spanish, Arabic and Hindi words, with their own ways of saying "number"
+        ("gabelstapler-4", "gabelstapler 4"),
+        ("gabelstapler 4", "Gabelstapler Nr. 4"),
+        ("montacargas4", "montacargas 4"),
+        ("montacargas 4", "montacargas nº 4"),
+        ("رافعة-4", "رافعة 4"),
+        ("رافعة 4", "رافعة4"),  # noqa: RUF001
+        ("फोर्कलिफ्ट-4", "फोर्कलिफ्ट 4"),
+        ("गाड़ी4", "गाड़ी 4"),  # a word ending in a vowel sign, which \w leaves out
+    ],
+)
+def test_spellings_join_a_word_and_its_identifier_every_way(stored: str, asked: str) -> None:
+    out = spellings(asked)
+    assert stored in out, out
+    assert out[0] == " ".join(asked.split()), "as written first"
+
+
+@pytest.mark.parametrize(
+    "asked",
+    ["forklift 4", "Forklift-4", "SKU 1001", "PO #4471", "gabelstapler 4", "رافعة 4", "फोर्कलिफ्ट 4"],
+)
+def test_spellings_never_name_another_identifier(asked: str) -> None:
+    """Zero false merges starts here: every spelling looked up is the same subject to the
+    matcher, so the lookup can only bring back what ``compare`` would merge anyway."""
+    for spelled in spellings(asked):
+        assert compare(parse(asked), parse(spelled)).verdict is SubjectVerdict.SAME, spelled
+
+
+def test_an_identity_in_another_case_is_looked_up_only_as_written() -> None:
+    """ "User:Alice" is not "user:alice" lower-cased: ids are case-sensitive, and folding it
+    would find both "user:alice" and "user:Alice", two people."""
+    assert spellings("User:Alice") == ["User:Alice"]
+    assert spellings("WORKSPACE:Fin") == ["WORKSPACE:Fin"]
+
+
+def test_forklift_3_and_forklift_4_never_meet() -> None:
+    for a, b in (
+        ("Forklift 3", "Forklift 4"),
+        ("forklift-3", "forklift4"),
+        ("SKU 1001", "SKU-1002"),
+    ):
+        assert not set(spellings(a)) & set(spellings(b)), (a, b)
+        assert compare(parse(a), parse(b)).verdict is SubjectVerdict.DIFFERENT, (a, b)
+
+
 # --------------------------------------------------------------------------- the matcher
 
 

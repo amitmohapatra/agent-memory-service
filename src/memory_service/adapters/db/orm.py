@@ -641,6 +641,14 @@ class MemoryRow(Base):
             postgresql_where=text("deleted_at IS NULL"),
         ),
         Index("ix_memories_tenant_subject", "tenant_id", "subject", "predicate"),
+        # the candidate read's case-insensitive subject match (migration 0027)
+        Index(
+            "ix_memories_scope_subject_lower",
+            "tenant_id",
+            "scope_key",
+            text("lower(subject)"),
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index("ix_memories_tenant_user", "tenant_id", "user_id", "created_at"),
         Index("ix_memories_tenant_thread", "tenant_id", "thread_id"),
         Index(

@@ -69,6 +69,22 @@ each entry says which one moved. Decisions behind each change are in the
   class), merge F1 0.84 (exact subject strings before: 0.13).
 
 ### Fixed
+- Same-subject lookup: an older statement past the window of recent rows consolidation reads
+  was missed when its subject was spelled with different punctuation ("forklift-4" stored,
+  "forklift 4" said): the spelling variants were derived only when the subject was not
+  already lower-case, which the fact rule's subjects always are. Every word-and-identifier
+  pair is now joined every way (a space, nothing, a hyphen, "#", "no."; "Nr.", "núm." and "nº"
+  are read as joins too), for the lower-cased and the as-written forms, in any script
+  (Devanagari and Arabic vowel signs included); another identifier is never produced, and
+  "Forklift 3" and "Forklift 4" still never merge (ADR 0035). Both sides are compared
+  case-folded (`lower(subject)`, index `ix_memories_scope_subject_lower`, migration 0027), so
+  "Forklift 4" stored through the API is found by "forklift-4" said in a turn. Both sides are
+  folded by PostgreSQL (Python's lower() and the database's differ, e.g. "ΟΔΟΣ"); an identity
+  ("user:Alice") still matches only as written, and one in another case ("User:Alice") matches
+  neither "user:alice" nor "user:Alice". The exact matches are read per kind like the
+  recent window: a user's newest turns, all about "user:<id>", crowded their older facts out
+  of one shared limit, so a person fact past the window was never replaced - the test that
+  claimed it never left the window, and now does.
 - "When I ask for a stock audit, always use a table" opened like a question, so nothing was
   stored; a "when"/"if" followed by a subject now opens a condition, and the rule is kept with
   its trigger. A standing rule is recognised wherever its "never"/"always" sits ("For weekly
@@ -141,8 +157,8 @@ each entry says which one moved. Decisions behind each change are in the
   by the `source` it claims.
   A `system` verdict on the caller's own run applies at once only when the credential may
   act as that agent (a bearer token naming a person waits), and an agent acting for a tenant
-  admin edits only its own user's memories. Migration Migration
-  `0027_votes_replaced_by_subject` adds `feedback.review_replaced_by`.
+  admin edits only its own user's memories. Migration
+  `0027_votes_replaced_by_subject` adds `feedback.review_replaced_by` (and the subject index under Fixed).
 - The conflict adjudicator (`conflict_adjudication`) is asked about the closest stored memory
   on the same - or possibly the same - subject, instead of the closest sharing half its words:
   a fact restated in other words now reaches it, and a fact about another subject that merely
