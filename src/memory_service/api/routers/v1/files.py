@@ -110,7 +110,8 @@ class DocumentResponse(BaseModel):
     status: DocumentStatus = Field(
         ...,
         description="STAGED: accepted, its parse or index job queued or running; READY: "
-        "parsed and indexed, retrievable; FAILED: the parse job gave up, see last_error.",
+        "parsed and indexed, retrievable; FAILED: the parse or index job gave up, see "
+        "last_error.",
     )
     archive_status: ArchiveStatus = Field(
         ...,

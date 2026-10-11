@@ -172,6 +172,24 @@ def test_a_pod_budget_is_split_and_never_exceeded(budget: int, processes: int) -
     assert plan.main_size + plan.main_overflow >= plan.graph_size + plan.graph_overflow
 
 
+@pytest.mark.parametrize("budget", [None, 6, 28, 84])
+def test_the_job_worker_has_queue_connections_for_each_of_its_pools(budget: int | None) -> None:
+    """The worker runs one Procrastinate worker per pool on one queue pool: two pooled
+    connections each (fetch and finishes; heartbeat, abort poll, deferrer) and a LISTEN each
+    outside the pool, all counted against the budget. Four for all three made its pool
+    checkouts time out under load."""
+    from memory_service.ports.tasks import WORKER_POOL_COUNT, worker_pools
+
+    assert len(worker_pools(4, 2, 2)) == WORKER_POOL_COUNT
+    database = Settings(_env_file=None, database={"connection_budget": budget}).database
+    plan = database.pool_plan(1, queue_workers=WORKER_POOL_COUNT)
+    assert plan.queue_max >= 2 * WORKER_POOL_COUNT
+    assert plan.listeners == WORKER_POOL_COUNT
+    share = 28 if budget is None else max(6, budget)
+    assert plan.total <= max(share, 4 + 3 * WORKER_POOL_COUNT)
+    assert database.pool_plan(1).listeners == 0, "the API listens for nothing"
+
+
 def test_the_compose_app_goes_through_pgbouncer_and_the_queue_does_not() -> None:
     """Transaction pooling breaks LISTEN/NOTIFY and session parameters, so the request path
     goes through PgBouncer and the session work (queue, graph traversal, migrations) direct."""

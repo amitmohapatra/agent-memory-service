@@ -92,7 +92,9 @@ async def _wire_cache(container: Container) -> None:
 async def _wire_database(container: Container) -> None:
     from memory_service.adapters.db.engine import Database
 
-    plan = container.settings.database.pool_plan(container.processes)
+    plan = container.settings.database.pool_plan(
+        container.processes, queue_workers=container.queue_workers
+    )
     db = Database(container.settings.database, plan)
     log.info("database.pools", processes=container.processes, per_process=plan.total)
     container.database = db
@@ -118,7 +120,9 @@ async def _wire_tasks(container: Container) -> None:
             container.settings.database.procrastinate_dsn,
             default_retries=constants.TASKS.default_retries,
             job_timeout_seconds=constants.TASKS.job_timeout_seconds,
-            max_size=container.settings.database.pool_plan(container.processes).queue_max,
+            max_size=container.settings.database.pool_plan(
+                container.processes, queue_workers=container.queue_workers
+            ).queue_max,
         )
         container.tasks = queue
         container.add_dependency(
@@ -613,7 +617,7 @@ def _wire_graph(container: Container) -> None:
         from memory_service.adapters.graph.postgres_store import PostgresGraphStore
 
         database = container.settings.database
-        plan = database.pool_plan(container.processes)
+        plan = database.pool_plan(container.processes, queue_workers=container.queue_workers)
         store = PostgresGraphStore(
             container.database.engine,
             budget_ms=container.tuning.graph.prefetch_budget_ms,

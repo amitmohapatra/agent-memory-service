@@ -24,7 +24,14 @@ from memory_service.observability.metrics import (
 )
 from memory_service.observability.tracing import span
 from memory_service.ports.models import ProviderInfo
-from memory_service.ports.tasks import QUEUE_PRIORITY, JobInfo, JobSpec, Queue, TaskHandler
+from memory_service.ports.tasks import (
+    QUEUE_PRIORITY,
+    GiveUpHandler,
+    JobInfo,
+    JobSpec,
+    Queue,
+    TaskHandler,
+)
 
 log = get_logger(__name__)
 
@@ -73,25 +80,35 @@ def _retry_strategy(retries: int) -> procrastinate.RetryStrategy | bool:
     return procrastinate.RetryStrategy(max_attempts=retries, wait=1, exponential_wait=2)
 
 
+async def _give_up(
+    name: str, on_give_up: GiveUpHandler, payload: dict[str, Any], exc: BaseException
+) -> None:
+    """Best effort: a failing give-up handler must not change how the job fails."""
+    try:
+        await on_give_up(payload, f"{type(exc).__name__}: {exc}"[:2000])
+    except Exception as give_up_exc:
+        log.warning("jobs.give_up_failed", task=name, error=str(give_up_exc))
+
+
 class WorkerStoppedError(RuntimeError):
     """A pool's worker ended although nobody asked it to stop: Procrastinate stops a worker
     whose heartbeat, periodic deferrer or listener failed, and returns as if stopped. The
     process must then exit non-zero so its supervisor restarts it."""
 
 
-#: SQLSTATEs that say the database is out of reach or out of room, not that the statement
-#: is wrong: the connection failed or was refused (08), the server is shutting down or
-#: starting (57P01-57P03), it ran out of disk, memory or connections (53).
-_UNAVAILABLE_CLASSES: Final = ("08", "53")
+#: SQLSTATEs the server answers a statement with when it is out of room or going away, not
+#: because the statement is wrong: out of disk, memory or connections (class 53), shutting
+#: down or starting (57P01-57P03). Either way it rolled the statement back.
+_UNAVAILABLE_CLASSES: Final = ("53",)
 _UNAVAILABLE_STATES: Final = frozenset({"57P01", "57P02", "57P03"})
 
 
 def _unavailable(exc: BaseException) -> bool:
-    """The database could not do the statement: no connection was free in the queue pool in
-    time (it never ran), or the server refused it for want of disk, memory or connections, or
-    lost the connection (it was rolled back). Running it again is safe: Procrastinate's
-    statements claim, finish and retry jobs only from the status they expect, and a job
-    claimed by a statement whose answer was lost is re-queued as stalled."""
+    """The database could not do the statement, and it did not take effect: no connection was
+    free in the queue pool in time (it never ran), or the server refused it for want of disk,
+    memory or connections, or because it is shutting down or starting (it was rolled back).
+    Running it again is safe. A connection lost mid-statement is not retried - whether the
+    statement committed is unknown - and the worker exits for its supervisor to restart."""
     if not isinstance(exc, pexc.ConnectorException):
         return False
     cause = exc.__cause__
@@ -106,7 +123,7 @@ class ResilientConnector(procrastinate.PsycopgConnector):
 
     With ``outage_seconds`` set (the worker's pools, :meth:`ProcrastinateTaskQueue.run_pools`),
     a query the database could not do (:func:`_unavailable`: no free connection in the pool,
-    a full disk, a lost connection), and a LISTEN connection that was lost or could not be
+    a full disk, a server going away), and a LISTEN connection that was lost or could not be
     opened, are tried again after a growing pause (``backoff``), each retry logged
     (``worker.db_retry``) and counted (``memory_worker_db_retries_total``), and how long the
     database has been out of reach is a gauge (``memory_worker_db_unavailable_seconds``),
@@ -274,12 +291,19 @@ class ProcrastinateTaskQueue:
 
     # -- registration ---------------------------------------------------------
     def register(
-        self, name: str, queue: Queue, handler: TaskHandler, *, retries: int | None = None
+        self,
+        name: str,
+        queue: Queue,
+        handler: TaskHandler,
+        *,
+        retries: int | None = None,
+        on_give_up: GiveUpHandler | None = None,
     ) -> None:
         if name in self._handlers:
             return
         self._handlers[name] = handler
         timeout = self.job_timeout_seconds
+        budget = retries if retries is not None else self.default_retries
 
         async def _run(context: procrastinate.JobContext, **payload: Any) -> Any:
             attempt = context.job.attempts if context.job else 0
@@ -291,6 +315,8 @@ class ProcrastinateTaskQueue:
                     jobs_total.labels(name, "failed").inc()
                     if context.job and context.job.id is not None:
                         await self._record_error(context.job.id, exc)
+                    if on_give_up is not None and attempt >= budget:  # no retry follows
+                        await _give_up(name, on_give_up, payload, exc)
                     raise
                 finally:
                     worker_running_jobs.dec()
@@ -301,7 +327,7 @@ class ProcrastinateTaskQueue:
             name=name,
             queue=queue.value,
             priority=QUEUE_PRIORITY[queue],
-            retry=_retry_strategy(retries if retries is not None else self.default_retries),
+            retry=_retry_strategy(budget),
             pass_context=True,
         )(_run)
 
@@ -409,6 +435,11 @@ class ProcrastinateTaskQueue:
             wait=wait,
             install_signal_handlers=install_signal_handlers,
             fetch_job_polling_interval=2.0,
+            # A worker starting prunes the workers whose heartbeat is older than this, and
+            # their running jobs are re-queued. Procrastinate's 30 s is shorter than the
+            # outage a worker rides out (TASKS.worker_db_outage_seconds): a replica starting
+            # meanwhile took a live worker's jobs, and they ran twice.
+            stalled_worker_timeout=TASKS.stalled_after_seconds,
         )
 
     async def run_pools(

@@ -87,6 +87,36 @@ async def test_failing_handler_is_retried_then_failed(queue: ProcrastinateTaskQu
     assert attempts == 3  # 1 initial + 2 retries
 
 
+async def test_a_job_that_gives_up_is_handed_to_its_give_up_handler(
+    queue: ProcrastinateTaskQueue,
+) -> None:
+    """``on_give_up`` runs once, after the last attempt, with the payload and the error -
+    the hook that marks a document whose index job gave up FAILED instead of STAGED forever."""
+    attempts: list[int] = []
+    gave_up: list[tuple[dict, str]] = []
+
+    async def handler(payload):
+        attempts.append(1)
+        raise ValueError("embedding service down")
+
+    async def give_up(payload, error):
+        gave_up.append((payload, error))
+
+    queue.register("test.index", Queue.EMBEDDING, handler, retries=1, on_give_up=give_up)
+    job_id = await queue.enqueue(
+        JobSpec(task_name="test.index", queue=Queue.EMBEDDING, payload={"document_id": "d1"})
+    )
+    for _ in range(12):
+        await queue.run_until_idle([Queue.EMBEDDING], concurrency=1)
+        info = await queue.get(job_id)
+        if info and info.status is JobStatus.FAILED:
+            break
+        assert gave_up == [], "not while a retry is to come"
+        await asyncio.sleep(1)
+    assert len(attempts) == 2
+    assert gave_up == [({"document_id": "d1"}, "ValueError: embedding service down")]
+
+
 async def test_handler_timeout_is_enforced(queue: ProcrastinateTaskQueue) -> None:
     queue.job_timeout_seconds = 1
 

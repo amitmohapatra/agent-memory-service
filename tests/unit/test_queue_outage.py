@@ -110,3 +110,55 @@ async def test_a_lost_listen_connection_is_opened_again(monkeypatch: pytest.Monk
 
     await _connector(5).listen_notify(notified, ["procrastinate_any_queue_v1"])
     assert len(calls) == 3 and _retries("listen") == before + 2
+
+
+async def test_a_real_pool_timeout_through_procrastinate_is_ridden_out_then_raised() -> None:
+    """No stand-in: Procrastinate's own connector, a real psycopg pool that cannot reach its
+    server, the statement through Procrastinate's ``execute_query_async``. The pool times out
+    (``psycopg_pool.PoolTimeout``, wrapped by Procrastinate), the connector retries it and
+    counts it, and raises once the outage budget is spent."""
+    pool = psycopg_pool.AsyncConnectionPool(
+        "host=127.0.0.1 port=9 dbname=none user=none connect_timeout=1",
+        min_size=0,
+        max_size=1,
+        timeout=0.3,
+        open=False,
+    )
+    await pool.open(wait=False)  # the server is never there: the pool cannot fill
+    connector = pq.ResilientConnector()
+    connector.outage_seconds = 1.5
+    connector.backoff = (0.05, 0.1)
+    unfilled: Any = pool  # a plain pool; Procrastinate types its own pool by row factory
+    await connector.open_async(pool=unfilled)
+    before = _retries("query")
+    try:
+        with pytest.raises(pq.pexc.ConnectorException) as raised:
+            await connector.execute_query_async("SELECT 1")
+    finally:
+        await pool.close()
+    assert isinstance(raised.value.__cause__, psycopg_pool.PoolTimeout)
+    assert _retries("query") > before, "retried before it gave up"
+
+
+async def test_a_starting_worker_never_takes_the_jobs_of_one_riding_an_outage_out() -> None:
+    """A worker starting prunes the workers silent for ``stalled_worker_timeout`` and their
+    running jobs are re-queued. Procrastinate's 30 s is shorter than the outage a worker rides
+    out (plus a heartbeat interval), so a replica starting meanwhile ran its jobs twice."""
+    from memory_service.config.constants import TASKS
+
+    heartbeat_seconds = 10.0  # Procrastinate's update_heartbeat_interval
+    assert TASKS.worker_db_outage_seconds + heartbeat_seconds < TASKS.stalled_after_seconds
+
+    queue = pq.ProcrastinateTaskQueue("")
+    given: dict[str, Any] = {}
+
+    async def opened() -> None:
+        return None
+
+    async def run_worker_async(**options: Any) -> None:
+        given.update(options)
+
+    queue.open = opened  # type: ignore[method-assign]
+    queue.app.run_worker_async = run_worker_async  # type: ignore[method-assign]
+    await queue.run_worker([pq.Queue.RECONCILE], concurrency=1)
+    assert given["stalled_worker_timeout"] == TASKS.stalled_after_seconds

@@ -30,7 +30,16 @@ each entry says which one moved. Decisions behind each change are in the
   ran seconds later and the question asked at `READY` answered "Memory holds nothing". The
   document now stays `STAGED` through parsing and indexing, and the index job marks it `READY`
   after the embeddings are written, before graph enrichment
-  ([documents](docs/api/documents.md)).
+  ([documents](docs/api/documents.md)). When the index job gives up (its retries spent, or past
+  the job timeout on a large file) the document is `FAILED` with `last_error` "index failed:
+  ...", and `memory-reindex` indexes such documents, and `STAGED` ones with a parsed version,
+  and makes them `READY`.
+- The job worker's queue pool is sized for its three Procrastinate workers (two connections
+  each), and their three LISTEN connections count against `connection_budget`; with four
+  connections for all of them, pool checkouts timed out under load. A worker starting no
+  longer takes the jobs of one silent for 30 s (Procrastinate's default) but for 120 s
+  (`TASKS.stalled_after_seconds`), longer than the 90 s a worker rides a database outage out,
+  so a job no longer runs twice.
 - `/v1/verify` records no verdict on a run whose context held no evidence. Against an empty
   context every claim is "unsupported" - one the run's own tools returned too - so the judge
   rejected such runs, their outcome became a failure, and an agent sampled for grounding
@@ -44,8 +53,9 @@ each entry says which one moved. Decisions behind each change are in the
   jobs, which outrank parsing, archiving, reconciliation and summaries - held every slot until
   it drained ([operations](docs/guide/11-operations.md#workers-and-periodic-jobs)).
 - The job worker rides out a database that cannot do its queue statements for up to 90 s: no
-  connection free in the queue pool, a full disk or no memory, a lost connection, a lost LISTEN
-  connection. Each is retried with a growing pause, logged (`worker.db_retry`) and counted
+  connection free in the queue pool, a full disk or no memory, a server shutting down or
+  starting, a lost LISTEN connection (a connection lost mid-statement still ends the worker).
+  Each is retried with a growing pause, logged (`worker.db_retry`) and counted
   (`memory_worker_db_retries_total`; `memory_worker_db_unavailable_seconds` says for how long).
   Under memory pressure one pool timeout in a heartbeat made Procrastinate stop the worker and
   the process exited 0, so a supervisor restarting on failure left it down; and a job-status

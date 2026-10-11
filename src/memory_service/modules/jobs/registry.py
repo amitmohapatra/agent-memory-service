@@ -153,6 +153,16 @@ def register_handlers(container: Container) -> None:
             )
         )
 
+    async def document_index_gave_up(payload: dict[str, Any], error: str) -> None:
+        ingestion = container.services.get("ingestion")
+        if ingestion is not None:
+            await ingestion.mark_index_failed(
+                payload["tenant_id"],
+                payload["document_id"],
+                payload.get("document_version_id"),
+                error,
+            )
+
     async def graph_enrich_document(payload: dict[str, Any]) -> None:
         graph = container.services.get("graph")
         if graph is not None:
@@ -371,7 +381,13 @@ def register_handlers(container: Container) -> None:
     )
     queue.register(TASK_PROCESS_OBSERVATION, Queue.CHAT_FAST, process_observation, retries=5)
     queue.register("document.parse", Queue.DOCUMENT_PARSE, document_parse, retries=3)
-    queue.register("document.index", Queue.EMBEDDING, document_index, retries=5)
+    queue.register(
+        "document.index",
+        Queue.EMBEDDING,
+        document_index,
+        retries=5,
+        on_give_up=document_index_gave_up,
+    )
     queue.register(TASK_MEMORY_INDEX, Queue.EMBEDDING, memory_index, retries=5)
     queue.register(TASK_GRAPH_ENRICH_MEMORIES, Queue.GRAPH, graph_enrich_memories, retries=5)
     queue.register(TASK_GRAPH_ENRICH_DOCUMENT, Queue.GRAPH, graph_enrich_document, retries=5)

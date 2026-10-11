@@ -20,10 +20,19 @@ job worker's pod runs one. `DatabaseSettings.pool_plan` divides it:
 
 ```text
 per_process = connection_budget // processes          (unset: 28)
-queue       = max(2, per_process // 7)
-graph       = max(2, 2 * per_process // 7)            size ceil(g/2), overflow floor(g/2)
-main        = max(2, per_process - graph - queue)     size ceil(m/2), overflow floor(m/2)
+listeners   = the job worker's Procrastinate workers  (3; 0 in the API)
+pooled      = per_process - listeners
+queue       = max(2, pooled // 7, 2 * listeners)
+graph       = max(2, 2 * pooled // 7)                 size ceil(g/2), overflow floor(g/2)
+main        = max(2, per_process - graph - queue - listeners)
+                                                      size ceil(m/2), overflow floor(m/2)
 ```
+
+The job worker runs three Procrastinate workers (one per pool: indexing, graph, the rest) on
+one queue pool; each fetches, finishes, heartbeats, polls for aborts and defers periodic jobs,
+so the pool gets two connections per worker, and each worker's LISTEN connection, opened
+outside the pool, counts against the budget too. A worker pod's share is at least 13 (4 + 3
+per worker), whatever the budget says.
 
 Unset, a process keeps the pools it had before the budget existed: requests 8 + 8, graph
 4 + 4, queue 4 (28). Overflow counts against the budget because a burst is exactly when the

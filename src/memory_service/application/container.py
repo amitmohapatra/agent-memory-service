@@ -32,6 +32,7 @@ from memory_service.config.registry import Registries, get_registries
 from memory_service.config.settings import Settings
 from memory_service.domain.fiscal import parse_calendar
 from memory_service.observability.logging import get_logger
+from memory_service.ports.tasks import WORKER_POOL_COUNT
 
 log = get_logger(__name__)
 
@@ -173,6 +174,9 @@ class Container:
     #: processes of this kind in one pod (the API's uvicorn workers, or 1 for the job
     #: worker): what the pod's connection budget is divided by
     processes: int = 1
+    #: Procrastinate workers this process runs on its queue pool (the job worker's pools,
+    #: ``ports.tasks.worker_pools``; 0 in the API): what the queue pool is sized for
+    queue_workers: int = 0
     dependencies: dict[str, Dependency] = field(default_factory=dict)
     #: Services with buffered work to finish at shutdown. Not dependencies: they are not
     #: pinged, they do not decide readiness, and they are closed *before* the dependencies
@@ -322,6 +326,7 @@ async def build_container(
         overrides=overrides,
         tuning=Tuning.resolve(overrides, settings.retail_calendar),
         processes=settings.service.workers if role == "api" else 1,
+        queue_workers=0 if role == "api" else WORKER_POOL_COUNT,
     )
     await wire_adapters(container)
     return container

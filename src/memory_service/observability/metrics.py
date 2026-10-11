@@ -195,7 +195,7 @@ worker_last_sample_timestamp = Gauge(
 worker_db_retries_total = Counter(
     "memory_worker_db_retries_total",
     "Queue operations the worker retried because the database could not do them (no "
-    "connection free in its pool, a full disk, a lost connection), by operation",
+    "connection free in its pool, a full disk, a server going away), by operation",
     ["operation"],
     registry=REGISTRY,
 )

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Final
 
 from memory_service.config.constants import DocumentSettings
 from memory_service.domain.context import MemoryExecutionContext
@@ -62,6 +62,11 @@ class FileAck:
     job_ids: list[str]
     deduplicated: bool = False
     observation_id: str | None = None
+
+
+#: How ``last_error`` starts when a document's index job gave up: its parse is done and its
+#: version is current, so ``memory-reindex`` picks it up (``tools/reindex.py``).
+INDEX_FAILED: Final = "index failed"
 
 
 class IngestionService:
@@ -368,6 +373,25 @@ class IngestionService:
             if document is None or document.current_version_id != document_version_id:
                 return
             await uow.documents.set_status(tenant_id, document_id, status="READY")
+            await uow.revisions.bump(tenant_id, RevisionKind.DOCUMENT, document_id)
+            await uow.commit()
+
+    async def mark_index_failed(
+        self, tenant_id: str, document_id: str, document_version_id: str | None, error: str
+    ) -> None:
+        """The index job gave up (its retries spent, or past the job timeout): the document
+        is FAILED with why, not left STAGED with nothing to say. Its parsed version stays;
+        ``memory-reindex`` indexes it and marks it READY. An index job of a version a later
+        parse replaced leaves the status to that version's own job."""
+        async with self.uow_factory() as uow:
+            document = await uow.documents.get(tenant_id, document_id)
+            if document is None or document.current_version_id != document_version_id:
+                return
+            if document.system_metadata.get("status") == "READY":
+                return
+            await uow.documents.set_status(
+                tenant_id, document_id, status="FAILED", error=f"{INDEX_FAILED}: {error}"[:2000]
+            )
             await uow.revisions.bump(tenant_id, RevisionKind.DOCUMENT, document_id)
             await uow.commit()
 

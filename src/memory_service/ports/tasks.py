@@ -42,12 +42,20 @@ INDEXING_QUEUES: tuple[Queue, ...] = (Queue.EMBEDDING,)
 GRAPH_QUEUES: tuple[Queue, ...] = (Queue.GRAPH,)
 
 
+#: How many pools (Procrastinate workers, each with a LISTEN connection) the worker runs
+WORKER_POOL_COUNT: int = 3
+
+
 def worker_pools(concurrency: int, indexing: int, graph: int) -> list[tuple[list[Queue], int]]:
     """The worker's pools: the indexing queues with ``indexing`` slots, the graph queues with
     ``graph``, every other queue with ``concurrency``."""
     own = (*INDEXING_QUEUES, *GRAPH_QUEUES)
     rest = [q for q in Queue if q not in own]
     return [(list(INDEXING_QUEUES), indexing), (list(GRAPH_QUEUES), graph), (rest, concurrency)]
+
+
+#: Called with a job's payload and the error it last failed with, once it will not be retried.
+GiveUpHandler = Callable[[dict[str, Any], str], Awaitable[None]]
 
 
 # interactive > indexing > summaries > eval/import
@@ -103,8 +111,19 @@ class TaskQueue(Protocol):
 
     async def get(self, job_id: str) -> JobInfo | None: ...
 
-    def register(self, name: str, queue: Queue, handler: TaskHandler, *, retries: int = 5) -> None:
-        """Register a task handler. Must be called before workers start."""
+    def register(
+        self,
+        name: str,
+        queue: Queue,
+        handler: TaskHandler,
+        *,
+        retries: int = 5,
+        on_give_up: GiveUpHandler | None = None,
+    ) -> None:
+        """Register a task handler. Must be called before workers start. ``on_give_up`` is
+        awaited with the payload and the error once the job has failed for the last time
+        (its retries spent, or its last attempt past the job timeout): what the job was to
+        finish must not stay half-done with nothing saying so."""
         ...
 
     async def run_worker(

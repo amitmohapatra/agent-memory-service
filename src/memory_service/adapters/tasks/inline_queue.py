@@ -14,7 +14,7 @@ from memory_service.domain.enums import JobStatus
 from memory_service.domain.ids import new_id
 from memory_service.observability.logging import get_logger
 from memory_service.ports.models import ProviderInfo
-from memory_service.ports.tasks import JobInfo, JobSpec, Queue, TaskHandler
+from memory_service.ports.tasks import GiveUpHandler, JobInfo, JobSpec, Queue, TaskHandler
 
 log = get_logger(__name__)
 
@@ -32,10 +32,21 @@ class RecordingTaskQueue:
         self.fail_enqueue = fail_enqueue
         self._queueing_locks: set[str] = set()
         self.periodic: dict[str, str] = {}
+        self.give_ups: dict[str, GiveUpHandler] = {}
 
-    def register(self, name: str, queue: Queue, handler: TaskHandler, *, retries: int = 5) -> None:
+    def register(
+        self,
+        name: str,
+        queue: Queue,
+        handler: TaskHandler,
+        *,
+        retries: int = 5,
+        on_give_up: GiveUpHandler | None = None,
+    ) -> None:
         self.handlers[name] = handler
         self.queues[name] = queue
+        if on_give_up is not None:
+            self.give_ups[name] = on_give_up
 
     def register_periodic(
         self, name: str, queue: Queue, handler: TaskHandler, *, cron: str
@@ -93,10 +104,14 @@ class RecordingTaskQueue:
         try:
             await self.handlers[spec.task_name](spec.payload)
         except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
             self.jobs[job_id] = self.jobs[job_id].model_copy(
-                update={"status": JobStatus.FAILED, "last_error": f"{type(exc).__name__}: {exc}"}
+                update={"status": JobStatus.FAILED, "last_error": error}
             )
             log.warning("inline_job.failed", task=spec.task_name, error=str(exc))
+            give_up = self.give_ups.get(spec.task_name)
+            if give_up is not None:  # an inline job is never retried: this was its last run
+                await give_up(spec.payload, error)
             return
         self.jobs[job_id] = self.jobs[job_id].model_copy(update={"status": JobStatus.SUCCEEDED})
 

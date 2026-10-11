@@ -37,17 +37,24 @@ class LossySink:
 
     def __init__(self, stream: TextIO) -> None:
         self.stream = stream
+        self._lost = False
 
     def write(self, text: str) -> int:
         try:
             return self.stream.write(text)
-        except OSError:
+        except OSError:  # an unbuffered stream fails here, a buffered one on flush
+            self._lost = True
             return 0
 
     def flush(self) -> None:
+        """Ends each line (structlog prints with ``flush=True``): the line is counted once
+        as dropped when any of its writes, or the flush, failed."""
         try:
             self.stream.flush()
         except OSError:
+            self._lost = True
+        if self._lost:
+            self._lost = False
             from memory_service.observability.metrics import log_lines_dropped_total
 
             log_lines_dropped_total.inc()

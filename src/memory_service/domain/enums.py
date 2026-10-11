@@ -187,7 +187,7 @@ class DocumentStatus(StrEnum):
 
     STAGED = "STAGED"  # bytes accepted, parse or index job queued or running
     READY = "READY"  # parsed and indexed; retrievable
-    FAILED = "FAILED"  # the parse job gave up; ``last_error`` says why
+    FAILED = "FAILED"  # the parse or index job gave up; ``last_error`` says why
 
 
 class ArchiveStatus(StrEnum):

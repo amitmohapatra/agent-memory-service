@@ -173,7 +173,7 @@ until it drained. Each pool keeps one listening connection outside the queue poo
 | `memory.index` | `embedding` | every memory change | 5 | index or remove, bump revisions, queue a profile refresh and the graph enrichment |
 | `graph.enrich_memories` | `graph` | `memory.index` | 5 | the memories' entities and relations; one at a time per tenant when a model is reachable |
 | `document.parse` | `document-parse` | upload | 3 | parse, hierarchy, chunks, Document Context Graph |
-| `document.index` | `embedding` | parse | 5 | index chunks and summaries, mark the document `READY`, queue the graph enrichment |
+| `document.index` | `embedding` | parse | 5 | index chunks and summaries, mark the document `READY`, queue the graph enrichment; when it gives up, the document is `FAILED` ("index failed: ...") for `memory-reindex` to finish |
 | `graph.enrich_document` | `graph` | `document.index` | 5 | the document's entities and relations; one at a time per tenant when a model is reachable |
 | `archive.stage_message` | `archive` | each message, 60 s coalesced per thread | 10 | compress, upload, verify, manifest (ADR 0006) |
 | `feedback.project` | `reconcile` | an applied verdict | 3 | apply it (chapter 6) |
@@ -285,12 +285,14 @@ worker that cannot reach its database), `memory_worker_db_retries_total` per ope
 that port. On SIGTERM the worker stops fetching, gives running jobs 30 s, then aborts and
 releases the rest for a retry; compose's `stop_grace_period` for it is 45 s. A database that
 cannot do a queue statement - no connection free in the queue pool, a full disk or no memory
-(SQLSTATE class 53), a lost or refused connection (class 08, 57P01-57P03), the LISTEN
+(SQLSTATE class 53), a server shutting down or starting (57P01-57P03), the LISTEN
 connection lost - is ridden out for 90 s (`TASKS.worker_db_outage_seconds`): each retry is
 logged (`worker.db_retry`) and counted, after a pause growing from 0.5 s to 10 s, and the
-gauge says for how long. Those statements did not take effect (never ran, or rolled back), and
-Procrastinate's claim, finish and retry statements act only from the status they expect, so a
-retry never applies one twice. Past 90 s (`worker.db_unavailable`), or when one of its pools
+gauge says for how long. Those statements did not take effect (never ran, or rolled back), so a retry
+never applies one twice. A connection lost mid-statement is not retried (whether it committed
+is unknown): the worker exits non-zero. A worker starting prunes only workers silent for 120 s
+(`TASKS.stalled_after_seconds`, longer than the 90 s), so it never takes the jobs of one that
+is riding an outage out. Past 90 s (`worker.db_unavailable`), or when one of its pools
 stops on its own, the worker logs `worker.failed` and exits non-zero for its supervisor to
 restart it (compose: `restart: on-failure`). One pool timeout in a heartbeat, or one job-status
 write to a full disk, used to stop it, and the process exited as if asked to. A log line that

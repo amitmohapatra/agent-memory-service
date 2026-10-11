@@ -133,12 +133,17 @@ class PoolPlan:
     graph_overflow: int
     #: Procrastinate's psycopg pool through ``direct_url`` (max; min is 1)
     queue_max: int
+    #: the job worker's LISTEN connections, one per Procrastinate worker (one per pool of
+    #: ``ports.tasks.worker_pools``), opened outside the queue pool; 0 in the API
+    listeners: int = 0
 
     @property
     def total(self) -> int:
         return (
-            self.main_size + self.main_overflow + self.graph_size + self.graph_overflow
-        ) + self.queue_max
+            (self.main_size + self.main_overflow + self.graph_size + self.graph_overflow)
+            + self.queue_max
+            + self.listeners
+        )
 
 
 class DatabaseSettings(BaseModel):
@@ -172,31 +177,41 @@ class DatabaseSettings(BaseModel):
         """The session-capable connection (``direct_url``, else ``url``)."""
         return (self.direct_url or self.url).get_secret_value()
 
-    def pool_plan(self, processes: int) -> PoolPlan:
+    def pool_plan(self, processes: int, *, queue_workers: int = 0) -> PoolPlan:
         """One process's pools, from the pod's budget::
 
             per_process = connection_budget // processes      (unset: 28)
-            queue       = max(2, per_process // 7)
-            graph       = max(2, 2 * per_process // 7)        split ceil(g/2) + floor(g/2)
-            main        = max(2, per_process - graph - queue) split ceil(m/2) + floor(m/2)
+            listeners   = queue_workers                       (the job worker's LISTENs)
+            pooled      = per_process - listeners
+            queue       = max(2, pooled // 7, 2 * queue_workers)
+            graph       = max(2, 2 * pooled // 7)             split ceil(g/2) + floor(g/2)
+            main        = max(2, per_process - graph - queue - listeners)
+                                                              split ceil(m/2) + floor(m/2)
 
         A pool's overflow is the burst it may open past its steady size and closes again;
-        the budget counts both, because a burst is when the budget matters.
+        the budget counts both, because a burst is when the budget matters. The job worker
+        runs ``queue_workers`` Procrastinate workers on one queue pool, each with its fetch,
+        finishes, heartbeat, abort poll and periodic deferrer: two pooled connections each,
+        or their checkouts time out under load. Its share is at least ``4 + 3 *
+        queue_workers`` (13 for three), whatever the budget says.
         """
         processes = max(1, processes)
         if self.connection_budget is None:
             per_process = _CONNECTIONS_PER_PROCESS
         else:
             per_process = max(6, self.connection_budget // processes)
-        queue = max(2, per_process // 7)
-        graph = max(2, 2 * per_process // 7)
-        main = max(2, per_process - graph - queue)
+        per_process = max(per_process, 4 + 3 * queue_workers)
+        pooled = per_process - queue_workers
+        queue = max(2, pooled // 7, 2 * queue_workers)
+        graph = max(2, 2 * pooled // 7)
+        main = max(2, per_process - graph - queue - queue_workers)
         return PoolPlan(
             main_size=-(-main // 2),
             main_overflow=main // 2,
             graph_size=-(-graph // 2),
             graph_overflow=graph // 2,
             queue_max=queue,
+            listeners=queue_workers,
         )
 
     @property
