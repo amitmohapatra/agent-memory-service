@@ -285,8 +285,8 @@ def test_the_gate_fails_on_any_drop_and_on_slower_context(tmp_path: Path) -> Non
     merged = gate.record([base, repeat], tmp_path / "gate2.json")
     assert merged["baselines"]["nollm"]["repeat_runs"] == 2
     assert gate.check(_run(0.6, 100.0), merged) == []
-    assert gate.check(_run(0.5, 100.0), merged) == [], "within the noise the repeats showed"
-    assert gate.check(_run(0.4, 100.0), merged)
+    # the threshold is already the lower repeat: below it is below, noisy or not
+    assert gate.check(_run(0.5, 100.0), merged)
     # a latency-only re-measure on a quieter machine replaces the latency, not the cells
     quiet = tmp_path / "quiet.json"
     quiet.write_text(json.dumps(_run(0.7, 80.0, load=0.05)))
@@ -340,13 +340,12 @@ def test_gate_rerun_rule_empty_runs_and_new_cells(tmp_path: Path) -> None:
     recorded = gate.record([first, second], tmp_path / "gate.json")
     cell = "context/new_session/single_fact_recall/en"
     assert recorded["baselines"]["nollm"]["noisy"][cell] == [0.6, 0.7]
-    # within the noise passes; below it, a noisy cell asks for one rerun ...
-    assert gate.check(_run(0.5, 100.0), recorded) == []
-    dropped = gate.check(_run(0.4, 100.0), recorded)
+    # below the threshold (the lower repeat), a noisy cell asks for one rerun ...
+    dropped = gate.check(_run(0.5, 100.0), recorded)
     assert dropped and all(f.startswith(gate.RERUN) for f in dropped)
-    # ... which clears it when the rerun is back within the noise, and fails it when not
-    assert gate.check(_run(0.4, 100.0), recorded, rerun=_run(0.5, 100.0)) == []
-    assert not gate.check(_run(0.4, 100.0), recorded, rerun=_run(0.4, 100.0))[0].startswith(
+    # ... and the rerun's own value decides
+    assert gate.check(_run(0.5, 100.0), recorded, rerun=_run(0.6, 100.0)) == []
+    assert not gate.check(_run(0.5, 100.0), recorded, rerun=_run(0.5, 100.0))[0].startswith(
         gate.RERUN
     )
     # a run that measured nothing is neither a baseline nor a pass
@@ -387,6 +386,42 @@ def test_the_gate_is_a_ratchet_with_report_only_targets(tmp_path: Path) -> None:
     assert gate.below_targets(_run(0.8, 100.0), with_target) == [f"{cell}: 0.8 below target 0.9"]
     assert record(0.9)["targets"] == with_target["targets"]
     assert gate.below_targets(_run(0.9, 100.0), with_target) == []
+
+
+def test_noise_is_allowed_once(tmp_path: Path) -> None:
+    """llm_core implicit_personalization/hi measured 0.5 and 0.667: the threshold is the lower,
+    0.5, and its noise is already spent - 0.333 must not pass."""
+    cell = "context/new_session/single_fact_recall/en"
+
+    def with_cell(acc: float) -> dict:
+        run = _run(0.7, 100.0)
+        for c in run["cells"]:
+            if (c["surface"], c["placement"], c["capability"], c["language"]) == tuple(
+                cell.split("/")
+            ):
+                c["accuracy"], c["n"] = acc, 3
+        return run
+
+    a, b = tmp_path / "a.json", tmp_path / "b.json"
+    a.write_text(json.dumps(with_cell(0.5)))
+    b.write_text(json.dumps(with_cell(0.6667)))
+    recorded = gate.record([a, b], tmp_path / "gate.json")
+    assert recorded["baselines"]["nollm"]["cells"][cell]["accuracy"] == 0.5
+    low = gate.check(with_cell(0.3333), recorded)
+    assert low and all(f.startswith(gate.RERUN) for f in low), "below the lower repeat"
+    # the rerun's own value decides, not the better of the two
+    assert gate.check(with_cell(0.3333), recorded, rerun=with_cell(0.3333))
+    assert gate.check(with_cell(0.3333), recorded, rerun=with_cell(0.5)) == []
+    # a rerun of a different run (another code sha) is refused
+    other = with_cell(0.5)
+    other["provenance"] = {**other.get("provenance", {}), "git_commit": "0" * 40}
+    refused_rerun = gate.check(with_cell(0.3333), recorded, rerun=other)
+    assert refused_rerun and "not a rerun of this run" in refused_rerun[0]
+
+
+def test_an_empty_answer_is_not_a_refusal() -> None:
+    v = scoring.score({"abstain": True}, [], "en", surface="answer")
+    assert (v.abstained, v.reason) == (False, "no_abstain")
 
 
 def test_reasons_are_given_in_precedence_order() -> None:
@@ -443,6 +478,12 @@ def _stack(tmp_path: Path, **env: str) -> subprocess.CompletedProcess[str]:
         ({"CAPEVAL_WORK": "/var/tmp/capeval_x/../live"}, "not under /var/tmp/capeval"),
         ({"CAPEVAL_REDIS_DB": "0"}, "reserved"),
         ({"CAPEVAL_REDIS_DB": "13"}, "reserved"),
+        ({"CAPEVAL_REDIS_DB": "00"}, "reserved"),
+        ({"CAPEVAL_QDRANT_HTTP": "06333"}, "live instance"),
+        ({"CAPEVAL_LOGS": "/var/tmp/capeval_x/../wt"}, "not under /var/tmp/capeval"),
+        ({"CAPEVAL_LOGS": "/tmp/capeval_logs"}, "not under /var/tmp/capeval"),
+        ({"CAPEVAL_API_PORT": "80a"}, "is not a number"),
+        ({"PGHOST": "db.example.com"}, "is not local"),
         ({"CAPEVAL_GATEWAY": "1", "BIFROST_URL": "", "BIFROST_VIRTUAL_KEY": ""}, "needs BIFROST"),
     ],
 )

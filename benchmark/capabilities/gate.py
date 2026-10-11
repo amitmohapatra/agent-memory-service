@@ -1,6 +1,6 @@
 """The capability gate: a ratchet. Accuracy may only go up.
 
-    python -m benchmark.capabilities.gate record <run.json>... [--allow-regression OWNER]
+    python -m benchmark.capabilities.gate record <run.json>...
     python -m benchmark.capabilities.gate check  <run.json> [--rerun <second run.json>]
 
 ``record`` writes ``benchmark/results/capability_gate.json``. For each mode (or gate set),
@@ -13,15 +13,18 @@ beside the thresholds (the pre-B1 values of cells B1 lowered): reported, never f
 
 ``check`` holds a run to it:
 
-* a cell below its threshold, less the noise its repeats showed, fails; on a noisy cell it
-  asks for one rerun first (exit 3), and fails only if the rerun is below too;
+* a cell below its floor fails: the threshold, less the noise its repeats showed only when
+  the threshold is a carried best value above the measured one (a threshold that is already
+  the lower repeat has had its noise allowed once). On a noisy cell it asks for one rerun
+  first (exit 3), and fails if the rerun's own value is below the floor too;
 * a cell the baseline has and the run does not fails; a cell the run has and the baseline
   does not is reported, and gated once recorded;
 * context p95 may not rise more than 10 % over the baseline's; a latency measured on a
   loaded machine fails the latency check;
 * a run on another dataset (the questions, the scorer, the generator) or another selection
-  is refused: re-record in the same change, where a reviewer sees both numbers. A cell whose
-  questions did not change keeps its threshold across the re-record.
+  is refused: re-record in the same change, where a reviewer sees both numbers. Any byte
+  change to scoring.py, generate.py or the language data resets every threshold; a change
+  to one capability's file resets that capability's.
 """
 
 from __future__ import annotations
@@ -276,6 +279,19 @@ def check(
     cells = _cells(run)
     if not cells:
         return ["the run measured no cells"]
+    if rerun is not None:
+        same = {
+            "dataset": (rerun["dataset"]["sha256"], run["dataset"]["sha256"]),
+            "selection": (rerun["meta"].get("selection"), run["meta"].get("selection")),
+            "mode": (rerun.get("mode"), run.get("mode")),
+            "code": (
+                (rerun.get("provenance") or {}).get("git_commit"),
+                (run.get("provenance") or {}).get("git_commit"),
+            ),
+        }
+        differs = [k for k, (a, b) in same.items() if a != b]
+        if differs:
+            return [f"the rerun is not a rerun of this run: its {', '.join(differs)} differ"]
     again = _cells(rerun) if rerun is not None else None
     pending: list[str] = []
     if subset:
@@ -291,19 +307,21 @@ def check(
         elif got["accuracy"] is None or want["accuracy"] is None:
             continue
         else:
-            # its threshold, less the noise its repeats showed
-            floor = want["accuracy"]
+            # the threshold; less the noise the repeats showed only when the threshold is a
+            # carried best value above what was measured - a threshold that already is the
+            # lower of the repeats has had its noise allowed once
             spread = _spread(base, key)
-            if got["accuracy"] >= floor - spread - 1e-9:
+            measured = want.get("measured")
+            carried = measured is not None and want["accuracy"] > measured + 1e-9
+            floor = want["accuracy"] - spread if carried else want["accuracy"]
+            if got["accuracy"] >= floor - 1e-9:
                 continue
-            line = f"{key}: accuracy {got['accuracy']} < threshold {floor} (n={got['n']})"
+            line = f"{key}: accuracy {got['accuracy']} < floor {round(floor, 4)} (n={got['n']})"
             if not spread:
                 failures.append(line)
             elif again is None:
                 pending.append(line)
-            elif max(got["accuracy"], (again.get(key) or {}).get("accuracy") or 0.0) < (
-                floor - spread - 1e-9
-            ):
+            elif ((again.get(key) or {}).get("accuracy") or 0.0) < floor - 1e-9:
                 # the one rerun is below it too: a regression, not noise
                 failures.append(f"{line}; rerun {(again.get(key) or {}).get('accuracy')}")
     if pending and not failures:

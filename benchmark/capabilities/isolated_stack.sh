@@ -48,7 +48,7 @@ FGA_HTTP="${CAPEVAL_FGA_HTTP:-8281}"
 FGA_GRPC="${CAPEVAL_FGA_GRPC:-8283}"
 READY_SECONDS="${CAPEVAL_READY_SECONDS:-300}"
 WORK="$(realpath -m "${CAPEVAL_WORK:-/var/tmp/capeval_stack}")"
-LOGS="${CAPEVAL_LOGS:-$WORK.logs}"
+LOGS="$(realpath -m "${CAPEVAL_LOGS:-$WORK.logs}")"
 MANIFEST="$WORK.manifest"
 PGHOST_="${PGHOST:-localhost}" PGUSER_="${PGUSER:-memory}" PGPASSWORD_="${PGPASSWORD:-memory}"
 
@@ -59,11 +59,23 @@ psql_() { PGPASSWORD="$PGPASSWORD_" psql -h "$PGHOST_" -U "$PGUSER_" -d postgres
 
 # ------------------------------------------------------------------ refuse before creating
 [[ "$DB" =~ ^capeval[a-z0-9_]*$ ]] || refuse "database '$DB' does not match ^capeval"
-case "$WORK" in /var/tmp/capeval*) ;; *) refuse "WORK '$WORK' is not under /var/tmp/capeval*" ;; esac
+# every path this script may delete, resolved (no "..", no symlink games) before the check
+for path in "$WORK" "$LOGS"; do
+  case "$path" in /var/tmp/capeval*) ;; *) refuse "path '$path' is not under /var/tmp/capeval*" ;; esac
+done
+# numbers as numbers: 00 is db 0, 06333 is port 6333
+for v in REDIS_DB API_PORT METRICS_PORT QDRANT_HTTP QDRANT_GRPC FGA_HTTP FGA_GRPC READY_SECONDS; do
+  [[ "${!v}" =~ ^[0-9]+$ ]] || refuse "$v '${!v}' is not a number"
+  printf -v "$v" '%d' "$((10#${!v}))"
+done
+# the eval database lives on this machine unless a remote one is explicitly allowed
+case "$PGHOST_" in
+  localhost|127.0.0.1|::1) ;;
+  *) [ "${CAPEVAL_ALLOW_REMOTE_PG:-0}" = 1 ] || refuse "PGHOST '$PGHOST_' is not local (CAPEVAL_ALLOW_REMOTE_PG=1 to allow)" ;;
+esac
 for p in "$QDRANT_HTTP" "$QDRANT_GRPC"; do
   if [ "$p" = 6333 ] || [ "$p" = 6334 ]; then refuse "Qdrant port $p is the live instance's"; fi
 done
-[[ "$REDIS_DB" =~ ^[0-9]+$ ]] || refuse "Redis db '$REDIS_DB' is not a number"
 for r in $REDIS_RESERVED; do
   if [ "$REDIS_DB" = "$r" ]; then refuse "Redis db $REDIS_DB is reserved"; fi
 done
@@ -116,7 +128,8 @@ teardown() {
   db="$(get db_created)" rdb="$(get redis_db)" work="$(get work_created)"
   [[ "$db" =~ ^capeval ]] && psql_ -c "drop database if exists $db with (force)" 2>/dev/null
   [ -n "$rdb" ] && redis-cli -n "$rdb" flushdb >/dev/null 2>&1
-  if [ -n "$work" ] && [[ "$work" == /var/tmp/capeval* ]]; then
+  work="$(realpath -m "${work:-/nonexistent}")"
+  if [[ "$work" == /var/tmp/capeval* ]] && [[ "$LOGS" == /var/tmp/capeval* ]]; then
     mkdir -p "$LOGS" && cp "$work"/*.log "$LOGS"/ 2>/dev/null
     rm -rf "$work"
   fi
@@ -148,7 +161,7 @@ done
 
 trap teardown EXIT
 trap 'log "failed: $BASH_COMMAND"' ERR
-[[ "$LOGS" == /var/tmp/capeval* ]] && rm -rf "$LOGS"
+if [[ "$LOGS" == /var/tmp/capeval* ]]; then rm -rf "$LOGS"; fi
 : > "$MANIFEST"
 mkdir -p "$WORK/qdrant" "$WORK/blob"
 note work_created "$WORK"

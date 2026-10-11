@@ -1,3 +1,5 @@
+> **Pre-B1, not reproducible:** measured 2026-10-08 on `a06c2c9` plus uncommitted work, on an earlier dataset hash. Kept as history; not in the gate.
+
 # Capability eval — nollm (2026-10-08)
 
 Dataset `600b1e5d758f`: 105 scenarios, 111 queries, 1110 phrasings per language. Selection: `{"languages": ["en", "de", "es", "ar", "hi", "mixed"], "split": "all", "capabilities": "all", "domains": "all", "kinds": "all", "scenarios_per_capability": null, "scenarios_per_domain": null, "scenario_ids": null}`.

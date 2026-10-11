@@ -175,8 +175,14 @@ More rules:
 - **Empty runs.** A run that measured nothing is refused as a baseline and fails as a check.
 - **New cells.** A cell the run measured but the baseline does not hold yet is listed as a new
   cell; it is gated once the baseline is re-recorded.
-- **Noise allowance.** A cell may sit below its threshold by as much as its repeats spread,
-  and no further; cells whose repeats agreed get no allowance at all.
+- **Noise allowance, once.** A threshold that is already the lower of the repeats gets no
+  further allowance. Only a carried best value above what was measured may be undercut, and
+  then by no more than the cell's own spread. Below that floor a noisy cell asks for one
+  rerun, and the rerun's own value decides. The rerun must be of the same dataset,
+  selection, mode and code, or it is refused.
+- **What resets thresholds.** Any byte change to `scoring.py`, `generate.py` or the language
+  data (`_languages.json`) changes the dataset hash and resets every threshold. A change to
+  one capability's file resets only that capability's cells.
 - **What the hash covers.** The dataset hash includes the scorer (`scoring.py`) and the
   generator (`generate.py`), so a change to what a verdict means re-records the baseline in
   the same change.
@@ -264,7 +270,7 @@ on a fast set, and the full set runs nightly:
 | `SET=core` | every capability but scale; all five languages and the code-switched phrasings; every phrasing kind and every surface. Questions start once the run's own queued work, summaries and graph enrichment included, has drained (bounded at 15 minutes; about 4 in practice). A run takes about 17 minutes, the isolated stack included | its own, `nollm/core` (cells and context p95), two runs merged: the lower value of each cell, and the cells they disagreed on recorded as noisy | every PR that touches capability work |
 | `SET=llm_core` (`MODE=llm`) | a fixed stratified subset of core: per capability (scale aside), the InventorySmart origin scenario and the other-domain scenario with the fewest turns. All five domains, every language and the code-switched phrasings, three phrasing kinds: 20 scenarios, 697 turns, 326 phrasings per surface (`_modes.json` lists them). It runs on the isolated store through the live gateway and the CPU model (`CAPEVAL_GATEWAY=1`, `CAPEVAL_LLM_MODEL`) | its own, `llm/llm_core`, ratcheted like `nollm/core` | every PR that touches capability work |
 | `SET=scale` | capability 7 alone, every language | held to the full baseline's scale cells; its latency is not compared | the PR of a change that targets scale, and nightly |
-| `SET=full` (default) | everything | `nollm` | nightly, and before a baseline is re-recorded |
+| `SET=full` (default) | everything | **no baseline yet**: record it on main first (the 2026-10-08 full runs are pre-B1 and unreproducible) | nightly, once recorded |
 
 `make eval-capabilities-isolated MODE=nollm SET=core` writes `nollm_core.json`, and
 `make eval-capabilities-gate MODE=nollm SET=core` checks it. A set's baseline is keyed
@@ -302,7 +308,8 @@ not part of CI.
 The recorded numbers, with what produced them, are in the result files and their summaries:
 [`nollm.md`](../../benchmark/results/capabilities/nollm.md),
 [`llm.md`](../../benchmark/results/capabilities/llm.md),
-[`harness.md`](../../benchmark/results/capabilities/harness.md). Read them with their dates and
+[`harness.md`](../../benchmark/results/capabilities/harness.md) - all three **pre-B1**
+(2026-10-08, `a06c2c9` plus uncommitted work), kept as history. Read them with their dates and
 `provenance`; the summary table below is copied from them.
 
 Recorded on 2026-10-08 on a 4-core laptop. The service ran `a06c2c9` plus uncommitted ingestion work, with the dataset `600b1e5d758f`. Accuracy is the share of phrasings whose assertions held. Reading the columns:

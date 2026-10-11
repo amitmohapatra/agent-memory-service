@@ -298,7 +298,7 @@ def score(
     elif surface == "answer" and items:
         abstained = refused(items[0].text, refusal_markers)
     elif surface == "answer":
-        abstained = True  # no answer at all is no claim
+        abstained = False  # an empty answer said nothing - not "I do not know" either
 
     v = Verdict(
         passed=False,
