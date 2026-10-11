@@ -316,6 +316,15 @@ def test_gate_sets_core_has_its_own_baseline_and_scale_is_held_to_the_full_one(
     # the scale set: the full baseline's matching cells, its own latency not compared
     assert gate.check(_run(0.7, 900.0, sample="scale"), recorded) == []
     assert gate.check(_run(0.6, 100.0, sample="scale"), recorded), "a scale cell dropped"
+    # a set whose read path runs the model on the measuring host: latency reported, not gated
+    llm_core = tmp_path / "llm_core.json"
+    run = _run(0.5, 300.0, sample="llm_core")
+    run["mode"] = run["meta"]["mode"] = "llm"
+    llm_core.write_text(json.dumps(run))
+    with_llm = gate.record([llm_core], tmp_path / "gate.json")
+    loaded = _run(0.5, 900.0, trustworthy=False, sample="llm_core")
+    loaded["mode"] = loaded["meta"]["mode"] = "llm"
+    assert gate.check(loaded, with_llm) == []
     scale = tmp_path / "nollm_scale.json"
     scale.write_text(json.dumps(_run(0.7, 100.0, sample="scale")))
     with pytest.raises(SystemExit, match="gated against"):

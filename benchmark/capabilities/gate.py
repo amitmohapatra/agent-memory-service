@@ -159,6 +159,17 @@ def _carries(existing: Mapping[str, Any], run: Mapping[str, Any]) -> Any:
     return lambda cell: by_capability.get(cell.split("/")[2], False)
 
 
+def _latency_gated(run: Mapping[str, Any]) -> bool:
+    """False for a set whose read path runs a model on the measuring host (``_modes.json``
+    ``latency_gated: false``): its latency is recorded and reported, not gated."""
+    sample = (run.get("meta") or {}).get("sample")
+    if not sample:
+        return True
+    from benchmark.capabilities.dataset import load_json
+
+    return (load_json("_modes.json")["samples"].get(sample) or {}).get("latency_gated", True)
+
+
 def _spread(base: Mapping[str, Any], key: str) -> float:
     lo, hi = (base.get("noisy") or {}).get(key, [0.0, 0.0])
     return round(hi - lo, 4)
@@ -302,7 +313,7 @@ def check(
         failures += pending
     lat = run["summary"]["latency_ms"]
     p95, base_p95 = lat.get("context_p95"), base["latency"].get("context_p95_ms")
-    if p95 is None or subset:
+    if p95 is None or subset or not _latency_gated(run):
         # no context was asked (harness mode scores answers): there is no latency to gate -
         # the answer's includes the model, which on a laptop is the CPU's main load itself
         pass

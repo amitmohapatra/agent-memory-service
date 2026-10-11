@@ -472,6 +472,24 @@ They are not in `capability_gate.json`; their summaries are kept as history. The
 re-record them on main with the nightly full run: `make eval-capabilities MODE=...`, then
 `make eval-capabilities-baseline`.
 
+### The llm_core baseline (main `420bbf3`)
+
+Two isolated runs through the live gateway and the CPU model (`llm_llm_core.json` and
+`llm_llm_core_repeat.json`, regenerable):
+
+| | run 1 | run 2 |
+|---|---|---|
+| macro, context in a new session | 0.6133 | 0.61 |
+| wall time | 4,616 s | 2,765 s |
+| writes | 692 turns in 2,938 s (run 1) | |
+| context p50 / p95 | 291 / 309 ms | 289 / 308 ms |
+| load during the questions | 1.42 per core | 1.43 per core |
+
+The two runs differ in 6 of 174 cells. Their ranges reach 0.17, because these cells are
+small. The latency is recorded but not gated: the read path calls the model on the same
+host, so the quiet-machine rule cannot hold. It is still the llm-mode regression in the
+known gaps, `query_expansion` waiting out its budget. The disk was left as found.
+
 ### Where the run-to-run noise may come from
 
 Not fixed yet; these are hypotheses to test. The two core runs differ in 41 of 174 cells,

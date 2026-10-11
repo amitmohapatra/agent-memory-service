@@ -146,7 +146,8 @@
         "implicit"
       ],
       "enrich_seconds": 900,
-      "note": "The llm-mode PR gate (make eval-capabilities-isolated MODE=llm SET=llm_core): a fixed stratified subset of core small enough to index through a CPU model in about an hour (697 turns, 326 phrasings per surface). Per capability (scale aside): the InventorySmart origin scenario and, of the scenarios in another domain, the one with the fewest turns (ties: id-hash order) - all five domains appear; every language and the code-switched phrasings; three phrasing kinds (direct, paraphrase, implicit). The list is fixed here, so the set does not move when scenarios are added."
+      "note": "The llm-mode PR gate (make eval-capabilities-isolated MODE=llm SET=llm_core): a fixed stratified subset of core small enough to index through a CPU model in about an hour (697 turns, 326 phrasings per surface). Per capability (scale aside): the InventorySmart origin scenario and, of the scenarios in another domain, the one with the fewest turns (ties: id-hash order) - all five domains appear; every language and the code-switched phrasings; three phrasing kinds (direct, paraphrase, implicit). The list is fixed here, so the set does not move when scenarios are added. Its latency is recorded, not gated: the read path calls the CPU model on the same 4-core host, so the load during the questions (about 1.4 per core) is the model's own and the quiet-machine rule cannot hold.",
+      "latency_gated": false
     }
   }
 }
