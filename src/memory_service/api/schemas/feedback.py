@@ -20,9 +20,12 @@ from memory_service.domain.feedback import (
     FeedbackProjection,
     FeedbackReview,
     FeedbackSource,
+    FeedbackTargetGroup,
     FeedbackTargetKind,
     FeedbackVerdict,
+    ReviewState,
 )
+from memory_service.domain.ids import is_valid_id
 from memory_service.domain.instants import UTC_RULE, UtcDateTime
 
 BoundedCorrection = Annotated[Any, AfterValidator(bounded_json(FEEDBACK_JSON_MAX_BYTES))]
@@ -191,7 +194,8 @@ class FeedbackResponse(BaseModel):
     review: FeedbackReview | None = Field(
         default=None,
         description="null: applied as it arrived; else pending (changes nothing until a tenant "
-        "admin approves it), approved or dismissed",
+        "admin approves it), approved or dismissed (a dismissed vote whose voter voted again "
+        "on the same target carries `replaced_by`)",
     )
     author_record: dict[str, int] | None = Field(
         default=None,
@@ -221,4 +225,107 @@ class FeedbackListResponse(BaseModel):
     feedback: list[FeedbackResponse] = Field(description="The page, newest first.")
     next_cursor: str | None = Field(
         default=None, description="pass as `cursor` for the next page; null on the last"
+    )
+
+
+class FeedbackTargetGroupResponse(BaseModel):
+    """One row of the grouped review queue: the votes on one target, counted."""
+
+    target_kind: FeedbackTargetKind = Field(
+        description="What the votes judge: run, memory, tool_call or procedure."
+    )
+    target_id: str = Field(description="The judged object's id.")
+    votes: int = Field(description="How many verdicts in this review state are on it.")
+    thumbs_up: int = Field(description="How many of them are confirm or approve.")
+    thumbs_down: int = Field(description="How many of them are reject, correct or edit.")
+    voters: int = Field(
+        description="How many distinct voters cast them (a person once, whichever agent "
+        "carried the vote; an agent with no person behind it counts as its own voter)."
+    )
+    latest_at: datetime = Field(description="When the latest of them came (ISO 8601, UTC).")
+
+    @classmethod
+    def of(cls, group: FeedbackTargetGroup) -> FeedbackTargetGroupResponse:
+        return cls.model_validate(group.model_dump())
+
+
+class FeedbackGroupListResponse(BaseModel):
+    groups: list[FeedbackTargetGroupResponse] = Field(
+        description="One row per target, the most recently voted target first."
+    )
+    next_cursor: str | None = Field(
+        default=None, description="pass as `cursor` for the next page; null on the last"
+    )
+
+
+def _feedback_ids(ids: list[str] | None) -> list[str] | None:
+    for value in ids or []:
+        if not is_valid_id(value):
+            raise ValueError(f"invalid identifier {value!r}")
+    return ids
+
+
+class FeedbackBulkReviewRequest(BaseModel):
+    """Which pending verdicts to decide: the ids, or every verdict pending on one target."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {"feedback_ids": ["fb_01J8ZK3N7R2Q4X5V6W7Y8Z9A0B"], "note": "duplicates"},
+                {
+                    "target_kind": "run",
+                    "target_id": "run_01J8ZK3N7R2Q4X5V6W7Y8Z9A0B",
+                    "note": "the answer matched the contract",
+                },
+            ]
+        },
+    )
+
+    feedback_ids: Annotated[list[str] | None, AfterValidator(_feedback_ids)] = Field(
+        default=None,
+        min_length=1,
+        max_length=500,
+        description="The verdicts to decide (1 to 500). Send these or a target, not both.",
+    )
+    target_kind: FeedbackTargetKind | None = Field(
+        default=None,
+        description="With target_id: decide every verdict pending on that target (up to 500 "
+        "a call; `more` says when to call again).",
+    )
+    target_id: str | None = Field(
+        default=None, min_length=1, max_length=200, description="The judged object's id."
+    )
+    note: str | None = Field(
+        default=None, max_length=COMMENT_MAX_CHARS, description="why, for the record"
+    )
+
+    @model_validator(mode="after")
+    def _ids_or_target(self) -> FeedbackBulkReviewRequest:
+        has_target = self.target_kind is not None or self.target_id is not None
+        if has_target and (self.target_kind is None or self.target_id is None):
+            raise ValueError("send target_kind and target_id together")
+        if (self.feedback_ids is None) == (not has_target):
+            raise ValueError("send feedback_ids or target_kind and target_id, not both")
+        return self
+
+
+class FeedbackUnchanged(BaseModel):
+    feedback_id: str = Field(description="A verdict that was already decided.")
+    state: ReviewState | None = Field(
+        description="Where its review stands (approved or dismissed); null for one applied "
+        "as it arrived."
+    )
+
+
+class FeedbackBulkReviewResponse(BaseModel):
+    state: ReviewState = Field(description="What this call decided: approved or dismissed.")
+    decided: list[str] = Field(description="The verdicts this call decided, in order.")
+    unchanged: list[FeedbackUnchanged] = Field(
+        description="The verdicts named that were not pending, left exactly as they were "
+        "(a repeated call decides nothing twice)."
+    )
+    more: bool = Field(
+        default=False,
+        description="True when the target holds more pending verdicts than one call decides.",
     )

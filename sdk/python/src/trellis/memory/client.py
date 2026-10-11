@@ -36,7 +36,9 @@ from trellis.memory.models import (
     ContextBundle,
     EvidenceRef,
     Feedback,
+    FeedbackBulkReview,
     FeedbackSource,
+    FeedbackTargetGroup,
     FeedbackTargetKind,
     FeedbackVerdict,
     Lifetime,
@@ -48,6 +50,7 @@ from trellis.memory.models import (
     ProfileBlock,
     PromptContext,
     RememberAck,
+    ReviewState,
     Scope,
     SearchItem,
     SearchKind,
@@ -588,17 +591,103 @@ class FeedbackAPI:
             next_cursor=data.get("next_cursor"),
         )
 
-    async def pending(self, *, limit: int = 100, cursor: str | None = None) -> Page[Feedback]:
+    @overload
+    async def pending(
+        self,
+        *,
+        group: None = None,
+        review: ReviewState = "pending",
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> Page[Feedback]: ...
+
+    @overload
+    async def pending(
+        self,
+        *,
+        group: Literal["target"],
+        review: ReviewState = "pending",
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> Page[FeedbackTargetGroup]: ...
+
+    async def pending(
+        self,
+        *,
+        group: Literal["target"] | None = None,
+        review: ReviewState = "pending",
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> Page[Feedback] | Page[FeedbackTargetGroup]:
         """The review queue (the tenant's administrator key): verdicts that change nothing
-        until approved, newest first, each with its author's ``author_record``."""
-        params: dict[str, Any] = {"review": "pending", "limit": limit}
+        until approved, newest first, each with its author's ``author_record``.
+        ``group="target"``: one row per target with its thumbs up and down, distinct voters
+        and latest vote. ``review="dismissed"`` (or approved) lists those instead,
+        for reporting."""
+        params: dict[str, Any] = {"review": review, "limit": limit}
+        if group is not None:
+            params["group"] = group
         if cursor:
             params["cursor"] = cursor
         data = await self._ctx._request("GET", "/v1/feedback", params=params)
+        if group is not None:
+            return Page[FeedbackTargetGroup](
+                items=[FeedbackTargetGroup.model_validate(g) for g in data.get("groups", [])],
+                next_cursor=data.get("next_cursor"),
+            )
         return Page[Feedback](
             items=[Feedback.model_validate(f) for f in data.get("feedback", [])],
             next_cursor=data.get("next_cursor"),
         )
+
+    async def approve_many(
+        self,
+        feedback_ids: Sequence[str] = (),
+        *,
+        target_kind: FeedbackTargetKind | str | None = None,
+        target_id: str | None = None,
+        note: str | None = None,
+    ) -> FeedbackBulkReview:
+        """Approve pending verdicts at once (the tenant's administrator key): the ids given,
+        or every verdict pending on one target. One already decided is left as it is."""
+        return await self._review_many(
+            "/v1/feedback/approve", feedback_ids, target_kind, target_id, note
+        )
+
+    async def dismiss_many(
+        self,
+        feedback_ids: Sequence[str] = (),
+        *,
+        target_kind: FeedbackTargetKind | str | None = None,
+        target_id: str | None = None,
+        note: str | None = None,
+    ) -> FeedbackBulkReview:
+        """Dismiss pending verdicts at once: kept for statistics, never applied."""
+        return await self._review_many(
+            "/v1/feedback/dismiss", feedback_ids, target_kind, target_id, note
+        )
+
+    async def _review_many(
+        self,
+        path: str,
+        feedback_ids: Sequence[str],
+        target_kind: FeedbackTargetKind | str | None,
+        target_id: str | None,
+        note: str | None,
+    ) -> FeedbackBulkReview:
+        if isinstance(feedback_ids, str):
+            raise TypeError("feedback_ids is a list of ids, not one id")
+        if bool(feedback_ids) == (target_kind is not None or target_id is not None):
+            raise ValueError("pass feedback_ids, or target_kind and target_id")
+        body: dict[str, Any] = {}
+        if feedback_ids:
+            body["feedback_ids"] = list(feedback_ids)
+        else:
+            body["target_kind"] = str(getattr(target_kind, "value", target_kind))
+            body["target_id"] = target_id
+        if note is not None:
+            body["note"] = note
+        return FeedbackBulkReview.model_validate(await self._ctx._request("POST", path, json=body))
 
     async def approve(self, feedback_id: str, *, note: str | None = None) -> Feedback:
         """Apply a pending verdict as if it had just arrived (the tenant's administrator key)."""

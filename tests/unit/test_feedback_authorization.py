@@ -1,4 +1,5 @@
-"""Who may say what about a memory: reading grants affirmation, rewriting needs the owner."""
+"""Who may say what about a memory: reading grants affirmation, rewriting needs the owner;
+which verdicts wait for review, one vote per voter per target, and bulk review."""
 
 from __future__ import annotations
 
@@ -7,14 +8,17 @@ from datetime import UTC, datetime
 import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.errors import ScopeDenied, ValidationFailed
+from memory_service.domain.errors import Conflict, NotFound, ScopeDenied, ValidationFailed
 from memory_service.domain.feedback import (
+    REPLACED_REASON,
     Feedback,
     FeedbackSource,
     FeedbackTargetKind,
     FeedbackVerdict,
+    ReviewState,
 )
 from memory_service.modules.feedback.service import FeedbackService
+from memory_service.modules.feedback.votes import ALREADY_COUNTED_REASON, is_vote
 
 OWNER = MemoryExecutionContext(tenant_id="acme", user_id="alice", workspace_id="fin")
 READER = MemoryExecutionContext(tenant_id="acme", user_id="carol", workspace_id="fin")
@@ -41,24 +45,84 @@ class _Authz:
 
 
 class _FeedbackRepo:
+    """What the service asks of the repository, over a dict (one tenant per row key)."""
+
     def __init__(self) -> None:
-        self.rows: dict[str, Feedback] = {}
+        self.rows: dict[tuple[str, str], Feedback] = {}
 
     async def get(self, tenant_id, feedback_id):
-        return self.rows.get(feedback_id)
+        return self.rows.get((tenant_id, feedback_id))
 
     async def add(self, feedback) -> bool:
-        self.rows[feedback.feedback_id] = feedback
+        self.rows[(feedback.tenant_id, feedback.feedback_id)] = feedback
         return True
+
+    async def set_review(self, tenant_id, feedback_id, review) -> None:
+        row = self.rows[(tenant_id, feedback_id)]
+        self.rows[(tenant_id, feedback_id)] = row.model_copy(update={"review": review})
+
+    async def set_projection(self, tenant_id, feedback_id, projection) -> None:
+        row = self.rows[(tenant_id, feedback_id)]
+        self.rows[(tenant_id, feedback_id)] = row.model_copy(update={"projection": projection})
+
+    async def pending_on(
+        self,
+        tenant_id,
+        *,
+        target_kind,
+        target_id,
+        user_id=None,
+        agent_id=None,
+        voter_only=False,
+        votes_only=False,
+        limit=1000,
+    ):
+        found = [
+            r
+            for (t, _), r in self.rows.items()
+            if t == tenant_id
+            and r.pending
+            and r.target_kind is target_kind
+            and r.target_id == target_id
+            and (not voter_only or _same_voter(r, user_id, agent_id))
+            and (not votes_only or is_vote(r))
+        ]
+        return sorted(found, key=lambda r: (r.created_at, r.feedback_id))[:limit]
+
+    async def applied_votes(
+        self, tenant_id, *, target_kind, target_id, user_id, agent_id, limit=20
+    ):
+        found = [
+            r
+            for (t, _), r in self.rows.items()
+            if t == tenant_id
+            and r.target_kind is target_kind
+            and r.target_id == target_id
+            and r.review is not None
+            and r.review.state is ReviewState.APPROVED
+            and is_vote(r)
+            and _same_voter(r, user_id, agent_id)
+        ]
+        return sorted(found, key=lambda r: (r.created_at, r.feedback_id), reverse=True)[:limit]
+
+
+def _same_voter(r: Feedback, user_id, agent_id) -> bool:
+    if user_id is not None:
+        return r.user_id == user_id
+    return r.user_id is None and r.agent_id == agent_id
 
 
 class _Uow:
     def __init__(self) -> None:
         self.feedback = _FeedbackRepo()
         self.jobs: list = []
+        self.locks: list[str] = []
 
     async def enqueue(self, spec):
         self.jobs.append(spec)
+
+    async def serialize(self, *keys: str) -> None:
+        self.locks.extend(keys)
 
 
 def _service(admins: set[str] = frozenset()) -> FeedbackService:
@@ -87,10 +151,15 @@ async def test_a_reader_may_affirm(verdict: FeedbackVerdict) -> None:
     assert created and stored.user_id == "carol"
 
 
-@pytest.mark.parametrize(
-    "verdict", [FeedbackVerdict.REJECT, FeedbackVerdict.CORRECT, FeedbackVerdict.EDIT]
-)
-async def test_only_the_owner_or_an_admin_may_retract_or_rewrite(verdict: FeedbackVerdict) -> None:
+async def test_a_reader_may_vote_a_memory_down_and_it_waits() -> None:
+    """A thumbs-down changes nothing until a tenant admin approves it (ADR 0039), so reading
+    is enough to cast one; it was owner-only while it retracted the memory at once."""
+    stored, created = await _service().submit(_Uow(), READER, _record(FeedbackVerdict.REJECT))
+    assert created and stored.pending
+
+
+@pytest.mark.parametrize("verdict", [FeedbackVerdict.CORRECT, FeedbackVerdict.EDIT])
+async def test_only_the_owner_or_an_admin_may_rewrite(verdict: FeedbackVerdict) -> None:
     with pytest.raises(ScopeDenied, match="owner"):
         await _service().submit(_Uow(), READER, _record(verdict))
     assert (await _service().submit(_Uow(), OWNER, _record(verdict)))[1]
@@ -122,7 +191,54 @@ async def test_what_needs_review_and_what_is_applied_as_it_arrives() -> None:
     admin_agent = READER.model_copy(update={"agent_id": "ref"})
     cases = [
         (READER, _record(FeedbackVerdict.CONFIRM), {}, True),
-        (OWNER, _record(FeedbackVerdict.REJECT), {}, False),
+        # a thumbs-down on a memory is a vote, even its owner's (ADR 0039)
+        (OWNER, _record(FeedbackVerdict.REJECT), {}, True),
+        (AGENT_OF_OWNER, _record(FeedbackVerdict.REJECT), {}, True),
+        # a correction carrying new text is the owner editing their memory
+        (OWNER, _record(FeedbackVerdict.CORRECT), {}, False),
+        (OWNER, _record(FeedbackVerdict.EDIT), {}, False),
+        (AGENT_OF_OWNER, _record(FeedbackVerdict.CORRECT), {}, False),
+        # ... and one carrying no text is a thumbs-down in other words
+        (
+            OWNER,
+            Feedback(
+                tenant_id="acme",
+                target_kind=FeedbackTargetKind.MEMORY,
+                target_id="mem_1",
+                verdict=FeedbackVerdict.CORRECT,
+                correction={"reason": "wrong"},
+            ),
+            {},
+            True,
+        ),
+        # a person's vote on a run, even from the run itself, waits
+        (
+            run_ctx,
+            Feedback(
+                tenant_id="acme",
+                target_kind=FeedbackTargetKind.RUN,
+                target_id="run_1",
+                verdict=FeedbackVerdict.REJECT,
+            ),
+            {},
+            True,
+        ),
+        # a tool-call decision from an agent key applies as it arrives
+        (
+            run_ctx,
+            Feedback(
+                tenant_id="acme",
+                target_kind=FeedbackTargetKind.TOOL_CALL,
+                target_id="call_2",
+                verdict=FeedbackVerdict.REJECT,
+                source=FeedbackSource.INTERRUPT,
+            ),
+            {},
+            False,
+        ),
+        # the admin's own word on a memory and on a run: no queue
+        (READER, _record(FeedbackVerdict.REJECT), {"trusted": True}, False),
+        # a run's own status, from a credential that may act as that agent
         (
             run_ctx,
             Feedback(
@@ -132,8 +248,22 @@ async def test_what_needs_review_and_what_is_applied_as_it_arrives() -> None:
                 verdict=FeedbackVerdict.CONFIRM,
                 source=FeedbackSource.SYSTEM,
             ),
-            {},
+            {"run_vouched": True},
             False,
+        ),
+        # the same claim from a credential that vouches for no agent (a person's own token)
+        # is a vote: it never overwrites the run's outcome on its word
+        (
+            run_ctx,
+            Feedback(
+                tenant_id="acme",
+                target_kind=FeedbackTargetKind.RUN,
+                target_id="run_1",
+                verdict=FeedbackVerdict.REJECT,
+                source=FeedbackSource.SYSTEM,
+            ),
+            {},
+            True,
         ),
         (
             run_ctx,
@@ -144,7 +274,7 @@ async def test_what_needs_review_and_what_is_applied_as_it_arrives() -> None:
                 verdict=FeedbackVerdict.REJECT,
                 source=FeedbackSource.SYSTEM,
             ),
-            {},
+            {"run_vouched": True},
             True,
         ),
         (
@@ -168,7 +298,7 @@ async def test_what_needs_review_and_what_is_applied_as_it_arrives() -> None:
                 source=FeedbackSource.SYSTEM,
                 evidence_refs=[{"source_type": "memory", "source_id": "mem_1"}],
             ),
-            {},
+            {"run_vouched": True},
             True,
         ),
         (READER, _record(FeedbackVerdict.CONFIRM), {"trusted": True}, False),
@@ -176,10 +306,306 @@ async def test_what_needs_review_and_what_is_applied_as_it_arrives() -> None:
     ]
     for ctx, record, kwargs, waits in cases:
         uow = _Uow()
-        stored, _ = await _service({"carol"} if ctx is admin_agent else frozenset()).submit(
-            uow, ctx, record, **kwargs
-        )
+        admins = {"carol"} if ctx is admin_agent or kwargs.get("trusted") else frozenset()
+        stored, _ = await _service(admins).submit(uow, ctx, record, **kwargs)
         assert stored.pending is waits, (ctx.principal_id, record.target_kind, record.source)
         assert bool(uow.jobs) is not waits
     stored, _ = await _service({"carol"}).submit(_Uow(), READER, _record(FeedbackVerdict.CONFIRM))
     assert not stored.pending, "a tenant admin in person"
+
+
+# ---------------------------------------------------------------- one vote per voter (ADR 0039)
+
+
+def _run_vote(verdict: FeedbackVerdict, run_id: str = "run_9", **fields) -> Feedback:
+    return Feedback(
+        tenant_id="acme",
+        target_kind=FeedbackTargetKind.RUN,
+        target_id=run_id,
+        verdict=verdict,
+        **fields,
+    )
+
+
+def _state(r: Feedback) -> str | None:
+    """The review state, with "replaced" for a vote dismissed because its voter voted again:
+    on the wire that is ``dismissed`` with ``replaced_by`` (no state older clients lack)."""
+    if r.review is None:
+        return None
+    if r.review.replaced_by is not None:
+        assert r.review.state is ReviewState.DISMISSED
+        assert r.review.note in (REPLACED_REASON, ALREADY_COUNTED_REASON)
+        return "replaced"
+    return r.review.state.value
+
+
+async def _states(uow: _Uow) -> dict[str, str | None]:
+    return {fid: _state(r) for (_, fid), r in uow.feedback.rows.items()}
+
+
+async def test_a_flipped_vote_replaces_the_earlier_one_and_repeats_count_once() -> None:
+    service, uow = _service(), _Uow()
+    up, _ = await service.submit(uow, READER, _run_vote(FeedbackVerdict.CONFIRM))
+    again, _ = await service.submit(uow, READER, _run_vote(FeedbackVerdict.CONFIRM))
+    down, _ = await service.submit(uow, READER, _run_vote(FeedbackVerdict.REJECT))
+    states = await _states(uow)
+    assert states == {
+        up.feedback_id: "replaced",
+        again.feedback_id: "replaced",
+        down.feedback_id: "pending",
+    }
+    old = await uow.feedback.get("acme", up.feedback_id)
+    assert old.review.replaced_by == again.feedback_id
+    assert (
+        await uow.feedback.get("acme", again.feedback_id)
+    ).review.replaced_by == down.feedback_id
+    assert old.projection is not None and old.projection.action.value == "none"
+    assert old.projection.reason == REPLACED_REASON
+    assert uow.jobs == [], "neither a pending nor a replaced vote schedules anything"
+    # the same voter's click on another target is a vote of its own
+    other, _ = await service.submit(uow, READER, _run_vote(FeedbackVerdict.REJECT, "run_10"))
+    assert (await _states(uow))[other.feedback_id] == "pending"
+    assert (await _states(uow))[down.feedback_id] == "pending"
+
+
+async def test_two_voters_on_one_target_keep_a_vote_each() -> None:
+    service, uow = _service(), _Uow()
+    alice, _ = await service.submit(uow, OWNER, _run_vote(FeedbackVerdict.CONFIRM))
+    carol, _ = await service.submit(uow, READER, _run_vote(FeedbackVerdict.REJECT))
+    assert await _states(uow) == {alice.feedback_id: "pending", carol.feedback_id: "pending"}
+
+
+async def test_a_person_is_one_voter_whichever_agent_carries_the_vote() -> None:
+    service, uow = _service(), _Uow()
+    direct, _ = await service.submit(uow, OWNER, _run_vote(FeedbackVerdict.CONFIRM))
+    via_agent, _ = await service.submit(uow, AGENT_OF_OWNER, _run_vote(FeedbackVerdict.REJECT))
+    assert await _states(uow) == {direct.feedback_id: "replaced", via_agent.feedback_id: "pending"}
+    # an agent with no person behind it is its own voter
+    bare = MemoryExecutionContext(tenant_id="acme", agent_id="bot")
+    other_bot = MemoryExecutionContext(tenant_id="acme", agent_id="bot2")
+    b1, _ = await service.submit(uow, bare, _run_vote(FeedbackVerdict.CONFIRM))
+    b2, _ = await service.submit(uow, other_bot, _run_vote(FeedbackVerdict.CONFIRM))
+    b3, _ = await service.submit(uow, bare, _run_vote(FeedbackVerdict.REJECT))
+    states = await _states(uow)
+    assert (states[b1.feedback_id], states[b2.feedback_id], states[b3.feedback_id]) == (
+        "replaced",
+        "pending",
+        "pending",
+    )
+    assert states[via_agent.feedback_id] == "pending", "a person's vote is not an agent's"
+
+
+async def test_a_retry_or_a_word_applied_at_once_replaces_nothing() -> None:
+    service, uow = _service({"carol"}), _Uow()
+    vote, _ = await service.submit(
+        uow, OWNER, _run_vote(FeedbackVerdict.CONFIRM, feedback_id="fb_v1")
+    )
+    retried, created = await service.submit(
+        uow, OWNER, _run_vote(FeedbackVerdict.CONFIRM, feedback_id="fb_v1")
+    )
+    assert not created and retried.pending
+    # the owner's correction of a memory is an edit, not a vote: their pending thumbs-down
+    # on it stays for the admin to decide
+    down, _ = await service.submit(uow, OWNER, _record(FeedbackVerdict.REJECT))
+    edit, _ = await service.submit(uow, OWNER, _record(FeedbackVerdict.CORRECT))
+    states = await _states(uow)
+    assert states[vote.feedback_id] == "pending" and states[down.feedback_id] == "pending"
+    assert states[edit.feedback_id] is None
+    # an admin in person is applied at once and leaves other voters' votes alone
+    admin, _ = await service.submit(uow, READER, _run_vote(FeedbackVerdict.REJECT))
+    assert admin.review is None and (await _states(uow))[vote.feedback_id] == "pending"
+
+
+# ---------------------------------------------------------------- bulk review
+
+
+async def _queue(service: FeedbackService, uow: _Uow) -> tuple[str, str, str]:
+    a, _ = await service.submit(uow, OWNER, _run_vote(FeedbackVerdict.CONFIRM))
+    b, _ = await service.submit(uow, READER, _run_vote(FeedbackVerdict.REJECT))
+    c, _ = await service.submit(uow, READER, _run_vote(FeedbackVerdict.REJECT, "run_other"))
+    return a.feedback_id, b.feedback_id, c.feedback_id
+
+
+async def test_bulk_approve_of_a_mix_decides_each_pending_vote_once() -> None:
+    service, uow = _service(), _Uow()
+    a, b, c = await _queue(service, uow)
+    await service.review(uow, "acme", b, approve=False, reviewed_by="key:admin")
+    uow.jobs.clear()
+    decided, unchanged, more = await service.review_many(
+        uow, "acme", feedback_ids=[a, b, a], approve=True, reviewed_by="key:admin", note="ok"
+    )
+    assert [f.feedback_id for f in decided] == [a] and not more
+    assert [(f.feedback_id, f.review.state.value) for f in unchanged] == [(b, "dismissed")]
+    assert len(uow.jobs) == 1, "one projection, for the one vote decided now"
+    # the same call again decides nothing and schedules nothing
+    decided, unchanged, _ = await service.review_many(
+        uow, "acme", feedback_ids=[a, b], approve=True, reviewed_by="key:admin"
+    )
+    assert decided == [] and {f.feedback_id for f in unchanged} == {a, b}
+    assert len(uow.jobs) == 1
+    assert (await _states(uow))[c] == "pending", "a vote not named is left alone"
+
+
+async def test_bulk_review_of_a_target_takes_every_vote_pending_on_it() -> None:
+    service, uow = _service(), _Uow()
+    a, b, c = await _queue(service, uow)
+    decided, unchanged, _ = await service.review_many(
+        uow,
+        "acme",
+        target=(FeedbackTargetKind.RUN, "run_9"),
+        approve=False,
+        reviewed_by="key:admin",
+    )
+    assert {f.feedback_id for f in decided} == {a, b} and unchanged == []
+    assert all(f.projection and f.projection.reason == "dismissed in review" for f in decided)
+    assert uow.jobs == []
+    states = await _states(uow)
+    assert (states[a], states[b], states[c]) == ("dismissed", "dismissed", "pending")
+    again, _, _ = await service.review_many(
+        uow, "acme", target=(FeedbackTargetKind.RUN, "run_9"), approve=True, reviewed_by="k"
+    )
+    assert again == [], "nothing pending on it any more"
+
+
+async def test_bulk_review_refuses_unknown_and_other_tenants_ids_before_deciding_any() -> None:
+    service, uow = _service(), _Uow()
+    a, _, _ = await _queue(service, uow)
+    globex = MemoryExecutionContext(tenant_id="globex", user_id="gina")
+    theirs, _ = await service.submit(
+        uow,
+        globex,
+        Feedback(tenant_id="globex", target_kind="run", target_id="r", verdict="reject"),
+    )
+    for ids in ([a, theirs.feedback_id], [a, "fb_missing"]):
+        with pytest.raises(NotFound):
+            await service.review_many(
+                uow, "acme", feedback_ids=ids, approve=True, reviewed_by="key:admin"
+            )
+    assert (await _states(uow))[a] == "pending" and uow.jobs == []
+    with pytest.raises(NotFound):
+        await service.review(uow, "acme", theirs.feedback_id, approve=True, reviewed_by="k")
+    for bad in ({}, {"feedback_ids": [a], "target": (FeedbackTargetKind.RUN, "run_9")}):
+        with pytest.raises(ValidationFailed):
+            await service.review_many(uow, "acme", approve=True, reviewed_by="k", **bad)
+    with pytest.raises(ValidationFailed):
+        await service.review_many(uow, "acme", feedback_ids=[], approve=True, reviewed_by="k")
+
+
+async def test_a_dismissed_or_replaced_vote_cannot_be_approved_one_by_one() -> None:
+    service, uow = _service(), _Uow()
+    a, b, _ = await _queue(service, uow)
+    await service.review(uow, "acme", a, approve=False, reviewed_by="key:admin")
+    with pytest.raises(Conflict):
+        await service.review(uow, "acme", a, approve=True, reviewed_by="key:admin")
+    flipped, _ = await service.submit(uow, READER, _run_vote(FeedbackVerdict.CONFIRM))
+    with pytest.raises(Conflict):
+        await service.review(uow, "acme", b, approve=True, reviewed_by="key:admin")
+    assert (await _states(uow))[flipped.feedback_id] == "pending"
+
+
+# ---------------------------------------------------------------- review fixes (ADR 0039)
+
+
+async def test_one_voter_one_lock_whichever_agent_carries_the_vote() -> None:
+    """The lock that serialises a voter's clicks is the voter's: Alice on the web and her
+    agent take the same one, so their two votes on one run cannot both stay pending."""
+    service, uow = _service(), _Uow()
+    await service.submit(uow, OWNER, _run_vote(FeedbackVerdict.REJECT))
+    await service.submit(uow, AGENT_OF_OWNER, _run_vote(FeedbackVerdict.CONFIRM))
+    votes = [k for k in uow.locks if k.startswith("feedback-vote:")]
+    assert votes == ["feedback-vote:acme:run:run_9:user:alice"] * 2
+
+
+async def test_automated_records_never_replace_a_thumb_nor_the_reverse() -> None:
+    """A run's status and a judge's word relayed by a credential vouched for the agent are not
+    votes: they wait (they cite memories) without replacing the person's thumb on the run,
+    and the thumb does not replace them."""
+    service, uow = _service(), _Uow()
+    run_ctx = OWNER.model_copy(update={"agent_id": "ref", "agent_run_id": "run_9"})
+    cites = [{"source_type": "memory", "source_id": "mem_1"}]
+    judge, _ = await service.submit(
+        uow,
+        run_ctx,
+        _run_vote(FeedbackVerdict.REJECT, source="judge", evidence_refs=cites),
+        run_vouched=True,
+    )
+    status, _ = await service.submit(
+        uow,
+        run_ctx,
+        _run_vote(FeedbackVerdict.CONFIRM, source="system", evidence_refs=cites),
+        run_vouched=True,
+    )
+    thumb, _ = await service.submit(uow, OWNER, _run_vote(FeedbackVerdict.CONFIRM))
+    again, _ = await service.submit(uow, OWNER, _run_vote(FeedbackVerdict.REJECT))
+    states = await _states(uow)
+    assert (states[judge.feedback_id], states[status.feedback_id]) == ("pending", "pending")
+    assert (states[thumb.feedback_id], states[again.feedback_id]) == ("replaced", "pending")
+    assert (judge.vote, status.vote, thumb.vote) == (False, False, True)
+
+
+async def test_a_claimed_source_does_not_make_a_thumb_anything_but_a_vote() -> None:
+    """A person's client writing source=judge (or system) on its thumbs, five times: one
+    vote, pending; the claim is kept, and counts for nothing (no credential vouched)."""
+    service, uow = _service(), _Uow()
+    clicks = [
+        (await service.submit(uow, OWNER, _run_vote(FeedbackVerdict.CONFIRM, source=src)))[0]
+        for src in ("judge", "judge", "system", "judge", "judge")
+    ]
+    states = await _states(uow)
+    assert [states[c.feedback_id] for c in clicks] == ["replaced"] * 4 + ["pending"]
+    assert all(c.vote for c in clicks) and clicks[-1].source is FeedbackSource.JUDGE
+
+
+async def test_the_same_thumb_as_the_one_applied_changes_nothing() -> None:
+    service, uow = _service(), _Uow()
+    up, _ = await service.submit(uow, READER, _run_vote(FeedbackVerdict.CONFIRM))
+    await service.review(uow, "acme", up.feedback_id, approve=True, reviewed_by="key:admin")
+    uow.jobs.clear()
+    # a flip waits; then the same thumb as the applied one withdraws the flip and is nothing:
+    # stored under the id the client sent, dismissed, pointing at the vote that counts
+    flip, _ = await service.submit(uow, READER, _run_vote(FeedbackVerdict.REJECT))
+    repeat, created = await service.submit(
+        uow, READER, _run_vote(FeedbackVerdict.APPROVE, feedback_id="fb_click_again")
+    )
+    assert created and repeat.feedback_id == "fb_click_again"
+    assert repeat.review.state is ReviewState.DISMISSED
+    assert repeat.review.replaced_by == up.feedback_id
+    assert repeat.projection is not None and repeat.projection.action.value == "none"
+    assert (await uow.feedback.get("acme", "fb_click_again")).review.replaced_by == up.feedback_id
+    states = await _states(uow)
+    assert states[flip.feedback_id] == "replaced" and uow.jobs == []
+    assert (await uow.feedback.get("acme", flip.feedback_id)).review.replaced_by == up.feedback_id
+
+
+async def test_an_agent_acting_for_an_admin_cannot_rewrite_a_colleagues_memory() -> None:
+    """The admin's word is the admin's own: an agent acting for a tenant admin is an agent,
+    and an agent edits only its own user's memories."""
+    admin_agent = READER.model_copy(update={"agent_id": "ref"})  # carol is the admin here
+    with pytest.raises(ScopeDenied, match="owner"):
+        await _service({"carol"}).submit(_Uow(), admin_agent, _record(FeedbackVerdict.CORRECT))
+    stored, _ = await _service({"carol"}).submit(_Uow(), READER, _record(FeedbackVerdict.CORRECT))
+    assert stored.review is None, "the admin in person edits at once"
+
+
+@pytest.mark.parametrize(
+    ("mode", "claims", "agent", "vouches"),
+    [
+        ("api_key", {"role": "service", "may_act_as": ["*"]}, "buyer", True),
+        ("api_key", {"role": "service", "may_act_as": ["user:u1", "agent:buyer"]}, "buyer", True),
+        ("api_key", {"role": "service", "may_act_as": ["user:u1"]}, "buyer", False),
+        ("api_key", {"role": "platform"}, "buyer", True),
+        ("trusted_dev", {}, "buyer", True),
+        # an identity provider's token names a person, never a run
+        ("jwt", {"sub": "alice", "may_act_as": ["*"]}, "buyer", False),
+        ("api_key", {"role": "service", "may_act_as": ["*"]}, None, False),
+    ],
+)
+def test_which_credential_vouches_for_a_runs_own_status(mode, claims, agent, vouches) -> None:
+    from types import SimpleNamespace
+
+    from memory_service.api.deps import credential_vouches_for_agent
+    from memory_service.modules.auth.authentication import ServicePrincipal
+
+    principal = ServicePrincipal(service_id="k", mode=mode, claims=claims)
+    request = SimpleNamespace(state=SimpleNamespace(service_principal=principal))
+    assert credential_vouches_for_agent(request, agent) is vouches  # type: ignore[arg-type]

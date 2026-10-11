@@ -245,15 +245,19 @@ The six tools: `memory_search`, `memory_remember`, `memory_update`, `memory_forg
 | Read one / a target's history | `GET /v1/feedback/{id}`, `GET /v1/feedback?target_kind=…&target_id=…` | `ctx.feedback.get(id)`, `ctx.feedback.page_for("run", run_id)` |
 | The review queue (tenant admin key) | `GET /v1/feedback?review=pending` | `await admin_ctx.feedback.pending(limit=50)` |
 | Decide a vote (tenant admin key) | `POST /v1/feedback/{id}/approve`, `/dismiss` | `admin_ctx.feedback.approve(id, note=…)`, `.dismiss(id, note=…)` |
+| The queue by target (tenant admin key) | `GET /v1/feedback?review=pending&group=target` | `await admin_ctx.feedback.pending(group="target")` |
+| Decide in bulk (tenant admin key) | `POST /v1/feedback/approve`, `/dismiss` (ids, or a target) | `admin_ctx.feedback.approve_many(ids)`, `.dismiss_many(target_kind=…, target_id=…)` |
 
 **Applied immediately:** the service's own grounding judge (`/v1/verify`); a run reporting its
 own status (`source="system"`, target = the calling `agent_run_id`, citing no memories); an
-owner's `reject`/`correct`/`edit` of their own memory; any `tool_call` verdict; anything sent
-with the tenant admin key or by a tenant admin user in person.
+owner's `correct`/`edit` of their own memory carrying new text; any `tool_call` verdict;
+anything sent with the tenant admin key or by a tenant admin user in person.
 
-**Waits for review** (`review.state == "pending"`, changes nothing): a `confirm`/`approve` of a
-memory by anyone else, a person's or client's verdict on a run, any procedure verdict — and a
-client-claimed `source="judge"`.
+**Waits for review** (`review.state == "pending"`, changes nothing): an end user's 👍/👎 — a
+`confirm`/`approve`/`reject` of a memory (the owner's thumbs-down included), a person's or
+client's verdict on a run, any procedure verdict — and a client-claimed `source="judge"`. A
+voter's newer vote on the same target replaces their earlier pending one
+(dismissed, with `review.replaced_by`): repeated clicks count once (ADR 0039).
 
 ```python
 admin_ctx = MemoryClient(url, api_key=TENANT_ADMIN_KEY).bind()
@@ -264,8 +268,10 @@ for vote in page.items:
 ```
 
 - Approve/dismiss a vote that is not pending: `409`. A dismissed vote is kept for statistics.
+- The bulk routes are idempotent: a vote no longer pending comes back in `unchanged`, untouched.
 - Nobody working the queue means votes never count.
-- `reject`/`correct`/`edit` of a memory requires its owner or a tenant admin (`403` otherwise).
+- `correct`/`edit` of a memory requires its owner (or the user an agent acts for) or a tenant
+  admin (`403` otherwise); a `reject` needs only read access, because it waits for review.
 - A `POST` answers before the projector runs: `projection` is null until then.
 
 ## 11. Model keys, policy and spend
@@ -376,7 +382,7 @@ shows one turn. Way 1: if your agent runs under
 | Approval suggestions | `GET …/approval-suggestions`, `POST …/{id}/accept` | `ctx.advanced.tools.approval_suggestions()`, `.accept_suggestion(id)` |
 | Agent tools | `GET /v1/agent-tools`, `POST /v1/agent-tools/{name}` | `ctx.agent_tools()`, `ctx.call_agent_tool(name, args)` |
 | A verdict | `POST /v1/feedback` | `ctx.feedback(kind, id, verdict, …)` |
-| Review votes (admin) | `GET /v1/feedback?review=pending`, `POST …/approve`, `…/dismiss` | `ctx.feedback.pending()`, `.approve(id)`, `.dismiss(id)` |
+| Review votes (admin) | `GET /v1/feedback?review=pending[&group=target]`, `POST …/approve`, `…/dismiss`, `POST /v1/feedback/approve`, `/dismiss` | `ctx.feedback.pending()`, `.approve(id)`, `.dismiss(id)`, `.approve_many(…)`, `.dismiss_many(…)` |
 | Agent model key | `PUT /v1/agents/model-key` | `ctx.advanced.model_keys.set(vk)` |
 | Tenant model key (admin) | `PUT /v1/model-key` | `client.tenant.set_model_key(vk)` |
 | Model policy (admin) | `PUT /v1/model-key/policy` | `client.tenant.set_model_policy(uses, read_assist=…, models=…)` |

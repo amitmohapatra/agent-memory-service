@@ -8,6 +8,15 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- Feedback review by target (ADR 0039, amends 0028): `GET /v1/feedback?review=pending&group=target`
+  lists the queue one row per target with `votes`, `thumbs_up`, `thumbs_down`, distinct
+  `voters` and `latest_at`; `POST /v1/feedback/approve` and `POST /v1/feedback/dismiss` decide
+  in bulk by `feedback_ids` (1 to 500) or by target (every vote pending on it), with the admin
+  key, idempotently (a vote no longer pending is returned in `unchanged`, never applied twice;
+  an id the tenant does not have refuses the whole call with 404). `review=` also takes
+  `approved` and `dismissed`, for reporting. SDK: `ctx.feedback.pending(group="target",
+  review=...)`, `approve_many`, `dismiss_many`, `FeedbackTargetGroup`, `FeedbackBulkReview`.
+  No migration.
 - Statement kinds: every sentence a user says is labelled at write with what it does - a
   `FACT`, a standing `RULE`, a `CONDITIONAL_RULE` (an exception or a trigger about the world),
   a `STATUS` of a thing, a `CORRECTION`, or a `LIFECYCLE` change - and the kind is stored on
@@ -115,6 +124,25 @@ each entry says which one moved. Decisions behind each change are in the
   own node is the required companion.
 
 ### Changed
+- An end user's thumbs-down on a memory now waits for the administrator like any other vote,
+  the owner's included (it retracted the memory on the spot before), and any reader of the
+  memory may cast one (it was owner-only; a rewrite still is); an owner's `correct`/`edit`
+  carrying new text is still applied at once, as are a run's own status, tool-call decisions,
+  `/v1/verify` and the administrator's own word, and `DELETE /v1/memories/{id}`. One vote per
+  voter per target: a voter's newer vote replaces their earlier pending one, which is kept with
+  `review.state = "dismissed"`, `review.note = "replaced by a newer vote from the same user"`
+  and `review.replaced_by` naming the newer vote, never applied, so repeated clicks count once
+  (ADR 0039). No new review state: SDK 0.4.0 reads every record (it ignores `replaced_by`), and
+  `author_record` and the grouped counts leave replaced clicks out. The rule holds across
+  approvals: the same thumb as the voter's approved vote is stored dismissed with
+  `replaced_by` naming the vote that counts, and an approved flip first undoes the vote that
+  was actually applied (`projection.reversed`; an approved vote not yet applied is closed
+  instead). Whether a record is a vote is decided by who sent it (`feedback.is_vote`), never
+  by the `source` it claims.
+  A `system` verdict on the caller's own run applies at once only when the credential may
+  act as that agent (a bearer token naming a person waits), and an agent acting for a tenant
+  admin edits only its own user's memories. Migration Migration
+  `0027_votes_replaced_by_subject` adds `feedback.review_replaced_by`.
 - The conflict adjudicator (`conflict_adjudication`) is asked about the closest stored memory
   on the same - or possibly the same - subject, instead of the closest sharing half its words:
   a fact restated in other words now reaches it, and a fact about another subject that merely

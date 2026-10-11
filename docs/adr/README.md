@@ -38,7 +38,7 @@ is not finished).
 | [0025](0025-late-interaction-two-keys-and-learned-memory-ranking.md) | Late interaction, two keys per memory, and a learned memory ranking | accepted; supersedes the `colbert` part of 0012; its learned ranking superseded by 0026 |
 | [0026](0026-general-memory-ranking.md) | A general memory ranking instead of a learned one | accepted; supersedes decision 3 of 0025 |
 | [0027](0027-memory-restatement-at-ingest.md) | A conversation turn restated at ingest, searched with the turn | accepted; opt-in: runs only when a tenant names `memory_restatement` in its model policy `uses` (and a key can pay) |
-| [0028](0028-feedback-review.md) | A vote waits for review before the platform learns from it | accepted |
+| [0028](0028-feedback-review.md) | A vote waits for review before the platform learns from it | accepted; amended by 0039 |
 | [0029](0029-lean-context-responses.md) | Context, tool hints and recall answer lean | accepted |
 | [0030](0030-api-surface-errors-idempotency-pagination-descriptions.md) | API surface: retryable database errors with `Retry-After`, `PAYLOAD_TOO_LARGE`, `Idempotency-Key` on every write, `Location`, one cursor convention, conditional GETs, every field described | accepted; amends 0022 and 0023 |
 | [0031](0031-runtime-freshness-overload-pools-readiness-workers.md) | Runtime: freshness by audience, overload bounds, one connection budget and PgBouncer, readiness, worker lifecycle and metrics, Qdrant scale-out, the tenant registry's channel | accepted; amends 0004, 0021 |
@@ -48,6 +48,7 @@ is not finished).
 | [0035](0035-same-subject-matching.md) | Same-subject matching: identifiers, units and dates block a merge, vocabulary packs (data) and a tenant's own defined abbreviations allow one, the encoder only makes a pair possible; the conflict adjudicator is gated by it instead of word overlap | accepted; amends 0009 |
 | [0036](0036-a-users-words-follow-the-user.md) | What a user says follows that user (`USER` by default, `THREAD`/`WORKSPACE` by choice) and is kept in the words they said it: the turn beside any reading that is not lasting, long turns in up to six pieces, long noun-phrase subjects | accepted; amends 0005, 0013 |
 | [0037](0037-statement-labeller.md) | What a user's statement does (fact, rule, conditional rule, status, correction, lifecycle) labelled at write: lexicon packs as data, the existing NLI head for what they leave open, the tenant's model only when the head is unsure and only if it confirms; fixes "When I ask ..." read as a question, rules with text before "never", and lost exception clauses | accepted |
+| [0039](0039-thumbs-wait-once-per-voter.md) | Only an end user's thumbs wait for the administrator (an owner's thumbs-down on a memory included; a correction with text, a run's own status, tool-call decisions, `/v1/verify` and the admin stay immediate), one vote per voter per target (`replaced`), a queue grouped by target and bulk approve/dismiss | accepted; amends 0028 |
 
 ## Where the numbers behind these decisions are
 
