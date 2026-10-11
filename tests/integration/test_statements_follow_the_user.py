@@ -153,12 +153,14 @@ async def test_what_the_assistant_said_stays_in_its_conversation(container, uow_
 
 async def test_a_workspace_share_is_still_explicit(container, uow_factory) -> None:
     tenancy = container.services["tenancy"]
+    ops = f"ops-{new_id('turn')[-8:].lower()}"
     async with uow_factory() as uow:
-        await tenancy.create_workspace(uow, "acme", name="Warehouse ops", workspace_id="ops")
+        # a workspace id is never reused, even after its team is deleted: a fresh one per run
+        await tenancy.create_workspace(uow, "acme", name="Warehouse ops", workspace_id=ops)
         for member in ("user:u1", "user:u2"):
-            await tenancy.set_member(uow, "acme", "ops", member, role="member", added_by="test")
+            await tenancy.set_member(uow, "acme", ops, member, role="member", added_by="test")
         await uow.commit()
-    author = _chat(workspace_id="ops")
+    author = _chat(workspace_id=ops)
     async with uow_factory() as uow:
         await container.services["conversation"].create_thread(uow, author)
         await uow.commit()
@@ -167,7 +169,7 @@ async def test_a_workspace_share_is_still_explicit(container, uow_factory) -> No
     await _observe(
         container, uow_factory, author, rota, hints=ProcessingHints(visibility=Visibility.WORKSPACE)
     )
-    teammate = _chat("u2", workspace_id="ops")
+    teammate = _chat("u2", workspace_id=ops)
     assert "break room door" in await _recalled(container, teammate, "where is the charging rota?")
     assert "8492" not in await _recalled(container, teammate, ASK), "membership is not consent"
     outsider = _chat("u3", workspace_id="ws1")
