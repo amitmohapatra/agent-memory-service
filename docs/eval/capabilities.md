@@ -402,6 +402,12 @@ Three cells moved the other way. The superseded value now reaches the context un
 - `abstention` in a new session fell from 1.00 to 0.31 (347 `no_abstain`): a nearest
   neighbour now always comes back.
 
+`capability_gate.json` keeps those 18 cells at their pre-B1 values as `targets`. The gate
+prints a run that is below a target ("below target (not failed)") but only the baseline fails
+it, because the old values came from thread isolation hiding the superseded statement, not
+from replacement logic: they are what B4/P4 must reach with statements visible across
+threads.
+
 These are the gaps listed above, now visible: stale leaks for **B4 / P4**, abstention for
 **P4**. The core baseline was re-recorded on `420bbf3` from one run. The full `nollm`, `llm`
 and `harness` baselines are still the pre-B1 ones until the nightly full run re-records them.

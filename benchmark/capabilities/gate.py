@@ -155,6 +155,8 @@ def record(paths: Sequence[Path], gate: Path = GATE) -> dict[str, Any]:
         "dataset_sha256": sha,
         "rule": "every cell >= its recorded accuracy; context p95 <= recorded x (1 + max_rise)",
         "baselines": dict(sorted(baselines.items())),
+        #: hand-set goals per baseline: reported when a run is below them, never failed on
+        "targets": existing.get("targets", {}),
         "provenance": _provenance(),
     }
     gate.parent.mkdir(parents=True, exist_ok=True)
@@ -221,6 +223,19 @@ def check(
     return failures
 
 
+def below_targets(run: Mapping[str, Any], gate: Mapping[str, Any]) -> list[str]:
+    """Cells under a target (``gate["targets"][key]["cells"]``): reported, not a failure -
+    only the baseline gates."""
+    target = (gate.get("targets") or {}).get(_subset_of(run) or key_of(run)) or {}
+    cells = _cells(run)
+    out = []
+    for key, want in sorted((target.get("cells") or {}).items()):
+        got = (cells.get(key) or {}).get("accuracy")
+        if got is not None and got < want:
+            out.append(f"{key}: {got} below target {want}")
+    return out
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -248,6 +263,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     for path in a.results:
         failures = check(_load(path), gate, allow_untrusted_latency=a.allow_untrusted_latency)
         print(f"CAPABILITY GATE {path}: {'FAIL' if failures else 'PASS'}")
+        for t in below_targets(_load(path), gate):
+            print(f"  ~ below target (not failed): {t}")
         for f in failures:
             print(f"  - {f}")
         failed |= bool(failures)

@@ -1840,5 +1840,30 @@
     "python": "3.13.14",
     "timestamp": "2026-10-11T04:54:25.994663+00:00"
   },
-  "rule": "every cell >= its recorded accuracy; context p95 <= recorded x (1 + max_rise)"
+  "rule": "every cell >= its recorded accuracy; context p95 <= recorded x (1 + max_rise)",
+  "targets": {
+    "nollm/core": {
+      "cells": {
+        "context/new_session/abstention/ar": 1.0,
+        "context/new_session/abstention/de": 1.0,
+        "context/new_session/abstention/en": 1.0,
+        "context/new_session/abstention/es": 1.0,
+        "context/new_session/abstention/hi": 1.0,
+        "context/new_session/abstention/mixed": 1.0,
+        "context/same_session/temporal_recency/ar": 0.92,
+        "context/same_session/temporal_recency/de": 0.96,
+        "context/same_session/temporal_recency/en": 0.96,
+        "context/same_session/temporal_recency/es": 0.94,
+        "context/same_session/temporal_recency/hi": 0.95,
+        "context/same_session/temporal_recency/mixed": 1.0,
+        "context/same_session/update_contradiction/ar": 0.83,
+        "context/same_session/update_contradiction/de": 0.95,
+        "context/same_session/update_contradiction/en": 0.93,
+        "context/same_session/update_contradiction/es": 0.94,
+        "context/same_session/update_contradiction/hi": 0.84,
+        "context/same_session/update_contradiction/mixed": 1.0
+      },
+      "note": "Pre-B1 values (c9233cf), reached through thread isolation rather than replacement logic: what the stale-value and abstention work (B4/P4) must restore with statements visible across threads. Reported, never failed."
+    }
+  }
 }

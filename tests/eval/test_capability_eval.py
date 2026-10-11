@@ -314,6 +314,15 @@ def test_gate_sets_core_has_its_own_baseline_and_scale_is_held_to_the_full_one(
     # the scale set: the full baseline's matching cells, its own latency not compared
     assert gate.check(_run(0.7, 900.0, sample="scale"), recorded) == []
     assert gate.check(_run(0.6, 100.0, sample="scale"), recorded), "a scale cell dropped"
+    # a target is reported when a run is below it, and never fails the gate
+    cell = next(iter(recorded["baselines"]["nollm/core"]["cells"]))
+    gate_file = tmp_path / "gate.json"
+    with_target = {**recorded, "targets": {"nollm/core": {"cells": {cell: 0.9}}}}
+    gate_file.write_text(json.dumps(with_target))
+    assert gate.record([full, core], gate_file)["targets"] == with_target["targets"]
+    below = _run(0.5, 40.0, sample="core")
+    assert gate.check(below, with_target) == []
+    assert gate.below_targets(below, with_target) == [f"{cell}: 0.5 below target 0.9"]
     scale = tmp_path / "nollm_scale.json"
     scale.write_text(json.dumps(_run(0.7, 100.0, sample="scale")))
     with pytest.raises(SystemExit, match="gated against"):
