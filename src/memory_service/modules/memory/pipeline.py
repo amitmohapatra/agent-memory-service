@@ -33,12 +33,18 @@ from memory_service.modules.llm.policy import identity_of
 from memory_service.modules.memory.admission import AdmissionGate
 from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.memory.native import normalized_hash
+from memory_service.modules.memory.replacement import CrossConversationReplacement
 from memory_service.modules.memory.restatement import restate
 from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.modules.memory.subjects import SubjectMatcher
 from memory_service.modules.memory.temporal import dated_mentions
 from memory_service.observability.logging import get_logger
-from memory_service.observability.metrics import memory_decisions_total, stage_seconds
+from memory_service.observability.metrics import (
+    memory_decisions_total,
+    memory_replacement_skipped_total,
+    memory_replacements_total,
+    stage_seconds,
+)
 from memory_service.observability.tracing import span
 from memory_service.ports.intelligence import (
     ConsolidationOutcome,
@@ -265,8 +271,11 @@ class ObservationPipeline:
         gate: AdmissionGate | None = None,
         assist: LLMAssist | None = None,
         subjects: SubjectMatcher | None = None,
+        replacement: CrossConversationReplacement | None = None,
     ) -> None:
         self.uow_factory = uow_factory
+        #: a user's new statement against their earlier ones in other conversations (ADR 0038)
+        self.replacement = replacement
         self.provider = provider
         self.cfg = settings
         self.working = working
@@ -312,6 +321,7 @@ class ObservationPipeline:
                     or observation.hints.importance is not None
                 )
                 async with self.uow_factory() as uow:
+                    since = datetime.now(UTC)
                     affected = await self._apply_all(
                         uow,
                         ctx,
@@ -320,6 +330,7 @@ class ObservationPipeline:
                         hinted=hinted,
                         gate=await self._gate_for(uow, tenant_id),
                     )
+                    affected |= await self._replace_earlier(uow, ctx, observation, affected, since)
                     if affected:
                         await uow.enqueue(
                             JobSpec(
@@ -346,6 +357,52 @@ class ObservationPipeline:
             decisions={o.decision.value: 1 for o in outcomes},
         )
         return outcomes
+
+    async def _replace_earlier(
+        self,
+        uow: UnitOfWork,
+        ctx: MemoryExecutionContext,
+        observation: Observation,
+        affected: set[str],
+        since: datetime,
+    ) -> set[str]:
+        """What the user's new statement replaces among their statements in any of their
+        conversations (ADR 0038): the ids marked or superseded, for the index job."""
+        if (
+            self.replacement is None
+            or not self.replacement.enabled
+            or not affected
+            or observation.kind is not ObservationKind.MESSAGE
+            or observation.agent_authored
+        ):
+            return set()
+        written = [
+            m
+            for m in await uow.memories.get_many(ctx.tenant_id, sorted(affected))
+            if m.created_at >= since
+        ]
+        try:
+            outcome = await self.replacement.run(uow, ctx, written, now=datetime.now(UTC))
+        except Exception as exc:  # a failing model never costs the message
+            # the head is shared and bounded (a full queue refuses with DependencyUnavailable)
+            # and a model can fail outright: the statements are stored, and what they would
+            # replace stays current until a later statement replaces it
+            memory_replacement_skipped_total.inc()
+            log.warning("memory.replacement_skipped", error=type(exc).__name__, reason=str(exc))
+            return set()
+        for memory_id, (newer, decision) in outcome.decisions.items():
+            memory_replacements_total.labels(
+                decision.grade.value if decision.grade else "NONE"
+            ).inc()
+            log.info(
+                "memory.replaced_across_conversations",
+                tenant_id=ctx.tenant_id,
+                memory_id=memory_id,
+                by=newer.memory_id,
+                grade=decision.grade.value if decision.grade else None,
+                reason=decision.reason,
+            )
+        return {m.memory_id for m in outcome.changed}
 
     @staticmethod
     def _apply_hints(c: MemoryCandidate, o: Observation) -> MemoryCandidate:

@@ -1281,6 +1281,18 @@
             "description": "who or what it is about",
             "title": "Subject"
           },
+          "superseded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "true for an earlier value: a later statement of the same user replaced it (served after every current item, as what it was)",
+            "title": "Superseded"
+          },
           "text": {
             "description": "The memory, as the model reads it.",
             "title": "Text",

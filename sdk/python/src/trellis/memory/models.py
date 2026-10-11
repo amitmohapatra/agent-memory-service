@@ -341,6 +341,9 @@ class ContextMemory(BaseModel):
     observed_at: str | None = None
     #: who or what it is about
     subject: str | None = None
+    #: true for an earlier value: a later statement of the same user replaced it (it is served
+    #: after every current memory, as what it was)
+    superseded: bool | None = None
     #: relative dates in the text, resolved: [{"text": "last week", "date": "a..b"}]
     dates: list[dict[str, str]] = Field(default_factory=list)
     #: the messages or documents it came from

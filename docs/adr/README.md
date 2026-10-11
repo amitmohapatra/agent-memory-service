@@ -48,6 +48,7 @@ is not finished).
 | [0035](0035-same-subject-matching.md) | Same-subject matching: identifiers, units and dates block a merge, vocabulary packs (data) and a tenant's own defined abbreviations allow one, the encoder only makes a pair possible; the conflict adjudicator is gated by it instead of word overlap | accepted; amends 0009 |
 | [0036](0036-a-users-words-follow-the-user.md) | What a user says follows that user (`USER` by default, `THREAD`/`WORKSPACE` by choice) and is kept in the words they said it: the turn beside any reading that is not lasting, long turns in up to six pieces, long noun-phrase subjects | accepted; amends 0005, 0013 |
 | [0037](0037-statement-labeller.md) | What a user's statement does (fact, rule, conditional rule, status, correction, lifecycle) labelled at write: lexicon packs as data, the existing NLI head for what they leave open, the tenant's model only when the head is unsure and only if it confirms; fixes "When I ask ..." read as a question, rules with text before "never", and lost exception clauses | accepted |
+| [0038](0038-replacement-across-conversations.md) | A user's later statement replaces an earlier one in any of their conversations: same thing by shared names or identifiers (or the encoder), the NLI head decides (earlier value, ranked last and labelled; superseded only at 0.9), the tenant's model for what the words or the head cannot settle; reversible, every form with it | accepted |
 
 ## Where the numbers behind these decisions are
 

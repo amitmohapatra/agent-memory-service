@@ -300,6 +300,8 @@ def _memory_line(m: Any, ref: str, *, body: str | None = None) -> str:
         ),
         day,
         weekday,
+        # a later statement of the same user replaced it (ADR 0038): served, but as what it was
+        "(earlier value, since replaced)" if m.attributes.get("earlier_value") else "",
         f"{who}:" if who else "",
         m.text if body is None else body,
         _resolved_dates(m) if body is None else "",

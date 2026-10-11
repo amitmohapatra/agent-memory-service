@@ -126,6 +126,8 @@ def _memory(item: ContextItem) -> dict[str, Any]:
     for key in ("observed_at", "subject"):
         if attributes.get(key):
             body[key] = attributes[key]
+    if attributes.get("earlier_value"):
+        body["superseded"] = True  # an earlier value: a later statement replaced it
     _put(body, "dates", [dict(d) for d in attributes.get("dated_mentions") or []])
     sources = [e.source_id for e in item.evidence]
     _put(body, "sources", sources)

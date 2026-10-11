@@ -357,6 +357,17 @@ def _wire_models(container: Container) -> None:
     _wire_late(container)
 
 
+def _multilingual_encoder(container: Container) -> Any:
+    """The multilingual dense space's encoder (``dense_ml``), else the primary one."""
+    from memory_service.ports.search import VectorName
+
+    spaces = getattr(container, "dense_spaces", None)
+    for space in getattr(spaces, "spaces", ()):
+        if space.name is VectorName.DENSE_ML:
+            return space.encoder
+    return container.embedding
+
+
 def _wire_late(container: Container) -> None:
     """The late-interaction arm (ADR 0025). The real graph must load; the stand-in is chosen
     only by an override, and the hash embedding implies it, so a hermetic container runs the
@@ -522,6 +533,7 @@ def _wire_memory(container: Container) -> None:
     from memory_service.modules.memory.native import NativeMemoryIntelligence
     from memory_service.modules.memory.pipeline import ObservationPipeline
     from memory_service.modules.memory.reflection import ReflectionService
+    from memory_service.modules.memory.replacement import CrossConversationReplacement
     from memory_service.modules.memory.service import MemoryService
     from memory_service.modules.memory.statements import StatementLabeller
     from memory_service.modules.memory.subjects import SubjectMatcher
@@ -560,6 +572,13 @@ def _wire_memory(container: Container) -> None:
         gate=AdmissionGate(cfg),
         assist=container.services["llm_assist"],
         subjects=subjects,
+        # a user's later statement against their earlier ones in any conversation (ADR
+        # 0038): the grounding cascade's NLI head decides, the multilingual encoder relates
+        replacement=CrossConversationReplacement(
+            container.nli,
+            _multilingual_encoder(container),
+            assist=container.services["llm_assist"],
+        ),
     )
     container.services["memory"] = MemoryService(
         container.services["authz"], fiscal=container.tuning.memory_intelligence.fiscal_calendar

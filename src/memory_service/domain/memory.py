@@ -34,6 +34,22 @@ def statement_kind_of(metadata: Mapping[str, Any]) -> StatementKind | None:
     return StatementKind(value) if value in StatementKind.__members__ else None
 
 
+def replaced_by(metadata: Mapping[str, Any]) -> str | None:
+    """The newer memory a later statement of the same user replaced this one with, across
+    conversations (``system_metadata["replaced_by"]``, ADR 0038), if any."""
+    mark = metadata.get("replaced_by")
+    if isinstance(mark, Mapping) and mark.get("memory_id"):
+        return str(mark["memory_id"])
+    return None
+
+
+def earlier_value(metadata: Mapping[str, Any]) -> bool:
+    """Marked as an earlier value: still current, ranked after every current item and
+    labelled as replaced (ADR 0038)."""
+    mark = metadata.get("replaced_by")
+    return isinstance(mark, Mapping) and mark.get("grade") == "EARLIER"
+
+
 def unverified_representation(metadata: Mapping[str, Any]) -> bool:
     """A model rewrite with source association, but no independently verified entailment."""
     return metadata.get("category") in UNVERIFIED_MEMORY_CATEGORIES or (

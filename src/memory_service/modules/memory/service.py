@@ -37,6 +37,7 @@ from memory_service.modules.memory.pipeline import (
     keys_for,
     supersede,
 )
+from memory_service.modules.memory.replacement import reinstate
 from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.modules.tenancy.gate import guard_workspace_visibility
 from memory_service.ports.intelligence import MemoryCandidate
@@ -398,5 +399,13 @@ class MemoryService:
         twins = await uow.memories.twins(ctx.tenant_id, memory, current_only=False)
         for gone in (memory, *twins):
             await uow.memories.forget(ctx.tenant_id, gone.memory_id)
-        await self._index(uow, ctx, [memory, *twins], key=f"memidx:forget:{memory_id}")
+        # what the forgotten statement replaced in the user's other conversations holds again
+        # (ADR 0038)
+        restored = await reinstate(
+            uow,
+            ctx.tenant_id,
+            [memory.memory_id, *(t.memory_id for t in twins)],
+            now=datetime.now(UTC),
+        )
+        await self._index(uow, ctx, [memory, *twins, *restored], key=f"memidx:forget:{memory_id}")
         return memory

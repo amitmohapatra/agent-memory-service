@@ -21,7 +21,7 @@ from memory_service.domain.enums import QueryType, Representation
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.domain.ids import content_hash
 from memory_service.domain.learning import standing_factor
-from memory_service.domain.memory import CanonicalMemory, unverified_representation
+from memory_service.domain.memory import CanonicalMemory, earlier_value, unverified_representation
 from memory_service.domain.script import Script, detect_script
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
@@ -140,6 +140,7 @@ def memory_candidate(memory: CanonicalMemory, *, retriever: str, score: float) -
             "derived": bool(memory.system_metadata.get("source_revisions")),
             "source_observed_to": memory.system_metadata.get("source_observed_to"),
             "temporal_status": memory.temporal.status.value,
+            **({"earlier_value": True} if earlier_value(memory.system_metadata) else {}),
             "subject": memory.subject,
             "predicate": memory.predicate,
             "object": memory.object,
@@ -444,7 +445,9 @@ class RetrievalEngine:
                     pool_limit = max(pool_limit, derived_k(limit))
                     diagnostics["memory_recall_k"] = limit
                 before = len(candidates)
-                candidates = _dedup(candidates)[:pool_limit]
+                # what a later statement of the same user replaced ranks after every
+                # current item (ADR 0038): still there, never in front of its replacement
+                candidates = current_first(_dedup(candidates))[:pool_limit]
                 candidates = await self._validate_derived(ctx, candidates, visibility)
                 checked_derived = {c.record_id for c in candidates if is_derived(c)}
                 if before != len(candidates):
@@ -1220,6 +1223,16 @@ def _twin_key(candidate: Candidate) -> tuple | None:
         content_hash(candidate.text) if candidate.text else None
     )
     return (_twin_context(_dedup_context(candidate)), digest) if digest else None
+
+
+def current_first(candidates: Sequence[Candidate]) -> list[Candidate]:
+    """``candidates`` with every earlier value (``payload["earlier_value"]``: a later
+    statement of the same user replaced it, ADR 0038) moved behind the current ones, each
+    group in its own order."""
+    earlier = [c for c in candidates if c.payload.get("earlier_value")]
+    if not earlier:
+        return list(candidates)
+    return [c for c in candidates if not c.payload.get("earlier_value")] + earlier
 
 
 def in_hand(candidates: Sequence[Candidate]) -> set[str]:

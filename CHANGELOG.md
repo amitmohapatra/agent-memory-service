@@ -8,6 +8,23 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- A value a user replaces in a later conversation is no longer served as current. Since a
+  user's words follow the user (ADR 0036) the old and the new statement were both current in
+  every conversation, and the same-session update and recency cells fell to 0.04 and 0.33. A
+  new statement is now compared with the user's own statements in all their conversations:
+  same thing by a shared name or identifier (two things of one kind, "Forklift #3" /
+  "Forklift #4", never), or the multilingual encoder; the NLI head decides. At 0.9 the old
+  statement and every form of it (turn, fact, event, twins) are superseded; at 0.85, or 0.4
+  for a stated change about the same named thing, it stays current as an **earlier value**:
+  ranked after every current item and labelled (`superseded: true` on a full context's
+  memory and on a search result, "(earlier value, since replaced)" in the rendered context).
+  With the tenant's `conflict_adjudication`, the model settles at most three related pairs per
+  message that the head leaves in its unsure band. Forgetting or
+  retracting the newer statement reinstates what it replaced. A failing head or model never
+  costs the message (`memory_replacement_skipped_total`; decisions in
+  `memory_replacements_total`). Migration 0027 adds two partial indexes, online. The full
+  context's `memories[].superseded` is new in the API and the SDK (`ContextMemory.superseded`)
+  (ADR 0038).
 - Statement kinds: every sentence a user says is labelled at write with what it does - a
   `FACT`, a standing `RULE`, a `CONDITIONAL_RULE` (an exception or a trigger about the world),
   a `STATUS` of a thing, a `CORRECTION`, or a `LIFECYCLE` change - and the kind is stored on

@@ -167,6 +167,8 @@ def candidate_to_item(c: Candidate) -> ContextItem:
                 "contradicts",
                 # typed connections written by the background pass (supersedes / contradicts /
                 # relates): a caller that reads one memory can see what it was linked to
+                # a later statement of the same user replaced it (ADR 0038)
+                "earlier_value",
                 "connections",
                 "contributors",
                 "memory_type",

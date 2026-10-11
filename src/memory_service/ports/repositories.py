@@ -373,6 +373,21 @@ class MemoryRepository(Protocol):
         normalized hash)."""
         ...
 
+    async def statements_of(
+        self, tenant_id: str, owner_principal: str, *, before: datetime, limit: int
+    ) -> list[CanonicalMemory]:
+        """The owner's live CURRENT ``USER``-visible memories said at or before ``before``,
+        newest first, in any conversation: what a new statement of theirs may replace (ADR
+        0038). An indexed range (tenant, owner, observed_at)."""
+        ...
+
+    async def replaced_by_any(
+        self, tenant_id: str, memory_ids: Sequence[str]
+    ) -> list[CanonicalMemory]:
+        """The memories whose ``system_metadata["replaced_by"]`` names one of ``memory_ids``,
+        whatever their status: what to reinstate when those go."""
+        ...
+
     async def get(self, tenant_id: str, memory_id: str) -> CanonicalMemory | None: ...
     async def get_many(
         self, tenant_id: str, memory_ids: Sequence[str]

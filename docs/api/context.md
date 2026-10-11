@@ -99,6 +99,13 @@ bundle.conversation, bundle.thread_summary, bundle.profile, bundle.skills, bundl
 bundle.missing_evidence, bundle.insufficient  # evidence_status == "INSUFFICIENT"
 ```
 
+**An earlier value is served last and says so.** When a later statement of the same user
+replaced a memory in another of their conversations and the service was not sure enough to
+close it (ADR 0038), the memory stays in the context after every current one, with
+`"superseded": true` in `format="full"` (and on a `search` result), and "(earlier value, since
+replaced)" in `rendered`. A memory it was sure about is closed and served only by a temporal
+read.
+
 **Nothing is shown twice.** A memory whose every source is a message the recent conversation
 already shows, and a `mentions` fact whose object the shown text already names, are left out
 of both forms. They stay in the bundle the service keeps under `bundle_id`, so `/v1/verify` and
