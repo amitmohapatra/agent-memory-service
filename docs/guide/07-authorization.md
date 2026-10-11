@@ -93,7 +93,10 @@ What the verifier guarantees (`modules/auth/keys.py`, ADR 0021):
    `agent_id` against the `agent:<id>` entries (`403 this key may not act for that user` /
    `… as that agent`); a request naming neither acts as the key itself, the anonymous service
    principal, which holds no grant on any user's or agent's memories. `*` lifts it
-   (`tests/security/test_may_act_as.py`, ADR 0032).
+   (`tests/security/test_may_act_as.py`, ADR 0032). Acting for a user reads that user's
+   `USER` memories, and what a user says is `USER` by default (ADR 0036): a key limited to
+   `user:alice` and `agent:x` sees what alice said in all of her threads, not only the one
+   the request names.
 5. **Body against headers**: a `tenant_id`, `workspace_id` or `user_id` in the body that
    disagrees with a header is refused, and `custom_metadata` may not contain any reserved key.
 
@@ -148,6 +151,13 @@ read; read means a non-empty intersection (`modules/authz/visibility.py`).
 | `AGENT_GROUP` | cooperating agents sharing a group id, at any depth | `agroup:<t>/<group>` |
 | `WORKSPACE` | every member of the team (admin, member, viewer) | `workspace:<t>/<workspace>` |
 | `TENANT` | everyone in the tenant | `tenant:<t>` |
+
+A user's own words default to `USER` and everything else to the narrowest audience its writer
+has (the default table in [chapter 2](02-concepts.md#scope-and-visibility-are-separate-on-purpose)):
+what a person says reaches their other conversations and nobody else; `THREAD` and `WORKSPACE`
+are chosen, never assumed. So the other participants of a shared thread (another user granted
+it, a workspace admin reaching a member's thread) no longer read a user's default memories
+from it; they read what was shared with the thread or the team.
 
 Three rules refine the table:
 

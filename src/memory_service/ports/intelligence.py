@@ -79,6 +79,11 @@ class MemoryCandidate(BaseModel):
         default=None,
         description="a rule's exception clause, as said: \"unless I type 'include out of stock'\"",
     )
+    said_by_user: bool = Field(
+        default=False,
+        description="the text is a user's own words (their message, decision or feedback, "
+        "not an agent's): by default it then follows that user across their conversations",
+    )
     preceding_turn: dict[str, str] | None = Field(
         default=None,
         description="the message said just before this one in the same conversation: its "

@@ -362,6 +362,17 @@ class MemoryRepository(Protocol):
         """Indexed lookup of the unique live derived slot; caller serializes slot writes."""
         ...
 
+    async def twins(
+        self, tenant_id: str, memory: CanonicalMemory, *, current_only: bool = True
+    ) -> list[CanonicalMemory]:
+        """The live (not forgotten) memories that are the same statement as ``memory``: its
+        words (normalized hash), its owner and a source it was read from, in any scope - a turn
+        kept verbatim and a rule's reading of it in the same words. ``current_only`` keeps the
+        CURRENT ones (what a replacement closes); without it every status counts (what a
+        forget removes, so an archived copy cannot be restored). An indexed lookup (tenant,
+        normalized hash)."""
+        ...
+
     async def get(self, tenant_id: str, memory_id: str) -> CanonicalMemory | None: ...
     async def get_many(
         self, tenant_id: str, memory_ids: Sequence[str]
@@ -382,7 +393,10 @@ class MemoryRepository(Protocol):
     ) -> list[CanonicalMemory]:
         """Existing CURRENT memories that could be duplicates of a new candidate: same scope
         and (same hash OR a subject stored as one of ``subjects`` - the spellings the
-        subject matcher allows - OR most recent)."""
+        subject matcher allows - OR among the ``limit`` most recent readings, OR among the
+        ``limit`` most recent verbatim turns). The two recent windows are apart because a
+        statement's turn is kept beside its reading (ADR 0036): one window over both held half
+        as many readings."""
         ...
 
     async def about_user(

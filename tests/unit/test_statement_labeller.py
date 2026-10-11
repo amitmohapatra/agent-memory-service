@@ -523,7 +523,8 @@ async def test_nothing_that_does_not_say_it_is_standing_is_kept_as_a_lasting_rul
     ["Don't use bullet points unless I ask.", "Don't reorder seasonal items unless it rains."],
 )
 async def test_an_unmarked_conditional_imperative_stays_a_short_term_instruction(text: str) -> None:
-    [cand] = await _extract(text, StatementLabeller(nli=_YesHead()))  # type: ignore[arg-type]
+    cands = await _extract(text, StatementLabeller(nli=_YesHead()))  # type: ignore[arg-type]
+    [cand] = [c for c in cands if c.category != "verbatim_turn"]  # the turn is kept beside it
     assert (cand.category, cand.lifetime) == ("instruction", Lifetime.SHORT_TERM)
     assert cand.statement_kind is K.CONDITIONAL_RULE, "the kind is kept, as metadata only"
 

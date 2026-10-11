@@ -5869,7 +5869,7 @@
                 "type": "null"
               }
             ],
-            "description": "Who may retrieve it, narrowest first: PRIVATE, RUN, THREAD, WORK, AGENT_GROUP, GROUP, USER, WORKSPACE, TENANT, GLOBAL. Omit for the scope's own."
+            "description": "Who may retrieve it, narrowest first: PRIVATE, RUN, THREAD, WORK, AGENT_GROUP, GROUP, USER, WORKSPACE, TENANT, GLOBAL. Omitted, a user's own statement is USER (every conversation of theirs and their agents, nobody else) and an agent's takes the scope's own."
           }
         },
         "required": [

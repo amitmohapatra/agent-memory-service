@@ -52,7 +52,8 @@ print((await MemoryClient(url, api_key=service.token).tenant.keys.whoami()).role
 - The tenant comes from the key; a `X-Trellis-Tenant` header that disagrees is a `403`.
 - `may_act_as` restricts a key to the listed principals: the request's user must be listed as
   `user:<id>` and its `agent_id` as `agent:<id>`, or it is a `403`; a restricted key naming
-  neither acts only as itself.
+  neither acts only as itself. Acting for a user reads everything that user said (`USER`, the
+  default for a user's own words), from all of their threads, not only the one named.
 - A secret is shown once; with `idempotency_key` a retry replays the record with `token=None`.
 - A `WORKSPACE`-visible write needs the workspace row and a membership first, or it answers
   `Workspace not found`. Workspace roles are `admin`, `member` (read + write) and `viewer`
@@ -91,8 +92,12 @@ for job_id in ack.job_ids:
   them (how the harness re-sends a transcript safely).
 - `history.*` needs a `thread_id` (or an agent run, whose id names the thread); `remember`,
   `search` and `context` need only a tenant.
-- `remember` with no `visibility` takes the scope's own; documents default to the thread, else
-  the user.
+- What a user says follows that user: `remember` with no `visibility`, and every memory made
+  from a user's own message, is `USER` (every conversation of theirs and their agents, nobody
+  else); pass `visibility="THREAD"` to keep it to one conversation, `"WORKSPACE"` to share it
+  with the team. An agent's own `remember` keeps the scope's audience. Other participants of
+  a shared thread see only what was shared with it (`THREAD`/`WORKSPACE`). Documents default
+  to the thread, else the user.
 
 ## 4. Correcting: supersede, forget, restore
 
