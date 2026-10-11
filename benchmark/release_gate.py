@@ -62,6 +62,12 @@ def representativeness(results: dict[str, dict[str, Any] | None]) -> list[str]:
             f"retrieval quality measured with embedding={retrieval.get('embedding')}: "
             "NOT representative of production models"
         )
+    kinds = results.get("statement_kinds_gate")
+    if kinds is not None and not kinds.get("representative", False):
+        notes.append(
+            "statement kinds measured with the lexicon alone (no NLI head): NOT representative "
+            "of the labeller the service runs, and the blind-set bars were not checked"
+        )
     perf = results.get("performance")
     if perf is not None and (note := _latency_caveat(perf)):
         notes.append(note)
@@ -165,6 +171,41 @@ def evaluate_with_notes() -> tuple[bool, list[str], list[str]]:
         if kg.get("query_hit_rate", 0.0) < 1.0:
             failures.append(f"KG query hit rate = {kg.get('query_hit_rate')} (must be 1.00)")
 
+    kinds = _load("statement_kinds_gate.json")
+    if kinds is None:
+        failures.append(
+            "statement_kinds_gate.json missing (statement-labeller gate has no evidence)"
+        )
+    else:
+        floor = (kinds.get("threshold") or {}).get("english_test_macro_f1", 0.85)
+        english = ((kinds.get("test") or {}).get("per_language") or {}).get("en") or {}
+        if (english.get("macro_f1") or 0.0) < floor:
+            failures.append(
+                f"statement kinds: English macro-F1 = {english.get('macro_f1')} (must be >= {floor})"
+            )
+        for half in ("dev", "test"):
+            measured = kinds.get(half) or {}
+            false_rules = measured.get("false_rules", measured.get("rules_on_none", 1))
+            if false_rules != 0:
+                failures.append(
+                    f"statement kinds: {false_rules} statements that are not rules kept as "
+                    f"lasting rules ({half}; must be 0)"
+                )
+        held_out = (kinds.get("blind") or {}).get("blind2")
+        if kinds.get("representative", False) and held_out is not None:
+            # the blind-set bars hold for the labeller the service runs (with its NLI head)
+            blind_floor = (kinds.get("threshold") or {}).get("blind2_macro_f1", 0.0)
+            macro = (held_out.get("labeller") or {}).get("macro_f1") or 0.0
+            if macro < blind_floor:
+                failures.append(
+                    f"statement kinds: blind set 2 macro-F1 = {macro} (must be >= {blind_floor})"
+                )
+            if held_out.get("below_baseline"):
+                failures.append(
+                    "statement kinds: blind set 2 below the extractor before the labeller in "
+                    + ", ".join(held_out["below_baseline"])
+                )
+
     budgets = {
         "chat_accept_p95_ms": BUDGETS.chat_accept_p95_ms,
         "cached_context_p95_ms": BUDGETS.cached_context_p95_ms,
@@ -221,6 +262,7 @@ def evaluate_with_notes() -> tuple[bool, list[str], list[str]]:
     notes = representativeness(
         {
             "retrieval_gate": retrieval,
+            "statement_kinds_gate": kinds,
             "performance": perf,
             "performance_network": perf_network,
             "durability_network": durability_network,

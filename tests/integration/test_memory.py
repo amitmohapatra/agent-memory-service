@@ -15,11 +15,13 @@ from memory_service.domain.enums import (
     MemoryType,
     ObservationKind,
     QueryType,
+    StatementKind,
     TemporalStatus,
     Visibility,
 )
 from memory_service.domain.errors import ScopeDenied
 from memory_service.domain.ids import new_id
+from memory_service.domain.memory import statement_kind_of
 from memory_service.domain.observation import ProcessingHints
 from memory_service.modules.jobs.registry import register_handlers
 
@@ -146,6 +148,45 @@ async def test_a_standing_rule_does_not_expire(container, uow_factory) -> None:
     assert rule.system_metadata.get("expires_at") is None, "a standing rule has no TTL"
     assert instruction.lifetime is Lifetime.SHORT_TERM
     assert instruction.system_metadata.get("expires_at") is not None
+
+
+async def test_a_rule_scoped_to_a_request_is_stored_not_read_as_a_question(
+    container, uow_factory
+) -> None:
+    """Audit case 8: "When I ask ..." opened like a question and nothing was stored at all."""
+    for said in (
+        "Whenever I ask for a stock audit, always format the response as a markdown table "
+        "with columns for: SKU, Item Name, Current Stock, Reorder Threshold, and Action "
+        "Required.",
+        "When I ask for a sales report, always break it down by region.",
+    ):
+        await _observe(container, uow_factory, U1, said)
+    rules = [m for m in await _memories(uow_factory, U1, container) if m.predicate == "rule"]
+    assert len(rules) == 2, [m.content for m in rules]
+    for rule in rules:
+        assert rule.lifetime is Lifetime.LONG_TERM and rule.memory_type is MemoryType.PREFERENCE
+        assert statement_kind_of(rule.system_metadata) is StatementKind.RULE
+        trigger = rule.system_metadata["rule_trigger"].lower()
+        assert trigger.startswith(("whenever i ask", "when i ask")), trigger
+
+
+async def test_a_rule_with_text_before_never_keeps_its_exception(container, uow_factory) -> None:
+    """Audit case 11: a rule failed when anything preceded "Never", and its exception clause
+    was not kept."""
+    await _observe(
+        container,
+        uow_factory,
+        U1,
+        "For my weekly category overviews: never include items with a stock level of zero "
+        "unless I specifically type 'include out of stock'.",
+    )
+    [rule] = [m for m in await _memories(uow_factory, U1, container) if m.predicate == "rule"]
+    assert rule.lifetime is Lifetime.LONG_TERM
+    assert statement_kind_of(rule.system_metadata) is StatementKind.CONDITIONAL_RULE
+    assert rule.system_metadata["rule_exception"] == (
+        "unless I specifically type 'include out of stock'"
+    )
+    assert rule.system_metadata.get("expires_at") is None
 
 
 async def test_a_decision_follows_its_author_and_is_shared_only_when_asked(

@@ -52,6 +52,13 @@ GOOD = {
         "undeclared_tool_suggestions": 0,
     },
     "tests.json": {"failed": 0, "errors": 0, "total": 260},
+    "statement_kinds_gate.json": {
+        "representative": True,
+        "threshold": {"english_test_macro_f1": 0.85, "false_rules": 0, "blind2_macro_f1": 0.75},
+        "dev": {"false_rules": 0},
+        "test": {"false_rules": 0, "per_language": {"en": {"macro_f1": 0.95}}},
+        "blind": {"blind2": {"labeller": {"macro_f1": 0.8}, "below_baseline": []}},
+    },
 }
 NETWORK = {
     "durability_network.json": {
@@ -174,6 +181,26 @@ def test_missing_evidence_is_a_failed_gate(results: Path) -> None:
         ("failure_injection.json", {"worker_kill": "fail"}, "worker_kill = fail"),
         ("tests.json", {"failed": 1}, "tests failed=1"),
         ("tests.json", {"total": 0}, "records no tests"),
+        (
+            "statement_kinds_gate.json",
+            {"test": {"false_rules": 0, "per_language": {"en": {"macro_f1": 0.8}}}},
+            "English macro-F1 = 0.8",
+        ),
+        (
+            "statement_kinds_gate.json",
+            {"dev": {"false_rules": 2}},
+            "2 statements that are not rules kept as lasting rules (dev",
+        ),
+        (
+            "statement_kinds_gate.json",
+            {"blind": {"blind2": {"labeller": {"macro_f1": 0.7}, "below_baseline": []}}},
+            "blind set 2 macro-F1 = 0.7",
+        ),
+        (
+            "statement_kinds_gate.json",
+            {"blind": {"blind2": {"labeller": {"macro_f1": 0.8}, "below_baseline": ["es NONE"]}}},
+            "below the extractor before the labeller in es NONE",
+        ),
     ],
 )
 def test_each_gate_blocks(results: Path, name: str, patch: dict, needle: str) -> None:
@@ -220,3 +247,10 @@ def test_a_retired_measurement_is_not_silently_ignored() -> None:
     assert "the cache-violation gate is retired" in adr, (
         "the retirement must stay recorded in ADR 0018, or the gate change has no basis"
     )
+
+
+def test_a_lexicon_only_statement_kinds_run_is_a_caveat(results: Path) -> None:
+    data = {**GOOD["statement_kinds_gate.json"], "representative": False}
+    (results / "statement_kinds_gate.json").write_text(json.dumps(data))
+    _, _, notes = release_gate.evaluate_with_notes()
+    assert any("statement kinds measured with the lexicon alone" in n for n in notes), notes

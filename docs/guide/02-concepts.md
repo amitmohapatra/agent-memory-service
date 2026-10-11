@@ -106,6 +106,39 @@ with real facts:
 Forgetting a fact therefore does not forget the sentence it came from; the turn stays
 searchable until it is forgotten too ([USAGE §4](../USAGE.md#4-correcting-supersede-forget-restore)).
 
+### What a statement does
+
+Each sentence of a user's message is also labelled with what it **does**, a `StatementKind`
+(`domain/enums.py`, ADR 0037), stored on every memory it produced as
+`system_metadata["statement_kind"]` (read it with `domain.memory.statement_kind_of`):
+
+| Kind | The sentence | Example |
+|---|---|---|
+| `FACT` | states something | "Our primary supplier for heavy-duty pallets is Uline." |
+| `RULE` | gives a standing instruction | "Whenever I ask for a stock audit, always format the response as a markdown table." |
+| `CONDITIONAL_RULE` | gives one with an exception or a condition about the world | "Never include zero-stock items unless I type 'include out of stock'." |
+| `STATUS` | reports the state of a thing | "Forklift #4 has been repaired and is back on the floor." |
+| `CORRECTION` | revises something said before | "No, our system was updated. We now use the /shrinkage command." |
+| `LIFECYCLE` | says a thing or a relationship began or ended | "The temporary refrigeration unit has been dismantled." |
+
+A question, a greeting or a one-off request gets no kind; a verbatim turn carries the most
+telling kind of its sentences (a correction outranks a rule, a rule a lifecycle change, then a
+status, then a fact). A rule that says it is for every time - a standing word ("always",
+"never", "from now on"), a recurring trigger ("whenever", "every time") or a universal
+obligation ("All X must") - is stored as a lasting rule wherever that word sits ("For weekly
+overviews, never ...") and in any of the labeller's languages, with its trigger and its
+exception as said (`rule_trigger`, `rule_exception`). A conditional instruction that does not
+say so ("Tell me if the price drops", "Don't use bullet points unless I ask") keeps its kind
+as metadata only and is stored as it was before the labeller.
+
+The labeller (`modules/memory/statements.py`) reads cue words from data packs
+(`modules/memory/lexicon/generic.json` and the default domain pack `retail.json`) and leaves
+what they cannot settle to the grounding model's NLI head and, when the tenant's policy
+allows `contextual_extraction`, to the model - whose proposal counts only if the NLI head
+confirms it; when the head fails, the lexicon's label stands and the message is stored as
+usual. Nothing reads the kind yet: retrieval, consolidation and the bundle are unchanged. It
+is recorded so that later stages can act on it.
+
 ### When two statements are about the same thing
 
 Consolidation reinforces, replaces or links a memory only when the new statement is about the
@@ -176,7 +209,11 @@ When the writer gives no lifetime, the type decides (`_LIFETIME_BY_TYPE` in
 
 One sentence-level exception: an imperative ("do not invent a sales number") is a
 `PREFERENCE` by shape but is given `SHORT_TERM`, so a one-off instruction does not become
-permanent; restating it restarts its clock (`classify` in `modules/memory/native.py`).
+permanent; restating it restarts its clock (`classify` in `modules/memory/native.py`). A
+rule that says it is standing ("never suggest recipes with cilantro", "whenever I ask for a
+stock audit, use a table") is `LONG_TERM` on sight; any other conditional instruction ("don't
+use bullet points unless I ask") is the imperative above, `SHORT_TERM`, whatever kind it was
+given.
 
 ---
 

@@ -150,13 +150,17 @@ async def test_a_clause_is_not_read_as_a_long_subject(native, text) -> None:
 
 
 async def test_a_short_lived_reading_does_not_take_the_turn_with_it(native) -> None:
-    """A rule may read a standing rule as a task: the task lapses in seven days, the user's
+    """A rule may read an instruction as a task: the task lapses in seven days, the user's
     sentence does not."""
-    text = "All seasonal holiday merchandise must be routed to Overflow Storage Facility B."
+    text = "The seasonal holiday merchandise must be routed to Overflow Storage Facility B."
     task, turn = await _classified(native, _obs(text))
     assert task.memory_type is MemoryType.TASK and task.lifetime is Lifetime.SHORT_TERM
     assert turn.category == "verbatim_turn" and turn.lifetime is Lifetime.LONG_TERM
     assert turn.content == text and turn.visibility is Visibility.USER
+    # said as a universal obligation it is a standing rule (ADR 0037): a lasting reading that
+    # keeps the words itself, so no twin is needed
+    [rule] = await _classified(native, _obs("All " + text[4:]))
+    assert rule.category == "rule" and rule.lifetime is Lifetime.LONG_TERM
 
 
 async def test_a_reading_and_its_turn_never_reinforce_each_other(native) -> None:

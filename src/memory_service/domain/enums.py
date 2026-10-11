@@ -162,6 +162,26 @@ class QueryType(StrEnum):
     GENERAL_SEMANTIC = "GENERAL_SEMANTIC"
 
 
+class StatementKind(StrEnum):
+    """What a user's statement does, decided at write by the statement labeller
+    (``modules.memory.statements``, ADR 0037). A sentence that is none of these - a question,
+    a greeting, a one-off request - gets no kind.
+
+    Stored on the memory (``system_metadata["statement_kind"]``) for the stages that act on
+    it: a rule is kept for every later answer, a correction, status or lifecycle change
+    replaces what it revises, a fact is held until something does.
+    """
+
+    FACT = "FACT"  # any other declarative statement of information
+    RULE = "RULE"  # a standing instruction: "always ...", "whenever I ask for X, always ..."
+    #: a standing instruction with an exception or a trigger about the world:
+    #: "never include zero-stock items unless I type 'include out of stock'"
+    CONDITIONAL_RULE = "CONDITIONAL_RULE"
+    STATUS = "STATUS"  # the state of a thing: "Forklift #4 is back on the floor"
+    CORRECTION = "CORRECTION"  # revises something said before: "No, we now use /shrinkage"
+    LIFECYCLE = "LIFECYCLE"  # a thing began or ended: "the contract was terminated"
+
+
 class DedupDecision(StrEnum):
     CREATE = "CREATE"
     REINFORCE = "REINFORCE"

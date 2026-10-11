@@ -1,0 +1,4463 @@
+{
+ "description": "Blind sets for the statement labeller (ADR 0037): sentences that IBM Granite 3.3 2B Instruct (Q4_K_M, served locally by llama.cpp at temperature 0.9) wrote to order - one request per (language, kind, two sampled domains), four sentences each, in en/de/es/ar/hi - not the packs' author. Each item's 'kind' is the kind that was asked for, then reviewed against 'guidelines' only, never against the labeller's output: garbled, truncated or genuinely ambiguous items dropped, mislabelled ones relabelled, each change listed with its reason under 'changes' ('noise_rate' = dropped + relabelled over generated). A third review pass relabelled, by the guidelines, valid sentences the first pass had dropped. 'blind1' (seed 7; retail, warehouse, supermarket, software, clinic, hotel, finance, personal life) is the generalisation dev set the packs and the NLI thresholds were tuned against after it was read. 'blind2' (seed 20261008; logistics, pharmacy, e-commerce, manufacturing, school, restaurant, car repair, bank) was generated afterwards and cleaned before any prediction on it existed; its third pass was made after aggregate scores, but before any per-item prediction on it was read.",
+ "guidelines": {
+  "RULE": "a standing instruction or policy meant for future occasions (always / never / from now on / every time / 'whenever I ask for X'; universal must: 'All X must ...'). A trigger that only scopes it to a kind of request ('when I ask for a stock audit') keeps it a RULE.",
+  "CONDITIONAL_RULE": "a standing instruction with an exception (unless / except / other than / without) or one that applies only while a condition about the world holds (if / when + a state or event).",
+  "STATUS": "the current state of a specific thing: available, out of service, repaired, in or out of stock, delayed, on hold, recalled, down.",
+  "LIFECYCLE": "a thing or a relationship began or ended: terminated, dismantled, discontinued, retired, launched, opened, hired, a new supplier.",
+  "CORRECTION": "the speaker revises something said or known before: 'No, ...', 'Actually, ...', 'I meant ...', 'we now use X' (instead of the old way).",
+  "FACT": "any other declarative statement of information, including preferences and past events.",
+  "NONE": "a question, greeting, thanks, acknowledgement, chit-chat, or a one-off request to do something now - including one tied to a single expected event ('call me when you get this', 'let me know when the shipment arrives', 'remind me when it's time to leave').",
+  "precedence": "CORRECTION > CONDITIONAL_RULE > RULE > LIFECYCLE > STATUS > FACT",
+  "storage": "a RULE or CONDITIONAL_RULE is kept as a lasting rule only when it says it is for every time: a standing word (always, never, from now on), a recurring trigger (whenever, every time) or a universal obligation ('All X must'). Any other conditional instruction keeps its kind as metadata and is stored as it would be without the labeller.",
+  "habits": "a standing word in the speaker's own habit or promise ('I always double-check the invoices', 'Siempre consulto con el banco') is a FACT."
+ },
+ "blind1": {
+  "role": "dev",
+  "seed": 7,
+  "cleaning": {
+   "items_in": 276,
+   "items_out": 254,
+   "dropped": 22,
+   "relabelled": 36,
+   "relanguaged": 9,
+   "noise_rate": 0.228
+  },
+  "changes": [
+   {
+    "index": 1,
+    "action": "relabel FACT -> NONE",
+    "reason": "one-off request ('..., please')",
+    "text": "Room service for Ms. Johnson, please."
+   },
+   {
+    "index": 7,
+    "action": "relabel FACT -> STATUS",
+    "reason": "an order delayed: the state of a thing",
+    "text": "The order for 500 units of Milk has been delayed due to supplier issues."
+   },
+   {
+    "index": 67,
+    "action": "relabel RULE -> CONDITIONAL_RULE",
+    "reason": "trigger 'wenn ich Fehler erkenne' is a world event, not a request",
+    "text": "Vermeide immer den direkten Kontakt mit Kunden, wenn ich Fehler in den Software-Produkten erkenne."
+   },
+   {
+    "index": 68,
+    "action": "relabel RULE -> CONDITIONAL_RULE",
+    "reason": "trigger 'wenn ein neuer Artikel eintreten wuerde' is a world event",
+    "text": "Aufkläre mich immer, wenn ein neuer Artikel eintreten würde."
+   },
+   {
+    "index": 69,
+    "action": "relabel RULE -> CONDITIONAL_RULE",
+    "reason": "trigger 'wenn ein Telefon laut ist' is a world state",
+    "text": "Lasse mich gegebenenfalls benachrichtigen, wenn ein Kundencenter-Telefon laut ist."
+   },
+   {
+    "index": 74,
+    "action": "relabel CONDITIONAL_RULE -> NONE",
+    "reason": "a one-off request ('please send me a detailed analysis')",
+    "text": "Aufkommendes Übernahmeangebot, bitte mir eine detaillierte Analyse zustellen."
+   },
+   {
+    "index": 75,
+    "action": "relabel CONDITIONAL_RULE -> NONE",
+    "reason": "a one-off request ('please check the payment options')",
+    "text": "Kreditnehmer zahlt nicht, bitte prüfe die Zahlungsmöglichkeiten und melde unverzüglich."
+   },
+   {
+    "index": 78,
+    "action": "relabel CONDITIONAL_RULE -> FACT",
+    "reason": "the speaker's own readiness, a statement",
+    "text": "Sobald die Bestände knapp werden, bin ich für dich bereit."
+   },
+   {
+    "index": 87,
+    "action": "drop",
+    "reason": "nonsensical ('file system sold out')",
+    "text": "Mein persönliches Aktenverwaltungssystem befindet sich derzeit ausverkauft, keine verfügbaren Exemplare.",
+    "was": "STATUS"
+   },
+   {
+    "index": 95,
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "advice stated as a fact ('we should adjust ...')",
+    "text": "Wir sollten die Injektionsstelle für die Insulin-Infusion anpassen, nicht dort, wo der Patient heute geimpft wurde."
+   },
+   {
+    "index": 101,
+    "action": "relabel LIFECYCLE -> STATUS",
+    "reason": "'ausgesetzt' (suspended) is a temporary state, not an end",
+    "text": "Ein Produkt wurde ausgesetzt..."
+   },
+   {
+    "index": 132,
+    "action": "relabel CONDITIONAL_RULE -> FACT",
+    "reason": "first-person habit ('envio'), not an instruction",
+    "text": "Cuando un paciente no se presente para su cita, envío un recordatorio por SMS."
+   },
+   {
+    "index": 133,
+    "action": "relabel CONDITIONAL_RULE -> FACT",
+    "reason": "first-person habit ('pongo en contacto'), not an instruction",
+    "text": "Si el sistema de la clinica falla y no puedo acceder a los registros del paciente, pongo en contacto al departamento de TI."
+   },
+   {
+    "index": 134,
+    "action": "relabel CONDITIONAL_RULE -> FACT",
+    "reason": "first-person habit ('envio'), not an instruction",
+    "text": "Si el tiempo se vuelve extremadamente frío y los pacientes tienen miedo de ir a la clínica, envío un correo electrónico a la comunidad local para informar sobre nuestros protocolos de seguridad."
+   },
+   {
+    "index": 143,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "No, realmente quiero que teje los retrasos de entrega",
+    "was": "CORRECTION"
+   },
+   {
+    "index": 144,
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "an intention ('actually, I should focus on ...'), a statement",
+    "text": "Actually, debo enfocar en los inventarios de lámina de plata"
+   },
+   {
+    "index": 171,
+    "action": "strip English gloss",
+    "text": "أريد تصحيح صيغة طريقة المريض الحالي. (I need to correct the medication schedule for the current patient.)"
+   },
+   {
+    "index": 171,
+    "action": "relabel FACT -> FACT",
+    "reason": "a statement of intent ('I want to correct the schedule')",
+    "text": "أريد تصحيح صيغة طريقة المريض الحالي. (I need to correct the medication schedule for the current patient.)"
+   },
+   {
+    "index": 172,
+    "action": "strip English gloss",
+    "text": "يمكنك الإشارة إلى الخيارات المتبعة للعلاج الحالي؟ (Can you point to the current treatment options?)"
+   },
+   {
+    "index": 172,
+    "action": "relabel FACT -> NONE",
+    "reason": "a question ('...?')",
+    "text": "يمكنك الإشارة إلى الخيارات المتبعة للعلاج الحالي؟ (Can you point to the current treatment options?)"
+   },
+   {
+    "index": 173,
+    "action": "strip English gloss",
+    "text": "تم جمع عينات العين للفحص إلى الجنائزة. (Eye swabs have been collected for the autopsy.)"
+   },
+   {
+    "index": 174,
+    "action": "strip English gloss",
+    "text": "المريض الذي يحتاج إلى عملية جراحية يدعى إسمه محمود صبحي. (The patient who needs a surgery is named Muhammad Sabahi.)"
+   },
+   {
+    "index": 176,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "لا أريد أن تنسيب الأسعار على شكل معطل أو معقد",
+    "was": "RULE"
+   },
+   {
+    "index": 178,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "اتبعها بالطريقة الدقيقة كلما تتلقاها عملات واقتراحات الدفع",
+    "was": "RULE"
+   },
+   {
+    "index": 179,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "لا تزول عن الاستشارة الطبية لدى الروبوت",
+    "was": "RULE"
+   },
+   {
+    "index": 182,
+    "action": "drop",
+    "reason": "corrupted text ('tansyp')",
+    "text": "لا تنسyp أن تتكرر التذكير بالتطعيمات المتوقعة للمرضى عند استخدام الروبوت",
+    "was": "RULE"
+   },
+   {
+    "index": 186,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "إذا كانت أيضاً طعمة نظيفة للرسائل الإلكترونية، احذري أجهزتي بشأن الرسائل الزائدة أو المعقدة.",
+    "was": "CONDITIONAL_RULE"
+   },
+   {
+    "index": 187,
+    "action": "drop",
+    "reason": "not an instruction",
+    "text": "إذا كانت عملية الشحن تعتبر متقلبة (If the stock market is volatile), إليك تعليمات إضافية (Please provide additional instructions)",
+    "was": "CONDITIONAL_RULE"
+   },
+   {
+    "index": 188,
+    "action": "drop",
+    "reason": "a bare condition clause",
+    "text": "إذا لم يصل الشحن الحالي (If the shipment hasn't arrived yet)",
+    "was": "CONDITIONAL_RULE"
+   },
+   {
+    "index": 189,
+    "action": "drop",
+    "reason": "a bare condition clause",
+    "text": "إذا كانت حالة السوق متضررة (If the market conditions are unfavorable)",
+    "was": "CONDITIONAL_RULE"
+   },
+   {
+    "index": 190,
+    "action": "drop",
+    "reason": "a bare condition clause",
+    "text": "إذا كانت حالة الطقس مشردة (If the weather conditions are severe)",
+    "was": "CONDITIONAL_RULE"
+   },
+   {
+    "index": 191,
+    "action": "strip English gloss",
+    "text": "معرضة للإصلاح. (Under repair.)"
+   },
+   {
+    "index": 192,
+    "action": "strip English gloss",
+    "text": "تعمل بشكل جيد عليه. (It's working properly.)"
+   },
+   {
+    "index": 193,
+    "action": "strip English gloss",
+    "text": "احتاج إلى إصلاح. (It needs repair.)"
+   },
+   {
+    "index": 194,
+    "action": "strip English gloss",
+    "text": "نفاد الخدمة. (Out of service.)"
+   },
+   {
+    "index": 199,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "No, مرحبا، الضيافة تعتمد على توفير خدمات عالية الجودة للمضيفين",
+    "was": "CORRECTION"
+   },
+   {
+    "index": 200,
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "one-off advice in the imperative ('don't limit yourself to ...')",
+    "text": "أيضاً، لا تقتصر على التواصل مع الضيفين فحسب، بل يجب أن تعمل على تحسين تجربة المضيف ككل"
+   },
+   {
+    "index": 201,
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "a statement ('continuous inquiries help ...')",
+    "text": "لا تنسى، الاستعلامات المستمرة تساعد في تحسين الخدمة والرضا الضيف"
+   },
+   {
+    "index": 202,
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "one-off advice in the imperative ('finally, avoid ...')",
+    "text": "أخيراً، تجنب استخدام التعليمات المزعجة أو غير الواضحة في تعاملاتك مع المضيفين"
+   },
+   {
+    "index": 206,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "أعرف أن تحليل البيانات باستخدام 'مقارنة' بدلاً من 'مقارنة'",
+    "was": "CORRECTION"
+   },
+   {
+    "index": 207,
+    "action": "relabel LIFECYCLE -> FACT",
+    "reason": "contracts extended: a statement",
+    "text": "العقود التعاقدية متمددة"
+   },
+   {
+    "index": 208,
+    "action": "drop",
+    "reason": "garbled ('product laid off')",
+    "text": "المنتج تم تسريحه",
+    "was": "LIFECYCLE"
+   },
+   {
+    "index": 209,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "بنك تجاري جديد تم توسيعه",
+    "was": "LIFECYCLE"
+   },
+   {
+    "index": 210,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "نظام متقدم للتحديث تم إعادة التحويل",
+    "was": "LIFECYCLE"
+   },
+   {
+    "index": 211,
+    "action": "relabel LIFECYCLE -> FACT",
+    "reason": "a contract was revised: a statement",
+    "text": "أُنقِح عقد كلاء."
+   },
+   {
+    "index": 212,
+    "action": "relabel LIFECYCLE -> FACT",
+    "reason": "a product reduced in stock: a statement",
+    "text": "تم تخفيض منتج من المخزون."
+   },
+   {
+    "index": 214,
+    "action": "relabel LIFECYCLE -> STATUS",
+    "reason": "a system restored: its state",
+    "text": "تم استعادة النظام التشغيلي."
+   },
+   {
+    "index": 223,
+    "action": "relabel FACT -> NONE",
+    "reason": "one-off request ('kripya ... jaanch karen')",
+    "text": "कृपया हमारे बोर्डरो की स्टॉक की जाँच करें, जो सप्ताहांत में स्वादिष्ट होती है।"
+   },
+   {
+    "index": 224,
+    "action": "relabel FACT -> NONE",
+    "reason": "one-off request",
+    "text": "आज को क्षेत्रीय फलों की संख्या कृपया दें।"
+   },
+   {
+    "index": 225,
+    "action": "relabel FACT -> NONE",
+    "reason": "one-off request",
+    "text": "कृपया मेरे डिवाइस पर आधारभूत व्यापार डेटा की जाँच करें।"
+   },
+   {
+    "index": 226,
+    "action": "relabel FACT -> NONE",
+    "reason": "one-off request",
+    "text": "हमारे स्टोर में साफ-सफाई कर्मचारियों की उपस्थिति की निगरानी करें।"
+   },
+   {
+    "index": 227,
+    "action": "relabel FACT -> NONE",
+    "reason": "one-off request",
+    "text": "रहने की आवश्यकता है, कृपया होटल कैलिफोर्निया में एक बेडरूम की जाँच करें।"
+   },
+   {
+    "index": 228,
+    "action": "relabel FACT -> NONE",
+    "reason": "one-off request",
+    "text": "हमें मेज के लिए दो सदस्यीय है, कृपया ऑर्डर लें।"
+   },
+   {
+    "index": 229,
+    "action": "drop",
+    "reason": "a fact and a request in one item",
+    "text": "हमारे ग्राहक, श्री थॉम्पसन, सुबह 10 बजे आ रहे हैं। कृपया उन्हें स्वागत करने के लिए परफेक्ट बैठने की व्यवस्था करें।",
+    "was": "FACT"
+   },
+   {
+    "index": 230,
+    "action": "drop",
+    "reason": "a fact and a request in one item",
+    "text": "आज हमारे कर्मचारी, मारिया, बाजार में कोई भी मेजबानी के लिए उपलब्ध नहीं रहेगी। कृपया रणनीतिक योजना में इसे ध्यान में रखें।",
+    "was": "FACT"
+   },
+   {
+    "index": 231,
+    "action": "relang hi -> en",
+    "reason": "English text filed under hi",
+    "text": "Always provide me with the latest software updates,"
+   },
+   {
+    "index": 232,
+    "action": "relang hi -> en",
+    "reason": "English text filed under hi",
+    "text": "Always check inventory levels before restocking shelves."
+   },
+   {
+    "index": 233,
+    "action": "relang hi -> en",
+    "reason": "English text filed under hi",
+    "text": "Never forget to update sales data every hour."
+   },
+   {
+    "index": 234,
+    "action": "relang hi -> en",
+    "reason": "English text filed under hi",
+    "text": "From now on, remind me about stock delivery schedules."
+   },
+   {
+    "index": 235,
+    "action": "relang hi -> en",
+    "reason": "English text filed under hi",
+    "text": "Whenever I place an order, please check for stock availability."
+   },
+   {
+    "index": 251,
+    "action": "drop",
+    "reason": "ambiguous between status and lifecycle ('band ho gaya')",
+    "text": "उत्पाद X बंद हो गया है।",
+    "was": "STATUS"
+   },
+   {
+    "index": 252,
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "advice ('No, realistically, you shouldn't rely on AI'), English",
+    "text": "No, realistically speaking, you shouldn't rely solely on AI for personal life advice. It's crucial to seek human counsel as well."
+   },
+   {
+    "index": 252,
+    "action": "relang hi -> en",
+    "reason": "English text filed under hi",
+    "text": "No, realistically speaking, you shouldn't rely solely on AI for personal life advice. It's crucial to seek human counsel as well."
+   },
+   {
+    "index": 253,
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "an assertion ('Actually, an AI can't ...'), English",
+    "text": "Actually, an AI can't understand personal emotions or context, so it's inappropriate to use it for such sensitive matters."
+   },
+   {
+    "index": 253,
+    "action": "relang hi -> en",
+    "reason": "English text filed under hi",
+    "text": "Actually, an AI can't understand personal emotions or context, so it's inappropriate to use it for such sensitive matters."
+   },
+   {
+    "index": 254,
+    "action": "relabel CORRECTION -> CORRECTION",
+    "reason": "'I meant, ...' revises what was said, English",
+    "text": "I meant, AI can provide information but it cannot replace the empathy and understanding a human counselor can offer."
+   },
+   {
+    "index": 254,
+    "action": "relang hi -> en",
+    "reason": "English text filed under hi",
+    "text": "I meant, AI can provide information but it cannot replace the empathy and understanding a human counselor can offer."
+   },
+   {
+    "index": 255,
+    "action": "relabel CORRECTION -> CORRECTION",
+    "reason": "'That is incorrect, ...' revises what was said, English",
+    "text": "That is incorrect, an AI cannot provide the emotional support a human therapist can. It's important to consider this."
+   },
+   {
+    "index": 255,
+    "action": "relang hi -> en",
+    "reason": "English text filed under hi",
+    "text": "That is incorrect, an AI cannot provide the emotional support a human therapist can. It's important to consider this."
+   },
+   {
+    "index": 256,
+    "action": "strip English gloss",
+    "text": "Nahi, main supermarket ke manager nahi hoon. (No, I am not the manager of the supermarket.)"
+   },
+   {
+    "index": 257,
+    "action": "strip English gloss",
+    "text": "Haan, aapne kharidaar ki tarah product display ki hai. (Yes, you have arranged the products like a shelf.)"
+   },
+   {
+    "index": 257,
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "an acknowledgement ('Haan, ...': yes, you did ...)",
+    "text": "Haan, aapne kharidaar ki tarah product display ki hai. (Yes, you have arranged the products like a shelf.)"
+   },
+   {
+    "index": 258,
+    "action": "strip English gloss",
+    "text": "Haan, aapne product stock update ke liye AI ki help le li. (Yes, you used AI's help for stock update.)"
+   },
+   {
+    "index": 258,
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "an acknowledgement ('Haan, ...')",
+    "text": "Haan, aapne product stock update ke liye AI ki help le li. (Yes, you used AI's help for stock update.)"
+   },
+   {
+    "index": 259,
+    "action": "strip English gloss",
+    "text": "Haan, aapne product price check ke liye camera system use kiya. (Yes, you used a camera system for price check."
+   },
+   {
+    "index": 259,
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "an acknowledgement ('Haan, ...')",
+    "text": "Haan, aapne product price check ke liye camera system use kiya. (Yes, you used a camera system for price check."
+   },
+   {
+    "index": 261,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "एक उत्पाद विरासत में आ गया है...",
+    "was": "LIFECYCLE"
+   },
+   {
+    "index": 262,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "एक स्टोर बिना बाहर खड़ा है...",
+    "was": "LIFECYCLE"
+   },
+   {
+    "index": 263,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "एक प्रणाली को अक्षय बना दिया गया है...",
+    "was": "LIFECYCLE"
+   }
+  ],
+  "items": [
+   {
+    "id": "blind1-000",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "a hotel",
+    "text": "The room number is 102, sir."
+   },
+   {
+    "id": "blind1-001",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a hotel",
+    "text": "Room service for Ms. Johnson, please."
+   },
+   {
+    "id": "blind1-002",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "a hotel",
+    "text": "Breakfast is served at 7 AM daily."
+   },
+   {
+    "id": "blind1-003",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "a hotel",
+    "text": "The concierge suggests a visit to the Art Museum."
+   },
+   {
+    "id": "blind1-004",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "a warehouse",
+    "text": "The inventory count for Lemons has dropped to 15 units."
+   },
+   {
+    "id": "blind1-005",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "a warehouse",
+    "text": "Our delivery truck from 'Fresh Foods Co.' arrived today."
+   },
+   {
+    "id": "blind1-006",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "a warehouse",
+    "text": "Bob, the warehouse manager, has scheduled a restock for Bread at 3:00 PM."
+   },
+   {
+    "id": "blind1-007",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a warehouse",
+    "text": "The order for 500 units of Milk has been delayed due to supplier issues."
+   },
+   {
+    "id": "blind1-008",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a finance office",
+    "text": "Always provide me with a daily financial summary before my daily meeting"
+   },
+   {
+    "id": "blind1-009",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a finance office",
+    "text": "Never forget to remind me of upcoming deadlines in my CRM"
+   },
+   {
+    "id": "blind1-010",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a finance office",
+    "text": "From now on, ensure that all transactions are cross-checked for errors before submission"
+   },
+   {
+    "id": "blind1-011",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a finance office",
+    "text": "Whenever I ask for a market analysis, make sure to include a 5-day forecast."
+   },
+   {
+    "id": "blind1-012",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a hotel",
+    "text": "Always confirm the room availability whenever I inquire about room details."
+   },
+   {
+    "id": "blind1-013",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a hotel",
+    "text": "Always provide the daily weather forecast every morning before breakfast."
+   },
+   {
+    "id": "blind1-014",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a hotel",
+    "text": "Never forget to remind me about the check-out time, no matter how early I call."
+   },
+   {
+    "id": "blind1-015",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a hotel",
+    "text": "Whenever I ask for local attractions, list the top-rated ones, including their ratings and distances from the hotel."
+   },
+   {
+    "id": "blind1-016",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a retail store",
+    "text": "If the stock drops below 50 units, please alert the manager immediately."
+   },
+   {
+    "id": "blind1-017",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a retail store",
+    "text": "When a delivery is late, notify our supplier and schedule a meeting with the team."
+   },
+   {
+    "id": "blind1-018",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a retail store",
+    "text": "If a customer complains about a product, initiate a quality check on that item."
+   },
+   {
+    "id": "blind1-019",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a retail store",
+    "text": "When the store is exceptionally busy, prioritize customer inquiries over other tasks."
+   },
+   {
+    "id": "blind1-020",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "someone's personal life",
+    "text": "If the client's privacy is compromised, notify me immediately."
+   },
+   {
+    "id": "blind1-021",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "someone's personal life",
+    "text": "Update me in real-time if there's any change in the client's health status."
+   },
+   {
+    "id": "blind1-022",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "someone's personal life",
+    "text": "Send alerts if the client's location deviates from their usual routine."
+   },
+   {
+    "id": "blind1-023",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "someone's personal life",
+    "text": "Remind me to respect the client's privacy unless explicitly authorized otherwise."
+   },
+   {
+    "id": "blind1-024",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a warehouse",
+    "text": "The forklift is currently out of service for maintenance."
+   },
+   {
+    "id": "blind1-025",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a warehouse",
+    "text": "The conveyor belt is currently unavailable due to a power outage."
+   },
+   {
+    "id": "blind1-026",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a warehouse",
+    "text": "The pallet jack has been recalled for safety inspection."
+   },
+   {
+    "id": "blind1-027",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a warehouse",
+    "text": "The inventory barcode scanner is on hold for software update."
+   },
+   {
+    "id": "blind1-028",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a supermarket chain",
+    "text": "The checkout scanner is currently out of service."
+   },
+   {
+    "id": "blind1-029",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a supermarket chain",
+    "text": "The cooling system in the freezer section is malfunctioning."
+   },
+   {
+    "id": "blind1-030",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a supermarket chain",
+    "text": "The delivery van is on hold due to traffic congestion."
+   },
+   {
+    "id": "blind1-031",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a supermarket chain",
+    "text": "We've run out of our specialty brand of bread, it's currently being reordered."
+   },
+   {
+    "id": "blind1-032",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "a retail store",
+    "text": "No, I meant to say 'Yes, we have that in stock."
+   },
+   {
+    "id": "blind1-033",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "a retail store",
+    "text": "Actually, the discount is on the 'Apple Watch, not the iPhone."
+   },
+   {
+    "id": "blind1-034",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "a retail store",
+    "text": "I meant 'That dress is on a special sale.', not 'The dresses are on a special sale."
+   },
+   {
+    "id": "blind1-035",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "a retail store",
+    "text": "That is incorrect, it's 'We are closed on Sundays.', not 'We are open on Sundays."
+   },
+   {
+    "id": "blind1-036",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "a medical clinic",
+    "text": "No, the patient's allergy is to penicillin, not penicillin-based antibiotics."
+   },
+   {
+    "id": "blind1-037",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "a medical clinic",
+    "text": "Actually, the prescription is for 500mg of ibuprofen, not 50mg."
+   },
+   {
+    "id": "blind1-038",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "a medical clinic",
+    "text": "I meant the patient is not on any blood thinners, not on warfarin."
+   },
+   {
+    "id": "blind1-039",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "a medical clinic",
+    "text": "That is wrong, the dosage for the patient is 20mg, not 2mg."
+   },
+   {
+    "id": "blind1-040",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a software team",
+    "text": "The contract for the software development project was terminated."
+   },
+   {
+    "id": "blind1-041",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a software team",
+    "text": "The product line of the XYZ smartphones was discontinued."
+   },
+   {
+    "id": "blind1-042",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a software team",
+    "text": "The physical store located at 5th Avenue has opened for business."
+   },
+   {
+    "id": "blind1-043",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a software team",
+    "text": "The legacy system, System Alpha, was decommissioned."
+   },
+   {
+    "id": "blind1-044",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a retail store",
+    "text": "The contract with our old supplier has been terminated."
+   },
+   {
+    "id": "blind1-045",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a retail store",
+    "text": "We've decided to discontinue the 'Classic Line' from our inventory."
+   },
+   {
+    "id": "blind1-046",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a retail store",
+    "text": "Our store in Downtown has closed for good due to low foot traffic."
+   },
+   {
+    "id": "blind1-047",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a retail store",
+    "text": "The system for tracking inventory has been decommissioned."
+   },
+   {
+    "id": "blind1-048",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "Can you show me the current inventory levels for the new shipment?"
+   },
+   {
+    "id": "blind1-049",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "Thanks, could you draft an email for the supplier regarding the delayed goods?"
+   },
+   {
+    "id": "blind1-050",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "AI, could you find the SKU number for the blue widgets we're low on?"
+   },
+   {
+    "id": "blind1-051",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "Would you mind filtering the sales reports for the last quarter?"
+   },
+   {
+    "id": "blind1-052",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a software team",
+    "text": "AI, can you show me the latest software updates?"
+   },
+   {
+    "id": "blind1-053",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a software team",
+    "text": "AI, would you draft an email to our client regarding the project status?"
+   },
+   {
+    "id": "blind1-054",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a software team",
+    "text": "AI, could you find me the latest user manual for our new software?"
+   },
+   {
+    "id": "blind1-055",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a software team",
+    "text": "AI, thank you for filtering these emails - they're looking quite manageable now."
+   },
+   {
+    "id": "blind1-056",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a finance office",
+    "text": "Der Kunde hat eine Abhebgebühr von 2,50 Euro bezahlt."
+   },
+   {
+    "id": "blind1-057",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a finance office",
+    "text": "Die Transaktionsverwaltung wurde erfolgreich in das System übertragen."
+   },
+   {
+    "id": "blind1-058",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a finance office",
+    "text": "Der neue Kontoausgleich zeigt eine Abbuchung von 150 Euro."
+   },
+   {
+    "id": "blind1-059",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a finance office",
+    "text": "Es ist eine Warnung für den Kunden über die Überweisung an die Gesellschaft für Kreditwürdigkeit."
+   },
+   {
+    "id": "blind1-060",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a retail store",
+    "text": "Der neue Bestellung von Lederhosenvorsten ist eingetroffen."
+   },
+   {
+    "id": "blind1-061",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a retail store",
+    "text": "Kundenmeinung: Wir benötigen mehr Rücksenden an der Niedergärtner Straße."
+   },
+   {
+    "id": "blind1-062",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a retail store",
+    "text": "Die Warenverteilung auf dem Westbahnhof wird automatisch optimiert."
+   },
+   {
+    "id": "blind1-063",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a retail store",
+    "text": "Erfolg der Saisonstart-Aktion in der Alpenstraße."
+   },
+   {
+    "id": "blind1-064",
+    "lang": "de",
+    "kind": "RULE",
+    "domain": "a software team",
+    "text": "Immer bitte den neuesten Version des Projektmanagements-Tools herunterladen, bevor wir damit beginnen."
+   },
+   {
+    "id": "blind1-065",
+    "lang": "de",
+    "kind": "RULE",
+    "domain": "a software team",
+    "text": "Auf keinen Fall die aktuelle Produkt-Roadmap missen, wenn wir Diskussionen darüber führen."
+   },
+   {
+    "id": "blind1-066",
+    "lang": "de",
+    "kind": "RULE",
+    "domain": "a software team",
+    "text": "Bitte stets den Code im Versionskontrollsystem speichern, bevor ich Änderungen vornereite."
+   },
+   {
+    "id": "blind1-067",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a software team",
+    "text": "Vermeide immer den direkten Kontakt mit Kunden, wenn ich Fehler in den Software-Produkten erkenne."
+   },
+   {
+    "id": "blind1-068",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a retail store",
+    "text": "Aufkläre mich immer, wenn ein neuer Artikel eintreten würde."
+   },
+   {
+    "id": "blind1-069",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a retail store",
+    "text": "Lasse mich gegebenenfalls benachrichtigen, wenn ein Kundencenter-Telefon laut ist."
+   },
+   {
+    "id": "blind1-070",
+    "lang": "de",
+    "kind": "RULE",
+    "domain": "a retail store",
+    "text": "Erinnere mich bitte, jeden Bestellvorgang nachzuprüfen, bevor ich abschließe."
+   },
+   {
+    "id": "blind1-071",
+    "lang": "de",
+    "kind": "RULE",
+    "domain": "a retail store",
+    "text": "Wende das stets, wenn ich die Warenverfügbarkeit prüfen möchte."
+   },
+   {
+    "id": "blind1-072",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a finance office",
+    "text": "Wenn der Aktienkurs unter 50 Euro fällt, bitte mir die Auswirkungen benachrichtigen."
+   },
+   {
+    "id": "blind1-073",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a finance office",
+    "text": "Wenn eine Lieferung verspätet ist, melde mir sofort den Sachverhalt."
+   },
+   {
+    "id": "blind1-074",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a finance office",
+    "text": "Aufkommendes Übernahmeangebot, bitte mir eine detaillierte Analyse zustellen."
+   },
+   {
+    "id": "blind1-075",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a finance office",
+    "text": "Kreditnehmer zahlt nicht, bitte prüfe die Zahlungsmöglichkeiten und melde unverzüglich."
+   },
+   {
+    "id": "blind1-076",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a retail store",
+    "text": "Wenn die Bestände unter einem bestimmten Niveau sinken, rufe mich bitte an."
+   },
+   {
+    "id": "blind1-077",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a retail store",
+    "text": "Lass mich wissen, wenn ein Liefertermin verschoben ist."
+   },
+   {
+    "id": "blind1-078",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a retail store",
+    "text": "Sobald die Bestände knapp werden, bin ich für dich bereit."
+   },
+   {
+    "id": "blind1-079",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a retail store",
+    "text": "Wenn der Preis eines Artikels sinkt, melde dich bei mir."
+   },
+   {
+    "id": "blind1-080",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "a warehouse",
+    "text": "Die Lagerautomatisierung ist ausgefallen."
+   },
+   {
+    "id": "blind1-081",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "a warehouse",
+    "text": "Der Laserkönig ist repariert worden."
+   },
+   {
+    "id": "blind1-082",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "a warehouse",
+    "text": "Der Transportroboter arbeitet wieder normal."
+   },
+   {
+    "id": "blind1-083",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "a warehouse",
+    "text": "Das Lagermittel ist aufgebraucht."
+   },
+   {
+    "id": "blind1-084",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "someone's personal life",
+    "text": "Mein persönlicher Computer ist defekt."
+   },
+   {
+    "id": "blind1-085",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "someone's personal life",
+    "text": "Das Reparaturverspätung meines Tablets ist leider noch bestehen."
+   },
+   {
+    "id": "blind1-086",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "someone's personal life",
+    "text": "Die Reparatur meiner Smartwatch ist abgeschlossen, sie funktioniert nun wieder."
+   },
+   {
+    "id": "blind1-088",
+    "lang": "de",
+    "kind": "CORRECTION",
+    "domain": "a retail store",
+    "text": "Nein, das ist nicht korrekt. Wir brauchen dieses Produkt nicht."
+   },
+   {
+    "id": "blind1-089",
+    "lang": "de",
+    "kind": "CORRECTION",
+    "domain": "a retail store",
+    "text": "Tatsächlich sollten wir dieses Angebot nutzen, nicht dieses."
+   },
+   {
+    "id": "blind1-090",
+    "lang": "de",
+    "kind": "CORRECTION",
+    "domain": "a retail store",
+    "text": "Es ist falsch, dass wir keine Rückzahlungen für dieses Produkt akzeptieren. Wir machen es."
+   },
+   {
+    "id": "blind1-091",
+    "lang": "de",
+    "kind": "CORRECTION",
+    "domain": "a retail store",
+    "text": "Das ist irreführend, wir brauchen keine solchen Lieferzeiten."
+   },
+   {
+    "id": "blind1-092",
+    "lang": "de",
+    "kind": "CORRECTION",
+    "domain": "a medical clinic",
+    "text": "Nein, das ist nicht korrekt. Die Patientin hat eine Vorgeschichte von Herzinsuffizienz."
+   },
+   {
+    "id": "blind1-093",
+    "lang": "de",
+    "kind": "CORRECTION",
+    "domain": "a medical clinic",
+    "text": "Tatsächlich sollten wir den Blutdruckmessung durchführen, bevor wir zur nächsten Ebene gehen."
+   },
+   {
+    "id": "blind1-094",
+    "lang": "de",
+    "kind": "CORRECTION",
+    "domain": "a medical clinic",
+    "text": "Es ist falsch, diese Medikamente gegeneinander einzusetzen. Es ist besser, sie nebeneinander zu verwenden."
+   },
+   {
+    "id": "blind1-095",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a medical clinic",
+    "text": "Wir sollten die Injektionsstelle für die Insulin-Infusion anpassen, nicht dort, wo der Patient heute geimpft wurde."
+   },
+   {
+    "id": "blind1-096",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a finance office",
+    "text": "Der Lieferant wurde neu beauftragt"
+   },
+   {
+    "id": "blind1-097",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a finance office",
+    "text": "Ein Produkt wurde eingestellt"
+   },
+   {
+    "id": "blind1-098",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a finance office",
+    "text": "Ein Ladengeschäft wurde für immer geschlossen"
+   },
+   {
+    "id": "blind1-099",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a finance office",
+    "text": "Ein System wurde dekommissioniert"
+   },
+   {
+    "id": "blind1-100",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a retail store",
+    "text": "Eine Lieferkette wurde eingestellt..."
+   },
+   {
+    "id": "blind1-101",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "a retail store",
+    "text": "Ein Produkt wurde ausgesetzt..."
+   },
+   {
+    "id": "blind1-102",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a retail store",
+    "text": "Eine Geschäftstür wurde für immer geschlossen..."
+   },
+   {
+    "id": "blind1-103",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a retail store",
+    "text": "Ein System wurde abgeschaltet..."
+   },
+   {
+    "id": "blind1-104",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a software team",
+    "text": "Kannst du mir bitte die neuesten Softwareupdates zurücksendet werden?"
+   },
+   {
+    "id": "blind1-105",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a software team",
+    "text": "Entschuldige, benötige deine Hilfe bei der Erstellung dieser Präsentation."
+   },
+   {
+    "id": "blind1-106",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a software team",
+    "text": "Kannst du mir die aktuellen Marktdaten für unseren Bericht zeigen?"
+   },
+   {
+    "id": "blind1-107",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a software team",
+    "text": "Vielen Dank, wichtig ist es, diese Code-Modifikation jetzt durchzuführen."
+   },
+   {
+    "id": "blind1-108",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a retail store",
+    "text": "Hey, kannst du mir bitte die aktuellen Bestandsmengen anzeigen?"
+   },
+   {
+    "id": "blind1-109",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a retail store",
+    "text": "Vielen Dank, hast du ein E-Mail-Draft für unseren neuen Kunden gemacht?"
+   },
+   {
+    "id": "blind1-110",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a retail store",
+    "text": "Kannst du mir bitte die Preise für das neue Kollektionsangebot anzeigen?"
+   },
+   {
+    "id": "blind1-111",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a retail store",
+    "text": "Dankeschön, hast du die Lieferantenliste für nächste Woche aktualisiert?"
+   },
+   {
+    "id": "blind1-112",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a supermarket chain",
+    "text": "El estocador necesita actualizar el inventario del producto naranja."
+   },
+   {
+    "id": "blind1-113",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a supermarket chain",
+    "text": "La cámara de control mostró que hubo un problema de flujo de clientes en la salida."
+   },
+   {
+    "id": "blind1-114",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a supermarket chain",
+    "text": "El gerente quiere saber cuál es la demanda mensual del arroz."
+   },
+   {
+    "id": "blind1-115",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "someone's personal life",
+    "text": "El asistente virtual ha recordado mi cita médica para el próximo miércoles a las 10:30 am."
+   },
+   {
+    "id": "blind1-116",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "someone's personal life",
+    "text": "El asistente ha actualizado mi calendario con la nueva reunión programada para el jueves a las 2:00 pm en el edificio de las Torrees."
+   },
+   {
+    "id": "blind1-117",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "someone's personal life",
+    "text": "El asistente ha encontrado un nuevo restaurante recomendado en la avenida 500 y 150, según mi preferencia por la comida vegana."
+   },
+   {
+    "id": "blind1-118",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "someone's personal life",
+    "text": "El asistente ha enviado un recordatorio para que compre leche y pan antes de que termine la semana, según mi lista de compras que he enviado."
+   },
+   {
+    "id": "blind1-119",
+    "lang": "es",
+    "kind": "RULE",
+    "domain": "a finance office",
+    "text": "Siempre informa detalladamente los movimientos financieros"
+   },
+   {
+    "id": "blind1-120",
+    "lang": "es",
+    "kind": "RULE",
+    "domain": "a finance office",
+    "text": "Nunca responda a consultas generales sin revisar la base de datos"
+   },
+   {
+    "id": "blind1-121",
+    "lang": "es",
+    "kind": "RULE",
+    "domain": "a finance office",
+    "text": "Siempre verifica la precisión de las cifras financieras"
+   },
+   {
+    "id": "blind1-122",
+    "lang": "es",
+    "kind": "RULE",
+    "domain": "a finance office",
+    "text": "Desde ahora, siempre se actualiza la información en tiempo real."
+   },
+   {
+    "id": "blind1-123",
+    "lang": "es",
+    "kind": "RULE",
+    "domain": "a warehouse",
+    "text": "Siempre solicita mi autorización antes de realizar cualquier movimiento de inventario"
+   },
+   {
+    "id": "blind1-124",
+    "lang": "es",
+    "kind": "RULE",
+    "domain": "a warehouse",
+    "text": "Nunca deje de actualizar el estatus de los envíos antes de mi llegada"
+   },
+   {
+    "id": "blind1-125",
+    "lang": "es",
+    "kind": "RULE",
+    "domain": "a warehouse",
+    "text": "Siempre verifica la disponibilidad de cada artículo antes de recomendar una entrega"
+   },
+   {
+    "id": "blind1-126",
+    "lang": "es",
+    "kind": "RULE",
+    "domain": "a warehouse",
+    "text": "Siempre informa cualquier desperdicio o daño en los productos cada vez que realices una inspección."
+   },
+   {
+    "id": "blind1-127",
+    "lang": "es",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a warehouse",
+    "text": "Informe si el stock de productos A disminuye por más del 10%"
+   },
+   {
+    "id": "blind1-128",
+    "lang": "es",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a warehouse",
+    "text": "Alerta si una entrega se retrasa más de 48 horas"
+   },
+   {
+    "id": "blind1-129",
+    "lang": "es",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a warehouse",
+    "text": "Revela los productos en stock cuando el nivel de inventario sea superior a 500"
+   },
+   {
+    "id": "blind1-130",
+    "lang": "es",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a warehouse",
+    "text": "Notifica si una línea de productos B se agota completamente"
+   },
+   {
+    "id": "blind1-131",
+    "lang": "es",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a medical clinic",
+    "text": "Si la stock de medicamentos cae por debajo del 10%, pide a la farmacéutica que envíe un nuevo pedido."
+   },
+   {
+    "id": "blind1-132",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a medical clinic",
+    "text": "Cuando un paciente no se presente para su cita, envío un recordatorio por SMS."
+   },
+   {
+    "id": "blind1-133",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a medical clinic",
+    "text": "Si el sistema de la clinica falla y no puedo acceder a los registros del paciente, pongo en contacto al departamento de TI."
+   },
+   {
+    "id": "blind1-134",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a medical clinic",
+    "text": "Si el tiempo se vuelve extremadamente frío y los pacientes tienen miedo de ir a la clínica, envío un correo electrónico a la comunidad local para informar sobre nuestros protocolos de seguridad."
+   },
+   {
+    "id": "blind1-135",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "a medical clinic",
+    "text": "El espejo de oficina está roto."
+   },
+   {
+    "id": "blind1-136",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "a medical clinic",
+    "text": "La bomba de lavandería ha sido reparada."
+   },
+   {
+    "id": "blind1-137",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "a medical clinic",
+    "text": "El monitoreo de pacientes vuelve a funcionar."
+   },
+   {
+    "id": "blind1-138",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "a medical clinic",
+    "text": "Los ventiladores están agotados."
+   },
+   {
+    "id": "blind1-139",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "someone's personal life",
+    "text": "Mi teléfono inteligente está roto."
+   },
+   {
+    "id": "blind1-140",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "someone's personal life",
+    "text": "El nuevo sistema de seguridad del coche se ha reparado."
+   },
+   {
+    "id": "blind1-141",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "someone's personal life",
+    "text": "El servicio de atención al cliente ahora funciona correctamente."
+   },
+   {
+    "id": "blind1-142",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "someone's personal life",
+    "text": "El filtro del aire del automóvil está agotado."
+   },
+   {
+    "id": "blind1-144",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a supermarket chain",
+    "text": "Actually, debo enfocar en los inventarios de lámina de plata"
+   },
+   {
+    "id": "blind1-145",
+    "lang": "es",
+    "kind": "CORRECTION",
+    "domain": "a supermarket chain",
+    "text": "I meant, no necesitamos nuevas aplicaciones de pago móvil"
+   },
+   {
+    "id": "blind1-146",
+    "lang": "es",
+    "kind": "CORRECTION",
+    "domain": "a supermarket chain",
+    "text": "That is wrong, hemos superado las metas de ventas del último trimestre."
+   },
+   {
+    "id": "blind1-147",
+    "lang": "es",
+    "kind": "CORRECTION",
+    "domain": "a retail store",
+    "text": "No, lo que dijiste sobre el stock del producto es incorrecto. Realmente, solo quedan 5 unidades."
+   },
+   {
+    "id": "blind1-148",
+    "lang": "es",
+    "kind": "CORRECTION",
+    "domain": "a retail store",
+    "text": "Debes actualizar la información del producto, ya que esa tarifa es inaccesible. El descuento es del 15%."
+   },
+   {
+    "id": "blind1-149",
+    "lang": "es",
+    "kind": "CORRECTION",
+    "domain": "a retail store",
+    "text": "Lo que mencionaste sobre la entrega es incorrecto. En realidad, la opción de envío express tiene un costo de $20."
+   },
+   {
+    "id": "blind1-150",
+    "lang": "es",
+    "kind": "CORRECTION",
+    "domain": "a retail store",
+    "text": "Realmente, la hora de apertura del domingo que mencionaste es incorrecta. El horario correcto es a las 10:00 AM."
+   },
+   {
+    "id": "blind1-151",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a software team",
+    "text": "El contrato con el cliente se ha terminado."
+   },
+   {
+    "id": "blind1-152",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a software team",
+    "text": "El producto X ha sido discontinuado."
+   },
+   {
+    "id": "blind1-153",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a software team",
+    "text": "La tienda física en la 5ª Avenida se ha cerrado para siempre."
+   },
+   {
+    "id": "blind1-154",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a software team",
+    "text": "El sistema de TI se ha decommissionado."
+   },
+   {
+    "id": "blind1-155",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a supermarket chain",
+    "text": "El contrato con el proveedor se terminó"
+   },
+   {
+    "id": "blind1-156",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a supermarket chain",
+    "text": "El producto enoltro se detuvo la producción"
+   },
+   {
+    "id": "blind1-157",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a supermarket chain",
+    "text": "La tienda cerró por completo"
+   },
+   {
+    "id": "blind1-158",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a supermarket chain",
+    "text": "El sistema de gestión se decommissionó"
+   },
+   {
+    "id": "blind1-159",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "¿Puedes mostrarme el inventario actualizado de estos artículos?"
+   },
+   {
+    "id": "blind1-160",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "¿Podrías enviarme el correo a los proveedores sobre el retraso de entregas?"
+   },
+   {
+    "id": "blind1-161",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "¿Qué tienes para mí en cuanto a nuevas políticas de seguridad?"
+   },
+   {
+    "id": "blind1-162",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "¿Puedes preparar un informe detallado de las ventas del mes pasado para mi revisión?"
+   },
+   {
+    "id": "blind1-163",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a medical clinic",
+    "text": "¿Puedo ver el historial médico de esta paciente, por favor?"
+   },
+   {
+    "id": "blind1-164",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a medical clinic",
+    "text": "Gracias, ¿puedes enviar esta carta de seguimiento?"
+   },
+   {
+    "id": "blind1-165",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a medical clinic",
+    "text": "¿Podrías buscar los registros de la última visita del paciente Johnson?"
+   },
+   {
+    "id": "blind1-166",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a medical clinic",
+    "text": "Esto es todo para hoy, ¿no es así?"
+   },
+   {
+    "id": "blind1-167",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a warehouse",
+    "text": "الرقم الخاص بإنتاج القطع الخرساني هو 3000 كجم اليوم."
+   },
+   {
+    "id": "blind1-168",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a warehouse",
+    "text": "نحن نضيف منتجاتنا إلى الكراسي A105."
+   },
+   {
+    "id": "blind1-169",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a warehouse",
+    "text": "قام الموقل الخاص بنا بإجراء فحص صحة الآلات في القائمة الأخيرة."
+   },
+   {
+    "id": "blind1-170",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a warehouse",
+    "text": "نحن نحاول زيادة استخدام الأنظمة الذكية لتحسين كفاءة التخزين."
+   },
+   {
+    "id": "blind1-171",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a medical clinic",
+    "text": "أريد تصحيح صيغة طريقة المريض الحالي."
+   },
+   {
+    "id": "blind1-172",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a medical clinic",
+    "text": "يمكنك الإشارة إلى الخيارات المتبعة للعلاج الحالي؟"
+   },
+   {
+    "id": "blind1-173",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a medical clinic",
+    "text": "تم جمع عينات العين للفحص إلى الجنائزة."
+   },
+   {
+    "id": "blind1-174",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a medical clinic",
+    "text": "المريض الذي يحتاج إلى عملية جراحية يدعى إسمه محمود صبحي."
+   },
+   {
+    "id": "blind1-175",
+    "lang": "ar",
+    "kind": "RULE",
+    "domain": "a retail store",
+    "text": "عملياً، احرص على توفير الحالة الحالية للمخزون كلما تتمكن"
+   },
+   {
+    "id": "blind1-177",
+    "lang": "ar",
+    "kind": "RULE",
+    "domain": "a retail store",
+    "text": "إذا تمكنت، فتذكر دائمًا توضيح الحلقات الزراعية والممثلة للعملاء"
+   },
+   {
+    "id": "blind1-180",
+    "lang": "ar",
+    "kind": "RULE",
+    "domain": "a medical clinic",
+    "text": "لا تتجنب التحقق من دواء المريض عند استخدام الروبوت"
+   },
+   {
+    "id": "blind1-181",
+    "lang": "ar",
+    "kind": "RULE",
+    "domain": "a medical clinic",
+    "text": "لا تقلل من تقييم الأعراض في تقييمنا باستخدام الروبوت"
+   },
+   {
+    "id": "blind1-183",
+    "lang": "ar",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a software team",
+    "text": "إذا انتقل التفاعل العملي للعمليات إلى المستوى العالي، تذكيري بتحديث البيانات في الزمن الفعلي."
+   },
+   {
+    "id": "blind1-184",
+    "lang": "ar",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a software team",
+    "text": "إذا تجاوزت أسعار السهم في الأسواق نسبة 10٪، اتذكر استبعاد الأصناف المتبقية عن المحتوى."
+   },
+   {
+    "id": "blind1-185",
+    "lang": "ar",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a software team",
+    "text": "إذا وقعت تأخيراً في التسليم، احجزي من تحديث تقاريرنا حتى جميع القطع الخاصة بالمنتج قد وصلوا."
+   },
+   {
+    "id": "blind1-191",
+    "lang": "ar",
+    "kind": "STATUS",
+    "domain": "a finance office",
+    "text": "معرضة للإصلاح."
+   },
+   {
+    "id": "blind1-192",
+    "lang": "ar",
+    "kind": "STATUS",
+    "domain": "a finance office",
+    "text": "تعمل بشكل جيد عليه."
+   },
+   {
+    "id": "blind1-193",
+    "lang": "ar",
+    "kind": "STATUS",
+    "domain": "a finance office",
+    "text": "احتاج إلى إصلاح."
+   },
+   {
+    "id": "blind1-194",
+    "lang": "ar",
+    "kind": "STATUS",
+    "domain": "a finance office",
+    "text": "نفاد الخدمة."
+   },
+   {
+    "id": "blind1-195",
+    "lang": "ar",
+    "kind": "STATUS",
+    "domain": "someone's personal life",
+    "text": "الأجهزة الطبية غير عملية حاليًا"
+   },
+   {
+    "id": "blind1-196",
+    "lang": "ar",
+    "kind": "STATUS",
+    "domain": "someone's personal life",
+    "text": "تم إصلاح الأجهزة اللوحية المتضررة"
+   },
+   {
+    "id": "blind1-197",
+    "lang": "ar",
+    "kind": "STATUS",
+    "domain": "someone's personal life",
+    "text": "الخدمة الإلكترونية متاحة مرة أخرى"
+   },
+   {
+    "id": "blind1-198",
+    "lang": "ar",
+    "kind": "STATUS",
+    "domain": "someone's personal life",
+    "text": "لا يمكن الحصول على المنتج المستحسن حاليًا"
+   },
+   {
+    "id": "blind1-200",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a hotel",
+    "text": "أيضاً، لا تقتصر على التواصل مع الضيفين فحسب، بل يجب أن تعمل على تحسين تجربة المضيف ككل"
+   },
+   {
+    "id": "blind1-201",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a hotel",
+    "text": "لا تنسى، الاستعلامات المستمرة تساعد في تحسين الخدمة والرضا الضيف"
+   },
+   {
+    "id": "blind1-202",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a hotel",
+    "text": "أخيراً، تجنب استخدام التعليمات المزعجة أو غير الواضحة في تعاملاتك مع المضيفين"
+   },
+   {
+    "id": "blind1-203",
+    "lang": "ar",
+    "kind": "CORRECTION",
+    "domain": "a software team",
+    "text": "لا، تكون ذلك صحيحة. ينبغي استخدام الفعل 'تحقق' بدلاً من 'يحقق"
+   },
+   {
+    "id": "blind1-204",
+    "lang": "ar",
+    "kind": "CORRECTION",
+    "domain": "a software team",
+    "text": "لا، أرغب في تنظيم دورة البيانات بدلاً من إدارة دورة البيانات"
+   },
+   {
+    "id": "blind1-205",
+    "lang": "ar",
+    "kind": "CORRECTION",
+    "domain": "a software team",
+    "text": "في هذا السياق، يجب استخدام 'نصب' بدلاً من 'نصيف', و'الإدارة' بدلاً من 'الإدارة"
+   },
+   {
+    "id": "blind1-207",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "someone's personal life",
+    "text": "العقود التعاقدية متمددة"
+   },
+   {
+    "id": "blind1-211",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a supermarket chain",
+    "text": "أُنقِح عقد كلاء."
+   },
+   {
+    "id": "blind1-212",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a supermarket chain",
+    "text": "تم تخفيض منتج من المخزون."
+   },
+   {
+    "id": "blind1-213",
+    "lang": "ar",
+    "kind": "LIFECYCLE",
+    "domain": "a supermarket chain",
+    "text": "تم تغيير بيان العمل. تم إغلاق المتجر بالتو."
+   },
+   {
+    "id": "blind1-214",
+    "lang": "ar",
+    "kind": "STATUS",
+    "domain": "a supermarket chain",
+    "text": "تم استعادة النظام التشغيلي."
+   },
+   {
+    "id": "blind1-215",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a medical clinic",
+    "text": "مرحباً، كيف يمكنني الوصول إلى قائمة المرضى الحالية؟"
+   },
+   {
+    "id": "blind1-216",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a medical clinic",
+    "text": "يبدو أن هناك بعض الأخبار الجديدة للأطباء. يمكنك توضيحها لي؟"
+   },
+   {
+    "id": "blind1-217",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a medical clinic",
+    "text": "لدي قائمة كاملة للجراحات المناسبة للمريض الذي لديه اضطراب في القلب. يمكنك مساعدتي؟"
+   },
+   {
+    "id": "blind1-218",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a medical clinic",
+    "text": "نحتاج إلى إرسال رسالة إلى التأشيرة الدولية لضمان السفر الآمن للمريض. يمكنك إرسالها لي؟"
+   },
+   {
+    "id": "blind1-219",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "ما هو الوقت الناجم للخرائط المخططة؟"
+   },
+   {
+    "id": "blind1-220",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "هل يمكنك تحديد المنتج الذي أبحث عنه؟"
+   },
+   {
+    "id": "blind1-221",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "كيف يمكنني إرسال رسائلة إلى الشركاء؟"
+   },
+   {
+    "id": "blind1-222",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "هل يمكنك إخباري عن حالة الحفظ للمنتجات الجديدة؟"
+   },
+   {
+    "id": "blind1-223",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a supermarket chain",
+    "text": "कृपया हमारे बोर्डरो की स्टॉक की जाँच करें, जो सप्ताहांत में स्वादिष्ट होती है।"
+   },
+   {
+    "id": "blind1-224",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a supermarket chain",
+    "text": "आज को क्षेत्रीय फलों की संख्या कृपया दें।"
+   },
+   {
+    "id": "blind1-225",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a supermarket chain",
+    "text": "कृपया मेरे डिवाइस पर आधारभूत व्यापार डेटा की जाँच करें।"
+   },
+   {
+    "id": "blind1-226",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a supermarket chain",
+    "text": "हमारे स्टोर में साफ-सफाई कर्मचारियों की उपस्थिति की निगरानी करें।"
+   },
+   {
+    "id": "blind1-227",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a hotel",
+    "text": "रहने की आवश्यकता है, कृपया होटल कैलिफोर्निया में एक बेडरूम की जाँच करें।"
+   },
+   {
+    "id": "blind1-228",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a hotel",
+    "text": "हमें मेज के लिए दो सदस्यीय है, कृपया ऑर्डर लें।"
+   },
+   {
+    "id": "blind1-231",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a software team",
+    "text": "Always provide me with the latest software updates"
+   },
+   {
+    "id": "blind1-232",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a retail store",
+    "text": "Always check inventory levels before restocking shelves."
+   },
+   {
+    "id": "blind1-233",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a retail store",
+    "text": "Never forget to update sales data every hour."
+   },
+   {
+    "id": "blind1-234",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a retail store",
+    "text": "From now on, remind me about stock delivery schedules."
+   },
+   {
+    "id": "blind1-235",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a retail store",
+    "text": "Whenever I place an order, please check for stock availability."
+   },
+   {
+    "id": "blind1-236",
+    "lang": "hi",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a medical clinic",
+    "text": "AI, यदि स्टॉक ड्यूट नीचे आ जाता है तो वित्तीय समाचारों की निगरानी करें।"
+   },
+   {
+    "id": "blind1-237",
+    "lang": "hi",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a medical clinic",
+    "text": "AI, जब पेपरवर्क देर से आता है तो हमारे लिए अलर्ट दिखाएँ।"
+   },
+   {
+    "id": "blind1-238",
+    "lang": "hi",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a medical clinic",
+    "text": "AI, असली प्रतिक्रिया होने तक ही मरीजों के प्रश्नों का उत्तर दें।"
+   },
+   {
+    "id": "blind1-239",
+    "lang": "hi",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a medical clinic",
+    "text": "AI, यदि एक मरीज का डेटा असामान्य प्रतीत होता है तो उसकी चिकित्सा रिकॉर्ड देखें।"
+   },
+   {
+    "id": "blind1-240",
+    "lang": "hi",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "someone's personal life",
+    "text": "AI, यदि निचला शेयर मूल्य गिरता है ही, तो कृपया मुझे निवेश की जानेवाली दें।"
+   },
+   {
+    "id": "blind1-241",
+    "lang": "hi",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "someone's personal life",
+    "text": "अगर कोई वितरण देर से हो, तो AI, मुझे जल्दी से अपडेट करें।"
+   },
+   {
+    "id": "blind1-242",
+    "lang": "hi",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "someone's personal life",
+    "text": "किसी व्यक्ति के निजी जीवन में परिवर्तन होते हैं, तो AI, मुझे सूचित रखें।"
+   },
+   {
+    "id": "blind1-243",
+    "lang": "hi",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "someone's personal life",
+    "text": "अगर कोई कंपनी का राजस्व कम होता है, तो AI, प्रभावी बाजार अनुसंधान प्रदान करें।"
+   },
+   {
+    "id": "blind1-244",
+    "lang": "hi",
+    "kind": "STATUS",
+    "domain": "someone's personal life",
+    "text": "मेरा कंप्यूटर एक्सेस फॉर्म अब उपलब्ध नहीं है।"
+   },
+   {
+    "id": "blind1-245",
+    "lang": "hi",
+    "kind": "STATUS",
+    "domain": "someone's personal life",
+    "text": "मेरी कैलेंडर प्रणाली में एक समस्या है और यह ठीक से काम नहीं कर रही है।"
+   },
+   {
+    "id": "blind1-246",
+    "lang": "hi",
+    "kind": "STATUS",
+    "domain": "someone's personal life",
+    "text": "मेरा फोन सिस्टम अचानक बंद हो गया है, जाँच की जानी होगी।"
+   },
+   {
+    "id": "blind1-247",
+    "lang": "hi",
+    "kind": "STATUS",
+    "domain": "someone's personal life",
+    "text": "मेरा स्वास्थ्य ऐप परीक्षण उपकरणों के लिए अब आपूर्ति समाप्त हो गया है।"
+   },
+   {
+    "id": "blind1-248",
+    "lang": "hi",
+    "kind": "STATUS",
+    "domain": "a supermarket chain",
+    "text": "सिस्टम में खराबी है।"
+   },
+   {
+    "id": "blind1-249",
+    "lang": "hi",
+    "kind": "STATUS",
+    "domain": "a supermarket chain",
+    "text": "फ्रीजर मर गया है।"
+   },
+   {
+    "id": "blind1-250",
+    "lang": "hi",
+    "kind": "STATUS",
+    "domain": "a supermarket chain",
+    "text": "वेबसाइट अपडेट नहीं हो रही है।"
+   },
+   {
+    "id": "blind1-252",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "someone's personal life",
+    "text": "No, realistically speaking, you shouldn't rely solely on AI for personal life advice. It's crucial to seek human counsel as well."
+   },
+   {
+    "id": "blind1-253",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "someone's personal life",
+    "text": "Actually, an AI can't understand personal emotions or context, so it's inappropriate to use it for such sensitive matters."
+   },
+   {
+    "id": "blind1-254",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "someone's personal life",
+    "text": "I meant, AI can provide information but it cannot replace the empathy and understanding a human counselor can offer."
+   },
+   {
+    "id": "blind1-255",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "someone's personal life",
+    "text": "That is incorrect, an AI cannot provide the emotional support a human therapist can. It's important to consider this."
+   },
+   {
+    "id": "blind1-256",
+    "lang": "hi",
+    "kind": "CORRECTION",
+    "domain": "a supermarket chain",
+    "text": "Nahi, main supermarket ke manager nahi hoon."
+   },
+   {
+    "id": "blind1-257",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a supermarket chain",
+    "text": "Haan, aapne kharidaar ki tarah product display ki hai."
+   },
+   {
+    "id": "blind1-258",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a supermarket chain",
+    "text": "Haan, aapne product stock update ke liye AI ki help le li."
+   },
+   {
+    "id": "blind1-259",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a supermarket chain",
+    "text": "Haan, aapne product price check ke liye camera system use kiya."
+   },
+   {
+    "id": "blind1-260",
+    "lang": "hi",
+    "kind": "LIFECYCLE",
+    "domain": "a warehouse",
+    "text": "एक अनुबंध समाप्त हो गया है..."
+   },
+   {
+    "id": "blind1-264",
+    "lang": "hi",
+    "kind": "LIFECYCLE",
+    "domain": "a retail store",
+    "text": "हमारे प्रोवाइडर सेवा के साथ एक अनुबंध समाप्त हो गया है।"
+   },
+   {
+    "id": "blind1-265",
+    "lang": "hi",
+    "kind": "LIFECYCLE",
+    "domain": "a retail store",
+    "text": "हमने एक उत्पाद को बाजार से बाहर रख दिया है।"
+   },
+   {
+    "id": "blind1-266",
+    "lang": "hi",
+    "kind": "LIFECYCLE",
+    "domain": "a retail store",
+    "text": "हमारे शॉप लेखा नहीं रहेगा। उसे बंद कर दिया जाएगा।"
+   },
+   {
+    "id": "blind1-267",
+    "lang": "hi",
+    "kind": "LIFECYCLE",
+    "domain": "a retail store",
+    "text": "हमने मौजूदा सिस्टम को डिस्कनेक्ट कर दिया है।"
+   },
+   {
+    "id": "blind1-268",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a finance office",
+    "text": "आपका सेवा किस बारे में पूछा जा रहा है?"
+   },
+   {
+    "id": "blind1-269",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a finance office",
+    "text": "आपकी मदद से क्या फ़ाइल की जाँच कर सकता हूँ?"
+   },
+   {
+    "id": "blind1-270",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a finance office",
+    "text": "क्या आप इस प्रकार का वित्तीय रिपोर्ट बना सकते हैं?"
+   },
+   {
+    "id": "blind1-271",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a finance office",
+    "text": "क्या आप लिखी जा रही ईमेल में सामान्य वाक्यांशों का विश्लेषण कर सकते हैं?"
+   },
+   {
+    "id": "blind1-272",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "हे एआई, क्या आप पुरानी आईडी शेड्यूल दिखा सकते हैं?"
+   },
+   {
+    "id": "blind1-273",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "एआई, हमारी निर्धारित स्केड्यूल के अपडेट को कृपया करें?"
+   },
+   {
+    "id": "blind1-274",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "एआई, कृपया अपनी सूची में नए आपूर्तिकर्ताओं को जोड़ें, कृपया"
+   },
+   {
+    "id": "blind1-275",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a warehouse",
+    "text": "एआई, क्या आप इस अंतर्राष्ट्रीय लीडर के साथ मेरे साथ मुख्य व्यापार बातचीत का प्रस्ताव तैयार कर सकते हैं?"
+   }
+  ]
+ },
+ "blind2": {
+  "role": "held_out",
+  "seed": 20261008,
+  "cleaning": {
+   "items_in": 278,
+   "items_out": 241,
+   "dropped": 37,
+   "relabelled": 31,
+   "stripped": 2,
+   "noise_rate": 0.245
+  },
+  "changes": [
+   {
+    "index": 4,
+    "action": "relabel FACT -> STATUS",
+    "reason": "a delivery delayed: the state of a thing",
+    "text": "The delivery to John Doe at 123 Main Street is delayed."
+   },
+   {
+    "index": 13,
+    "action": "relabel RULE -> CONDITIONAL_RULE",
+    "reason": "trigger 'whenever a new stock arrives' is a world event",
+    "text": "Never forget to update the inventory database whenever a new stock arrives."
+   },
+   {
+    "index": 15,
+    "action": "relabel RULE -> CONDITIONAL_RULE",
+    "reason": "trigger 'whenever I receive a call' is an event, not a request to the assistant",
+    "text": "Whenever I receive a call, ensure I have the patient's complete medical history readily available."
+   },
+   {
+    "index": 55,
+    "action": "relabel FACT -> LIFECYCLE",
+    "reason": "a new branch opened",
+    "text": "Wir haben eine neue Bankfiliale in der Friedrichstraße eröffnet."
+   },
+   {
+    "index": 60,
+    "action": "relabel FACT -> LIFECYCLE",
+    "reason": "a new route starts next week: a thing begins",
+    "text": "Die neue Route für den Express-Transport nach Oslo wird ab nächster Woche starten."
+   },
+   {
+    "index": 61,
+    "action": "relabel FACT -> STATUS",
+    "reason": "a truck back in service next week: its state",
+    "text": "Das Problem mit dem Lastwagen in Wuppertal ist gelöst und er wird nächste Woche wieder in Diensten stehen."
+   },
+   {
+    "index": 63,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "Sollten wir die Fahrzeugteile jemals ausfallen lassen, so mache das sofort wieder ein,",
+    "was": "RULE"
+   },
+   {
+    "index": 65,
+    "action": "relabel RULE -> NONE",
+    "reason": "a question without its question mark ('Should I always ...')",
+    "text": "Müsste ich immer vor jeder Neuanschaffung ein Fahrzeugprüfergebnis einholen."
+   },
+   {
+    "index": 66,
+    "action": "relabel RULE -> CONDITIONAL_RULE",
+    "reason": "trigger 'wenn eine Bestellung aufgegeben wird' is a world event",
+    "text": "Bitte immer den Lagerbestand aktualisieren, wenn ein Bestellung aufgegeben wird."
+   },
+   {
+    "index": 72,
+    "action": "relabel CONDITIONAL_RULE -> FACT",
+    "reason": "the speaker's own availability, a statement",
+    "text": "Bei einem Lieferengpass, solange keine Alternative gefunden wird, stehe ich Ihnen zur Verfügung."
+   },
+   {
+    "index": 78,
+    "action": "drop",
+    "reason": "nonsensical ('laser pointer excluded')",
+    "text": "Der Laserpointer ist ausgeschlossen.",
+    "was": "STATUS"
+   },
+   {
+    "index": 89,
+    "action": "drop",
+    "reason": "a fragment",
+    "text": "Wirklich solltest du...",
+    "was": "CORRECTION"
+   },
+   {
+    "index": 92,
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "an acknowledgement with thanks",
+    "text": "Ihr Verstoß gegen die Medikamentenverordnung ist korrekt, danke für den Hinweis."
+   },
+   {
+    "index": 119,
+    "action": "relabel RULE -> FACT",
+    "reason": "a third-person statement of what will (not) happen",
+    "text": "Nunca responderá sobre tus transacciones personales sin tu autorización."
+   },
+   {
+    "index": 120,
+    "action": "relabel RULE -> FACT",
+    "reason": "first-person habit ('consultare'), not an instruction",
+    "text": "Siempre consultaré con el banco antes de tomar decisiones financieras importantes."
+   },
+   {
+    "index": 121,
+    "action": "relabel RULE -> FACT",
+    "reason": "first-person promise ('validare'), not an instruction",
+    "text": "A partir de ahora, siempre validaré tus datos personales antes de proceder."
+   },
+   {
+    "index": 124,
+    "action": "relabel RULE -> CONDITIONAL_RULE",
+    "reason": "trigger 'cada vez que se de un fallo' is a world event",
+    "text": "Debe enviarme una alerta cada vez que se dé un fallo en un motores"
+   },
+   {
+    "index": 142,
+    "action": "keep (second pass)",
+    "reason": "'No, ...' revising an earlier request, same shape as item 146",
+    "text": "No, realmente necesito que agregues un depósito de 500 euros a mi cuenta corriente."
+   },
+   {
+    "index": 143,
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "a one-off instruction ('you must enter 1000 euros')",
+    "text": "Debes introducir la cantidad de 1000 euros para el préstamo personal."
+   },
+   {
+    "index": 147,
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "a one-off request ('I need to see the status of delivery 12345')",
+    "text": "Realmente, debo ver el estado actual de la entrega 12345."
+   },
+   {
+    "index": 148,
+    "action": "keep (second pass)",
+    "reason": "'De hecho, ...' (actually) revising a fact, same shape as items 91 and 203",
+    "text": "De hecho, la ruta más rápida para llegar al puerto es a través del puente 901."
+   },
+   {
+    "index": 149,
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "a statement ('I have needed the rate update')",
+    "text": "Exactamente, he necesitado la actualización de las tarifas de transporte."
+   },
+   {
+    "index": 169,
+    "action": "drop",
+    "reason": "truncated",
+    "text": "تغيير عنصر المنتج إلى",
+    "was": "FACT"
+   },
+   {
+    "index": 170,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "الراكب الحالي لي أحب المحفظة الأولى في الشارع الرابع",
+    "was": "FACT"
+   },
+   {
+    "index": 171,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "الاستدائة للمرضى الجدد على خادم المصري",
+    "was": "FACT"
+   },
+   {
+    "index": 172,
+    "action": "drop",
+    "reason": "a fragment",
+    "text": "تحديد الأموال التالية في حساب المستلم",
+    "was": "FACT"
+   },
+   {
+    "index": 173,
+    "action": "drop",
+    "reason": "a fragment",
+    "text": "تسجيل التمرين الرياضي للعميل المتوقع",
+    "was": "FACT"
+   },
+   {
+    "index": 175,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "اكتب كلما قمت بتحديث المستندات، رصد التغييرات",
+    "was": "RULE"
+   },
+   {
+    "index": 178,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "البالغ من التأكد ألكون تتبع دقتي في كل تداول نادي ما",
+    "was": "RULE"
+   },
+   {
+    "index": 179,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "لا تزال تلاحظ أن تقييم الاحتيال لا يمكن أن يتم من أي وسائل مختلفة",
+    "was": "RULE"
+   },
+   {
+    "index": 180,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "من الضروري ألا تذكر دائمًا تحديد المقترض بنموذجه قبل السمح للحدود المالية",
+    "was": "RULE"
+   },
+   {
+    "index": 181,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "لا تتجاهل أن تكرار عمليات تحديد الجرم في كل شراء جديدة هو بالفعل تعلم شديد",
+    "was": "RULE"
+   },
+   {
+    "index": 182,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "اقرأ وثقافة الأدوية الجديدة إذا نقصت",
+    "was": "CONDITIONAL_RULE"
+   },
+   {
+    "index": 183,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "تذكر احتفاظي بالمخزون عندما يقل إذا",
+    "was": "CONDITIONAL_RULE"
+   },
+   {
+    "index": 184,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "بدل على الحصول على وثقافة غير متاحة انقر",
+    "was": "CONDITIONAL_RULE"
+   },
+   {
+    "index": 185,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "أخبرني عندما تقترب الوسائل التشغيلية إذا",
+    "was": "CONDITIONAL_RULE"
+   },
+   {
+    "index": 188,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "اعادة ترشيح القائمة إذا كانت متكررة استهلاك نادرة الكائنات الحيوانية",
+    "was": "CONDITIONAL_RULE"
+   },
+   {
+    "index": 194,
+    "action": "relabel STATUS -> FACT",
+    "reason": "a past decision, a statement",
+    "text": "الطاقم قد قرر بإصلاح الإذار الإلكترونية."
+   },
+   {
+    "index": 195,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "الإطلاق الدوائي الأمامي قد توقف واتجاهه يكون على الأجهزة.",
+    "was": "STATUS"
+   },
+   {
+    "index": 196,
+    "action": "relabel STATUS -> FACT",
+    "reason": "a speculation about the future, a statement",
+    "text": "المواد الدوائية المتوقفة عن توصيل قد تبدأ في العودة."
+   },
+   {
+    "index": 197,
+    "action": "relabel STATUS -> FACT",
+    "reason": "a past event (a mistake was made), a statement",
+    "text": "الطاقم قد وقع خطأ في ترتيب المدة المتوقعة للدواء."
+   },
+   {
+    "index": 199,
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "a statement about the listener",
+    "text": "أنت لا تفعل شيئًا غريبًا بالبيانات المنزلية."
+   },
+   {
+    "index": 200,
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "a preference ('I don't want you to ...') with no standing word",
+    "text": "لا أريد أن تقوم بتحليل المشاكل العلمية دون فهمها الأساسي."
+   },
+   {
+    "index": 201,
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "advice stated as a fact ('you need to ...')",
+    "text": "أنت تحتاج إلى تعليم المدرسة بطريقة أكثر تفاعلية مع الطلاب."
+   },
+   {
+    "index": 204,
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "a one-off instruction ('also, don't miss repairing ...')",
+    "text": "أيضًا، لا تفوت تصليح العينين الخلفية."
+   },
+   {
+    "index": 205,
+    "action": "relabel CORRECTION -> NONE",
+    "reason": "a one-off instruction ('finally, make sure to repair ...')",
+    "text": "وأخيرًا، تأكد من تصليح أفق العين."
+   },
+   {
+    "index": 206,
+    "action": "relabel LIFECYCLE -> NONE",
+    "reason": "thanks",
+    "text": "شكراً على إنشاء عربة الشحن المتقدمة، كانت عملية التعاون ناجحة"
+   },
+   {
+    "index": 207,
+    "action": "relabel LIFECYCLE -> FACT",
+    "reason": "waiting to sign: a statement",
+    "text": "ننتظر بتوقيع التعديل على اتفاقية التسويق الجديدة"
+   },
+   {
+    "index": 209,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "تم الاستقلال عن أنظمة البرمجيات القديمة وبدأت نهاية عملية التحديث",
+    "was": "LIFECYCLE"
+   },
+   {
+    "index": 211,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "المنتج يتم إيلاجه",
+    "was": "LIFECYCLE"
+   },
+   {
+    "index": 212,
+    "action": "drop",
+    "reason": "garbled ('you close the store in peace'), like 211 and 213",
+    "text": "تقوم بإغلاق المتجر بالسلام",
+    "was": "LIFECYCLE"
+   },
+   {
+    "index": 213,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "نظامنا نتحدث في التحديث الأخير",
+    "was": "LIFECYCLE"
+   },
+   {
+    "index": 217,
+    "action": "relabel NONE -> CONDITIONAL_RULE",
+    "reason": "a standing 'notify me when there are updates', not a question",
+    "text": "شيء نزلي: قم بإبلاغي عندما تكون هناك تحديثات حول الإنترنت."
+   },
+   {
+    "index": 223,
+    "action": "relabel FACT -> NONE",
+    "reason": "a one-off imperative ('use number 12345')",
+    "text": "प्रोडक्ट एक्सेस वेक नंबर 12345 का उपयोग करें।"
+   },
+   {
+    "index": 225,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "भूमध्यसागरीय में हाइवन ड्राइव करने की आवश्यकता है।",
+    "was": "FACT"
+   },
+   {
+    "index": 226,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "किसी पंपीचेरी में पैकेज 123 से अधिक नहीं है, एआई।",
+    "was": "FACT"
+   },
+   {
+    "index": 232,
+    "action": "relabel RULE -> CONDITIONAL_RULE",
+    "reason": "trigger 'if a new medicine is released' is a world event",
+    "text": "अगर कोई नई दवा जारी की गई है तो हमें तुम्हें सूचीबद्ध करवाएं"
+   },
+   {
+    "index": 234,
+    "action": "drop",
+    "reason": "code-mixed and garbled",
+    "text": "Always, kisi bose 'shipment status' ka update roz में दें; सोचें, कार्य समाप्त नहीं हुए हैं।",
+    "was": "RULE"
+   },
+   {
+    "index": 235,
+    "action": "drop",
+    "reason": "garbled ('ever consider')",
+    "text": "कभी भी, मेरी पूर्वावली के दौरान प्रतिस्पर्धी मूल्य निर्धारण पर विचार करें।",
+    "was": "RULE"
+   },
+   {
+    "index": 238,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "AI, जान लो अगर कार का विघटन का पूर्वानुमान लगता है तो रंगों का स्टॉक खर्च करने दो, 'अगर विघटन का अनुमान लगता है तो रंगों का स्टॉक खर्च करें',",
+    "was": "CONDITIONAL_RULE"
+   },
+   {
+    "index": 239,
+    "action": "drop",
+    "reason": "garbled ('check you on phone')",
+    "text": "AI, यदि आवासन देरी होती है तो आपको फोन पर जांच करें, 'यदि आवासन देरी होती है तो आपको फोन पर जांच करनी चाहिए',",
+    "was": "CONDITIONAL_RULE"
+   },
+   {
+    "index": 240,
+    "action": "strip repeated quote",
+    "text": "AI, अगर घटकों की कीमत गिर जाए तो हमें बोलें, 'अगर घटकों की कीमत गिर जाए तो हमें बोलें',"
+   },
+   {
+    "index": 241,
+    "action": "strip repeated quote",
+    "text": "AI, अगर दुकान की स्टॉक में कमी आती है तो ग्राहकों को सूचित करें, 'अगर दुकान की स्टॉक में कमी आती है तो ग्राहकों को सूचित करें'"
+   },
+   {
+    "index": 246,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "रॉडशेयर XYZ वाइटन पंजीकृत नहीं रहा है.",
+    "was": "STATUS"
+   },
+   {
+    "index": 249,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "भूमि पर वितरण केंद्र पूर्ण लोड है, लेकिन प्रसंस्करण सुविधा दृष्टिबाधित है।",
+    "was": "STATUS"
+   },
+   {
+    "index": 254,
+    "action": "drop",
+    "reason": "romanised, glossed and garbled",
+    "text": "Nahi, mera aapko aapka dosak hota. Main kha sakta hoon ki aapka pills thoda hafte mein dinoge. (No, I meant that I need your medicine. I should say your pills will be available next week.)",
+    "was": "CORRECTION"
+   },
+   {
+    "index": 255,
+    "action": "drop",
+    "reason": "romanised, glossed and garbled",
+    "text": "Ha actually, aapka information incorrect hai. Leptin ki dose hafte mein khaane ki bahuta saar probate hai. (Actually, your information is wrong. Leptin dosage should be taken once a week.)",
+    "was": "CORRECTION"
+   },
+   {
+    "index": 256,
+    "action": "drop",
+    "reason": "romanised, glossed and garbled",
+    "text": "Actually, aapki recommendation pasand nahi. Tajuk 'Sari' ki tarah, 'Janta' bhi khiladi jate hai. (Actually, your recommendation is not preferred. Even 'Sari' is worn, 'Janta' is also a good option.)",
+    "was": "CORRECTION"
+   },
+   {
+    "index": 257,
+    "action": "drop",
+    "reason": "romanised, glossed and garbled",
+    "text": "That is incorrect, aapki parchhaai. 'Sabzi' ki khaalii 'dhan' se bahut hota hai. (That is incorrect, your stock is much higher than 'Wheat'.)",
+    "was": "CORRECTION"
+   },
+   {
+    "index": 258,
+    "action": "drop",
+    "reason": "garbled",
+    "text": "Nahi, hum ismat से सवाल नहीं रखते। कृपया दावा का सटीक आंकड़ा दें।",
+    "was": "CORRECTION"
+   },
+   {
+    "index": 261,
+    "action": "relabel CORRECTION -> FACT",
+    "reason": "advice stated as a fact, code-mixed but readable",
+    "text": "Realistically, कर्मचारियों का उपयोग आपको काम पर पर्याप्त सुरक्षा सुनिश्चित करने के लिए जरूरी है, न कि अनावश्यक दक्षता के लिए।"
+   },
+   {
+    "index": 262,
+    "action": "drop",
+    "reason": "unclear ('appointment released')",
+    "text": "अपॉइंटमेंट रिलीज़ हो गया.",
+    "was": "LIFECYCLE"
+   }
+  ],
+  "items": [
+   {
+    "id": "blind2-000",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "a school",
+    "text": "The school's attendance record shows Mr. Smith absent today."
+   },
+   {
+    "id": "blind2-001",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "a school",
+    "text": "Today's schedule lists Mrs. Johnson's English class at 9 AM."
+   },
+   {
+    "id": "blind2-002",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "a school",
+    "text": "The library's catalog system confirms 'To Kill a Mockingbird' is checked out by Ms. Brown."
+   },
+   {
+    "id": "blind2-003",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "a school",
+    "text": "The principal's office received an email from the state department regarding the new curriculum changes."
+   },
+   {
+    "id": "blind2-004",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a logistics company",
+    "text": "The delivery to John Doe at 123 Main Street is delayed."
+   },
+   {
+    "id": "blind2-005",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "a logistics company",
+    "text": "We've allocated 50 units of inventory to the Lakeside store."
+   },
+   {
+    "id": "blind2-006",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "a logistics company",
+    "text": "The consignment from XYZ Manufacturing arrived yesterday."
+   },
+   {
+    "id": "blind2-007",
+    "lang": "en",
+    "kind": "FACT",
+    "domain": "a logistics company",
+    "text": "Customer feedback suggests a preference for eco-friendly packaging."
+   },
+   {
+    "id": "blind2-008",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a bank branch",
+    "text": "From now on, always ask for my account balance before processing any transaction."
+   },
+   {
+    "id": "blind2-009",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a bank branch",
+    "text": "Whenever I mention a new account, remind me of the security measures in place."
+   },
+   {
+    "id": "blind2-010",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a bank branch",
+    "text": "Every time I request a statement, ensure it's the latest one from the online banking system."
+   },
+   {
+    "id": "blind2-011",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a bank branch",
+    "text": "Never forget to double-check my identity before sharing any sensitive information."
+   },
+   {
+    "id": "blind2-012",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a pharmacy",
+    "text": "Always verify the patient's prescription details before dispensing."
+   },
+   {
+    "id": "blind2-013",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a pharmacy",
+    "text": "Never forget to update the inventory database whenever a new stock arrives."
+   },
+   {
+    "id": "blind2-014",
+    "lang": "en",
+    "kind": "RULE",
+    "domain": "a pharmacy",
+    "text": "From now on, remind me about the expiration dates of all medicines regularly."
+   },
+   {
+    "id": "blind2-015",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a pharmacy",
+    "text": "Whenever I receive a call, ensure I have the patient's complete medical history readily available."
+   },
+   {
+    "id": "blind2-016",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "an e-commerce shop",
+    "text": "If the stock drops below 50, re-evaluate our inventory management strategy."
+   },
+   {
+    "id": "blind2-017",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "an e-commerce shop",
+    "text": "When a delivery is late, notify our logistics team immediately."
+   },
+   {
+    "id": "blind2-018",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "an e-commerce shop",
+    "text": "If customer reviews on this product drop below 4 stars, consider offering a discount to boost sales."
+   },
+   {
+    "id": "blind2-019",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "an e-commerce shop",
+    "text": "Unless there's a major sale, maintain the current pricing strategy for our best-sellers."
+   },
+   {
+    "id": "blind2-020",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a bank branch",
+    "text": "If the ATM is out of cash, please inform the customer."
+   },
+   {
+    "id": "blind2-021",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a bank branch",
+    "text": "If the bank's online portal is down, schedule the appointment for tomorrow."
+   },
+   {
+    "id": "blind2-022",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a bank branch",
+    "text": "When a customer's account balance is low, send a reminder email."
+   },
+   {
+    "id": "blind2-023",
+    "lang": "en",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a bank branch",
+    "text": "If the deposit slips are misread, re-scan the slip and try again."
+   },
+   {
+    "id": "blind2-024",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a pharmacy",
+    "text": "The automated dispensing machine is currently out of service."
+   },
+   {
+    "id": "blind2-025",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a pharmacy",
+    "text": "The refrigerator for our vaccines is recalled due to a malfunction."
+   },
+   {
+    "id": "blind2-026",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a pharmacy",
+    "text": "The inventory system is currently unavailable, causing delays in stock updates."
+   },
+   {
+    "id": "blind2-027",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a pharmacy",
+    "text": "The prescription printer is on hold for maintenance; please contact IT for updates."
+   },
+   {
+    "id": "blind2-028",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a restaurant",
+    "text": "The kitchen oven is currently out of service."
+   },
+   {
+    "id": "blind2-029",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a restaurant",
+    "text": "The point-of-sale system has gone unavailable."
+   },
+   {
+    "id": "blind2-030",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a restaurant",
+    "text": "Our ice machine is on hold for a much-needed repair."
+   },
+   {
+    "id": "blind2-031",
+    "lang": "en",
+    "kind": "STATUS",
+    "domain": "a restaurant",
+    "text": "The wine rack is currently empty as our stock has been recalled."
+   },
+   {
+    "id": "blind2-032",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "a manufacturing plant",
+    "text": "No, I meant to say 'decrease production', not 'decrease these products.'"
+   },
+   {
+    "id": "blind2-033",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "a manufacturing plant",
+    "text": "Actually, the defect rate should be 'below 5%', not 'below five percent.'"
+   },
+   {
+    "id": "blind2-034",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "an e-commerce shop",
+    "text": "No, I need the inventory updated for 'Laptop' not 'Laptops'"
+   },
+   {
+    "id": "blind2-035",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "an e-commerce shop",
+    "text": "Actually, the shipping address for 'Order A123' is '123 Main St', not '456 Elm St'"
+   },
+   {
+    "id": "blind2-036",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "an e-commerce shop",
+    "text": "I meant 'discount' not 'decrement', we need a 'discount' of 20%, not a subtraction"
+   },
+   {
+    "id": "blind2-037",
+    "lang": "en",
+    "kind": "CORRECTION",
+    "domain": "an e-commerce shop",
+    "text": "That is wrong, it's 'Express' delivery, not 'Express Delivery'"
+   },
+   {
+    "id": "blind2-038",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a manufacturing plant",
+    "text": "The contract with our current supplier has been terminated."
+   },
+   {
+    "id": "blind2-039",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a manufacturing plant",
+    "text": "We have discontinued production of the XYZ model."
+   },
+   {
+    "id": "blind2-040",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a manufacturing plant",
+    "text": "The store at 5th Avenue has closed for good."
+   },
+   {
+    "id": "blind2-041",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a manufacturing plant",
+    "text": "The old system has been decommissioned and replaced with a new one."
+   },
+   {
+    "id": "blind2-042",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a bank branch",
+    "text": "The contract for our new loan agreement has been terminated."
+   },
+   {
+    "id": "blind2-043",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a bank branch",
+    "text": "We have discontinued the sale of our older model cars due to production issues."
+   },
+   {
+    "id": "blind2-044",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a bank branch",
+    "text": "The store located at 5th Avenue has opened for good."
+   },
+   {
+    "id": "blind2-045",
+    "lang": "en",
+    "kind": "LIFECYCLE",
+    "domain": "a bank branch",
+    "text": "Our legacy system has been decommissioned in preparation for a major software update."
+   },
+   {
+    "id": "blind2-046",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a pharmacy",
+    "text": "Can you show me the available stock levels for Aspirin?"
+   },
+   {
+    "id": "blind2-047",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a pharmacy",
+    "text": "Could you draft a prescription for a patient named John Doe?"
+   },
+   {
+    "id": "blind2-048",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a pharmacy",
+    "text": "Is there any update on the delivery status of Morphine?"
+   },
+   {
+    "id": "blind2-049",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a pharmacy",
+    "text": "Could you remind me to check the refrigerator inventory at noon?"
+   },
+   {
+    "id": "blind2-050",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a school",
+    "text": "Could you show me the school's calendar for next week?"
+   },
+   {
+    "id": "blind2-051",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a school",
+    "text": "AI, could you draft an email to parents regarding the upcoming science fair?"
+   },
+   {
+    "id": "blind2-052",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a school",
+    "text": "Hey AI, could you please update the attendance list for today?"
+   },
+   {
+    "id": "blind2-053",
+    "lang": "en",
+    "kind": "NONE",
+    "domain": "a school",
+    "text": "AI, could you find me the latest research papers on educational psychology?"
+   },
+   {
+    "id": "blind2-054",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a bank branch",
+    "text": "Der Kunde hat seine Kontodaten aktualisiert."
+   },
+   {
+    "id": "blind2-055",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a bank branch",
+    "text": "Wir haben eine neue Bankfiliale in der Friedrichstraße eröffnet."
+   },
+   {
+    "id": "blind2-056",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a bank branch",
+    "text": "Der Transaktionscode des Kunden lautet 123456."
+   },
+   {
+    "id": "blind2-057",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a bank branch",
+    "text": "Der Sparplan für Kinder hat 50 Euro erfolgreich abgebucht."
+   },
+   {
+    "id": "blind2-058",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a logistics company",
+    "text": "Der Lagerbestand an Lebensmitteln im Magazin hat sich auf 15.000 kg reduziert."
+   },
+   {
+    "id": "blind2-059",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a logistics company",
+    "text": "Die Lieferung für den Kunden in Leipzig muss heute Abend um 19 Uhr erfolgen."
+   },
+   {
+    "id": "blind2-060",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a logistics company",
+    "text": "Die neue Route für den Express-Transport nach Oslo wird ab nächster Woche starten."
+   },
+   {
+    "id": "blind2-061",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "a logistics company",
+    "text": "Das Problem mit dem Lastwagen in Wuppertal ist gelöst und er wird nächste Woche wieder in Diensten stehen."
+   },
+   {
+    "id": "blind2-062",
+    "lang": "de",
+    "kind": "RULE",
+    "domain": "a car repair garage",
+    "text": "Bitte immer die aktuelle Reparaturzeit mir mitteilen"
+   },
+   {
+    "id": "blind2-064",
+    "lang": "de",
+    "kind": "RULE",
+    "domain": "a car repair garage",
+    "text": "Vergessen Sie nie, den Kunden über die Reparaturstatus zu informieren"
+   },
+   {
+    "id": "blind2-065",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a car repair garage",
+    "text": "Müsste ich immer vor jeder Neuanschaffung ein Fahrzeugprüfergebnis einholen."
+   },
+   {
+    "id": "blind2-066",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "an e-commerce shop",
+    "text": "Bitte immer den Lagerbestand aktualisieren, wenn ein Bestellung aufgegeben wird."
+   },
+   {
+    "id": "blind2-067",
+    "lang": "de",
+    "kind": "RULE",
+    "domain": "an e-commerce shop",
+    "text": "Verwende immer den Sprachwahl basierend auf der IP-Adresse des Kunden."
+   },
+   {
+    "id": "blind2-068",
+    "lang": "de",
+    "kind": "RULE",
+    "domain": "an e-commerce shop",
+    "text": "Gib immer einen Überblick über die aktuellen Angebote, wenn ich nach Rabatten fragen."
+   },
+   {
+    "id": "blind2-069",
+    "lang": "de",
+    "kind": "RULE",
+    "domain": "an e-commerce shop",
+    "text": "Verwende immer das Kundenfeedback, um personalisierte Empfehlungen zu erstellen."
+   },
+   {
+    "id": "blind2-070",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a manufacturing plant",
+    "text": "Wenn die Bestellung spät eintretet, bitte mir benachrichtigen."
+   },
+   {
+    "id": "blind2-071",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a manufacturing plant",
+    "text": "Sobald der Warelpaneele unter einen bestimmten Schwellenwert sinkt, warn Sie mich."
+   },
+   {
+    "id": "blind2-072",
+    "lang": "de",
+    "kind": "FACT",
+    "domain": "a manufacturing plant",
+    "text": "Bei einem Lieferengpass, solange keine Alternative gefunden wird, stehe ich Ihnen zur Verfügung."
+   },
+   {
+    "id": "blind2-073",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a manufacturing plant",
+    "text": "Wenn der Preis fällt, sollten Sie mir regelmäßig die Markttrends mitteilen."
+   },
+   {
+    "id": "blind2-074",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a pharmacy",
+    "text": "Wenn die Lagerbestände unter 5 fallen, bitte mir alle Nachschubarten benachrichtigen."
+   },
+   {
+    "id": "blind2-075",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a pharmacy",
+    "text": "Sobald eine Lieferung verspätet ist, melde dich bitte bei mir."
+   },
+   {
+    "id": "blind2-076",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a pharmacy",
+    "text": "Wenn der Preis des Medikaments unter 10 Euro fällt, benachrichtige mich."
+   },
+   {
+    "id": "blind2-077",
+    "lang": "de",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a pharmacy",
+    "text": "Wenn die Kasse ausfällt, erinnere mich bitte an die Bezahlmöglichkeiten."
+   },
+   {
+    "id": "blind2-079",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "a school",
+    "text": "Das Projektor ist repariert worden."
+   },
+   {
+    "id": "blind2-080",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "a school",
+    "text": "Unser PC ist wieder verfügbar."
+   },
+   {
+    "id": "blind2-081",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "a school",
+    "text": "Die Notebooks sind ausverkauft."
+   },
+   {
+    "id": "blind2-082",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "a manufacturing plant",
+    "text": "Die Lokomotive ist ausgesfallen."
+   },
+   {
+    "id": "blind2-083",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "a manufacturing plant",
+    "text": "Der Maschinenkühler hat eine Reparatur erforderlich."
+   },
+   {
+    "id": "blind2-084",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "a manufacturing plant",
+    "text": "Die Führungsmaschine arbeitet jetzt einwandfrei."
+   },
+   {
+    "id": "blind2-085",
+    "lang": "de",
+    "kind": "STATUS",
+    "domain": "a manufacturing plant",
+    "text": "Katalysatoren sind ausverkauft."
+   },
+   {
+    "id": "blind2-086",
+    "lang": "de",
+    "kind": "CORRECTION",
+    "domain": "a logistics company",
+    "text": "Nein, das ist nicht richtig. Du meinst wahrscheinlich..."
+   },
+   {
+    "id": "blind2-087",
+    "lang": "de",
+    "kind": "CORRECTION",
+    "domain": "a logistics company",
+    "text": "Tatsächlich meine ich..."
+   },
+   {
+    "id": "blind2-088",
+    "lang": "de",
+    "kind": "CORRECTION",
+    "domain": "a logistics company",
+    "text": "Das ist falsch, ich bedeutete..."
+   },
+   {
+    "id": "blind2-090",
+    "lang": "de",
+    "kind": "CORRECTION",
+    "domain": "a pharmacy",
+    "text": "Nein, das Medikament ist nicht absetzt, es wird noch empfohlen."
+   },
+   {
+    "id": "blind2-091",
+    "lang": "de",
+    "kind": "CORRECTION",
+    "domain": "a pharmacy",
+    "text": "Tatsächlich müssen Sie Ihre Rezeptur vor dem Zahnarzt abgeben."
+   },
+   {
+    "id": "blind2-092",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a pharmacy",
+    "text": "Ihr Verstoß gegen die Medikamentenverordnung ist korrekt, danke für den Hinweis."
+   },
+   {
+    "id": "blind2-093",
+    "lang": "de",
+    "kind": "CORRECTION",
+    "domain": "a pharmacy",
+    "text": "Das ist falsch, die Apothekenöffnungszeiten sind in der Woche von montags bis freitags, nicht am Wochenende."
+   },
+   {
+    "id": "blind2-094",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a pharmacy",
+    "text": "Ein Lieferantenvertrag wurde beendet."
+   },
+   {
+    "id": "blind2-095",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a pharmacy",
+    "text": "Ein Produkt wurde eingestellt."
+   },
+   {
+    "id": "blind2-096",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a pharmacy",
+    "text": "Eine Filiale wurde für immer geschlossen."
+   },
+   {
+    "id": "blind2-097",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a pharmacy",
+    "text": "Ein System wurde abgewickelt."
+   },
+   {
+    "id": "blind2-098",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a school",
+    "text": "Ein Vertrag wurde beendet."
+   },
+   {
+    "id": "blind2-099",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a school",
+    "text": "Ein Produkt wurde eingestellt."
+   },
+   {
+    "id": "blind2-100",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a school",
+    "text": "Eine Geschäftsfilial wurde für immer geschlossen."
+   },
+   {
+    "id": "blind2-101",
+    "lang": "de",
+    "kind": "LIFECYCLE",
+    "domain": "a school",
+    "text": "Ein System wurde abgeschaltet."
+   },
+   {
+    "id": "blind2-102",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a school",
+    "text": "Hey, AI, wie kann ich die Schülertermine anzeigen?"
+   },
+   {
+    "id": "blind2-103",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a school",
+    "text": "Könntest du bitte die Lektüreaufgabe für die 5. Klasse erstellen?"
+   },
+   {
+    "id": "blind2-104",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a school",
+    "text": "Ich brauche dringend die Termindaten für die letzten zwei Wochen, kannst du das anzeigen?"
+   },
+   {
+    "id": "blind2-105",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a school",
+    "text": "Sollten wir den Schulfestpreis nicht noch aktualisieren?"
+   },
+   {
+    "id": "blind2-106",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a restaurant",
+    "text": "Kannst du mir bitte die aktuellen Speisekarten zeigen?"
+   },
+   {
+    "id": "blind2-107",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a restaurant",
+    "text": "Habe ich schon die Lieferzeit für heute Abend eingerichtet?"
+   },
+   {
+    "id": "blind2-108",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a restaurant",
+    "text": "Wie sieht's mit der Bestellübertragung per App? Ist das möglich?"
+   },
+   {
+    "id": "blind2-109",
+    "lang": "de",
+    "kind": "NONE",
+    "domain": "a restaurant",
+    "text": "Kannst du mir gerade eine neue Speisevorschlagserinnerung senden, bitte?"
+   },
+   {
+    "id": "blind2-110",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a car repair garage",
+    "text": "El auto que traigo hoy es un Toyota Corolla."
+   },
+   {
+    "id": "blind2-111",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a car repair garage",
+    "text": "El cliente preferiría que se realizara un control de los neumáticos."
+   },
+   {
+    "id": "blind2-112",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a car repair garage",
+    "text": "El servicio de diagnóstico informó que hay un problema en el motor."
+   },
+   {
+    "id": "blind2-113",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a car repair garage",
+    "text": "El taller está ubicado en la Avenida General Cañuelo 234."
+   },
+   {
+    "id": "blind2-114",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a manufacturing plant",
+    "text": "La temperatura del horno actual es de 250 grados."
+   },
+   {
+    "id": "blind2-115",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a manufacturing plant",
+    "text": "El proceso de ensamblaje de los componentes se ha completado."
+   },
+   {
+    "id": "blind2-116",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a manufacturing plant",
+    "text": "Se ha recibido un pedido de 500 unidades de piezas A."
+   },
+   {
+    "id": "blind2-117",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a manufacturing plant",
+    "text": "La máquina de soldadura ha generado un error de 2% en la tasa de soldadura."
+   },
+   {
+    "id": "blind2-118",
+    "lang": "es",
+    "kind": "RULE",
+    "domain": "a bank branch",
+    "text": "Siempre que solicite información financiera, por favor mencione tu nombre completo."
+   },
+   {
+    "id": "blind2-119",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a bank branch",
+    "text": "Nunca responderá sobre tus transacciones personales sin tu autorización."
+   },
+   {
+    "id": "blind2-120",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a bank branch",
+    "text": "Siempre consultaré con el banco antes de tomar decisiones financieras importantes."
+   },
+   {
+    "id": "blind2-121",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a bank branch",
+    "text": "A partir de ahora, siempre validaré tus datos personales antes de proceder."
+   },
+   {
+    "id": "blind2-122",
+    "lang": "es",
+    "kind": "RULE",
+    "domain": "a manufacturing plant",
+    "text": "Siempre me informarás sobre el estado de los equipos cada hora"
+   },
+   {
+    "id": "blind2-123",
+    "lang": "es",
+    "kind": "RULE",
+    "domain": "a manufacturing plant",
+    "text": "Nunca te olvides de actualizar los niveles de inventario"
+   },
+   {
+    "id": "blind2-124",
+    "lang": "es",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a manufacturing plant",
+    "text": "Debe enviarme una alerta cada vez que se dé un fallo en un motores"
+   },
+   {
+    "id": "blind2-125",
+    "lang": "es",
+    "kind": "RULE",
+    "domain": "a manufacturing plant",
+    "text": "Siempre asegúrate de que la temperatura se mantenga dentro de los límites establecidos."
+   },
+   {
+    "id": "blind2-126",
+    "lang": "es",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a logistics company",
+    "text": "Informe si la stock del producto blanco disminuye"
+   },
+   {
+    "id": "blind2-127",
+    "lang": "es",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a logistics company",
+    "text": "Programar una reunión si un envío se retrasa"
+   },
+   {
+    "id": "blind2-128",
+    "lang": "es",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a logistics company",
+    "text": "Notificarme si se produce un desperdicio"
+   },
+   {
+    "id": "blind2-129",
+    "lang": "es",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a logistics company",
+    "text": "Verifique el estado de los vehículos si se produce un accidente"
+   },
+   {
+    "id": "blind2-130",
+    "lang": "es",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a bank branch",
+    "text": "Informeme sobre el monto de depósito si el valor de la bolsa cae..."
+   },
+   {
+    "id": "blind2-131",
+    "lang": "es",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a bank branch",
+    "text": "Envíe un recordatorio de pago si un envío llega retrasado..."
+   },
+   {
+    "id": "blind2-132",
+    "lang": "es",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a bank branch",
+    "text": "Verifique si existe un fraude si se identifica una transacción sospechosa..."
+   },
+   {
+    "id": "blind2-133",
+    "lang": "es",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a bank branch",
+    "text": "Deténgame si el tipo de cambio supera el 1.20 dolares."
+   },
+   {
+    "id": "blind2-134",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "a restaurant",
+    "text": "El microondas está roto."
+   },
+   {
+    "id": "blind2-135",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "a restaurant",
+    "text": "El espejo del comedor se ha reparado."
+   },
+   {
+    "id": "blind2-136",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "a restaurant",
+    "text": "La barra de pagos vuelve a funcionar."
+   },
+   {
+    "id": "blind2-137",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "a restaurant",
+    "text": "El ronquido del ventilador está en reparación."
+   },
+   {
+    "id": "blind2-138",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "a logistics company",
+    "text": "La maquinaria de carga está rota."
+   },
+   {
+    "id": "blind2-139",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "a logistics company",
+    "text": "Se ha reparado el vehículo de entrega defectuoso."
+   },
+   {
+    "id": "blind2-140",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "a logistics company",
+    "text": "El sistema de rastreo de envídos está funcionando nuevamente."
+   },
+   {
+    "id": "blind2-141",
+    "lang": "es",
+    "kind": "STATUS",
+    "domain": "a logistics company",
+    "text": "El estacionamiento de contenedores está vacío."
+   },
+   {
+    "id": "blind2-142",
+    "lang": "es",
+    "kind": "CORRECTION",
+    "domain": "a bank branch",
+    "text": "No, realmente necesito que agregues un depósito de 500 euros a mi cuenta corriente."
+   },
+   {
+    "id": "blind2-143",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a bank branch",
+    "text": "Debes introducir la cantidad de 1000 euros para el préstamo personal."
+   },
+   {
+    "id": "blind2-144",
+    "lang": "es",
+    "kind": "CORRECTION",
+    "domain": "a bank branch",
+    "text": "Eso es incorrecto, la tasa de interés para el préstamo es del 5%, no del 10%."
+   },
+   {
+    "id": "blind2-145",
+    "lang": "es",
+    "kind": "CORRECTION",
+    "domain": "a bank branch",
+    "text": "Lo siento, pero el saldo de mi tarjeta de crédito debe ser de 800 euros, no 900."
+   },
+   {
+    "id": "blind2-146",
+    "lang": "es",
+    "kind": "CORRECTION",
+    "domain": "a logistics company",
+    "text": "No, lo que necesito es la información de los envíos de mañana."
+   },
+   {
+    "id": "blind2-147",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a logistics company",
+    "text": "Realmente, debo ver el estado actual de la entrega 12345."
+   },
+   {
+    "id": "blind2-148",
+    "lang": "es",
+    "kind": "CORRECTION",
+    "domain": "a logistics company",
+    "text": "De hecho, la ruta más rápida para llegar al puerto es a través del puente 901."
+   },
+   {
+    "id": "blind2-149",
+    "lang": "es",
+    "kind": "FACT",
+    "domain": "a logistics company",
+    "text": "Exactamente, he necesitado la actualización de las tarifas de transporte."
+   },
+   {
+    "id": "blind2-150",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a restaurant",
+    "text": "El contrato del proveedor se ha terminado."
+   },
+   {
+    "id": "blind2-151",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a restaurant",
+    "text": "El producto X se ha discontinuado."
+   },
+   {
+    "id": "blind2-152",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a restaurant",
+    "text": "La tienda de comestibles ha cerrado para siempre."
+   },
+   {
+    "id": "blind2-153",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a restaurant",
+    "text": "El sistema de gestión se ha decomisionado."
+   },
+   {
+    "id": "blind2-154",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a car repair garage",
+    "text": "El contrato de suministro con nuestra empresa de neumáticos se ha terminado."
+   },
+   {
+    "id": "blind2-155",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a car repair garage",
+    "text": "El modelo del coche ha sido discontinuado."
+   },
+   {
+    "id": "blind2-156",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a car repair garage",
+    "text": "La tienda de reparaciones de autos ubicada en la esquina de 5th y Main se ha cerrado para siempre."
+   },
+   {
+    "id": "blind2-157",
+    "lang": "es",
+    "kind": "LIFECYCLE",
+    "domain": "a car repair garage",
+    "text": "El sistema de diagnóstico del software se ha decomisado."
+   },
+   {
+    "id": "blind2-158",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a pharmacy",
+    "text": "¿Puedo consultar el inventario en línea?"
+   },
+   {
+    "id": "blind2-159",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a pharmacy",
+    "text": "¿Podría enviarme un correo electrónico al paciente sobre su receta?"
+   },
+   {
+    "id": "blind2-160",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a pharmacy",
+    "text": "¿Cuál es el proceso para ordenar medicamentos recientemente aprobados?"
+   },
+   {
+    "id": "blind2-161",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "a pharmacy",
+    "text": "¿Podría mostrarme los posibles efectos secundarios del nuevo medicamento?"
+   },
+   {
+    "id": "blind2-162",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "an e-commerce shop",
+    "text": "¿Puedo ver el estadillo de inventario actual?"
+   },
+   {
+    "id": "blind2-163",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "an e-commerce shop",
+    "text": "¿Podría enviar un correo electrónico de confirmación a los clientes?"
+   },
+   {
+    "id": "blind2-164",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "an e-commerce shop",
+    "text": "¿Qué productos han tenido la mayor venta este mes?"
+   },
+   {
+    "id": "blind2-165",
+    "lang": "es",
+    "kind": "NONE",
+    "domain": "an e-commerce shop",
+    "text": "¿Puedes actualizar el precio de este artículo en tiempo real?"
+   },
+   {
+    "id": "blind2-166",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "an e-commerce shop",
+    "text": "الحجم الحالي للمخزون 250 عدة"
+   },
+   {
+    "id": "blind2-167",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "an e-commerce shop",
+    "text": "عملية التسوق الأكبر حدودياً 1000 يومياً"
+   },
+   {
+    "id": "blind2-168",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "an e-commerce shop",
+    "text": "نجاح العرض المحدود في مكان معين"
+   },
+   {
+    "id": "blind2-174",
+    "lang": "ar",
+    "kind": "RULE",
+    "domain": "a logistics company",
+    "text": "لا تزيد الآني عدد المنتجات المرسلة إلى العملاء، كلما طلبت ذلك"
+   },
+   {
+    "id": "blind2-176",
+    "lang": "ar",
+    "kind": "RULE",
+    "domain": "a logistics company",
+    "text": "اقدم لي قائمة المنتجات المستعدة للتخزين كل ثلاث دقائق"
+   },
+   {
+    "id": "blind2-177",
+    "lang": "ar",
+    "kind": "RULE",
+    "domain": "a logistics company",
+    "text": "احرص دائمًا على تحديث قائمة المواعيد للشحن دوريًا"
+   },
+   {
+    "id": "blind2-186",
+    "lang": "ar",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a restaurant",
+    "text": "التحدث إلى المستخدم إذا كانت المخزونة تنخفض أدنى"
+   },
+   {
+    "id": "blind2-187",
+    "lang": "ar",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a restaurant",
+    "text": "إرجاع المعلومات إذا وقعت أي تأخير في التوصيل"
+   },
+   {
+    "id": "blind2-189",
+    "lang": "ar",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a restaurant",
+    "text": "تحذير المستخدمين إذا كان هناك نقص في المواد المطلوبة للخدمة المستقبلية"
+   },
+   {
+    "id": "blind2-190",
+    "lang": "ar",
+    "kind": "STATUS",
+    "domain": "a school",
+    "text": "إن الإنترنت في الغرفة التعليمية معتبر غير عملي حاليًا."
+   },
+   {
+    "id": "blind2-191",
+    "lang": "ar",
+    "kind": "STATUS",
+    "domain": "a school",
+    "text": "أجهزة الكمبيوتر في الغرفة التعليمية تم إصلاحها بنجاح."
+   },
+   {
+    "id": "blind2-192",
+    "lang": "ar",
+    "kind": "STATUS",
+    "domain": "a school",
+    "text": "أجهزة اللوحي في الغرفة التعليمية تعمل بشكل صحيح مرة أخرى."
+   },
+   {
+    "id": "blind2-193",
+    "lang": "ar",
+    "kind": "STATUS",
+    "domain": "a school",
+    "text": "لا يزال معدات التدريس الإلكترونية مؤقتًا محدودة في الغرفة التعليمية."
+   },
+   {
+    "id": "blind2-194",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a pharmacy",
+    "text": "الطاقم قد قرر بإصلاح الإذار الإلكترونية."
+   },
+   {
+    "id": "blind2-196",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a pharmacy",
+    "text": "المواد الدوائية المتوقفة عن توصيل قد تبدأ في العودة."
+   },
+   {
+    "id": "blind2-197",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a pharmacy",
+    "text": "الطاقم قد وقع خطأ في ترتيب المدة المتوقعة للدواء."
+   },
+   {
+    "id": "blind2-198",
+    "lang": "ar",
+    "kind": "CORRECTION",
+    "domain": "a school",
+    "text": "لا، لم تقم بإعطاء المعلمة تعلم الرياضيات بشكل صحيح."
+   },
+   {
+    "id": "blind2-199",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a school",
+    "text": "أنت لا تفعل شيئًا غريبًا بالبيانات المنزلية."
+   },
+   {
+    "id": "blind2-200",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a school",
+    "text": "لا أريد أن تقوم بتحليل المشاكل العلمية دون فهمها الأساسي."
+   },
+   {
+    "id": "blind2-201",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "a school",
+    "text": "أنت تحتاج إلى تعليم المدرسة بطريقة أكثر تفاعلية مع الطلاب."
+   },
+   {
+    "id": "blind2-202",
+    "lang": "ar",
+    "kind": "CORRECTION",
+    "domain": "a car repair garage",
+    "text": "لا، أرى أنك فقدت طلب التصليح للأعلام."
+   },
+   {
+    "id": "blind2-203",
+    "lang": "ar",
+    "kind": "CORRECTION",
+    "domain": "a car repair garage",
+    "text": "في الواقع، تحتاج إلى تصليح الأشبات الأمامية."
+   },
+   {
+    "id": "blind2-204",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a car repair garage",
+    "text": "أيضًا، لا تفوت تصليح العينين الخلفية."
+   },
+   {
+    "id": "blind2-205",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a car repair garage",
+    "text": "وأخيرًا، تأكد من تصليح أفق العين."
+   },
+   {
+    "id": "blind2-206",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "an e-commerce shop",
+    "text": "شكراً على إنشاء عربة الشحن المتقدمة، كانت عملية التعاون ناجحة"
+   },
+   {
+    "id": "blind2-207",
+    "lang": "ar",
+    "kind": "FACT",
+    "domain": "an e-commerce shop",
+    "text": "ننتظر بتوقيع التعديل على اتفاقية التسويق الجديدة"
+   },
+   {
+    "id": "blind2-208",
+    "lang": "ar",
+    "kind": "LIFECYCLE",
+    "domain": "an e-commerce shop",
+    "text": "تم إغلاق متجرنا الشائك الثاني لأسباب عائضة"
+   },
+   {
+    "id": "blind2-210",
+    "lang": "ar",
+    "kind": "LIFECYCLE",
+    "domain": "a logistics company",
+    "text": "العقود التعاقب عليها تنتهي"
+   },
+   {
+    "id": "blind2-214",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a school",
+    "text": "مرحبا، كيف حالة الطلاب اليوم؟"
+   },
+   {
+    "id": "blind2-215",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a school",
+    "text": "هل يمكنك إعداد كتابة عرضية للمدرسة؟"
+   },
+   {
+    "id": "blind2-216",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a school",
+    "text": "أحتاج إلى معلومات حول الموعلد النسبي للإعدادات الإلكترونية؟"
+   },
+   {
+    "id": "blind2-217",
+    "lang": "ar",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a school",
+    "text": "شيء نزلي: قم بإبلاغي عندما تكون هناك تحديثات حول الإنترنت."
+   },
+   {
+    "id": "blind2-218",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a car repair garage",
+    "text": "ما البيانات الإلكترونية لفئة السيارة الأحدث؟"
+   },
+   {
+    "id": "blind2-219",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a car repair garage",
+    "text": "كيف يمكنني تخصيص موقع إصلاح سيارة جديدة؟"
+   },
+   {
+    "id": "blind2-220",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a car repair garage",
+    "text": "هل يمكنك إرسال رسيلة نصية إلى عميل بالقصة التاريخية للسيارة؟"
+   },
+   {
+    "id": "blind2-221",
+    "lang": "ar",
+    "kind": "NONE",
+    "domain": "a car repair garage",
+    "text": "هل يمكنني الحصول على تقييم التكاليف المحتملة لإصلاح سيارة معينة؟"
+   },
+   {
+    "id": "blind2-222",
+    "lang": "hi",
+    "kind": "FACT",
+    "domain": "a logistics company",
+    "text": "मेरे अगले डिलीवरी लॉट को हरी-भरी रंग में परिवहन करना है।"
+   },
+   {
+    "id": "blind2-223",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a logistics company",
+    "text": "प्रोडक्ट एक्सेस वेक नंबर 12345 का उपयोग करें।"
+   },
+   {
+    "id": "blind2-224",
+    "lang": "hi",
+    "kind": "FACT",
+    "domain": "a logistics company",
+    "text": "क्रेशियों तक पहुँचने के लिए मुझे प्रतिदिन 3 बैच होने की आवश्यकता है।"
+   },
+   {
+    "id": "blind2-227",
+    "lang": "hi",
+    "kind": "FACT",
+    "domain": "a pharmacy",
+    "text": "हमारी केंद्र में आज सुबह 9 बजे पैकेज ऑर्डर लेने की अच्छी संभावना है।"
+   },
+   {
+    "id": "blind2-228",
+    "lang": "hi",
+    "kind": "FACT",
+    "domain": "a pharmacy",
+    "text": "मेरे कार्यालय में आज ही 'एसएमए' की 100 पैकेट आएंगे, जानें"
+   },
+   {
+    "id": "blind2-229",
+    "lang": "hi",
+    "kind": "FACT",
+    "domain": "a pharmacy",
+    "text": "नवीनतम 'डोपेमिक' की सूची में दो नई प्रविष्टियाँ हैं, जानें एआई."
+   },
+   {
+    "id": "blind2-230",
+    "lang": "hi",
+    "kind": "RULE",
+    "domain": "a pharmacy",
+    "text": "हर बार जब मैं दवाओं की जानकारी मांगूं तो आपको सटीक जानकारी दें"
+   },
+   {
+    "id": "blind2-231",
+    "lang": "hi",
+    "kind": "RULE",
+    "domain": "a pharmacy",
+    "text": "कभी भी मेरी सलाह का पालन न करें, चाहे मैं कोई दवा से संबंधित प्रश्न हो"
+   },
+   {
+    "id": "blind2-232",
+    "lang": "hi",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a pharmacy",
+    "text": "अगर कोई नई दवा जारी की गई है तो हमें तुम्हें सूचीबद्ध करवाएं"
+   },
+   {
+    "id": "blind2-233",
+    "lang": "hi",
+    "kind": "RULE",
+    "domain": "a pharmacy",
+    "text": "मेरे साथ हमेशा रखरखाव करने वाले दवाओं के नियमों का अपडेट रखें"
+   },
+   {
+    "id": "blind2-236",
+    "lang": "hi",
+    "kind": "RULE",
+    "domain": "a logistics company",
+    "text": "हमेशा, मेरे स्टॉक मैनेजमेंट के लिए नवीनतम बाजार की कीमतों के साथ पुष्टि करें।"
+   },
+   {
+    "id": "blind2-237",
+    "lang": "hi",
+    "kind": "RULE",
+    "domain": "a logistics company",
+    "text": "अब, हमेशा, मेरी आवागमन योजना में ट्रैफ़िक अपडेट और वैकल्पिक मार्ग शामिल करें।"
+   },
+   {
+    "id": "blind2-240",
+    "lang": "hi",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a car repair garage",
+    "text": "AI, अगर घटकों की कीमत गिर जाए तो हमें बोलें"
+   },
+   {
+    "id": "blind2-241",
+    "lang": "hi",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a car repair garage",
+    "text": "AI, अगर दुकान की स्टॉक में कमी आती है तो ग्राहकों को सूचित करें"
+   },
+   {
+    "id": "blind2-242",
+    "lang": "hi",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a bank branch",
+    "text": "AI, जब बैंक संचालन में अप्रत्याशित वित्तीय प्रक्रिया का सामना करने का मामला हो, तो वास्तविक समय डेटा के साथ प्रोटोकॉल को अपडेट करें।"
+   },
+   {
+    "id": "blind2-243",
+    "lang": "hi",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a bank branch",
+    "text": "AI, यदि हेल्दी का शेयर मूल्य नीचे आ जाता है, तो निवेश पोर्टफोलियो को समायोजित करने के लिए संवाद करें।"
+   },
+   {
+    "id": "blind2-244",
+    "lang": "hi",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a bank branch",
+    "text": "AI, अगर व्यापार कार्य में एक दिन समय कम हो जाता है, तो वांछित समय पर परिणाम प्रस्तुत करने का सुझाव दें।"
+   },
+   {
+    "id": "blind2-245",
+    "lang": "hi",
+    "kind": "CONDITIONAL_RULE",
+    "domain": "a bank branch",
+    "text": "AI, अगर भुगतान प्रसंस्करण में त्रुटि आती है, तो ग्राहकों को तत्काल अलर्ट भेजें और समस्या का समाधान करें।"
+   },
+   {
+    "id": "blind2-247",
+    "lang": "hi",
+    "kind": "STATUS",
+    "domain": "a logistics company",
+    "text": "पेलोड लैंडर 2 आउट ऑफ-सर्विस में है."
+   },
+   {
+    "id": "blind2-248",
+    "lang": "hi",
+    "kind": "STATUS",
+    "domain": "a logistics company",
+    "text": "परिवहन रखरखाव पाइपलाइन में एक समस्या है, यह जारी रहने वाली है."
+   },
+   {
+    "id": "blind2-250",
+    "lang": "hi",
+    "kind": "STATUS",
+    "domain": "a bank branch",
+    "text": "ATM मशीन अप्रत्याशित रूप से बंद है"
+   },
+   {
+    "id": "blind2-251",
+    "lang": "hi",
+    "kind": "STATUS",
+    "domain": "a bank branch",
+    "text": "बैंकिंग मशीन मरम्मत कर रही है"
+   },
+   {
+    "id": "blind2-252",
+    "lang": "hi",
+    "kind": "STATUS",
+    "domain": "a bank branch",
+    "text": "आईटी सेवाएँ वर्तमान में उपलब्ध नहीं हैं"
+   },
+   {
+    "id": "blind2-253",
+    "lang": "hi",
+    "kind": "STATUS",
+    "domain": "a bank branch",
+    "text": "पुस्तकालय में नई पुस्तकें स्टॉक करने में देरी है"
+   },
+   {
+    "id": "blind2-259",
+    "lang": "hi",
+    "kind": "CORRECTION",
+    "domain": "a manufacturing plant",
+    "text": "Actually, आपने गलती की। नवीनीकरण प्रक्रिया में कार्बन स्क्रीन महत्वपूर्ण है, न कि फिल्म।"
+   },
+   {
+    "id": "blind2-260",
+    "lang": "hi",
+    "kind": "CORRECTION",
+    "domain": "a manufacturing plant",
+    "text": "That's incorrect, मशीन का रखरखाव हर दिन विशेष रूप से किया जाता है। साप्ताहिक नहीं।"
+   },
+   {
+    "id": "blind2-261",
+    "lang": "hi",
+    "kind": "FACT",
+    "domain": "a manufacturing plant",
+    "text": "Realistically, कर्मचारियों का उपयोग आपको काम पर पर्याप्त सुरक्षा सुनिश्चित करने के लिए जरूरी है, न कि अनावश्यक दक्षता के लिए।"
+   },
+   {
+    "id": "blind2-263",
+    "lang": "hi",
+    "kind": "LIFECYCLE",
+    "domain": "a pharmacy",
+    "text": "उत्पाद का सेवानिवृत्ति हो गया."
+   },
+   {
+    "id": "blind2-264",
+    "lang": "hi",
+    "kind": "LIFECYCLE",
+    "domain": "a pharmacy",
+    "text": "शॉप बंद हो गया अंतिम रूप से."
+   },
+   {
+    "id": "blind2-265",
+    "lang": "hi",
+    "kind": "LIFECYCLE",
+    "domain": "a pharmacy",
+    "text": "प्रणाली डीकमिशन हो गई."
+   },
+   {
+    "id": "blind2-266",
+    "lang": "hi",
+    "kind": "LIFECYCLE",
+    "domain": "a logistics company",
+    "text": "हमने विक्रेता का संबंध समाप्त कर दिया है..."
+   },
+   {
+    "id": "blind2-267",
+    "lang": "hi",
+    "kind": "LIFECYCLE",
+    "domain": "a logistics company",
+    "text": "उत्पाद को बाजार से वापस हटा दिया गया है..."
+   },
+   {
+    "id": "blind2-268",
+    "lang": "hi",
+    "kind": "LIFECYCLE",
+    "domain": "a logistics company",
+    "text": "शॉप एक साथ समाप्त हो गया है..."
+   },
+   {
+    "id": "blind2-269",
+    "lang": "hi",
+    "kind": "LIFECYCLE",
+    "domain": "a logistics company",
+    "text": "इस प्रणाली को संचालन से हटाया जा रहा है..."
+   },
+   {
+    "id": "blind2-270",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a car repair garage",
+    "text": "क्या आप इस गारहैफे के मरम्मत के लिए व्यक्ति की संपर्क जानकारी दे सकते हैं?"
+   },
+   {
+    "id": "blind2-271",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a car repair garage",
+    "text": "कृपया मुझे इस बेडरूम का रखरखाव कर्मचारी ढूंढें।"
+   },
+   {
+    "id": "blind2-272",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a car repair garage",
+    "text": "हाँ, मैं तुम्हें इस हवाई जाने के लिए एक ईमेल टेम्प्लेट बनाना चाहूंगा।"
+   },
+   {
+    "id": "blind2-273",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a car repair garage",
+    "text": "प्रोफेसर, मेरे कार मरम्मत डेटाबेस में एक नया टिकट जोड़ना है। क्या आप इसे कर सकते हैं?"
+   },
+   {
+    "id": "blind2-274",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a pharmacy",
+    "text": "कृपया एक पेडी के नए दवा के बारे में जानकारी दिए जा सकती है?"
+   },
+   {
+    "id": "blind2-275",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a pharmacy",
+    "text": "अगर कोई नया रोगी है तो उसके इलाज के बारे में सलाह दें किस दवा से ही लिया जा सके?"
+   },
+   {
+    "id": "blind2-276",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a pharmacy",
+    "text": "मुझे आज दोपहर स्टॉक की जाँच करवाना होगा, कृपया मुझे सूची दिखाएं?"
+   },
+   {
+    "id": "blind2-277",
+    "lang": "hi",
+    "kind": "NONE",
+    "domain": "a pharmacy",
+    "text": "एक ग्राहक के लिए एक व्यापक निदान रिपोर्ट बनाना है, कृपया शुरू करें।"
+   }
+  ]
+ }
+}

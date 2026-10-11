@@ -8,6 +8,23 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- Statement kinds: every sentence a user says is labelled at write with what it does - a
+  `FACT`, a standing `RULE`, a `CONDITIONAL_RULE` (an exception or a trigger about the world),
+  a `STATUS` of a thing, a `CORRECTION`, or a `LIFECYCLE` change - and the kind is stored on
+  the memories it produced (`system_metadata["statement_kind"]`, with a rule's
+  `rule_trigger` and `rule_exception` as said). Cue words are data: a generic pack and a
+  retail pack (`modules/memory/lexicon/`) in English, German, Spanish, Arabic and Hindi; what
+  they leave open goes to the NLI head the service already loads (one pair for a sentence
+  the packs are unsure of, none for one they settle), and to the tenant's model only when the
+  head is unsure and only if the head confirms it. Retrieval is unchanged
+  ([concepts](docs/guide/02-concepts.md#what-a-statement-does), ADR 0037). No migration.
+  Only a rule that says it is for every time (a standing word, a recurring trigger, a
+  universal obligation) is kept as a lasting rule; any other conditional instruction ("Tell me
+  if the price drops") keeps its kind as metadata and is stored as before. A failing NLI head
+  keeps the lexicon's labels (`memory_statement_labeller_fallback_total`). Measured on
+  sentences a local language model wrote to order (`tests/eval/golden/statement_kinds_blind.json`,
+  blind set 2): macro-F1 0.829 over the six kinds against 0.105 for the extractor before it,
+  below it in no kind, language or cell, and no non-rule kept as a lasting rule.
 - Learned skills: an agent learns from all of its users (its own tool records, whichever user it
   ran for, under one audience) and is offered what it learned in its context on its own -
   "Learned skills for this task", in full, matched to the task; nothing is published or
@@ -43,6 +60,12 @@ each entry says which one moved. Decisions behind each change are in the
   class), merge F1 0.84 (exact subject strings before: 0.13).
 
 ### Fixed
+- "When I ask for a stock audit, always use a table" opened like a question, so nothing was
+  stored; a "when"/"if" followed by a subject now opens a condition, and the rule is kept with
+  its trigger. A standing rule is recognised wherever its "never"/"always" sits ("For weekly
+  overviews, never include ..."), not only first in the sentence, and in German, Spanish,
+  Arabic and Hindi as well; its exception clause ("unless I type 'include out of stock'") is
+  kept with it (ADR 0037).
 - Single-fact recall across conversations: "The master lock code for the hazardous materials
   cage in Warehouse 3 is 8492." said in one chat is answered in the user's next one. What a
   user says - their messages, decisions, feedback and their own `remember` - now defaults to

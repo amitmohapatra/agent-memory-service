@@ -1,0 +1,3624 @@
+{
+ "description": "Labelled sentences for the statement labeller (ADR 0037). One user sentence per item; 'kind' is the StatementKind it should get, or NONE for a question, greeting, acknowledgement or one-off request. 'dev' tunes the lexicon packs and the NLI thresholds; 'test' is held out: written before the packs and never used to tune them.",
+ "guidelines": {
+  "RULE": "a standing instruction or policy meant for future occasions (always / never / from now on / every time / 'whenever I ask for X'; universal must: 'All X must ...'). A trigger that only scopes it to a kind of request ('when I ask for a stock audit') keeps it a RULE.",
+  "CONDITIONAL_RULE": "a standing instruction with an exception (unless / except / other than / without) or one that applies only while a condition about the world holds (if / when + a state or event).",
+  "STATUS": "the current state of a specific thing: available, out of service, repaired, in or out of stock, delayed, on hold, recalled, down.",
+  "LIFECYCLE": "a thing or a relationship began or ended: terminated, dismantled, discontinued, retired, launched, opened, hired, a new supplier.",
+  "CORRECTION": "the speaker revises something said or known before: 'No, ...', 'Actually, ...', 'I meant ...', 'we now use X' (instead of the old way).",
+  "FACT": "any other declarative statement of information, including preferences and past events.",
+  "NONE": "a question, greeting, thanks, acknowledgement, chit-chat, or a one-off request to do something now - including one tied to a single expected event ('call me when you get this', 'let me know when the shipment arrives', 'remind me when it's time to leave').",
+  "precedence": "CORRECTION > CONDITIONAL_RULE > RULE > LIFECYCLE > STATUS > FACT",
+  "storage": "a RULE or CONDITIONAL_RULE is kept as a lasting rule only when it says it is for every time: a standing word (always, never, from now on), a recurring trigger (whenever, every time) or a universal obligation ('All X must'). Any other conditional instruction keeps its kind as metadata and is stored as it would be without the labeller.",
+  "habits": "a standing word in the speaker's own habit or promise ('I always double-check the invoices', 'Siempre consulto con el banco') is a FACT."
+ },
+ "dev": [
+  {
+   "id": "dev-en-001",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "The master lock code for the hazardous materials cage in Warehouse 3 is 8492."
+  },
+  {
+   "id": "dev-en-002",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "Our primary supplier for heavy-duty pallets is Uline."
+  },
+  {
+   "id": "dev-en-003",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "We just received a shipment of 5,000 artificial Christmas trees from supplier X."
+  },
+  {
+   "id": "dev-en-004",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "Aisle 12 holds cleaning supplies and paper goods."
+  },
+  {
+   "id": "dev-en-005",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "FACT",
+   "text": "Our Leeds distribution centre has 14 loading docks."
+  },
+  {
+   "id": "dev-en-006",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "The reorder threshold for AA batteries is 200 units."
+  },
+  {
+   "id": "dev-en-007",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "Store 41 is the largest location in the northern region."
+  },
+  {
+   "id": "dev-en-008",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "My daughter's name is Priya."
+  },
+  {
+   "id": "dev-en-009",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "I'm allergic to shellfish."
+  },
+  {
+   "id": "dev-en-010",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "I prefer concise answers with bullet points."
+  },
+  {
+   "id": "dev-en-011",
+   "lang": "en",
+   "domain": "software",
+   "kind": "FACT",
+   "text": "The payments service runs on Kubernetes in eu-west-1."
+  },
+  {
+   "id": "dev-en-012",
+   "lang": "en",
+   "domain": "software",
+   "kind": "FACT",
+   "text": "Our on-call rotation changes every Monday at 9am."
+  },
+  {
+   "id": "dev-en-013",
+   "lang": "en",
+   "domain": "finance",
+   "kind": "FACT",
+   "text": "Q3 revenue was EUR 412 million."
+  },
+  {
+   "id": "dev-en-014",
+   "lang": "en",
+   "domain": "finance",
+   "kind": "FACT",
+   "text": "The board approved the new budget last week."
+  },
+  {
+   "id": "dev-en-015",
+   "lang": "en",
+   "domain": "healthcare",
+   "kind": "FACT",
+   "text": "Dr. Alvarez sees patients on Tuesdays and Thursdays."
+  },
+  {
+   "id": "dev-en-016",
+   "lang": "en",
+   "domain": "travel",
+   "kind": "FACT",
+   "text": "I'm flying to London next Tuesday."
+  },
+  {
+   "id": "dev-en-017",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "My manager is Sarah Chen."
+  },
+  {
+   "id": "dev-en-018",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "Supplier X ships from a warehouse in Rotterdam."
+  },
+  {
+   "id": "dev-en-019",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "The average shelf life of our organic strawberries is seven days."
+  },
+  {
+   "id": "dev-en-020",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "FACT",
+   "text": "Each pallet holds up to 48 cases of bottled water."
+  },
+  {
+   "id": "dev-en-021",
+   "lang": "en",
+   "domain": "finance",
+   "kind": "FACT",
+   "text": "Our fiscal year starts in February."
+  },
+  {
+   "id": "dev-en-022",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "I love contemporary art."
+  },
+  {
+   "id": "dev-en-023",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "Yesterday we sold 300 units of the blue hoodie in Store 9."
+  },
+  {
+   "id": "dev-en-024",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "The shrinkage rate for cosmetics was 3.2% in Q2."
+  },
+  {
+   "id": "dev-en-025",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "Whenever I ask for a stock audit, always format the response as a markdown table with columns for: SKU, Item Name, Current Stock, Reorder Threshold, and Action Required."
+  },
+  {
+   "id": "dev-en-026",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "When I ask for a stock audit, always format the response as a markdown table."
+  },
+  {
+   "id": "dev-en-027",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "All seasonal holiday merchandise must be routed to Overflow Storage Facility B."
+  },
+  {
+   "id": "dev-en-028",
+   "lang": "en",
+   "domain": "software",
+   "kind": "RULE",
+   "text": "Always write code in Python with strict type hinting."
+  },
+  {
+   "id": "dev-en-029",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "RULE",
+   "text": "Never suggest recipes with cilantro."
+  },
+  {
+   "id": "dev-en-030",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "For weekly overviews, never include items with zero stock."
+  },
+  {
+   "id": "dev-en-031",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "Important: never share supplier pricing with store staff."
+  },
+  {
+   "id": "dev-en-032",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "From now on, send the daily sales summary to Maria as well."
+  },
+  {
+   "id": "dev-en-033",
+   "lang": "en",
+   "domain": "finance",
+   "kind": "RULE",
+   "text": "Going forward, round all currency figures to two decimals."
+  },
+  {
+   "id": "dev-en-034",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "Please always cc the regional manager on markdown approvals."
+  },
+  {
+   "id": "dev-en-035",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "Every time you draft a supplier email, sign it as the Procurement Team."
+  },
+  {
+   "id": "dev-en-036",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "In all reports, always list SKUs in ascending order."
+  },
+  {
+   "id": "dev-en-037",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "Do not ever recommend competitor products."
+  },
+  {
+   "id": "dev-en-038",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "RULE",
+   "text": "We never ship hazardous goods on Fridays."
+  },
+  {
+   "id": "dev-en-039",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "Make sure you always include the store number in incident summaries."
+  },
+  {
+   "id": "dev-en-040",
+   "lang": "en",
+   "domain": "software",
+   "kind": "RULE",
+   "text": "When you write SQL for me, always use uppercase keywords."
+  },
+  {
+   "id": "dev-en-041",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "RULE",
+   "text": "Remember to always convert temperatures to Celsius."
+  },
+  {
+   "id": "dev-en-042",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "RULE",
+   "text": "Don't ever schedule meetings before 10am for me."
+  },
+  {
+   "id": "dev-en-043",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "Each time I upload a receiving log, always flag missing invoice numbers."
+  },
+  {
+   "id": "dev-en-044",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "RULE",
+   "text": "Always answer in metric units."
+  },
+  {
+   "id": "dev-en-045",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "RULE",
+   "text": "Any pallet over 1,000 kg must be moved with Forklift #2 only."
+  },
+  {
+   "id": "dev-en-046",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Never include items with a stock level of zero in my weekly category overviews unless I specifically type 'include out of stock'."
+  },
+  {
+   "id": "dev-en-047",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Always use the express carrier unless the order is under $50."
+  },
+  {
+   "id": "dev-en-048",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "CONDITIONAL_RULE",
+   "text": "If a delivery is more than two hours late, always notify the store manager."
+  },
+  {
+   "id": "dev-en-049",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Don't reorder seasonal items unless the buyer approves it first."
+  },
+  {
+   "id": "dev-en-050",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Always round prices to .99 except for clearance items."
+  },
+  {
+   "id": "dev-en-051",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "When stock drops below the reorder threshold, always create a purchase order draft."
+  },
+  {
+   "id": "dev-en-052",
+   "lang": "en",
+   "domain": "finance",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Never send reports on weekends unless it is quarter end."
+  },
+  {
+   "id": "dev-en-053",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "If the temperature in a cold-storage unit goes above 5°C, always alert me immediately."
+  },
+  {
+   "id": "dev-en-054",
+   "lang": "en",
+   "domain": "finance",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Always include tax in quotes, except when the customer is tax-exempt."
+  },
+  {
+   "id": "dev-en-055",
+   "lang": "en",
+   "domain": "software",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Only escalate a ticket to engineering if it has been open for more than 48 hours."
+  },
+  {
+   "id": "dev-en-056",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Unless I say otherwise, always reply in English."
+  },
+  {
+   "id": "dev-en-057",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "If a SKU is recalled, never sell it even if it is back in stock."
+  },
+  {
+   "id": "dev-en-058",
+   "lang": "en",
+   "domain": "software",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Always deploy on Tuesdays, other than during a code freeze."
+  },
+  {
+   "id": "dev-en-059",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Whenever a pallet arrives damaged, always photograph it before signing."
+  },
+  {
+   "id": "dev-en-060",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "If a customer asks for a refund after 30 days, never approve it automatically."
+  },
+  {
+   "id": "dev-en-061",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Don't use the loading dock B entrance unless dock A is blocked."
+  },
+  {
+   "id": "dev-en-062",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Always schedule the cleaning crew after closing, except on public holidays."
+  },
+  {
+   "id": "dev-en-063",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "CONDITIONAL_RULE",
+   "text": "If the forklift is out of service, route heavy pallets to Dock 3."
+  },
+  {
+   "id": "dev-en-064",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "Forklift #4 has been repaired and is back on the floor."
+  },
+  {
+   "id": "dev-en-065",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "Log an incident: Forklift #4 is out of service for maintenance."
+  },
+  {
+   "id": "dev-en-066",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "The walk-in freezer at Store 7 is down again."
+  },
+  {
+   "id": "dev-en-067",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "Blue hoodies in size M are out of stock at the downtown store."
+  },
+  {
+   "id": "dev-en-068",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "The north entrance is closed for repairs until Friday."
+  },
+  {
+   "id": "dev-en-069",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "Batch 2231 of the baby formula has been recalled."
+  },
+  {
+   "id": "dev-en-070",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "The POS terminals at Store 12 are back online."
+  },
+  {
+   "id": "dev-en-071",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "STATUS",
+   "text": "Order #88412 is delayed at customs."
+  },
+  {
+   "id": "dev-en-072",
+   "lang": "en",
+   "domain": "software",
+   "kind": "STATUS",
+   "text": "The checkout API is currently degraded."
+  },
+  {
+   "id": "dev-en-073",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "STATUS",
+   "text": "My laptop is in the repair shop."
+  },
+  {
+   "id": "dev-en-074",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "STATUS",
+   "text": "Dock 3 is blocked by a broken trailer."
+  },
+  {
+   "id": "dev-en-075",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "Organic strawberries are back in stock."
+  },
+  {
+   "id": "dev-en-076",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "STATUS",
+   "text": "The conveyor belt in Zone C is under maintenance today."
+  },
+  {
+   "id": "dev-en-077",
+   "lang": "en",
+   "domain": "software",
+   "kind": "STATUS",
+   "text": "The VPN is working again."
+  },
+  {
+   "id": "dev-en-078",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "STATUS",
+   "text": "Shipment 5521 is on hold pending inspection."
+  },
+  {
+   "id": "dev-en-079",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "The self-checkout lanes are unavailable this morning."
+  },
+  {
+   "id": "dev-en-080",
+   "lang": "en",
+   "domain": "healthcare",
+   "kind": "STATUS",
+   "text": "Patient room 4 is being cleaned and is not ready yet."
+  },
+  {
+   "id": "dev-en-081",
+   "lang": "en",
+   "domain": "travel",
+   "kind": "STATUS",
+   "text": "The flight to Berlin is delayed by two hours."
+  },
+  {
+   "id": "dev-en-082",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "SKU 10442 is on backorder until next month."
+  },
+  {
+   "id": "dev-en-083",
+   "lang": "en",
+   "domain": "software",
+   "kind": "STATUS",
+   "text": "The staging server is offline."
+  },
+  {
+   "id": "dev-en-084",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "No, our system was updated."
+  },
+  {
+   "id": "dev-en-085",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "We now use the /shrinkage command to write off damage so it hits the right ledger."
+  },
+  {
+   "id": "dev-en-086",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "Actually, we terminated our contract with Uline yesterday due to pricing."
+  },
+  {
+   "id": "dev-en-087",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "CORRECTION",
+   "text": "Correction: the meeting is at 3pm, not 2pm."
+  },
+  {
+   "id": "dev-en-088",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "Sorry, I meant Store 14, not Store 41."
+  },
+  {
+   "id": "dev-en-089",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "CORRECTION",
+   "text": "Actually, my daughter's name is Priya, not Pria."
+  },
+  {
+   "id": "dev-en-090",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "No, the reorder threshold is 150, not 200."
+  },
+  {
+   "id": "dev-en-091",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "That's wrong, the lock code is 8429."
+  },
+  {
+   "id": "dev-en-092",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "CORRECTION",
+   "text": "Scratch that, the delivery is coming on Thursday."
+  },
+  {
+   "id": "dev-en-093",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "I made a mistake earlier: the shipment has 4,000 trees, not 5,000."
+  },
+  {
+   "id": "dev-en-094",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "To clarify, the discount applies only to members."
+  },
+  {
+   "id": "dev-en-095",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "Wait, the supplier is actually based in Antwerp."
+  },
+  {
+   "id": "dev-en-096",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "CORRECTION",
+   "text": "It's not Dock 2, it's Dock 3."
+  },
+  {
+   "id": "dev-en-097",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "Update: the price of the blue hoodie is $39, not $35."
+  },
+  {
+   "id": "dev-en-098",
+   "lang": "en",
+   "domain": "software",
+   "kind": "CORRECTION",
+   "text": "No, we switched from Slack to Teams last month."
+  },
+  {
+   "id": "dev-en-099",
+   "lang": "en",
+   "domain": "finance",
+   "kind": "CORRECTION",
+   "text": "I was wrong about the budget; it's EUR 2 million."
+  },
+  {
+   "id": "dev-en-100",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "Let me correct that: the warehouse closes at 8pm."
+  },
+  {
+   "id": "dev-en-101",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "My mistake, the order number is 88421."
+  },
+  {
+   "id": "dev-en-102",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "The temporary refrigeration unit has been dismantled and the project is closed."
+  },
+  {
+   "id": "dev-en-103",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "Our new exclusive pallet supplier is PackagingCorp."
+  },
+  {
+   "id": "dev-en-104",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "LIFECYCLE",
+   "text": "We terminated our contract with FastFreight last month."
+  },
+  {
+   "id": "dev-en-105",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "The blue hoodie has been discontinued."
+  },
+  {
+   "id": "dev-en-106",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "Store 22 closed permanently on Saturday."
+  },
+  {
+   "id": "dev-en-107",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "We opened a new store in Manchester this week."
+  },
+  {
+   "id": "dev-en-108",
+   "lang": "en",
+   "domain": "software",
+   "kind": "LIFECYCLE",
+   "text": "The legacy inventory system was decommissioned in June."
+  },
+  {
+   "id": "dev-en-109",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "We hired a new night-shift supervisor, Tom Reyes."
+  },
+  {
+   "id": "dev-en-110",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "Maria resigned and her last day is Friday."
+  },
+  {
+   "id": "dev-en-111",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "The loyalty programme launched on 1 March."
+  },
+  {
+   "id": "dev-en-112",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "LIFECYCLE",
+   "text": "We signed a new contract with DHL for last-mile delivery."
+  },
+  {
+   "id": "dev-en-113",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "The pilot project in Zone B has ended."
+  },
+  {
+   "id": "dev-en-114",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "We onboarded GreenLeaf as our produce supplier."
+  },
+  {
+   "id": "dev-en-115",
+   "lang": "en",
+   "domain": "software",
+   "kind": "LIFECYCLE",
+   "text": "The old API v1 has been retired."
+  },
+  {
+   "id": "dev-en-116",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "The pop-up shop at the mall has been shut down."
+  },
+  {
+   "id": "dev-en-117",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "We have phased out plastic bags in all stores."
+  },
+  {
+   "id": "dev-en-118",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "The Christmas promotion kicked off today."
+  },
+  {
+   "id": "dev-en-119",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "LIFECYCLE",
+   "text": "Our partnership with Acme Logistics came to an end in May."
+  },
+  {
+   "id": "dev-en-120",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "What's the code for the hazmat cage in Warehouse 3?"
+  },
+  {
+   "id": "dev-en-121",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Where should the warehouse team put the new shipment of artificial trees?"
+  },
+  {
+   "id": "dev-en-122",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Which forklifts are currently available for the loading dock?"
+  },
+  {
+   "id": "dev-en-123",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Draft a reorder email to our pallet supplier for 500 heavy-duty pallets."
+  },
+  {
+   "id": "dev-en-124",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "What is the cell phone number for OSHA safety inspector John Doe?"
+  },
+  {
+   "id": "dev-en-125",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Generate a health report of our current active cold-storage units."
+  },
+  {
+   "id": "dev-en-126",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Give me a stock audit for the office supplies category."
+  },
+  {
+   "id": "dev-en-127",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Give me a category overview for Aisle 12."
+  },
+  {
+   "id": "dev-en-128",
+   "lang": "en",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "Thanks, that's helpful!"
+  },
+  {
+   "id": "dev-en-129",
+   "lang": "en",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "Good morning!"
+  },
+  {
+   "id": "dev-en-130",
+   "lang": "en",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "Haha, that's funny."
+  },
+  {
+   "id": "dev-en-131",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Can you check the stock of AA batteries?"
+  },
+  {
+   "id": "dev-en-132",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "How do I remove crushed boxes from the system?"
+  },
+  {
+   "id": "dev-en-133",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "NONE",
+   "text": "When does the next delivery arrive?"
+  },
+  {
+   "id": "dev-en-134",
+   "lang": "en",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "Okay, sounds good."
+  },
+  {
+   "id": "dev-en-135",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Set up a reorder alert for our new stock of organic strawberries."
+  },
+  {
+   "id": "dev-en-136",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Is Forklift #4 working?"
+  },
+  {
+   "id": "dev-en-137",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Could you summarise last week's sales?"
+  },
+  {
+   "id": "dev-en-138",
+   "lang": "en",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "Hmm, let me think about it."
+  },
+  {
+   "id": "dev-en-139",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Show me the top three SKUs by shrinkage in Q3."
+  },
+  {
+   "id": "dev-en-140",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Why is the walk-in freezer always so loud?"
+  },
+  {
+   "id": "dev-en-141",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Do you always round prices?"
+  },
+  {
+   "id": "dev-en-142",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "When will the new supplier start deliveries?"
+  },
+  {
+   "id": "dev-en-143",
+   "lang": "en",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "Never mind."
+  },
+  {
+   "id": "dev-en-144",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Please list the stores in the northern region."
+  },
+  {
+   "id": "dev-en-145",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Whenever you get a chance, could you send me the report?"
+  },
+  {
+   "id": "dev-de-001",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "Der Code für den Gefahrstoffkäfig in Lager 3 lautet 8492."
+  },
+  {
+   "id": "dev-de-002",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "Unser Hauptlieferant für Paletten ist Uline."
+  },
+  {
+   "id": "dev-de-003",
+   "lang": "de",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "Ich arbeite seit drei Jahren in der Filiale in Hamburg."
+  },
+  {
+   "id": "dev-de-004",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "Die Filiale 9 hat zwölf Kassen."
+  },
+  {
+   "id": "dev-de-005",
+   "lang": "de",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "Mein Lieblingseditor ist Vim."
+  },
+  {
+   "id": "dev-de-006",
+   "lang": "de",
+   "domain": "finance",
+   "kind": "FACT",
+   "text": "Der Umsatz im dritten Quartal betrug 4,2 Millionen Euro."
+  },
+  {
+   "id": "dev-de-007",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "Wir haben gestern 300 Weihnachtsbäume geliefert bekommen."
+  },
+  {
+   "id": "dev-de-008",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "Formatiere Bestandsprüfungen immer als Markdown-Tabelle."
+  },
+  {
+   "id": "dev-de-009",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "Wenn ich nach einer Bestandsprüfung frage, verwende immer eine Tabelle."
+  },
+  {
+   "id": "dev-de-010",
+   "lang": "de",
+   "domain": "personal",
+   "kind": "RULE",
+   "text": "Schlage mir niemals Rezepte mit Koriander vor."
+  },
+  {
+   "id": "dev-de-011",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "Ab sofort schick den Tagesbericht bitte auch an Maria."
+  },
+  {
+   "id": "dev-de-012",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "Alle Saisonwaren müssen in das Außenlager B gebracht werden."
+  },
+  {
+   "id": "dev-de-013",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "Für Wochenberichte gilt: niemals Artikel ohne Bestand aufführen."
+  },
+  {
+   "id": "dev-de-014",
+   "lang": "de",
+   "domain": "personal",
+   "kind": "RULE",
+   "text": "Antworte mir künftig immer auf Deutsch."
+  },
+  {
+   "id": "dev-de-015",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Nimm niemals Artikel mit Bestand null in die Übersicht auf, es sei denn, ich schreibe 'mit Fehlbestand'."
+  },
+  {
+   "id": "dev-de-016",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Benutze immer den Expressversand, außer die Bestellung liegt unter 50 Euro."
+  },
+  {
+   "id": "dev-de-017",
+   "lang": "de",
+   "domain": "logistics",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Wenn eine Lieferung mehr als zwei Stunden zu spät ist, informiere immer den Filialleiter."
+  },
+  {
+   "id": "dev-de-018",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Falls die Temperatur im Kühlraum über 5 Grad steigt, alarmiere mich sofort."
+  },
+  {
+   "id": "dev-de-019",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Bestelle Saisonartikel nur nach, wenn der Einkäufer zustimmt."
+  },
+  {
+   "id": "dev-de-020",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Runde Preise immer auf ,99, außer bei Abverkaufsware."
+  },
+  {
+   "id": "dev-de-021",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "Gabelstapler 4 wurde repariert und ist wieder im Einsatz."
+  },
+  {
+   "id": "dev-de-022",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "Gabelstapler 4 ist wegen Wartung außer Betrieb."
+  },
+  {
+   "id": "dev-de-023",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "Die blauen Kapuzenpullis in Größe M sind ausverkauft."
+  },
+  {
+   "id": "dev-de-024",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "Der Kühlraum in Filiale 7 ist schon wieder ausgefallen."
+  },
+  {
+   "id": "dev-de-025",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "Die Kassen in Filiale 12 sind wieder online."
+  },
+  {
+   "id": "dev-de-026",
+   "lang": "de",
+   "domain": "logistics",
+   "kind": "STATUS",
+   "text": "Die Bestellung 88412 hängt beim Zoll fest."
+  },
+  {
+   "id": "dev-de-027",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "Erdbeeren sind wieder vorrätig."
+  },
+  {
+   "id": "dev-de-028",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "Nein, unser System wurde aktualisiert."
+  },
+  {
+   "id": "dev-de-029",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "Eigentlich haben wir den Vertrag mit Uline gestern gekündigt."
+  },
+  {
+   "id": "dev-de-030",
+   "lang": "de",
+   "domain": "personal",
+   "kind": "CORRECTION",
+   "text": "Korrektur: Das Meeting ist um 15 Uhr, nicht um 14 Uhr."
+  },
+  {
+   "id": "dev-de-031",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "Ich meinte Filiale 14, nicht Filiale 41."
+  },
+  {
+   "id": "dev-de-032",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "Das stimmt nicht, der Code ist 8429."
+  },
+  {
+   "id": "dev-de-033",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "Wir verwenden jetzt den Befehl /schwund statt /löschen."
+  },
+  {
+   "id": "dev-de-034",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "Die provisorische Kühleinheit wurde abgebaut und das Projekt ist abgeschlossen."
+  },
+  {
+   "id": "dev-de-035",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "Unser neuer exklusiver Palettenlieferant ist PackagingCorp."
+  },
+  {
+   "id": "dev-de-036",
+   "lang": "de",
+   "domain": "logistics",
+   "kind": "LIFECYCLE",
+   "text": "Wir haben den Vertrag mit FastFreight letzten Monat beendet."
+  },
+  {
+   "id": "dev-de-037",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "Der blaue Kapuzenpulli wurde aus dem Sortiment genommen."
+  },
+  {
+   "id": "dev-de-038",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "Filiale 22 wurde am Samstag endgültig geschlossen."
+  },
+  {
+   "id": "dev-de-039",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "Wir haben diese Woche eine neue Filiale in München eröffnet."
+  },
+  {
+   "id": "dev-de-040",
+   "lang": "de",
+   "domain": "software",
+   "kind": "LIFECYCLE",
+   "text": "Das alte Warenwirtschaftssystem wurde im Juni abgeschaltet."
+  },
+  {
+   "id": "dev-de-041",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Wie lautet der Code für den Gefahrstoffkäfig?"
+  },
+  {
+   "id": "dev-de-042",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Welche Gabelstapler sind gerade verfügbar?"
+  },
+  {
+   "id": "dev-de-043",
+   "lang": "de",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "Danke, das hilft mir sehr!"
+  },
+  {
+   "id": "dev-de-044",
+   "lang": "de",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "Guten Morgen!"
+  },
+  {
+   "id": "dev-de-045",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Erstelle eine Bestellmail an unseren Palettenlieferanten."
+  },
+  {
+   "id": "dev-de-046",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Kannst du den Bestand an Batterien prüfen?"
+  },
+  {
+   "id": "dev-de-047",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Warum ist der Kühlraum immer so laut?"
+  },
+  {
+   "id": "dev-es-001",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "El código del armario de materiales peligrosos del almacén 3 es 8492."
+  },
+  {
+   "id": "dev-es-002",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "Nuestro proveedor principal de palés es Uline."
+  },
+  {
+   "id": "dev-es-003",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "La tienda 9 tiene doce cajas registradoras."
+  },
+  {
+   "id": "dev-es-004",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "Ayer recibimos 300 árboles de Navidad del proveedor X."
+  },
+  {
+   "id": "dev-es-005",
+   "lang": "es",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "Mi gerente se llama Sara Chen."
+  },
+  {
+   "id": "dev-es-006",
+   "lang": "es",
+   "domain": "finance",
+   "kind": "FACT",
+   "text": "Las ventas del tercer trimestre fueron de 4,2 millones de euros."
+  },
+  {
+   "id": "dev-es-007",
+   "lang": "es",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "Soy alérgica a los mariscos."
+  },
+  {
+   "id": "dev-es-008",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "Cuando te pida una auditoría de inventario, usa siempre una tabla en markdown."
+  },
+  {
+   "id": "dev-es-009",
+   "lang": "es",
+   "domain": "personal",
+   "kind": "RULE",
+   "text": "Nunca me sugieras recetas con cilantro."
+  },
+  {
+   "id": "dev-es-010",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "A partir de ahora, envía también el resumen diario a María."
+  },
+  {
+   "id": "dev-es-011",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "Todas las mercancías de temporada deben enviarse al almacén externo B."
+  },
+  {
+   "id": "dev-es-012",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "Para los informes semanales, nunca incluyas artículos sin existencias."
+  },
+  {
+   "id": "dev-es-013",
+   "lang": "es",
+   "domain": "personal",
+   "kind": "RULE",
+   "text": "Responde siempre en español."
+  },
+  {
+   "id": "dev-es-014",
+   "lang": "es",
+   "domain": "finance",
+   "kind": "RULE",
+   "text": "De ahora en adelante, redondea las cifras a dos decimales."
+  },
+  {
+   "id": "dev-es-015",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Nunca incluyas artículos con existencias cero en mis resúmenes semanales a menos que escriba 'incluir agotados'."
+  },
+  {
+   "id": "dev-es-016",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Usa siempre el envío exprés, salvo que el pedido sea inferior a 50 euros."
+  },
+  {
+   "id": "dev-es-017",
+   "lang": "es",
+   "domain": "logistics",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Si una entrega llega con más de dos horas de retraso, avisa siempre al gerente de la tienda."
+  },
+  {
+   "id": "dev-es-018",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Si la temperatura de la cámara frigorífica supera los 5 grados, avísame de inmediato."
+  },
+  {
+   "id": "dev-es-019",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "No vuelvas a pedir artículos de temporada a menos que el comprador lo apruebe."
+  },
+  {
+   "id": "dev-es-020",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Redondea siempre los precios a ,99 excepto en los artículos de liquidación."
+  },
+  {
+   "id": "dev-es-021",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "La carretilla elevadora 4 ha sido reparada y vuelve a estar en servicio."
+  },
+  {
+   "id": "dev-es-022",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "La carretilla elevadora 4 está fuera de servicio por mantenimiento."
+  },
+  {
+   "id": "dev-es-023",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "Las sudaderas azules de talla M están agotadas."
+  },
+  {
+   "id": "dev-es-024",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "La cámara frigorífica de la tienda 7 vuelve a estar averiada."
+  },
+  {
+   "id": "dev-es-025",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "Los terminales de venta de la tienda 12 vuelven a funcionar."
+  },
+  {
+   "id": "dev-es-026",
+   "lang": "es",
+   "domain": "logistics",
+   "kind": "STATUS",
+   "text": "El pedido 88412 está retenido en la aduana."
+  },
+  {
+   "id": "dev-es-027",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "Las fresas orgánicas vuelven a estar disponibles."
+  },
+  {
+   "id": "dev-es-028",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "No, nuestro sistema se actualizó."
+  },
+  {
+   "id": "dev-es-029",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "En realidad, ayer rescindimos el contrato con Uline."
+  },
+  {
+   "id": "dev-es-030",
+   "lang": "es",
+   "domain": "personal",
+   "kind": "CORRECTION",
+   "text": "Corrección: la reunión es a las 15:00, no a las 14:00."
+  },
+  {
+   "id": "dev-es-031",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "Quise decir la tienda 14, no la 41."
+  },
+  {
+   "id": "dev-es-032",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "Eso no es correcto, el código es 8429."
+  },
+  {
+   "id": "dev-es-033",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "Ahora usamos el comando /merma en lugar de /borrar."
+  },
+  {
+   "id": "dev-es-034",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "La unidad de refrigeración temporal ha sido desmantelada y el proyecto está cerrado."
+  },
+  {
+   "id": "dev-es-035",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "Nuestro nuevo proveedor exclusivo de palés es PackagingCorp."
+  },
+  {
+   "id": "dev-es-036",
+   "lang": "es",
+   "domain": "logistics",
+   "kind": "LIFECYCLE",
+   "text": "Rescindimos el contrato con FastFreight el mes pasado."
+  },
+  {
+   "id": "dev-es-037",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "La sudadera azul se ha descatalogado."
+  },
+  {
+   "id": "dev-es-038",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "La tienda 22 cerró definitivamente el sábado."
+  },
+  {
+   "id": "dev-es-039",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "Esta semana abrimos una nueva tienda en Valencia."
+  },
+  {
+   "id": "dev-es-040",
+   "lang": "es",
+   "domain": "software",
+   "kind": "LIFECYCLE",
+   "text": "El antiguo sistema de inventario se dio de baja en junio."
+  },
+  {
+   "id": "dev-es-041",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "¿Cuál es el código del armario de materiales peligrosos?"
+  },
+  {
+   "id": "dev-es-042",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "¿Qué carretillas están disponibles ahora?"
+  },
+  {
+   "id": "dev-es-043",
+   "lang": "es",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "¡Gracias, me ayuda mucho!"
+  },
+  {
+   "id": "dev-es-044",
+   "lang": "es",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "¡Buenos días!"
+  },
+  {
+   "id": "dev-es-045",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Redacta un correo de pedido para nuestro proveedor de palés."
+  },
+  {
+   "id": "dev-es-046",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "¿Puedes revisar las existencias de pilas?"
+  },
+  {
+   "id": "dev-es-047",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "¿Por qué la cámara frigorífica siempre hace tanto ruido?"
+  },
+  {
+   "id": "dev-ar-001",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "رمز قفل قفص المواد الخطرة في المستودع 3 هو 8492."
+  },
+  {
+   "id": "dev-ar-002",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "المورد الرئيسي للمنصات لدينا هو Uline."
+  },
+  {
+   "id": "dev-ar-003",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "يحتوي المتجر 9 على اثني عشر صندوق دفع."
+  },
+  {
+   "id": "dev-ar-004",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "استلمنا أمس 300 شجرة عيد الميلاد من المورد X."
+  },
+  {
+   "id": "dev-ar-005",
+   "lang": "ar",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "اسم مديري سارة تشين."
+  },
+  {
+   "id": "dev-ar-006",
+   "lang": "ar",
+   "domain": "finance",
+   "kind": "FACT",
+   "text": "بلغت مبيعات الربع الثالث 4.2 مليون يورو."
+  },
+  {
+   "id": "dev-ar-007",
+   "lang": "ar",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "أنا أعمل في فرع الرياض منذ ثلاث سنوات."
+  },
+  {
+   "id": "dev-ar-008",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "عندما أطلب جرد المخزون، استخدم دائمًا جدولًا بصيغة ماركداون."
+  },
+  {
+   "id": "dev-ar-009",
+   "lang": "ar",
+   "domain": "personal",
+   "kind": "RULE",
+   "text": "لا تقترح عليّ أبدًا وصفات تحتوي على الكزبرة."
+  },
+  {
+   "id": "dev-ar-010",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "من الآن فصاعدًا، أرسل الملخص اليومي إلى مريم أيضًا."
+  },
+  {
+   "id": "dev-ar-011",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "يجب نقل جميع البضائع الموسمية إلى المستودع الخارجي ب."
+  },
+  {
+   "id": "dev-ar-012",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "في التقارير الأسبوعية، لا تُدرج أبدًا الأصناف غير المتوفرة."
+  },
+  {
+   "id": "dev-ar-013",
+   "lang": "ar",
+   "domain": "personal",
+   "kind": "RULE",
+   "text": "أجب دائمًا باللغة العربية."
+  },
+  {
+   "id": "dev-ar-014",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "في كل مرة أرفع فيها سجل استلام، ضع علامة على أرقام الفواتير الناقصة."
+  },
+  {
+   "id": "dev-ar-015",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "لا تُدرج أبدًا الأصناف ذات المخزون الصفري في ملخصاتي الأسبوعية إلا إذا كتبت 'تضمين النافد'."
+  },
+  {
+   "id": "dev-ar-016",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "استخدم دائمًا الشحن السريع ما لم تكن قيمة الطلب أقل من 50 دولارًا."
+  },
+  {
+   "id": "dev-ar-017",
+   "lang": "ar",
+   "domain": "logistics",
+   "kind": "CONDITIONAL_RULE",
+   "text": "إذا تأخرت الشحنة أكثر من ساعتين، أبلغ مدير المتجر دائمًا."
+  },
+  {
+   "id": "dev-ar-018",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "إذا تجاوزت درجة حرارة غرفة التبريد 5 درجات، نبهني فورًا."
+  },
+  {
+   "id": "dev-ar-019",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "لا تُعد طلب الأصناف الموسمية إلا بموافقة المشتري."
+  },
+  {
+   "id": "dev-ar-020",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "قرّب الأسعار دائمًا إلى .99 باستثناء أصناف التصفية."
+  },
+  {
+   "id": "dev-ar-021",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "تم إصلاح الرافعة الشوكية رقم 4 وعادت إلى العمل."
+  },
+  {
+   "id": "dev-ar-022",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "الرافعة الشوكية رقم 4 خارج الخدمة للصيانة."
+  },
+  {
+   "id": "dev-ar-023",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "نفدت الكنزات الزرقاء مقاس M."
+  },
+  {
+   "id": "dev-ar-024",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "غرفة التبريد في المتجر 7 معطلة مرة أخرى."
+  },
+  {
+   "id": "dev-ar-025",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "أجهزة نقاط البيع في المتجر 12 تعمل من جديد."
+  },
+  {
+   "id": "dev-ar-026",
+   "lang": "ar",
+   "domain": "logistics",
+   "kind": "STATUS",
+   "text": "الطلب رقم 88412 محتجز في الجمارك."
+  },
+  {
+   "id": "dev-ar-027",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "الفراولة العضوية متوفرة مرة أخرى."
+  },
+  {
+   "id": "dev-ar-028",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "لا، لقد تم تحديث نظامنا."
+  },
+  {
+   "id": "dev-ar-029",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "في الواقع، أنهينا عقدنا مع Uline أمس."
+  },
+  {
+   "id": "dev-ar-030",
+   "lang": "ar",
+   "domain": "personal",
+   "kind": "CORRECTION",
+   "text": "تصحيح: الاجتماع الساعة 3 مساءً وليس 2."
+  },
+  {
+   "id": "dev-ar-031",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "قصدت المتجر 14 وليس 41."
+  },
+  {
+   "id": "dev-ar-032",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "هذا غير صحيح، الرمز هو 8429."
+  },
+  {
+   "id": "dev-ar-033",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "نستخدم الآن الأمر /shrinkage بدلًا من /delete."
+  },
+  {
+   "id": "dev-ar-034",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "تم تفكيك وحدة التبريد المؤقتة وإغلاق المشروع."
+  },
+  {
+   "id": "dev-ar-035",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "مورد المنصات الحصري الجديد لدينا هو PackagingCorp."
+  },
+  {
+   "id": "dev-ar-036",
+   "lang": "ar",
+   "domain": "logistics",
+   "kind": "LIFECYCLE",
+   "text": "أنهينا العقد مع FastFreight الشهر الماضي."
+  },
+  {
+   "id": "dev-ar-037",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "تم إيقاف إنتاج الكنزة الزرقاء."
+  },
+  {
+   "id": "dev-ar-038",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "أُغلق المتجر 22 نهائيًا يوم السبت."
+  },
+  {
+   "id": "dev-ar-039",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "افتتحنا متجرًا جديدًا في جدة هذا الأسبوع."
+  },
+  {
+   "id": "dev-ar-040",
+   "lang": "ar",
+   "domain": "software",
+   "kind": "LIFECYCLE",
+   "text": "تم إيقاف تشغيل نظام المخزون القديم في يونيو."
+  },
+  {
+   "id": "dev-ar-041",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "ما هو رمز قفص المواد الخطرة؟"
+  },
+  {
+   "id": "dev-ar-042",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "ما هي الرافعات الشوكية المتاحة الآن؟"
+  },
+  {
+   "id": "dev-ar-043",
+   "lang": "ar",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "شكرًا، هذا مفيد جدًا!"
+  },
+  {
+   "id": "dev-ar-044",
+   "lang": "ar",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "صباح الخير!"
+  },
+  {
+   "id": "dev-ar-045",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "اكتب رسالة طلب إلى مورد المنصات."
+  },
+  {
+   "id": "dev-ar-046",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "هل يمكنك التحقق من مخزون البطاريات؟"
+  },
+  {
+   "id": "dev-ar-047",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "لماذا غرفة التبريد دائمًا صاخبة؟"
+  },
+  {
+   "id": "dev-hi-001",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "वेयरहाउस 3 में खतरनाक सामग्री वाले पिंजरे का कोड 8492 है।"
+  },
+  {
+   "id": "dev-hi-002",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "पैलेट के लिए हमारा मुख्य सप्लायर Uline है।"
+  },
+  {
+   "id": "dev-hi-003",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "स्टोर 9 में बारह कैश काउंटर हैं।"
+  },
+  {
+   "id": "dev-hi-004",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "कल हमें सप्लायर X से 300 क्रिसमस ट्री मिले।"
+  },
+  {
+   "id": "dev-hi-005",
+   "lang": "hi",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "मेरे मैनेजर का नाम सारा चेन है।"
+  },
+  {
+   "id": "dev-hi-006",
+   "lang": "hi",
+   "domain": "finance",
+   "kind": "FACT",
+   "text": "तीसरी तिमाही में बिक्री 4.2 करोड़ रुपये रही।"
+  },
+  {
+   "id": "dev-hi-007",
+   "lang": "hi",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "मैं तीन साल से पुणे शाखा में काम कर रहा हूँ।"
+  },
+  {
+   "id": "dev-hi-008",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "जब भी मैं स्टॉक ऑडिट माँगूँ, हमेशा मार्कडाउन टेबल में जवाब देना।"
+  },
+  {
+   "id": "dev-hi-009",
+   "lang": "hi",
+   "domain": "personal",
+   "kind": "RULE",
+   "text": "मुझे कभी भी धनिया वाली रेसिपी मत सुझाना।"
+  },
+  {
+   "id": "dev-hi-010",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "अब से, दैनिक सारांश मारिया को भी भेजना।"
+  },
+  {
+   "id": "dev-hi-011",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "सभी मौसमी सामान को ओवरफ्लो स्टोरेज B में भेजा जाना चाहिए।"
+  },
+  {
+   "id": "dev-hi-012",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "साप्ताहिक रिपोर्ट में कभी भी शून्य स्टॉक वाले आइटम शामिल मत करना।"
+  },
+  {
+   "id": "dev-hi-013",
+   "lang": "hi",
+   "domain": "personal",
+   "kind": "RULE",
+   "text": "हमेशा हिंदी में जवाब दो।"
+  },
+  {
+   "id": "dev-hi-014",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "हर बार जब मैं रसीद लॉग अपलोड करूँ, गायब इनवॉइस नंबर चिह्नित करना।"
+  },
+  {
+   "id": "dev-hi-015",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "मेरे साप्ताहिक सारांश में शून्य स्टॉक वाले आइटम कभी शामिल मत करना, जब तक मैं 'include out of stock' न लिखूँ।"
+  },
+  {
+   "id": "dev-hi-016",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "हमेशा एक्सप्रेस शिपिंग इस्तेमाल करो, सिवाय तब जब ऑर्डर 500 रुपये से कम हो।"
+  },
+  {
+   "id": "dev-hi-017",
+   "lang": "hi",
+   "domain": "logistics",
+   "kind": "CONDITIONAL_RULE",
+   "text": "अगर डिलीवरी दो घंटे से ज़्यादा लेट हो, तो हमेशा स्टोर मैनेजर को बताना।"
+  },
+  {
+   "id": "dev-hi-018",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "अगर कोल्ड स्टोरेज का तापमान 5 डिग्री से ऊपर जाए, तो मुझे तुरंत अलर्ट करना।"
+  },
+  {
+   "id": "dev-hi-019",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "खरीदार की मंज़ूरी के बिना मौसमी आइटम दोबारा ऑर्डर मत करना।"
+  },
+  {
+   "id": "dev-hi-020",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "क्लियरेंस आइटम को छोड़कर, कीमतें हमेशा .99 पर राउंड करना।"
+  },
+  {
+   "id": "dev-hi-021",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "फोर्कलिफ्ट 4 ठीक हो गई है और फिर से काम पर है।"
+  },
+  {
+   "id": "dev-hi-022",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "फोर्कलिफ्ट 4 रखरखाव के कारण सेवा से बाहर है।"
+  },
+  {
+   "id": "dev-hi-023",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "साइज़ M की नीली हुडी स्टॉक में नहीं है।"
+  },
+  {
+   "id": "dev-hi-024",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "स्टोर 7 का कोल्ड रूम फिर से बंद पड़ा है।"
+  },
+  {
+   "id": "dev-hi-025",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "स्टोर 12 के POS टर्मिनल फिर से चालू हैं।"
+  },
+  {
+   "id": "dev-hi-026",
+   "lang": "hi",
+   "domain": "logistics",
+   "kind": "STATUS",
+   "text": "ऑर्डर 88412 कस्टम में अटका हुआ है।"
+  },
+  {
+   "id": "dev-hi-027",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "ऑर्गेनिक स्ट्रॉबेरी फिर से स्टॉक में है।"
+  },
+  {
+   "id": "dev-hi-028",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "नहीं, हमारा सिस्टम अपडेट हो गया है।"
+  },
+  {
+   "id": "dev-hi-029",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "दरअसल, हमने कल Uline के साथ अपना कॉन्ट्रैक्ट खत्म कर दिया।"
+  },
+  {
+   "id": "dev-hi-030",
+   "lang": "hi",
+   "domain": "personal",
+   "kind": "CORRECTION",
+   "text": "सुधार: मीटिंग 3 बजे है, 2 बजे नहीं।"
+  },
+  {
+   "id": "dev-hi-031",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "मेरा मतलब स्टोर 14 था, 41 नहीं।"
+  },
+  {
+   "id": "dev-hi-032",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "यह गलत है, कोड 8429 है।"
+  },
+  {
+   "id": "dev-hi-033",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "अब हम /delete की जगह /shrinkage कमांड इस्तेमाल करते हैं।"
+  },
+  {
+   "id": "dev-hi-034",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "अस्थायी रेफ्रिजरेशन यूनिट को हटा दिया गया है और प्रोजेक्ट बंद हो गया है।"
+  },
+  {
+   "id": "dev-hi-035",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "हमारा नया एक्सक्लूसिव पैलेट सप्लायर PackagingCorp है।"
+  },
+  {
+   "id": "dev-hi-036",
+   "lang": "hi",
+   "domain": "logistics",
+   "kind": "LIFECYCLE",
+   "text": "हमने पिछले महीने FastFreight के साथ कॉन्ट्रैक्ट खत्म कर दिया।"
+  },
+  {
+   "id": "dev-hi-037",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "नीली हुडी का उत्पादन बंद कर दिया गया है।"
+  },
+  {
+   "id": "dev-hi-038",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "स्टोर 22 शनिवार को हमेशा के लिए बंद हो गया।"
+  },
+  {
+   "id": "dev-hi-039",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "हमने इस हफ्ते जयपुर में एक नया स्टोर खोला।"
+  },
+  {
+   "id": "dev-hi-040",
+   "lang": "hi",
+   "domain": "software",
+   "kind": "LIFECYCLE",
+   "text": "पुराना इन्वेंटरी सिस्टम जून में बंद कर दिया गया।"
+  },
+  {
+   "id": "dev-hi-041",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "खतरनाक सामग्री वाले पिंजरे का कोड क्या है?"
+  },
+  {
+   "id": "dev-hi-042",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "अभी कौन सी फोर्कलिफ्ट उपलब्ध हैं?"
+  },
+  {
+   "id": "dev-hi-043",
+   "lang": "hi",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "धन्यवाद, यह बहुत मददगार है!"
+  },
+  {
+   "id": "dev-hi-044",
+   "lang": "hi",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "सुप्रभात!"
+  },
+  {
+   "id": "dev-hi-045",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "पैलेट सप्लायर के लिए एक ऑर्डर ईमेल लिखो।"
+  },
+  {
+   "id": "dev-hi-046",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "क्या आप बैटरियों का स्टॉक चेक कर सकते हैं?"
+  },
+  {
+   "id": "dev-hi-047",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "कोल्ड रूम हमेशा इतना शोर क्यों करता है?"
+  },
+  {
+   "id": "dev-oneoff-en-01",
+   "lang": "en",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Please send the report when it's ready."
+  },
+  {
+   "id": "dev-oneoff-en-02",
+   "lang": "en",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Let me know when the shipment arrives."
+  },
+  {
+   "id": "dev-oneoff-en-03",
+   "lang": "en",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Tell me if the price drops."
+  },
+  {
+   "id": "dev-oneoff-en-04",
+   "lang": "en",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Call me when you get this."
+  },
+  {
+   "id": "dev-oneoff-en-05",
+   "lang": "en",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Remind me when it's time to leave."
+  },
+  {
+   "id": "dev-oneoff-en-06",
+   "lang": "en",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Text me once you've landed."
+  },
+  {
+   "id": "dev-oneoff-en-07",
+   "lang": "en",
+   "domain": "one-off requests and habits",
+   "kind": "FACT",
+   "text": "I always double-check the invoices before I pay them."
+  },
+  {
+   "id": "dev-oneoff-de-01",
+   "lang": "de",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Sag mir Bescheid, wenn du da bist."
+  },
+  {
+   "id": "dev-oneoff-de-02",
+   "lang": "de",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Ruf mich an, wenn du das hier liest."
+  },
+  {
+   "id": "dev-oneoff-de-03",
+   "lang": "de",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Gib mir Bescheid, wenn die Lieferung ankommt."
+  },
+  {
+   "id": "dev-oneoff-de-04",
+   "lang": "de",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Erinnere mich daran, wenn es Zeit zum Gehen ist."
+  },
+  {
+   "id": "dev-oneoff-de-05",
+   "lang": "de",
+   "domain": "one-off requests and habits",
+   "kind": "FACT",
+   "text": "Ich prüfe die Rechnungen immer vor der Zahlung."
+  },
+  {
+   "id": "dev-oneoff-es-01",
+   "lang": "es",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Avísame cuando llegues."
+  },
+  {
+   "id": "dev-oneoff-es-02",
+   "lang": "es",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Llámame cuando leas esto."
+  },
+  {
+   "id": "dev-oneoff-es-03",
+   "lang": "es",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Avísame cuando llegue el pedido."
+  },
+  {
+   "id": "dev-oneoff-es-04",
+   "lang": "es",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "Mándame el informe cuando esté listo."
+  },
+  {
+   "id": "dev-oneoff-es-05",
+   "lang": "es",
+   "domain": "one-off requests and habits",
+   "kind": "FACT",
+   "text": "Siempre consulto con el banco antes de firmar."
+  },
+  {
+   "id": "dev-oneoff-es-06",
+   "lang": "es",
+   "domain": "one-off requests and habits",
+   "kind": "FACT",
+   "text": "Nunca uso efectivo en la tienda."
+  },
+  {
+   "id": "dev-oneoff-ar-01",
+   "lang": "ar",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "أخبرني عندما تصل."
+  },
+  {
+   "id": "dev-oneoff-ar-02",
+   "lang": "ar",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "اتصل بي عندما تقرأ هذا."
+  },
+  {
+   "id": "dev-oneoff-ar-03",
+   "lang": "ar",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "أرسل لي التقرير عندما يكون جاهزًا."
+  },
+  {
+   "id": "dev-oneoff-ar-04",
+   "lang": "ar",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "أخبرني إذا انخفض السعر."
+  },
+  {
+   "id": "dev-oneoff-ar-05",
+   "lang": "ar",
+   "domain": "one-off requests and habits",
+   "kind": "FACT",
+   "text": "أنا دائمًا أراجع الفواتير قبل الدفع."
+  },
+  {
+   "id": "dev-oneoff-hi-01",
+   "lang": "hi",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "जब तुम पहुँचो तो मुझे बताना।"
+  },
+  {
+   "id": "dev-oneoff-hi-02",
+   "lang": "hi",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "जब आप यह पढ़ें तो मुझे फ़ोन करना।"
+  },
+  {
+   "id": "dev-oneoff-hi-03",
+   "lang": "hi",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "रिपोर्ट तैयार हो जाए तो मुझे भेज देना।"
+  },
+  {
+   "id": "dev-oneoff-hi-04",
+   "lang": "hi",
+   "domain": "one-off requests and habits",
+   "kind": "NONE",
+   "text": "अगर कीमत गिरे तो मुझे बताना।"
+  },
+  {
+   "id": "dev-oneoff-hi-05",
+   "lang": "hi",
+   "domain": "one-off requests and habits",
+   "kind": "FACT",
+   "text": "मैं हमेशा भुगतान से पहले बिल जाँचता हूँ।"
+  }
+ ],
+ "test": [
+  {
+   "id": "test-en-001",
+   "lang": "en",
+   "domain": "healthcare",
+   "kind": "FACT",
+   "text": "Our clinic's main phone line is 555-0142."
+  },
+  {
+   "id": "test-en-002",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "FACT",
+   "text": "The Denver warehouse ships about 2,000 orders a day."
+  },
+  {
+   "id": "test-en-003",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "I usually work from home on Fridays."
+  },
+  {
+   "id": "test-en-004",
+   "lang": "en",
+   "domain": "finance",
+   "kind": "FACT",
+   "text": "The marketing budget for next year is $1.2 million."
+  },
+  {
+   "id": "test-en-005",
+   "lang": "en",
+   "domain": "finance",
+   "kind": "FACT",
+   "text": "Our biggest customer is Northwind Traders."
+  },
+  {
+   "id": "test-en-006",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "My son plays the violin."
+  },
+  {
+   "id": "test-en-007",
+   "lang": "en",
+   "domain": "software",
+   "kind": "FACT",
+   "text": "The API rate limit is 100 requests per minute."
+  },
+  {
+   "id": "test-en-008",
+   "lang": "en",
+   "domain": "software",
+   "kind": "FACT",
+   "text": "Last night the team shipped version 2.3 of the mobile app."
+  },
+  {
+   "id": "test-en-009",
+   "lang": "en",
+   "domain": "hospitality",
+   "kind": "FACT",
+   "text": "Hotel check-in starts at 3pm."
+  },
+  {
+   "id": "test-en-010",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "FACT",
+   "text": "Store 5 sells the most garden furniture in the chain."
+  },
+  {
+   "id": "test-en-011",
+   "lang": "en",
+   "domain": "software",
+   "kind": "RULE",
+   "text": "Always write commit messages in the imperative mood."
+  },
+  {
+   "id": "test-en-012",
+   "lang": "en",
+   "domain": "travel",
+   "kind": "RULE",
+   "text": "Never book me on flights that leave before 7am."
+  },
+  {
+   "id": "test-en-013",
+   "lang": "en",
+   "domain": "finance",
+   "kind": "RULE",
+   "text": "From now on, address all customer emails to the account owner."
+  },
+  {
+   "id": "test-en-014",
+   "lang": "en",
+   "domain": "finance",
+   "kind": "RULE",
+   "text": "Every invoice must be approved by two people."
+  },
+  {
+   "id": "test-en-015",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "RULE",
+   "text": "When I ask for a sales report, always break it down by region."
+  },
+  {
+   "id": "test-en-016",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "RULE",
+   "text": "In meeting notes, always list action items at the top."
+  },
+  {
+   "id": "test-en-017",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "RULE",
+   "text": "Please never use emojis in client-facing drafts."
+  },
+  {
+   "id": "test-en-018",
+   "lang": "en",
+   "domain": "finance",
+   "kind": "RULE",
+   "text": "Going forward, store all receipts in the finance folder."
+  },
+  {
+   "id": "test-en-019",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "RULE",
+   "text": "Each time you summarise a call, include the next steps."
+  },
+  {
+   "id": "test-en-020",
+   "lang": "en",
+   "domain": "hospitality",
+   "kind": "RULE",
+   "text": "Never give guests a second key card for free."
+  },
+  {
+   "id": "test-en-021",
+   "lang": "en",
+   "domain": "software",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Always use the staging database unless I say 'prod'."
+  },
+  {
+   "id": "test-en-022",
+   "lang": "en",
+   "domain": "healthcare",
+   "kind": "CONDITIONAL_RULE",
+   "text": "If a patient cancels twice, always flag their file for review."
+  },
+  {
+   "id": "test-en-023",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Never discount new arrivals except during the anniversary sale."
+  },
+  {
+   "id": "test-en-024",
+   "lang": "en",
+   "domain": "software",
+   "kind": "CONDITIONAL_RULE",
+   "text": "When the error rate exceeds 5%, always page the on-call engineer."
+  },
+  {
+   "id": "test-en-025",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Don't send me notifications after 8pm unless it's an outage."
+  },
+  {
+   "id": "test-en-026",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "If a return has no receipt, offer store credit only."
+  },
+  {
+   "id": "test-en-027",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Always ship with UPS, except for orders to Alaska."
+  },
+  {
+   "id": "test-en-028",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Only restock the endcaps if sales are above target."
+  },
+  {
+   "id": "test-en-029",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Unless the client objects, always record the call."
+  },
+  {
+   "id": "test-en-030",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "If inventory of milk falls under 20 cartons, reorder it automatically."
+  },
+  {
+   "id": "test-en-031",
+   "lang": "en",
+   "domain": "hospitality",
+   "kind": "STATUS",
+   "text": "The elevator in Building B is out of order."
+  },
+  {
+   "id": "test-en-032",
+   "lang": "en",
+   "domain": "software",
+   "kind": "STATUS",
+   "text": "The printer on the third floor is working again."
+  },
+  {
+   "id": "test-en-033",
+   "lang": "en",
+   "domain": "hospitality",
+   "kind": "STATUS",
+   "text": "Room 214 is ready for the next guest."
+  },
+  {
+   "id": "test-en-034",
+   "lang": "en",
+   "domain": "software",
+   "kind": "STATUS",
+   "text": "Our main database is running in read-only mode right now."
+  },
+  {
+   "id": "test-en-035",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "The iPhone 15 cases are sold out online."
+  },
+  {
+   "id": "test-en-036",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "STATUS",
+   "text": "The package is stuck in transit in Memphis."
+  },
+  {
+   "id": "test-en-037",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "STATUS",
+   "text": "The coffee machine is broken."
+  },
+  {
+   "id": "test-en-038",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "STATUS",
+   "text": "Dock 1 is back in use after the inspection."
+  },
+  {
+   "id": "test-en-039",
+   "lang": "en",
+   "domain": "software",
+   "kind": "STATUS",
+   "text": "The website is down for maintenance."
+  },
+  {
+   "id": "test-en-040",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "STATUS",
+   "text": "Pallet jack #3 has been fixed."
+  },
+  {
+   "id": "test-en-041",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "CORRECTION",
+   "text": "Actually, the meeting was moved to Thursday."
+  },
+  {
+   "id": "test-en-042",
+   "lang": "en",
+   "domain": "finance",
+   "kind": "CORRECTION",
+   "text": "No, the client's name is Jansen, not Janssen."
+  },
+  {
+   "id": "test-en-043",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "CORRECTION",
+   "text": "Correction: we have 12 stores in Ohio, not 14."
+  },
+  {
+   "id": "test-en-044",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "CORRECTION",
+   "text": "Sorry, I meant the Denver warehouse, not Dallas."
+  },
+  {
+   "id": "test-en-045",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "CORRECTION",
+   "text": "I gave you the wrong number; it's 555-0124."
+  },
+  {
+   "id": "test-en-046",
+   "lang": "en",
+   "domain": "finance",
+   "kind": "CORRECTION",
+   "text": "That's not right, the budget is $1.5 million."
+  },
+  {
+   "id": "test-en-047",
+   "lang": "en",
+   "domain": "personal",
+   "kind": "CORRECTION",
+   "text": "Oops, the deadline is the 15th, not the 5th."
+  },
+  {
+   "id": "test-en-048",
+   "lang": "en",
+   "domain": "software",
+   "kind": "CORRECTION",
+   "text": "We now use Jira instead of Trello for tracking."
+  },
+  {
+   "id": "test-en-049",
+   "lang": "en",
+   "domain": "travel",
+   "kind": "CORRECTION",
+   "text": "Let me correct myself: the flight leaves at 6:40."
+  },
+  {
+   "id": "test-en-050",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "CORRECTION",
+   "text": "No, we stopped using FedEx for returns; it's UPS now."
+  },
+  {
+   "id": "test-en-051",
+   "lang": "en",
+   "domain": "software",
+   "kind": "LIFECYCLE",
+   "text": "We cancelled our subscription to the analytics tool."
+  },
+  {
+   "id": "test-en-052",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "The Springfield store has been permanently closed."
+  },
+  {
+   "id": "test-en-053",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "LIFECYCLE",
+   "text": "Our new logistics partner is Maersk."
+  },
+  {
+   "id": "test-en-054",
+   "lang": "en",
+   "domain": "hospitality",
+   "kind": "LIFECYCLE",
+   "text": "The holiday menu launched yesterday."
+  },
+  {
+   "id": "test-en-055",
+   "lang": "en",
+   "domain": "finance",
+   "kind": "LIFECYCLE",
+   "text": "John retired from the company last month."
+  },
+  {
+   "id": "test-en-056",
+   "lang": "en",
+   "domain": "software",
+   "kind": "LIFECYCLE",
+   "text": "We decommissioned the old mail server."
+  },
+  {
+   "id": "test-en-057",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "The red sneakers have been discontinued by the manufacturer."
+  },
+  {
+   "id": "test-en-058",
+   "lang": "en",
+   "domain": "software",
+   "kind": "LIFECYCLE",
+   "text": "The beta programme has officially ended."
+  },
+  {
+   "id": "test-en-059",
+   "lang": "en",
+   "domain": "healthcare",
+   "kind": "LIFECYCLE",
+   "text": "We just opened a second clinic in Austin."
+  },
+  {
+   "id": "test-en-060",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "LIFECYCLE",
+   "text": "Our lease on the Elm Street warehouse expired and we moved out."
+  },
+  {
+   "id": "test-en-061",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "What time does the store open on Sundays?"
+  },
+  {
+   "id": "test-en-062",
+   "lang": "en",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "Thank you so much!"
+  },
+  {
+   "id": "test-en-063",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Can you remind me what our return policy is?"
+  },
+  {
+   "id": "test-en-064",
+   "lang": "en",
+   "domain": "software",
+   "kind": "NONE",
+   "text": "Please summarise the last three incidents."
+  },
+  {
+   "id": "test-en-065",
+   "lang": "en",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "lol okay"
+  },
+  {
+   "id": "test-en-066",
+   "lang": "en",
+   "domain": "logistics",
+   "kind": "NONE",
+   "text": "Who is our contact at Maersk?"
+  },
+  {
+   "id": "test-en-067",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Show me today's open orders."
+  },
+  {
+   "id": "test-en-068",
+   "lang": "en",
+   "domain": "software",
+   "kind": "NONE",
+   "text": "Is the printer working now?"
+  },
+  {
+   "id": "test-en-069",
+   "lang": "en",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "Have a great weekend!"
+  },
+  {
+   "id": "test-en-070",
+   "lang": "en",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Why do we always run out of milk on Mondays?"
+  },
+  {
+   "id": "test-de-001",
+   "lang": "de",
+   "domain": "healthcare",
+   "kind": "FACT",
+   "text": "Unsere Praxis hat montags bis freitags geöffnet."
+  },
+  {
+   "id": "test-de-002",
+   "lang": "de",
+   "domain": "logistics",
+   "kind": "FACT",
+   "text": "Das Lager in Köln versendet täglich etwa 2.000 Bestellungen."
+  },
+  {
+   "id": "test-de-003",
+   "lang": "de",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "Mein Sohn spielt Geige."
+  },
+  {
+   "id": "test-de-004",
+   "lang": "de",
+   "domain": "software",
+   "kind": "RULE",
+   "text": "Schreib Commit-Nachrichten immer im Imperativ."
+  },
+  {
+   "id": "test-de-005",
+   "lang": "de",
+   "domain": "travel",
+   "kind": "RULE",
+   "text": "Buche mir nie Flüge vor 7 Uhr."
+  },
+  {
+   "id": "test-de-006",
+   "lang": "de",
+   "domain": "finance",
+   "kind": "RULE",
+   "text": "Von nun an speichere alle Belege im Finanzordner."
+  },
+  {
+   "id": "test-de-007",
+   "lang": "de",
+   "domain": "software",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Verwende immer die Testdatenbank, außer ich sage 'prod'."
+  },
+  {
+   "id": "test-de-008",
+   "lang": "de",
+   "domain": "software",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Wenn die Fehlerrate über 5 % steigt, benachrichtige immer den Bereitschaftsdienst."
+  },
+  {
+   "id": "test-de-009",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Gib keine Rabatte auf Neuware, es sei denn, es ist Jubiläumsverkauf."
+  },
+  {
+   "id": "test-de-010",
+   "lang": "de",
+   "domain": "hospitality",
+   "kind": "STATUS",
+   "text": "Der Aufzug in Gebäude B ist außer Betrieb."
+  },
+  {
+   "id": "test-de-011",
+   "lang": "de",
+   "domain": "software",
+   "kind": "STATUS",
+   "text": "Der Drucker im dritten Stock funktioniert wieder."
+  },
+  {
+   "id": "test-de-012",
+   "lang": "de",
+   "domain": "software",
+   "kind": "STATUS",
+   "text": "Die Website ist wegen Wartung nicht erreichbar."
+  },
+  {
+   "id": "test-de-013",
+   "lang": "de",
+   "domain": "personal",
+   "kind": "CORRECTION",
+   "text": "Eigentlich wurde das Meeting auf Donnerstag verschoben."
+  },
+  {
+   "id": "test-de-014",
+   "lang": "de",
+   "domain": "finance",
+   "kind": "CORRECTION",
+   "text": "Nein, der Kunde heißt Jansen, nicht Janssen."
+  },
+  {
+   "id": "test-de-015",
+   "lang": "de",
+   "domain": "software",
+   "kind": "CORRECTION",
+   "text": "Wir nutzen jetzt Jira statt Trello."
+  },
+  {
+   "id": "test-de-016",
+   "lang": "de",
+   "domain": "software",
+   "kind": "LIFECYCLE",
+   "text": "Wir haben unser Abo für das Analysetool gekündigt."
+  },
+  {
+   "id": "test-de-017",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "Die Filiale in Springfield wurde dauerhaft geschlossen."
+  },
+  {
+   "id": "test-de-018",
+   "lang": "de",
+   "domain": "finance",
+   "kind": "LIFECYCLE",
+   "text": "Johann ist letzten Monat in Rente gegangen."
+  },
+  {
+   "id": "test-de-019",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Wann öffnet der Laden am Sonntag?"
+  },
+  {
+   "id": "test-de-020",
+   "lang": "de",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "Vielen Dank!"
+  },
+  {
+   "id": "test-de-021",
+   "lang": "de",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Zeig mir die offenen Bestellungen von heute."
+  },
+  {
+   "id": "test-es-001",
+   "lang": "es",
+   "domain": "healthcare",
+   "kind": "FACT",
+   "text": "Nuestra clínica abre de lunes a viernes."
+  },
+  {
+   "id": "test-es-002",
+   "lang": "es",
+   "domain": "logistics",
+   "kind": "FACT",
+   "text": "El almacén de Sevilla envía unos 2.000 pedidos al día."
+  },
+  {
+   "id": "test-es-003",
+   "lang": "es",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "Mi hijo toca el violín."
+  },
+  {
+   "id": "test-es-004",
+   "lang": "es",
+   "domain": "software",
+   "kind": "RULE",
+   "text": "Escribe siempre los mensajes de commit en imperativo."
+  },
+  {
+   "id": "test-es-005",
+   "lang": "es",
+   "domain": "travel",
+   "kind": "RULE",
+   "text": "Nunca me reserves vuelos antes de las 7."
+  },
+  {
+   "id": "test-es-006",
+   "lang": "es",
+   "domain": "finance",
+   "kind": "RULE",
+   "text": "De ahora en adelante, guarda todos los recibos en la carpeta de finanzas."
+  },
+  {
+   "id": "test-es-007",
+   "lang": "es",
+   "domain": "software",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Usa siempre la base de datos de pruebas, a menos que diga 'prod'."
+  },
+  {
+   "id": "test-es-008",
+   "lang": "es",
+   "domain": "software",
+   "kind": "CONDITIONAL_RULE",
+   "text": "Si la tasa de errores supera el 5 %, avisa siempre al ingeniero de guardia."
+  },
+  {
+   "id": "test-es-009",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "No hagas descuentos en novedades excepto durante la venta de aniversario."
+  },
+  {
+   "id": "test-es-010",
+   "lang": "es",
+   "domain": "hospitality",
+   "kind": "STATUS",
+   "text": "El ascensor del edificio B está fuera de servicio."
+  },
+  {
+   "id": "test-es-011",
+   "lang": "es",
+   "domain": "software",
+   "kind": "STATUS",
+   "text": "La impresora del tercer piso vuelve a funcionar."
+  },
+  {
+   "id": "test-es-012",
+   "lang": "es",
+   "domain": "software",
+   "kind": "STATUS",
+   "text": "El sitio web está caído por mantenimiento."
+  },
+  {
+   "id": "test-es-013",
+   "lang": "es",
+   "domain": "personal",
+   "kind": "CORRECTION",
+   "text": "En realidad, la reunión se cambió al jueves."
+  },
+  {
+   "id": "test-es-014",
+   "lang": "es",
+   "domain": "finance",
+   "kind": "CORRECTION",
+   "text": "No, el cliente se llama Jansen, no Janssen."
+  },
+  {
+   "id": "test-es-015",
+   "lang": "es",
+   "domain": "software",
+   "kind": "CORRECTION",
+   "text": "Ahora usamos Jira en lugar de Trello."
+  },
+  {
+   "id": "test-es-016",
+   "lang": "es",
+   "domain": "software",
+   "kind": "LIFECYCLE",
+   "text": "Cancelamos nuestra suscripción a la herramienta de análisis."
+  },
+  {
+   "id": "test-es-017",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "La tienda de Springfield cerró de forma permanente."
+  },
+  {
+   "id": "test-es-018",
+   "lang": "es",
+   "domain": "finance",
+   "kind": "LIFECYCLE",
+   "text": "Juan se jubiló el mes pasado."
+  },
+  {
+   "id": "test-es-019",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "¿A qué hora abre la tienda el domingo?"
+  },
+  {
+   "id": "test-es-020",
+   "lang": "es",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "¡Muchas gracias!"
+  },
+  {
+   "id": "test-es-021",
+   "lang": "es",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "Muéstrame los pedidos abiertos de hoy."
+  },
+  {
+   "id": "test-ar-001",
+   "lang": "ar",
+   "domain": "healthcare",
+   "kind": "FACT",
+   "text": "تفتح عيادتنا من الاثنين إلى الجمعة."
+  },
+  {
+   "id": "test-ar-002",
+   "lang": "ar",
+   "domain": "logistics",
+   "kind": "FACT",
+   "text": "يشحن مستودع الدمام حوالي 2000 طلب يوميًا."
+  },
+  {
+   "id": "test-ar-003",
+   "lang": "ar",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "ابني يعزف على الكمان."
+  },
+  {
+   "id": "test-ar-004",
+   "lang": "ar",
+   "domain": "software",
+   "kind": "RULE",
+   "text": "اكتب رسائل الالتزام دائمًا بصيغة الأمر."
+  },
+  {
+   "id": "test-ar-005",
+   "lang": "ar",
+   "domain": "travel",
+   "kind": "RULE",
+   "text": "لا تحجز لي أبدًا رحلات قبل الساعة 7 صباحًا."
+  },
+  {
+   "id": "test-ar-006",
+   "lang": "ar",
+   "domain": "finance",
+   "kind": "RULE",
+   "text": "من الآن فصاعدًا، احفظ جميع الإيصالات في مجلد المالية."
+  },
+  {
+   "id": "test-ar-007",
+   "lang": "ar",
+   "domain": "software",
+   "kind": "CONDITIONAL_RULE",
+   "text": "استخدم دائمًا قاعدة بيانات الاختبار ما لم أقل 'prod'."
+  },
+  {
+   "id": "test-ar-008",
+   "lang": "ar",
+   "domain": "software",
+   "kind": "CONDITIONAL_RULE",
+   "text": "إذا تجاوز معدل الأخطاء 5٪، نبّه المهندس المناوب دائمًا."
+  },
+  {
+   "id": "test-ar-009",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "لا تقدم خصومات على المنتجات الجديدة إلا خلال تخفيضات الذكرى السنوية."
+  },
+  {
+   "id": "test-ar-010",
+   "lang": "ar",
+   "domain": "hospitality",
+   "kind": "STATUS",
+   "text": "المصعد في المبنى ب معطل."
+  },
+  {
+   "id": "test-ar-011",
+   "lang": "ar",
+   "domain": "software",
+   "kind": "STATUS",
+   "text": "الطابعة في الطابق الثالث تعمل مرة أخرى."
+  },
+  {
+   "id": "test-ar-012",
+   "lang": "ar",
+   "domain": "software",
+   "kind": "STATUS",
+   "text": "الموقع الإلكتروني متوقف للصيانة."
+  },
+  {
+   "id": "test-ar-013",
+   "lang": "ar",
+   "domain": "personal",
+   "kind": "CORRECTION",
+   "text": "في الواقع، تم نقل الاجتماع إلى يوم الخميس."
+  },
+  {
+   "id": "test-ar-014",
+   "lang": "ar",
+   "domain": "finance",
+   "kind": "CORRECTION",
+   "text": "لا، اسم العميل يانسن وليس يانسسن."
+  },
+  {
+   "id": "test-ar-015",
+   "lang": "ar",
+   "domain": "software",
+   "kind": "CORRECTION",
+   "text": "نستخدم الآن Jira بدلًا من Trello."
+  },
+  {
+   "id": "test-ar-016",
+   "lang": "ar",
+   "domain": "software",
+   "kind": "LIFECYCLE",
+   "text": "ألغينا اشتراكنا في أداة التحليلات."
+  },
+  {
+   "id": "test-ar-017",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "تم إغلاق فرع سبرينغفيلد بشكل دائم."
+  },
+  {
+   "id": "test-ar-018",
+   "lang": "ar",
+   "domain": "finance",
+   "kind": "LIFECYCLE",
+   "text": "تقاعد يوسف من الشركة الشهر الماضي."
+  },
+  {
+   "id": "test-ar-019",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "متى يفتح المتجر يوم الأحد؟"
+  },
+  {
+   "id": "test-ar-020",
+   "lang": "ar",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "شكرًا جزيلًا!"
+  },
+  {
+   "id": "test-ar-021",
+   "lang": "ar",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "أرني الطلبات المفتوحة اليوم."
+  },
+  {
+   "id": "test-hi-001",
+   "lang": "hi",
+   "domain": "healthcare",
+   "kind": "FACT",
+   "text": "हमारा क्लिनिक सोमवार से शुक्रवार तक खुला रहता है।"
+  },
+  {
+   "id": "test-hi-002",
+   "lang": "hi",
+   "domain": "logistics",
+   "kind": "FACT",
+   "text": "नागपुर गोदाम रोज़ लगभग 2,000 ऑर्डर भेजता है।"
+  },
+  {
+   "id": "test-hi-003",
+   "lang": "hi",
+   "domain": "personal",
+   "kind": "FACT",
+   "text": "मेरा बेटा वायलिन बजाता है।"
+  },
+  {
+   "id": "test-hi-004",
+   "lang": "hi",
+   "domain": "software",
+   "kind": "RULE",
+   "text": "कमिट मैसेज हमेशा आदेशात्मक रूप में लिखना।"
+  },
+  {
+   "id": "test-hi-005",
+   "lang": "hi",
+   "domain": "travel",
+   "kind": "RULE",
+   "text": "मेरे लिए सुबह 7 बजे से पहले की फ्लाइट कभी बुक मत करना।"
+  },
+  {
+   "id": "test-hi-006",
+   "lang": "hi",
+   "domain": "finance",
+   "kind": "RULE",
+   "text": "अब से सभी रसीदें फाइनेंस फ़ोल्डर में सेव करना।"
+  },
+  {
+   "id": "test-hi-007",
+   "lang": "hi",
+   "domain": "software",
+   "kind": "CONDITIONAL_RULE",
+   "text": "हमेशा टेस्ट डेटाबेस इस्तेमाल करना, जब तक मैं 'prod' न कहूँ।"
+  },
+  {
+   "id": "test-hi-008",
+   "lang": "hi",
+   "domain": "software",
+   "kind": "CONDITIONAL_RULE",
+   "text": "अगर एरर रेट 5% से ज़्यादा हो जाए, तो हमेशा ऑन-कॉल इंजीनियर को सूचित करना।"
+  },
+  {
+   "id": "test-hi-009",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "CONDITIONAL_RULE",
+   "text": "नए उत्पादों पर छूट मत देना, सिवाय सालगिरह सेल के दौरान।"
+  },
+  {
+   "id": "test-hi-010",
+   "lang": "hi",
+   "domain": "hospitality",
+   "kind": "STATUS",
+   "text": "बिल्डिंग B की लिफ्ट खराब है।"
+  },
+  {
+   "id": "test-hi-011",
+   "lang": "hi",
+   "domain": "software",
+   "kind": "STATUS",
+   "text": "तीसरी मंज़िल का प्रिंटर फिर से काम कर रहा है।"
+  },
+  {
+   "id": "test-hi-012",
+   "lang": "hi",
+   "domain": "software",
+   "kind": "STATUS",
+   "text": "वेबसाइट रखरखाव के लिए बंद है।"
+  },
+  {
+   "id": "test-hi-013",
+   "lang": "hi",
+   "domain": "personal",
+   "kind": "CORRECTION",
+   "text": "दरअसल, मीटिंग गुरुवार को शिफ्ट कर दी गई है।"
+  },
+  {
+   "id": "test-hi-014",
+   "lang": "hi",
+   "domain": "finance",
+   "kind": "CORRECTION",
+   "text": "नहीं, क्लाइंट का नाम जैनसन है, जैन्सन नहीं।"
+  },
+  {
+   "id": "test-hi-015",
+   "lang": "hi",
+   "domain": "software",
+   "kind": "CORRECTION",
+   "text": "अब हम Trello की जगह Jira इस्तेमाल करते हैं।"
+  },
+  {
+   "id": "test-hi-016",
+   "lang": "hi",
+   "domain": "software",
+   "kind": "LIFECYCLE",
+   "text": "हमने एनालिटिक्स टूल की सदस्यता रद्द कर दी।"
+  },
+  {
+   "id": "test-hi-017",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "LIFECYCLE",
+   "text": "स्प्रिंगफील्ड स्टोर स्थायी रूप से बंद हो गया है।"
+  },
+  {
+   "id": "test-hi-018",
+   "lang": "hi",
+   "domain": "finance",
+   "kind": "LIFECYCLE",
+   "text": "रमेश पिछले महीने कंपनी से रिटायर हो गए।"
+  },
+  {
+   "id": "test-hi-019",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "रविवार को स्टोर कितने बजे खुलता है?"
+  },
+  {
+   "id": "test-hi-020",
+   "lang": "hi",
+   "domain": "chitchat",
+   "kind": "NONE",
+   "text": "बहुत-बहुत धन्यवाद!"
+  },
+  {
+   "id": "test-hi-021",
+   "lang": "hi",
+   "domain": "retail",
+   "kind": "NONE",
+   "text": "आज के खुले ऑर्डर दिखाओ।"
+  }
+ ]
+}
