@@ -1,0 +1,2426 @@
+{
+  "comparison_timing": {
+    "cold_ms": {
+      "p50": 0.05,
+      "p95": 0.11
+    },
+    "comparisons": 5760,
+    "encoded_pairs": 83,
+    "warm_ms": {
+      "p50": 0.0046,
+      "p95": 0.02
+    },
+    "with_encoder_cold_ms": {
+      "p50": 5.01,
+      "p95": 8.65
+    }
+  },
+  "dense_threshold": {
+    "chosen_threshold": "0.77",
+    "different_cosines": [
+      "0.433",
+      "0.516",
+      "0.52",
+      "0.533",
+      "0.549",
+      "0.552",
+      "0.556",
+      "0.561",
+      "0.571",
+      "0.575",
+      "0.581",
+      "0.591",
+      "0.599",
+      "0.622",
+      "0.656",
+      "0.657",
+      "0.671",
+      "0.674",
+      "0.679",
+      "0.699",
+      "0.702",
+      "0.713",
+      "0.713",
+      "0.72",
+      "0.723",
+      "0.745",
+      "0.751",
+      "0.754",
+      "0.77",
+      "0.817",
+      "0.818"
+    ],
+    "same_cosines": [
+      "0.536",
+      "0.661",
+      "0.672",
+      "0.778",
+      "0.804",
+      "0.823",
+      "0.835",
+      "0.874",
+      "0.916"
+    ],
+    "shipped_threshold": 0.77,
+    "soft_pairs": 40,
+    "youden_j": 0.602
+  },
+  "dev": 285,
+  "encoder": "onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384",
+  "exact_strings": {
+    "different": 322,
+    "f1": 0.125,
+    "false_merge_rate": 0.0031,
+    "false_merges": 1,
+    "hard_negative_false_merge_rate": 0.0031,
+    "hard_negative_false_merges": 1,
+    "hard_negatives": 322,
+    "pairs": 576,
+    "precision": 0.9444,
+    "recall": 0.0669,
+    "routed_different_rate": 0.0031,
+    "routed_recall": 0.0669,
+    "same": 254
+  },
+  "pairs": 576,
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "b1aa2aa87d09e207fd219d0bcaa51a399466e24a",
+    "host_load": {
+      "load_per_core": 0.92,
+      "loadavg_15m": 2.64,
+      "loadavg_1m": 3.68,
+      "loadavg_5m": 2.85
+    },
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    },
+    "machine": "x86_64",
+    "memory_gb": 15.7,
+    "models": {
+      "bekko-embedding-v1-a8m": {
+        "repo": "hotchpotch/bekko-embedding-v1-a8m",
+        "revision": "c721113d59a1d91b447450324f51c4b3332c924a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "mdeberta-v3-base-xnli-multilingual-nli-2mil7": {
+        "repo": "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7",
+        "revision": "b5113eb38ab63efdd7f280f8c144ea8b13f978ce"
+      },
+      "mxbai-edge-colbert-v0-32m": {
+        "repo": "mixedbread-ai/mxbai-edge-colbert-v0-32m",
+        "revision": "bb13a29ec9b1e7edd4ba8f7a0776c48b55cbad66"
+      }
+    },
+    "packages": {
+      "docling": "2.127.0",
+      "fastapi": "0.141.1",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.18.44-fc-v80-x86_64-with-glibc2.39",
+    "python": "3.13.14",
+    "timestamp": "2026-10-08T17:05:30.240161+00:00"
+  },
+  "rapidfuzz": {
+    "native_edit1": {
+      "different_pairs": 79,
+      "different_routed": 5,
+      "same_pairs": 24,
+      "same_routed": 7
+    },
+    "ratio>=80": {
+      "different_pairs": 79,
+      "different_routed": 6,
+      "same_pairs": 24,
+      "same_routed": 8
+    },
+    "ratio>=85": {
+      "different_pairs": 79,
+      "different_routed": 4,
+      "same_pairs": 24,
+      "same_routed": 7
+    },
+    "ratio>=90": {
+      "different_pairs": 79,
+      "different_routed": 3,
+      "same_pairs": 24,
+      "same_routed": 4
+    },
+    "ratio>=95": {
+      "different_pairs": 79,
+      "different_routed": 0,
+      "same_pairs": 24,
+      "same_routed": 0
+    }
+  },
+  "statement_timing": {
+    "words": {
+      "consolidate_ms": {
+        "p50": 0.2,
+        "p95": 0.3
+      },
+      "decisions": {
+        "CREATE": 130,
+        "REINFORCE": 10,
+        "SUPERSEDE": 10
+      },
+      "rounds": 10,
+      "statements": 15,
+      "stored_memories": 20,
+      "subject_matcher_ms": {
+        "p50": 0.15,
+        "p95": 0.24
+      }
+    }
+  },
+  "test": 291,
+  "words": {
+    "by_domain": {
+      "general": {
+        "different": 9,
+        "f1": 0.9268,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 9,
+        "pairs": 31,
+        "precision": 1.0,
+        "recall": 0.8636,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 22
+      },
+      "mixed": {
+        "different": 55,
+        "f1": 0.5385,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 55,
+        "pairs": 112,
+        "precision": 1.0,
+        "recall": 0.3684,
+        "routed_different_rate": 0.5636,
+        "routed_recall": 1.0,
+        "same": 57
+      },
+      "names": {
+        "different": 81,
+        "f1": 0.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 81,
+        "pairs": 91,
+        "precision": 1.0,
+        "recall": 0.0,
+        "routed_different_rate": 0.1728,
+        "routed_recall": 1.0,
+        "same": 10
+      },
+      "retail": {
+        "different": 177,
+        "f1": 0.9286,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 177,
+        "pairs": 342,
+        "precision": 1.0,
+        "recall": 0.8667,
+        "routed_different_rate": 0.0113,
+        "routed_recall": 0.8909,
+        "same": 165
+      }
+    },
+    "by_kind": {
+      "alias": {
+        "different": 0,
+        "f1": 0.9804,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 0,
+        "pairs": 52,
+        "precision": 1.0,
+        "recall": 0.9615,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 52
+      },
+      "ambiguous_comma": {
+        "different": 4,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 4,
+        "pairs": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "article_name": {
+        "different": 6,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 6,
+        "pairs": 6,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 1.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "code": {
+        "different": 22,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 22,
+        "pairs": 22,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "crosslingual": {
+        "different": 8,
+        "f1": 0.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 8,
+        "pairs": 24,
+        "precision": 1.0,
+        "recall": 0.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 16
+      },
+      "direction": {
+        "different": 8,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 8,
+        "pairs": 8,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.125,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "format": {
+        "different": 0,
+        "f1": 0.9863,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 0,
+        "pairs": 74,
+        "precision": 1.0,
+        "recall": 0.973,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.9865,
+        "same": 74
+      },
+      "general": {
+        "different": 9,
+        "f1": 0.8421,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 9,
+        "pairs": 20,
+        "precision": 1.0,
+        "recall": 0.7273,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 11
+      },
+      "identifier": {
+        "different": 92,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 92,
+        "pairs": 92,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "learned": {
+        "different": 6,
+        "f1": 0.9412,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 6,
+        "pairs": 15,
+        "precision": 1.0,
+        "recall": 0.8889,
+        "routed_different_rate": 0.3333,
+        "routed_recall": 1.0,
+        "same": 9
+      },
+      "legal_code": {
+        "different": 15,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 15,
+        "pairs": 15,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.9333,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "lower_code": {
+        "different": 3,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 3,
+        "pairs": 3,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "month_name": {
+        "different": 4,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 4,
+        "pairs": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 1.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "names": {
+        "different": 61,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 61,
+        "pairs": 61,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.082,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "normalisation": {
+        "different": 0,
+        "f1": 0.5714,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 0,
+        "pairs": 55,
+        "precision": 1.0,
+        "recall": 0.4,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 55
+      },
+      "number": {
+        "different": 19,
+        "f1": 0.9231,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 19,
+        "pairs": 26,
+        "precision": 1.0,
+        "recall": 0.8571,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.8571,
+        "same": 7
+      },
+      "order": {
+        "different": 13,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 13,
+        "pairs": 13,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "partial": {
+        "different": 6,
+        "f1": 0.4,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 6,
+        "pairs": 10,
+        "precision": 1.0,
+        "recall": 0.25,
+        "routed_different_rate": 1.0,
+        "routed_recall": 1.0,
+        "same": 4
+      },
+      "plural_name": {
+        "different": 9,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 9,
+        "pairs": 9,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 1.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "spelling": {
+        "different": 0,
+        "f1": 0.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 0,
+        "pairs": 10,
+        "precision": 1.0,
+        "recall": 0.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 10
+      },
+      "symbol": {
+        "different": 9,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 9,
+        "pairs": 9,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "tenant_vs_pack": {
+        "different": 3,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 3,
+        "pairs": 5,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 2
+      },
+      "title": {
+        "different": 11,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 11,
+        "pairs": 11,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "unit": {
+        "different": 14,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 14,
+        "pairs": 28,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 14
+      }
+    },
+    "by_lang": {
+      "ar": {
+        "different": 32,
+        "f1": 0.7895,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 32,
+        "pairs": 55,
+        "precision": 1.0,
+        "recall": 0.6522,
+        "routed_different_rate": 0.0938,
+        "routed_recall": 0.8696,
+        "same": 23
+      },
+      "de": {
+        "different": 49,
+        "f1": 0.8276,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 49,
+        "pairs": 83,
+        "precision": 1.0,
+        "recall": 0.7059,
+        "routed_different_rate": 0.1837,
+        "routed_recall": 0.8529,
+        "same": 34
+      },
+      "en": {
+        "different": 159,
+        "f1": 0.874,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 159,
+        "pairs": 302,
+        "precision": 1.0,
+        "recall": 0.7762,
+        "routed_different_rate": 0.1509,
+        "routed_recall": 0.986,
+        "same": 143
+      },
+      "es": {
+        "different": 49,
+        "f1": 0.7925,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 49,
+        "pairs": 81,
+        "precision": 1.0,
+        "recall": 0.6562,
+        "routed_different_rate": 0.1837,
+        "routed_recall": 0.8438,
+        "same": 32
+      },
+      "hi": {
+        "different": 33,
+        "f1": 0.7059,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 33,
+        "pairs": 55,
+        "precision": 1.0,
+        "recall": 0.5455,
+        "routed_different_rate": 0.0606,
+        "routed_recall": 0.8636,
+        "same": 22
+      }
+    },
+    "by_split": {
+      "dev": {
+        "different": 163,
+        "f1": 0.8491,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 163,
+        "pairs": 285,
+        "precision": 1.0,
+        "recall": 0.7377,
+        "routed_different_rate": 0.1534,
+        "routed_recall": 0.9262,
+        "same": 122
+      },
+      "test": {
+        "different": 159,
+        "f1": 0.8267,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 159,
+        "pairs": 291,
+        "precision": 1.0,
+        "recall": 0.7045,
+        "routed_different_rate": 0.1384,
+        "routed_recall": 0.9318,
+        "same": 132
+      }
+    },
+    "different": 322,
+    "errors": [
+      {
+        "a": "PO#4471",
+        "b": "po 4471",
+        "id": "format-en-009",
+        "label": "same",
+        "reason": "identifiers differ: po# 4471 vs 4471",
+        "verdict": "different"
+      },
+      {
+        "a": "Dock 7",
+        "b": "dock door #7",
+        "id": "format-en-010",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "SKU 1001 \u0915\u093e \u0938\u094d\u091f\u0949\u0915",
+        "b": "SKU-1001 \u0938\u094d\u091f\u0949\u0915",
+        "id": "alias-hi-242",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "SKU 1001 \u0633\u0639\u0631",
+        "b": "\u0633\u0639\u0631 SKU-1001",
+        "id": "alias-ar-245",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Forklift 4 battery",
+        "b": "battery of forklift 4",
+        "id": "normalisation-en-246",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "The Atlas project",
+        "b": "Atlas project",
+        "id": "normalisation-en-249",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "pallets in Warehouse 3",
+        "b": "Warehouse 3 pallets",
+        "id": "normalisation-en-250",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Dr. Priya Sharma",
+        "b": "Priya Sharma",
+        "id": "normalisation-en-255",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Ms. Ana Garc\u00eda",
+        "b": "Ana Garc\u00eda",
+        "id": "normalisation-en-256",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Mr John Smith",
+        "b": "John Smith",
+        "id": "normalisation-en-257",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "batteries for Forklift 4",
+        "b": "Forklift 4 battery",
+        "id": "normalisation-en-258",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "north warehouse",
+        "b": "warehouse north",
+        "id": "normalisation-en-259",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Store 12 weekly sales",
+        "b": "weekly sales of store 12",
+        "id": "normalisation-en-260",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "SKU 1001 price",
+        "b": "price of SKU-1001",
+        "id": "normalisation-en-261",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Kubernetes cluster",
+        "b": "kubernetes clusters",
+        "id": "normalisation-en-266",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Q3 forecast",
+        "b": "forecast for Q3",
+        "id": "normalisation-en-267",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Acme's DC 3",
+        "b": "distribution center 3 of Acme",
+        "id": "normalisation-en-268",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Berlin store",
+        "b": "Berlin stores",
+        "id": "normalisation-en-269",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Gabelstapler 4 Batterie",
+        "b": "Batterie von Gabelstapler 4",
+        "id": "normalisation-de-270",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "Herr Thomas Weber",
+        "b": "Thomas Weber",
+        "id": "normalisation-de-273",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Frau Dr. Anna Schmidt",
+        "b": "Anna Schmidt",
+        "id": "normalisation-de-274",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Lager Nord",
+        "b": "Nord Lager",
+        "id": "normalisation-de-275",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "bater\u00eda del montacargas 4",
+        "b": "montacargas 4 bater\u00eda",
+        "id": "normalisation-es-278",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "Transportes Garc\u00eda S.A.",
+        "b": "Transportes Garc\u00eda",
+        "id": "normalisation-es-280",
+        "label": "same",
+        "reason": "one side names no identifier",
+        "verdict": "possible"
+      },
+      {
+        "a": "Sra. Ana Garc\u00eda",
+        "b": "Ana Garc\u00eda",
+        "id": "normalisation-es-281",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Don Luis P\u00e9rez",
+        "b": "Luis P\u00e9rez",
+        "id": "normalisation-es-283",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "ventas de la tienda 12",
+        "b": "tienda 12 ventas",
+        "id": "normalisation-es-285",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0627\u0644\u0633\u064a\u062f \u0623\u062d\u0645\u062f \u0639\u0644\u064a",
+        "b": "\u0623\u062d\u0645\u062f \u0639\u0644\u064a",
+        "id": "normalisation-ar-287",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0627\u0644\u062f\u0643\u062a\u0648\u0631 \u062e\u0627\u0644\u062f \u062d\u0633\u0646",
+        "b": "\u062e\u0627\u0644\u062f \u062d\u0633\u0646",
+        "id": "normalisation-ar-288",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0645\u0628\u064a\u0639\u0627\u062a \u0627\u0644\u0645\u062a\u062c\u0631 12",
+        "b": "\u0627\u0644\u0645\u062a\u062c\u0631 12 \u0645\u0628\u064a\u0639\u0627\u062a",
+        "id": "normalisation-ar-289",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0628\u0637\u0627\u0631\u064a\u0629 \u0627\u0644\u0631\u0627\u0641\u0639\u0629 \u0627\u0644\u0634\u0648\u0643\u064a\u0629 4",
+        "b": "\u0627\u0644\u0631\u0627\u0641\u0639\u0629 \u0627\u0644\u0634\u0648\u0643\u064a\u0629 4 \u0628\u0637\u0627\u0631\u064a\u0629",
+        "id": "normalisation-ar-290",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0936\u094d\u0930\u0940 \u0930\u093e\u091c\u0947\u0936 \u0915\u0941\u092e\u093e\u0930",
+        "b": "\u0930\u093e\u091c\u0947\u0936 \u0915\u0941\u092e\u093e\u0930",
+        "id": "normalisation-hi-293",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0921\u0949 \u092a\u094d\u0930\u093f\u092f\u093e \u0936\u0930\u094d\u092e\u093e",
+        "b": "\u092a\u094d\u0930\u093f\u092f\u093e \u0936\u0930\u094d\u092e\u093e",
+        "id": "normalisation-hi-294",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0938\u094d\u091f\u094b\u0930 12 \u0915\u0940 \u092c\u093f\u0915\u094d\u0930\u0940",
+        "b": "\u0938\u094d\u091f\u094b\u0930 12 \u092c\u093f\u0915\u094d\u0930\u0940",
+        "id": "normalisation-hi-295",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u092b\u094b\u0930\u094d\u0915\u0932\u093f\u092b\u094d\u091f 4 \u0915\u0940 \u092c\u0948\u091f\u0930\u0940",
+        "b": "\u092b\u094b\u0930\u094d\u0915\u0932\u093f\u092b\u094d\u091f 4 \u092c\u0948\u091f\u0930\u0940",
+        "id": "normalisation-hi-296",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0936\u0930\u094d\u092e\u093e \u091c\u0940",
+        "b": "\u0936\u0930\u094d\u092e\u093e",
+        "id": "normalisation-hi-297",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0917\u094b\u0926\u093e\u092e 3 \u0915\u0947 \u092a\u0948\u0932\u0947\u091f",
+        "b": "\u0917\u094b\u0926\u093e\u092e 3 \u092a\u0948\u0932\u0947\u091f",
+        "id": "normalisation-hi-298",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Acme",
+        "b": "Acme Logistics",
+        "id": "partial-en-360",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "Priya",
+        "b": "Priya Sharma",
+        "id": "partial-en-362",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "Northwind",
+        "b": "Northwind Traders",
+        "id": "partial-en-369",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "Jonathan Smith",
+        "b": "Jonathon Smith",
+        "id": "spelling-en-370",
+        "label": "same",
+        "reason": "spelling variant",
+        "verdict": "possible"
+      },
+      {
+        "a": "Kubernetes cluster",
+        "b": "Kubernets cluster",
+        "id": "spelling-en-371",
+        "label": "same",
+        "reason": "spelling variant",
+        "verdict": "possible"
+      },
+      {
+        "a": "Northwind Traders",
+        "b": "Nortwind Traders",
+        "id": "spelling-en-372",
+        "label": "same",
+        "reason": "spelling variant",
+        "verdict": "possible"
+      },
+      {
+        "a": "Margaret Thompson",
+        "b": "Margret Thompson",
+        "id": "spelling-en-373",
+        "label": "same",
+        "reason": "spelling variant",
+        "verdict": "possible"
+      },
+      {
+        "a": "Acme Logistics",
+        "b": "Acme Logisitcs",
+        "id": "spelling-en-374",
+        "label": "same",
+        "reason": "spelling variant",
+        "verdict": "possible"
+      },
+      {
+        "a": "Global Freight Solutions",
+        "b": "GFS",
+        "id": "spelling-en-375",
+        "label": "same",
+        "reason": "initialism",
+        "verdict": "possible"
+      },
+      {
+        "a": "Fresh Produce Distributors",
+        "b": "FPD",
+        "id": "spelling-en-376",
+        "label": "same",
+        "reason": "initialism",
+        "verdict": "possible"
+      },
+      {
+        "a": "Pacific Coast Supply",
+        "b": "PCS",
+        "id": "spelling-en-377",
+        "label": "same",
+        "reason": "initialism",
+        "verdict": "possible"
+      },
+      {
+        "a": "Rossmann Drogerie",
+        "b": "Rosmann Drogerie",
+        "id": "spelling-de-378",
+        "label": "same",
+        "reason": "spelling variant",
+        "verdict": "possible"
+      },
+      {
+        "a": "Transportes Garc\u00eda",
+        "b": "Transportes Garcia",
+        "id": "spelling-es-379",
+        "label": "same",
+        "reason": "spelling variant",
+        "verdict": "possible"
+      },
+      {
+        "a": "Forklift 4",
+        "b": "Gabelstapler 4",
+        "id": "crosslingual-de-380",
+        "label": "same",
+        "reason": "names differ: forklift vs gabelstapler",
+        "verdict": "different"
+      },
+      {
+        "a": "Forklift 4",
+        "b": "montacargas 4",
+        "id": "crosslingual-es-381",
+        "label": "same",
+        "reason": "names differ: forklift vs montacarga",
+        "verdict": "different"
+      },
+      {
+        "a": "Forklift 4",
+        "b": "\u0627\u0644\u0631\u0627\u0641\u0639\u0629 \u0627\u0644\u0634\u0648\u0643\u064a\u0629 4",
+        "id": "crosslingual-ar-382",
+        "label": "same",
+        "reason": "names differ: forklift vs \u0631\u0627\u0641\u0639\u0647 \u0634\u0648\u0643\u064a\u0647",
+        "verdict": "different"
+      },
+      {
+        "a": "Forklift 4",
+        "b": "\u092b\u094b\u0930\u094d\u0915\u0932\u093f\u092b\u094d\u091f 4",
+        "id": "crosslingual-hi-383",
+        "label": "same",
+        "reason": "names differ: forklift vs \u092b\u094b\u0930\u094d\u0915\u0932\u093f\u092b\u094d\u091f",
+        "verdict": "different"
+      },
+      {
+        "a": "Warehouse 3",
+        "b": "Lager 3",
+        "id": "crosslingual-de-384",
+        "label": "same",
+        "reason": "names differ: warehouse vs lager",
+        "verdict": "different"
+      },
+      {
+        "a": "Warehouse 3",
+        "b": "almac\u00e9n 3",
+        "id": "crosslingual-es-385",
+        "label": "same",
+        "reason": "names differ: warehouse vs almac\u00e9n",
+        "verdict": "different"
+      },
+      {
+        "a": "Warehouse 3",
+        "b": "\u0627\u0644\u0645\u0633\u062a\u0648\u062f\u0639 3",
+        "id": "crosslingual-ar-386",
+        "label": "same",
+        "reason": "names differ: warehouse vs \u0645\u0633\u062a\u0648\u062f\u0639",
+        "verdict": "different"
+      },
+      {
+        "a": "Warehouse 3",
+        "b": "\u0917\u094b\u0926\u093e\u092e 3",
+        "id": "crosslingual-hi-387",
+        "label": "same",
+        "reason": "names differ: warehouse vs \u0917\u094b\u0926\u093e\u092e",
+        "verdict": "different"
+      },
+      {
+        "a": "Store 12",
+        "b": "Filiale 12",
+        "id": "crosslingual-de-388",
+        "label": "same",
+        "reason": "names differ: store vs filiale",
+        "verdict": "different"
+      },
+      {
+        "a": "Store 12",
+        "b": "tienda 12",
+        "id": "crosslingual-es-389",
+        "label": "same",
+        "reason": "names differ: store vs tienda",
+        "verdict": "different"
+      },
+      {
+        "a": "Store 12",
+        "b": "\u0627\u0644\u0645\u062a\u062c\u0631 12",
+        "id": "crosslingual-ar-390",
+        "label": "same",
+        "reason": "names differ: store vs \u0645\u062a\u062c\u0631",
+        "verdict": "different"
+      },
+      {
+        "a": "Store 12",
+        "b": "\u0938\u094d\u091f\u094b\u0930 12",
+        "id": "crosslingual-hi-391",
+        "label": "same",
+        "reason": "names differ: store vs \u0938\u094d\u091f\u094b\u0930",
+        "verdict": "different"
+      },
+      {
+        "a": "purchase order 4471",
+        "b": "Bestellung 4471",
+        "id": "crosslingual-de-392",
+        "label": "same",
+        "reason": "names differ: order purchase vs bestellung",
+        "verdict": "different"
+      },
+      {
+        "a": "purchase order 4471",
+        "b": "orden de compra 4471",
+        "id": "crosslingual-es-393",
+        "label": "same",
+        "reason": "names differ: order purchase vs compra de orden",
+        "verdict": "different"
+      },
+      {
+        "a": "October sales",
+        "b": "Oktober Umsatz",
+        "id": "crosslingual-de-394",
+        "label": "same",
+        "reason": "names differ: sale vs oktober umsatz",
+        "verdict": "different"
+      },
+      {
+        "a": "October sales",
+        "b": "ventas de octubre",
+        "id": "crosslingual-es-395",
+        "label": "same",
+        "reason": "names differ: sale vs de venta",
+        "verdict": "different"
+      },
+      {
+        "a": "XD lane",
+        "b": "cross-docking lane",
+        "id": "learned-en-404",
+        "label": "same",
+        "reason": "one names more than the other and no identifier",
+        "verdict": "possible"
+      },
+      {
+        "a": "Atlas project",
+        "b": "Project Atlas",
+        "id": "general-en-416",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Q3 board meeting",
+        "b": "board meeting Q3",
+        "id": "general-en-423",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Dr. Rao's clinic",
+        "b": "clinic of Dr Rao",
+        "id": "general-en-432",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "1,000 units order",
+        "b": "1000 units order",
+        "id": "number-en-497",
+        "label": "same",
+        "reason": "identifiers differ: 1,000pcs vs 1000pcs",
+        "verdict": "different"
+      }
+    ],
+    "f1": 0.8375,
+    "false_merge_rate": 0.0,
+    "false_merges": 0,
+    "hard_negative_false_merge_rate": 0.0,
+    "hard_negative_false_merges": 0,
+    "hard_negatives": 322,
+    "pairs": 576,
+    "precision": 1.0,
+    "recall": 0.7205,
+    "routed_different_rate": 0.146,
+    "routed_recall": 0.9291,
+    "same": 254
+  },
+  "words+encoder": {
+    "by_domain": {
+      "general": {
+        "different": 9,
+        "f1": 0.9268,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 9,
+        "pairs": 31,
+        "precision": 1.0,
+        "recall": 0.8636,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 22
+      },
+      "mixed": {
+        "different": 55,
+        "f1": 0.5385,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 55,
+        "pairs": 112,
+        "precision": 1.0,
+        "recall": 0.3684,
+        "routed_different_rate": 0.5636,
+        "routed_recall": 1.0,
+        "same": 57
+      },
+      "names": {
+        "different": 81,
+        "f1": 0.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 81,
+        "pairs": 91,
+        "precision": 1.0,
+        "recall": 0.0,
+        "routed_different_rate": 0.2469,
+        "routed_recall": 1.0,
+        "same": 10
+      },
+      "retail": {
+        "different": 177,
+        "f1": 0.9286,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 177,
+        "pairs": 342,
+        "precision": 1.0,
+        "recall": 0.8667,
+        "routed_different_rate": 0.0113,
+        "routed_recall": 0.9394,
+        "same": 165
+      }
+    },
+    "by_kind": {
+      "alias": {
+        "different": 0,
+        "f1": 0.9804,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 0,
+        "pairs": 52,
+        "precision": 1.0,
+        "recall": 0.9615,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 52
+      },
+      "ambiguous_comma": {
+        "different": 4,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 4,
+        "pairs": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "article_name": {
+        "different": 6,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 6,
+        "pairs": 6,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 1.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "code": {
+        "different": 22,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 22,
+        "pairs": 22,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "crosslingual": {
+        "different": 8,
+        "f1": 0.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 8,
+        "pairs": 24,
+        "precision": 1.0,
+        "recall": 0.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.5,
+        "same": 16
+      },
+      "direction": {
+        "different": 8,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 8,
+        "pairs": 8,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.125,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "format": {
+        "different": 0,
+        "f1": 0.9863,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 0,
+        "pairs": 74,
+        "precision": 1.0,
+        "recall": 0.973,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.9865,
+        "same": 74
+      },
+      "general": {
+        "different": 9,
+        "f1": 0.8421,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 9,
+        "pairs": 20,
+        "precision": 1.0,
+        "recall": 0.7273,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 11
+      },
+      "identifier": {
+        "different": 92,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 92,
+        "pairs": 92,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "learned": {
+        "different": 6,
+        "f1": 0.9412,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 6,
+        "pairs": 15,
+        "precision": 1.0,
+        "recall": 0.8889,
+        "routed_different_rate": 0.3333,
+        "routed_recall": 1.0,
+        "same": 9
+      },
+      "legal_code": {
+        "different": 15,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 15,
+        "pairs": 15,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.9333,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "lower_code": {
+        "different": 3,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 3,
+        "pairs": 3,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "month_name": {
+        "different": 4,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 4,
+        "pairs": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 1.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "names": {
+        "different": 61,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 61,
+        "pairs": 61,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.1803,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "normalisation": {
+        "different": 0,
+        "f1": 0.5714,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 0,
+        "pairs": 55,
+        "precision": 1.0,
+        "recall": 0.4,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 55
+      },
+      "number": {
+        "different": 19,
+        "f1": 0.9231,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 19,
+        "pairs": 26,
+        "precision": 1.0,
+        "recall": 0.8571,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.8571,
+        "same": 7
+      },
+      "order": {
+        "different": 13,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 13,
+        "pairs": 13,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "partial": {
+        "different": 6,
+        "f1": 0.4,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 6,
+        "pairs": 10,
+        "precision": 1.0,
+        "recall": 0.25,
+        "routed_different_rate": 1.0,
+        "routed_recall": 1.0,
+        "same": 4
+      },
+      "plural_name": {
+        "different": 9,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 9,
+        "pairs": 9,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 1.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "spelling": {
+        "different": 0,
+        "f1": 0.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 0,
+        "pairs": 10,
+        "precision": 1.0,
+        "recall": 0.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 10
+      },
+      "symbol": {
+        "different": 9,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 9,
+        "pairs": 9,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "tenant_vs_pack": {
+        "different": 3,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 3,
+        "pairs": 5,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 2
+      },
+      "title": {
+        "different": 11,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 11,
+        "pairs": 11,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 0.0,
+        "same": 0
+      },
+      "unit": {
+        "different": 14,
+        "f1": 1.0,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 14,
+        "pairs": 28,
+        "precision": 1.0,
+        "recall": 1.0,
+        "routed_different_rate": 0.0,
+        "routed_recall": 1.0,
+        "same": 14
+      }
+    },
+    "by_lang": {
+      "ar": {
+        "different": 32,
+        "f1": 0.7895,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 32,
+        "pairs": 55,
+        "precision": 1.0,
+        "recall": 0.6522,
+        "routed_different_rate": 0.125,
+        "routed_recall": 0.913,
+        "same": 23
+      },
+      "de": {
+        "different": 49,
+        "f1": 0.8276,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 49,
+        "pairs": 83,
+        "precision": 1.0,
+        "recall": 0.7059,
+        "routed_different_rate": 0.1837,
+        "routed_recall": 0.9118,
+        "same": 34
+      },
+      "en": {
+        "different": 159,
+        "f1": 0.874,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 159,
+        "pairs": 302,
+        "precision": 1.0,
+        "recall": 0.7762,
+        "routed_different_rate": 0.1824,
+        "routed_recall": 0.986,
+        "same": 143
+      },
+      "es": {
+        "different": 49,
+        "f1": 0.7925,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 49,
+        "pairs": 81,
+        "precision": 1.0,
+        "recall": 0.6562,
+        "routed_different_rate": 0.1837,
+        "routed_recall": 0.9688,
+        "same": 32
+      },
+      "hi": {
+        "different": 33,
+        "f1": 0.7059,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 33,
+        "pairs": 55,
+        "precision": 1.0,
+        "recall": 0.5455,
+        "routed_different_rate": 0.0606,
+        "routed_recall": 0.9091,
+        "same": 22
+      }
+    },
+    "by_split": {
+      "dev": {
+        "different": 163,
+        "f1": 0.8491,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 163,
+        "pairs": 285,
+        "precision": 1.0,
+        "recall": 0.7377,
+        "routed_different_rate": 0.1656,
+        "routed_recall": 0.9754,
+        "same": 122
+      },
+      "test": {
+        "different": 159,
+        "f1": 0.8267,
+        "false_merge_rate": 0.0,
+        "false_merges": 0,
+        "hard_negative_false_merge_rate": 0.0,
+        "hard_negative_false_merges": 0,
+        "hard_negatives": 159,
+        "pairs": 291,
+        "precision": 1.0,
+        "recall": 0.7045,
+        "routed_different_rate": 0.1635,
+        "routed_recall": 0.947,
+        "same": 132
+      }
+    },
+    "dev": 0.9754,
+    "different": 322,
+    "errors": [
+      {
+        "a": "PO#4471",
+        "b": "po 4471",
+        "id": "format-en-009",
+        "label": "same",
+        "reason": "identifiers differ: po# 4471 vs 4471",
+        "verdict": "different"
+      },
+      {
+        "a": "Dock 7",
+        "b": "dock door #7",
+        "id": "format-en-010",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "SKU 1001 \u0915\u093e \u0938\u094d\u091f\u0949\u0915",
+        "b": "SKU-1001 \u0938\u094d\u091f\u0949\u0915",
+        "id": "alias-hi-242",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "SKU 1001 \u0633\u0639\u0631",
+        "b": "\u0633\u0639\u0631 SKU-1001",
+        "id": "alias-ar-245",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Forklift 4 battery",
+        "b": "battery of forklift 4",
+        "id": "normalisation-en-246",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "The Atlas project",
+        "b": "Atlas project",
+        "id": "normalisation-en-249",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "pallets in Warehouse 3",
+        "b": "Warehouse 3 pallets",
+        "id": "normalisation-en-250",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Dr. Priya Sharma",
+        "b": "Priya Sharma",
+        "id": "normalisation-en-255",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Ms. Ana Garc\u00eda",
+        "b": "Ana Garc\u00eda",
+        "id": "normalisation-en-256",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Mr John Smith",
+        "b": "John Smith",
+        "id": "normalisation-en-257",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "batteries for Forklift 4",
+        "b": "Forklift 4 battery",
+        "id": "normalisation-en-258",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "north warehouse",
+        "b": "warehouse north",
+        "id": "normalisation-en-259",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Store 12 weekly sales",
+        "b": "weekly sales of store 12",
+        "id": "normalisation-en-260",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "SKU 1001 price",
+        "b": "price of SKU-1001",
+        "id": "normalisation-en-261",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Kubernetes cluster",
+        "b": "kubernetes clusters",
+        "id": "normalisation-en-266",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Q3 forecast",
+        "b": "forecast for Q3",
+        "id": "normalisation-en-267",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Acme's DC 3",
+        "b": "distribution center 3 of Acme",
+        "id": "normalisation-en-268",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Berlin store",
+        "b": "Berlin stores",
+        "id": "normalisation-en-269",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Gabelstapler 4 Batterie",
+        "b": "Batterie von Gabelstapler 4",
+        "id": "normalisation-de-270",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "Herr Thomas Weber",
+        "b": "Thomas Weber",
+        "id": "normalisation-de-273",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Frau Dr. Anna Schmidt",
+        "b": "Anna Schmidt",
+        "id": "normalisation-de-274",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Lager Nord",
+        "b": "Nord Lager",
+        "id": "normalisation-de-275",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "bater\u00eda del montacargas 4",
+        "b": "montacargas 4 bater\u00eda",
+        "id": "normalisation-es-278",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "Transportes Garc\u00eda S.A.",
+        "b": "Transportes Garc\u00eda",
+        "id": "normalisation-es-280",
+        "label": "same",
+        "reason": "one side names no identifier",
+        "verdict": "possible"
+      },
+      {
+        "a": "Sra. Ana Garc\u00eda",
+        "b": "Ana Garc\u00eda",
+        "id": "normalisation-es-281",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Don Luis P\u00e9rez",
+        "b": "Luis P\u00e9rez",
+        "id": "normalisation-es-283",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "ventas de la tienda 12",
+        "b": "tienda 12 ventas",
+        "id": "normalisation-es-285",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0627\u0644\u0633\u064a\u062f \u0623\u062d\u0645\u062f \u0639\u0644\u064a",
+        "b": "\u0623\u062d\u0645\u062f \u0639\u0644\u064a",
+        "id": "normalisation-ar-287",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0627\u0644\u062f\u0643\u062a\u0648\u0631 \u062e\u0627\u0644\u062f \u062d\u0633\u0646",
+        "b": "\u062e\u0627\u0644\u062f \u062d\u0633\u0646",
+        "id": "normalisation-ar-288",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0645\u0628\u064a\u0639\u0627\u062a \u0627\u0644\u0645\u062a\u062c\u0631 12",
+        "b": "\u0627\u0644\u0645\u062a\u062c\u0631 12 \u0645\u0628\u064a\u0639\u0627\u062a",
+        "id": "normalisation-ar-289",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0628\u0637\u0627\u0631\u064a\u0629 \u0627\u0644\u0631\u0627\u0641\u0639\u0629 \u0627\u0644\u0634\u0648\u0643\u064a\u0629 4",
+        "b": "\u0627\u0644\u0631\u0627\u0641\u0639\u0629 \u0627\u0644\u0634\u0648\u0643\u064a\u0629 4 \u0628\u0637\u0627\u0631\u064a\u0629",
+        "id": "normalisation-ar-290",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0936\u094d\u0930\u0940 \u0930\u093e\u091c\u0947\u0936 \u0915\u0941\u092e\u093e\u0930",
+        "b": "\u0930\u093e\u091c\u0947\u0936 \u0915\u0941\u092e\u093e\u0930",
+        "id": "normalisation-hi-293",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0921\u0949 \u092a\u094d\u0930\u093f\u092f\u093e \u0936\u0930\u094d\u092e\u093e",
+        "b": "\u092a\u094d\u0930\u093f\u092f\u093e \u0936\u0930\u094d\u092e\u093e",
+        "id": "normalisation-hi-294",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0938\u094d\u091f\u094b\u0930 12 \u0915\u0940 \u092c\u093f\u0915\u094d\u0930\u0940",
+        "b": "\u0938\u094d\u091f\u094b\u0930 12 \u092c\u093f\u0915\u094d\u0930\u0940",
+        "id": "normalisation-hi-295",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u092b\u094b\u0930\u094d\u0915\u0932\u093f\u092b\u094d\u091f 4 \u0915\u0940 \u092c\u0948\u091f\u0930\u0940",
+        "b": "\u092b\u094b\u0930\u094d\u0915\u0932\u093f\u092b\u094d\u091f 4 \u092c\u0948\u091f\u0930\u0940",
+        "id": "normalisation-hi-296",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0936\u0930\u094d\u092e\u093e \u091c\u0940",
+        "b": "\u0936\u0930\u094d\u092e\u093e",
+        "id": "normalisation-hi-297",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "\u0917\u094b\u0926\u093e\u092e 3 \u0915\u0947 \u092a\u0948\u0932\u0947\u091f",
+        "b": "\u0917\u094b\u0926\u093e\u092e 3 \u092a\u0948\u0932\u0947\u091f",
+        "id": "normalisation-hi-298",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Acme",
+        "b": "Acme Logistics",
+        "id": "partial-en-360",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "Priya",
+        "b": "Priya Sharma",
+        "id": "partial-en-362",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "Northwind",
+        "b": "Northwind Traders",
+        "id": "partial-en-369",
+        "label": "same",
+        "reason": "one names more than the other",
+        "verdict": "possible"
+      },
+      {
+        "a": "Jonathan Smith",
+        "b": "Jonathon Smith",
+        "id": "spelling-en-370",
+        "label": "same",
+        "reason": "spelling variant",
+        "verdict": "possible"
+      },
+      {
+        "a": "Kubernetes cluster",
+        "b": "Kubernets cluster",
+        "id": "spelling-en-371",
+        "label": "same",
+        "reason": "spelling variant",
+        "verdict": "possible"
+      },
+      {
+        "a": "Northwind Traders",
+        "b": "Nortwind Traders",
+        "id": "spelling-en-372",
+        "label": "same",
+        "reason": "spelling variant",
+        "verdict": "possible"
+      },
+      {
+        "a": "Margaret Thompson",
+        "b": "Margret Thompson",
+        "id": "spelling-en-373",
+        "label": "same",
+        "reason": "spelling variant",
+        "verdict": "possible"
+      },
+      {
+        "a": "Acme Logistics",
+        "b": "Acme Logisitcs",
+        "id": "spelling-en-374",
+        "label": "same",
+        "reason": "spelling variant",
+        "verdict": "possible"
+      },
+      {
+        "a": "Global Freight Solutions",
+        "b": "GFS",
+        "id": "spelling-en-375",
+        "label": "same",
+        "reason": "initialism",
+        "verdict": "possible"
+      },
+      {
+        "a": "Fresh Produce Distributors",
+        "b": "FPD",
+        "id": "spelling-en-376",
+        "label": "same",
+        "reason": "initialism",
+        "verdict": "possible"
+      },
+      {
+        "a": "Pacific Coast Supply",
+        "b": "PCS",
+        "id": "spelling-en-377",
+        "label": "same",
+        "reason": "initialism",
+        "verdict": "possible"
+      },
+      {
+        "a": "Rossmann Drogerie",
+        "b": "Rosmann Drogerie",
+        "id": "spelling-de-378",
+        "label": "same",
+        "reason": "spelling variant",
+        "verdict": "possible"
+      },
+      {
+        "a": "Transportes Garc\u00eda",
+        "b": "Transportes Garcia",
+        "id": "spelling-es-379",
+        "label": "same",
+        "reason": "spelling variant",
+        "verdict": "possible"
+      },
+      {
+        "a": "Forklift 4",
+        "b": "Gabelstapler 4",
+        "id": "crosslingual-de-380",
+        "label": "same",
+        "reason": "names differ: forklift vs gabelstapler",
+        "verdict": "different"
+      },
+      {
+        "a": "Forklift 4",
+        "b": "montacargas 4",
+        "id": "crosslingual-es-381",
+        "label": "same",
+        "reason": "names differ: forklift vs montacarga",
+        "verdict": "different"
+      },
+      {
+        "a": "Forklift 4",
+        "b": "\u0627\u0644\u0631\u0627\u0641\u0639\u0629 \u0627\u0644\u0634\u0648\u0643\u064a\u0629 4",
+        "id": "crosslingual-ar-382",
+        "label": "same",
+        "reason": "names differ: forklift vs \u0631\u0627\u0641\u0639\u0647 \u0634\u0648\u0643\u064a\u0647",
+        "verdict": "different"
+      },
+      {
+        "a": "Forklift 4",
+        "b": "\u092b\u094b\u0930\u094d\u0915\u0932\u093f\u092b\u094d\u091f 4",
+        "id": "crosslingual-hi-383",
+        "label": "same",
+        "reason": "names differ: forklift vs \u092b\u094b\u0930\u094d\u0915\u0932\u093f\u092b\u094d\u091f",
+        "verdict": "different"
+      },
+      {
+        "a": "Warehouse 3",
+        "b": "Lager 3",
+        "id": "crosslingual-de-384",
+        "label": "same",
+        "reason": "names differ: warehouse vs lager",
+        "verdict": "different"
+      },
+      {
+        "a": "Warehouse 3",
+        "b": "almac\u00e9n 3",
+        "id": "crosslingual-es-385",
+        "label": "same",
+        "reason": "dense similarity 0.80",
+        "verdict": "possible"
+      },
+      {
+        "a": "Warehouse 3",
+        "b": "\u0627\u0644\u0645\u0633\u062a\u0648\u062f\u0639 3",
+        "id": "crosslingual-ar-386",
+        "label": "same",
+        "reason": "names differ: warehouse vs \u0645\u0633\u062a\u0648\u062f\u0639",
+        "verdict": "different"
+      },
+      {
+        "a": "Warehouse 3",
+        "b": "\u0917\u094b\u0926\u093e\u092e 3",
+        "id": "crosslingual-hi-387",
+        "label": "same",
+        "reason": "names differ: warehouse vs \u0917\u094b\u0926\u093e\u092e",
+        "verdict": "different"
+      },
+      {
+        "a": "Store 12",
+        "b": "Filiale 12",
+        "id": "crosslingual-de-388",
+        "label": "same",
+        "reason": "names differ: store vs filiale",
+        "verdict": "different"
+      },
+      {
+        "a": "Store 12",
+        "b": "tienda 12",
+        "id": "crosslingual-es-389",
+        "label": "same",
+        "reason": "dense similarity 0.83",
+        "verdict": "possible"
+      },
+      {
+        "a": "Store 12",
+        "b": "\u0627\u0644\u0645\u062a\u062c\u0631 12",
+        "id": "crosslingual-ar-390",
+        "label": "same",
+        "reason": "dense similarity 0.79",
+        "verdict": "possible"
+      },
+      {
+        "a": "Store 12",
+        "b": "\u0938\u094d\u091f\u094b\u0930 12",
+        "id": "crosslingual-hi-391",
+        "label": "same",
+        "reason": "dense similarity 0.87",
+        "verdict": "possible"
+      },
+      {
+        "a": "purchase order 4471",
+        "b": "Bestellung 4471",
+        "id": "crosslingual-de-392",
+        "label": "same",
+        "reason": "dense similarity 0.88",
+        "verdict": "possible"
+      },
+      {
+        "a": "purchase order 4471",
+        "b": "orden de compra 4471",
+        "id": "crosslingual-es-393",
+        "label": "same",
+        "reason": "dense similarity 0.92",
+        "verdict": "possible"
+      },
+      {
+        "a": "October sales",
+        "b": "Oktober Umsatz",
+        "id": "crosslingual-de-394",
+        "label": "same",
+        "reason": "dense similarity 0.78",
+        "verdict": "possible"
+      },
+      {
+        "a": "October sales",
+        "b": "ventas de octubre",
+        "id": "crosslingual-es-395",
+        "label": "same",
+        "reason": "dense similarity 0.82",
+        "verdict": "possible"
+      },
+      {
+        "a": "XD lane",
+        "b": "cross-docking lane",
+        "id": "learned-en-404",
+        "label": "same",
+        "reason": "one names more than the other and no identifier",
+        "verdict": "possible"
+      },
+      {
+        "a": "Atlas project",
+        "b": "Project Atlas",
+        "id": "general-en-416",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Q3 board meeting",
+        "b": "board meeting Q3",
+        "id": "general-en-423",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "Dr. Rao's clinic",
+        "b": "clinic of Dr Rao",
+        "id": "general-en-432",
+        "label": "same",
+        "reason": "the same only once folded, reordered or without a title",
+        "verdict": "possible"
+      },
+      {
+        "a": "1,000 units order",
+        "b": "1000 units order",
+        "id": "number-en-497",
+        "label": "same",
+        "reason": "identifiers differ: 1,000pcs vs 1000pcs",
+        "verdict": "different"
+      }
+    ],
+    "f1": 0.8375,
+    "false_merge_rate": 0.0,
+    "false_merges": 0,
+    "hard_negative_false_merge_rate": 0.0,
+    "hard_negative_false_merges": 0,
+    "hard_negatives": 322,
+    "pairs": 576,
+    "precision": 1.0,
+    "recall": 0.7205,
+    "routed_different_rate": 0.1646,
+    "routed_recall": 0.9606,
+    "same": 254,
+    "test": 0.947
+  }
+}

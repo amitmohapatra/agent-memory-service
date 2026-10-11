@@ -35,6 +35,7 @@ from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.memory.native import normalized_hash
 from memory_service.modules.memory.restatement import restate
 from memory_service.modules.memory.revisions import bump_memory_revisions
+from memory_service.modules.memory.subjects import SubjectMatcher
 from memory_service.modules.memory.temporal import dated_mentions
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import memory_decisions_total, stage_seconds
@@ -138,6 +139,19 @@ def _is_echo(candidate: MemoryCandidate) -> bool:
     return bool(evidence) and all(ev.source_type in _ECHO_SOURCES for ev in evidence)
 
 
+def statement_metadata(candidate: MemoryCandidate) -> dict[str, str]:
+    """What the statement labeller said about a candidate, as stored with its memory (read
+    back by ``domain.memory.statement_kind_of``)."""
+    out: dict[str, str] = {}
+    if candidate.statement_kind is not None:
+        out["statement_kind"] = candidate.statement_kind.value
+    if candidate.rule_trigger:
+        out["rule_trigger"] = candidate.rule_trigger
+    if candidate.rule_exception:
+        out["rule_exception"] = candidate.rule_exception
+    return out
+
+
 def build_memory(
     candidate: MemoryCandidate,
     ctx: MemoryExecutionContext,
@@ -186,6 +200,7 @@ def build_memory(
             "provider_ref": candidate.provider_ref,
             "expires_at": expires.isoformat() if expires else None,
             "dated_mentions": dated,
+            **statement_metadata(candidate),
             **({"preceding_turn": candidate.preceding_turn} if candidate.preceding_turn else {}),
             **({"restatement": candidate.restatement} if candidate.restatement else {}),
             **(
@@ -218,6 +233,27 @@ def supersede(target: CanonicalMemory, replacement: CanonicalMemory, *, now: dat
     target.updated_at = now
 
 
+async def _replace(
+    uow: UnitOfWork,
+    ctx: MemoryExecutionContext,
+    target: CanonicalMemory,
+    memory: CanonicalMemory,
+    *,
+    now: datetime,
+) -> set[str]:
+    """Store ``memory`` as the new version of ``target`` and close ``target``, with the turn
+    kept in the target's words: it is the same statement (ADR 0036), and left CURRENT it
+    keeps answering the value just replaced. The ids written."""
+    twins = await uow.memories.twins(ctx.tenant_id, target)
+    supersede(target, memory, now=now)
+    for twin in twins:
+        supersede(twin, memory.model_copy(), now=now)
+    await uow.memories.add(memory, visibility_keys=keys_for(memory.scope, memory.visibility, ctx))
+    for closed in (target, *twins):
+        await uow.memories.update(closed)
+    return {memory.memory_id, target.memory_id, *(t.memory_id for t in twins)}
+
+
 class ObservationPipeline:
     def __init__(
         self,
@@ -228,6 +264,7 @@ class ObservationPipeline:
         working: EphemeralMemory | None = None,
         gate: AdmissionGate | None = None,
         assist: LLMAssist | None = None,
+        subjects: SubjectMatcher | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.provider = provider
@@ -236,6 +273,8 @@ class ObservationPipeline:
         self.gate = gate
         #: binds each observation's model work to its owner (key, policy, usage)
         self.assist = assist or LLMAssist.disabled()
+        #: the spellings a candidate's subject may be stored under (candidate generation)
+        self.subjects = subjects or SubjectMatcher()
 
     async def run(self, payload: dict[str, Any]) -> list[ConsolidationOutcome]:
         tenant_id, observation_id = payload["tenant_id"], payload["observation_id"]
@@ -401,7 +440,7 @@ class ObservationPipeline:
                 ctx.tenant_id,
                 scope_key=scope.key(),
                 normalized_hash=normalized_hash(cand.content),
-                subject=cand.subject,
+                subjects=self.subjects.spellings(cand.subject),
                 limit=self.cfg.dedup_candidate_k,
             )
             outcome = await self.provider.consolidate(cand, existing, ctx)
@@ -452,9 +491,10 @@ class ObservationPipeline:
         if said is None:
             return candidates
         update = {"restatement": said.text or None, "restatement_relations": said.relations}
-        return [
-            c.model_copy(update=update) if c.category == "verbatim_turn" else c for c in candidates
-        ]
+        # one restatement of the whole turn, carried by its first piece when a long turn was
+        # kept in several (``native.verbatim_windows``)
+        first = turns[0]
+        return [c.model_copy(update=update) if c is first else c for c in candidates]
 
     async def _preceding_turn(self, observation: Observation) -> dict[str, str] | None:
         """The conversation's previous message, which the indexer puts beside a verbatim turn
@@ -550,12 +590,7 @@ class ObservationPipeline:
             case DedupDecision.SUPERSEDE | DedupDecision.UPDATE if target is not None:
                 memory = self._new_memory(cand, ctx, now=now, admission=admission)
                 memory.reinforcement_count = 1
-                supersede(target, memory, now=now)
-                await uow.memories.add(
-                    memory, visibility_keys=keys_for(memory.scope, memory.visibility, ctx)
-                )
-                await uow.memories.update(target)
-                return {memory.memory_id, target.memory_id}
+                return await _replace(uow, ctx, target, memory, now=now)
             case DedupDecision.CONTRADICT if target is not None:
                 memory = self._new_memory(cand, ctx, now=now, admission=admission)
                 memory.temporal = memory.temporal.model_copy(

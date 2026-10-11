@@ -139,7 +139,9 @@ Step by step:
 8. **The pipeline** (`ObservationPipeline.run`, `modules/memory/pipeline.py`). An observation
    already processed is skipped, so a replayed job is a no-op. The work is bound to the
    observation's owner, so their model key and policy govern any model use. The native
-   provider extracts candidates — here, a `timezone` attribute and the verbatim turn —
+   provider labels what each user sentence does (fact, rule, status, correction, lifecycle:
+   the statement labeller, ADR 0037), extracts candidates — here, a `timezone` attribute and
+   the verbatim turn, both labelled `FACT` —
    classifies them (type, lifetime, visibility), optionally restates the turn (opt-in), and
    consolidates each against current memories in the same scope: create, reinforce, merge,
    supersede or contradict (chapter 3). All of it, the `memory.index` job and the revision
@@ -270,6 +272,7 @@ is never hidden by a stale list (ADR 0015).
 | You want to change… | Start in |
 |---|---|
 | what is extracted from a message | `modules/memory/native.py`, `modules/memory/pipeline.py` |
+| what kind of statement a sentence is | `modules/memory/statements.py`, `modules/memory/lexicon/*.json` |
 | how memories are ranked | `modules/retrieval/memory_ranking.py` |
 | how a query is routed | `modules/retrieval/router.py` |
 | what goes into the bundle and how it renders | `modules/context/builder.py`, `modules/context/sections.py`, `domain/context_bundle.py` |

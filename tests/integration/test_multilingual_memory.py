@@ -9,6 +9,7 @@ import pytest
 
 from memory_service.domain.enums import Visibility
 from memory_service.domain.observation import ProcessingHints
+from memory_service.modules.retrieval.engine import in_hand
 from tests.integration.test_memory import U1, U2, _memories, _observe
 
 pytestmark = pytest.mark.integration
@@ -42,17 +43,23 @@ async def test_original_language_survives_ingestion_recall_isolation_and_forgett
         hints=ProcessingHints(visibility=Visibility.USER),
     )
     memories = await _memories(uow_factory, U1, container)
-    original = next(m for m in memories if m.content == statement)
+    # the turn as said, and in English a rule's reading of it in the same words: one
+    # statement, which ranking gives one slot (a collapsed twin is in hand under its survivor)
+    said = [m for m in memories if m.content == statement]
+    assert said
+    original = said[0]
     engine = container.services["retrieval"]
     found = await engine.retrieve(U1, statement, kinds=("memory",))
-    assert original.memory_id in {c.record_id for c in found.candidates}
+    assert {m.memory_id for m in said} <= in_hand(found.candidates)
     assert not (await engine.retrieve(U2, statement, kinds=("memory",))).candidates
     async with uow_factory() as uow:
         await container.services["memory"].forget(uow, U1, original.memory_id)
         await uow.commit()
     await container.tasks.drain()
     found = await engine.retrieve(U1, statement, kinds=("memory",))
-    assert original.memory_id not in {c.record_id for c in found.candidates}
+    # forgetting the statement forgets every copy of it
+    assert not {m.memory_id for m in said} & in_hand(found.candidates)
+    assert all(c.text != statement for c in found.candidates)
 
 
 async def test_similar_transcripts_keep_both_sources_and_exact_repeats_reinforce(

@@ -14,6 +14,7 @@ from memory_service.domain.enums import (
     MemoryType,
     Representation,
     ScopeLevel,
+    StatementKind,
     TemporalStatus,
     Visibility,
 )
@@ -25,10 +26,35 @@ from memory_service.domain.predicates import predicate_label
 UNVERIFIED_MEMORY_CATEGORIES = ("contextual_fact", "assisted", "reflection")
 
 
+def statement_kind_of(metadata: Mapping[str, Any]) -> StatementKind | None:
+    """The kind the statement labeller gave a memory (``system_metadata["statement_kind"]``,
+    ADR 0037); None for a memory written before it, or not from a user statement. A rule's
+    trigger and exception, when it has them, are ``rule_trigger`` and ``rule_exception``."""
+    value = metadata.get("statement_kind")
+    return StatementKind(value) if value in StatementKind.__members__ else None
+
+
 def unverified_representation(metadata: Mapping[str, Any]) -> bool:
     """A model rewrite with source association, but no independently verified entailment."""
     return metadata.get("category") in UNVERIFIED_MEMORY_CATEGORIES or (
         metadata.get("provider") == "llm"
+    )
+
+
+#: Categories kept for good: the turns every other memory is evidence from, and the rules a
+#: user said are standing.
+LASTING_CATEGORIES = frozenset({"verbatim_turn", "rule"})
+#: Kinds whose LONG_TERM memories are kept for good: what the user said about themselves.
+LASTING_TYPES = frozenset({MemoryType.USER, MemoryType.PREFERENCE})
+
+
+def lasting(category: str | None, memory_type: MemoryType, lifetime: Lifetime) -> bool:
+    """Whether a memory is kept for good: never lapsing, and left alone by automatic
+    forgetting however long it sits unused (``modules.memory.forgetting``). A user's turn
+    needs no verbatim copy beside a reading of it in the same words that is lasting
+    (``modules.memory.native``); any other reading can lapse, fade or be merged away."""
+    return category in LASTING_CATEGORIES or (
+        memory_type in LASTING_TYPES and lifetime is Lifetime.LONG_TERM
     )
 
 

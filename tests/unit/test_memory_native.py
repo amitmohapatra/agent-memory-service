@@ -204,10 +204,17 @@ def test_a_header_eats_neither_a_caption_nor_the_first_clause_of_prose() -> None
 )
 async def test_extraction_rules(native, text, mtype, predicate, obj) -> None:
     cands = await _extract(native, text)
-    assert len(cands) == 1, cands
-    c = cands[0]
+    [c] = _extracted(cands)
     assert c.memory_type is mtype and c.predicate == predicate and c.object == obj
     assert c.evidence[0].message_id == "msg_1" and c.evidence[0].source_type == "message"
+    # A lasting reading (an attribute, a preference, a standing rule) holds the user's words
+    # for good, so the turn of the same words is not stored twice; any other reading has the
+    # turn kept beside it, last, with the same source.
+    turns = [v for v in cands if v.category == "verbatim_turn"]
+    if mtype in (MemoryType.USER, MemoryType.PREFERENCE):
+        assert turns == []
+    else:
+        assert [(v.content, v.evidence) for v in turns] == [(text, c.evidence)]
 
 
 async def test_extraction_skips_noise_and_questions(native) -> None:
@@ -228,7 +235,8 @@ async def test_extraction_kinds_and_temporal(native) -> None:
         native, "Go with Qdrant for retrieval.", kind=ObservationKind.DECISION
     )
     assert decision[0].predicate == "decided" and decision[0].subject == "thread:thr_1"
-    assert decision[0].visibility is Visibility.THREAD and decision[0].importance == 0.8
+    # a decision the user recorded is theirs: it follows them out of the thread it was made in
+    assert decision[0].visibility is Visibility.USER and decision[0].importance == 0.8
     tz = await _extract(native, "Actually, my timezone is now America/New_York since 2026-09-01.")
     assert tz[0].negates_prior and tz[0].valid_from == datetime(2026, 9, 1, tzinfo=UTC)
     assert tz[0].object == "america/new_york"
@@ -265,10 +273,11 @@ async def test_classification_defaults_and_hints(native) -> None:
     pref = (await _extract(native, "I prefer tea."))[0]
     assert pref.visibility is Visibility.USER and pref.lifetime is Lifetime.LONG_TERM
     fact = (await _extract(native, "The billing service runs on Cloud Run."))[0]
-    assert fact.visibility is Visibility.THREAD  # thread in context
+    # what the user says follows the user, inside a thread or not
+    assert fact.visibility is Visibility.USER
     no_thread = CTX.model_copy(update={"thread_id": None})
     fact2 = (await _extract(native, "The billing service runs on Cloud Run.", ctx=no_thread))[0]
-    assert fact2.visibility is Visibility.USER  # no thread, but a user to anchor on
+    assert fact2.visibility is Visibility.USER
     # scope anchors follow the type
     assert scope_for(pref, CTX).level.value == "USER"
     assert scope_for(fact, CTX).level.value == "THREAD"
@@ -281,7 +290,12 @@ async def test_classification_defaults_and_hints(native) -> None:
     # THREAD, where it made the thread key dead weight: the author matched from any thread,
     # so a memory scoped to one conversation was readable in all of them. The author reaches
     # this row through the thread grant now, which the write itself creates.
-    assert keys_for(scope_for(fact, CTX), fact.visibility, CTX) == ["thread:acme/thr_1"]
+    assert keys_for(scope_for(fact, CTX), Visibility.THREAD, CTX) == ["thread:acme/thr_1"]
+    # USER: that user (and every agent acting for them) in any thread, and its author
+    assert keys_for(scope_for(fact, CTX), fact.visibility, CTX) == [
+        "user:acme/u1",
+        "principal:acme/user:u1",
+    ]
     assert keys_for(scope_for(agent_note, AGENT), Visibility.PRIVATE, AGENT) == [
         "principal:acme/agent:u1/planner"
     ]

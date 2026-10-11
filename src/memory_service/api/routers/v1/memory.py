@@ -98,7 +98,9 @@ class RememberRequest(BaseModel):
     visibility: Visibility | None = Field(
         default=None,
         description="Who may retrieve it, narrowest first: PRIVATE, RUN, THREAD, WORK, "
-        "AGENT_GROUP, GROUP, USER, WORKSPACE, TENANT, GLOBAL. Omit for the scope's own.",
+        "AGENT_GROUP, GROUP, USER, WORKSPACE, TENANT, GLOBAL. Omitted, a user's own "
+        "statement is USER (every conversation of theirs and their agents, nobody else) and "
+        "an agent's takes the scope's own.",
     )
     subject: str | None = Field(
         default=None,

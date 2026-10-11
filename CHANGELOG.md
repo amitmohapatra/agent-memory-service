@@ -8,6 +8,23 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- Statement kinds: every sentence a user says is labelled at write with what it does - a
+  `FACT`, a standing `RULE`, a `CONDITIONAL_RULE` (an exception or a trigger about the world),
+  a `STATUS` of a thing, a `CORRECTION`, or a `LIFECYCLE` change - and the kind is stored on
+  the memories it produced (`system_metadata["statement_kind"]`, with a rule's
+  `rule_trigger` and `rule_exception` as said). Cue words are data: a generic pack and a
+  retail pack (`modules/memory/lexicon/`) in English, German, Spanish, Arabic and Hindi; what
+  they leave open goes to the NLI head the service already loads (one pair for a sentence
+  the packs are unsure of, none for one they settle), and to the tenant's model only when the
+  head is unsure and only if the head confirms it. Retrieval is unchanged
+  ([concepts](docs/guide/02-concepts.md#what-a-statement-does), ADR 0037). No migration.
+  Only a rule that says it is for every time (a standing word, a recurring trigger, a
+  universal obligation) is kept as a lasting rule; any other conditional instruction ("Tell me
+  if the price drops") keeps its kind as metadata and is stored as before. A failing NLI head
+  keeps the lexicon's labels (`memory_statement_labeller_fallback_total`). Measured on
+  sentences a local language model wrote to order (`tests/eval/golden/statement_kinds_blind.json`,
+  blind set 2): macro-F1 0.829 over the six kinds against 0.105 for the extractor before it,
+  below it in no kind, language or cell, and no non-rule kept as a lasting rule.
 - Learned skills: an agent learns from all of its users (its own tool records, whichever user it
   ran for, under one audience) and is offered what it learned in its context on its own -
   "Learned skills for this task", in full, matched to the task; nothing is published or
@@ -22,6 +39,25 @@ each entry says which one moved. Decisions behind each change are in the
   user's earlier conversations', this conversation's first among equal matches; each item
   carries its `thread_id`. Another user's threads are never read; without a user, this thread
   only ([past conversations](docs/guide/04-retrieval.md#past-conversations)).
+
+- Same-subject matching on the write path (ADR 0035, [concepts](docs/guide/02-concepts.md#when-two-statements-are-about-the-same-thing)):
+  a subject respelled ("FORKLIFT-4", "forklift #4"), abbreviated ("PO-4471", "purchase order
+  4471"; "DC 3", "Distribution Centre 3") or written in another script's digits ("المستودع
+  رقم ٣") reinforces the memory it names instead of duplicating it. Candidates are also looked
+  up by a few stored spellings of the subject (case, the first identifier's joins, pack
+  aliases), so some older rows are found beyond the newest ones consolidation reads.
+  Differing identifiers, short codes ("Store LA" / "Store AL", "C#" / "C++", "Sales SE" /
+  "Sales"), their order ("Dock 3 door 4" / "Dock 4 door 3"), units, signs and decimal commas
+  ("5 kg" / "5 lb", "1,5 kg" / "15 kg", "Level -1" / "Level 1"), dates, titles ("Mrs Patel" /
+  "Mr Patel"), directions ("to" / "from Berlin") and legal forms ("Acme Inc" / "Acme Ltd")
+  never merge, and a match that needs a plural folded, a title or connective dropped or the
+  words reordered ("John Roberts" / "John Robert") is never merged by the service itself; with
+  `conflict_adjudication` on, it is what the model is asked about. Abbreviations come from two
+  vocabulary packs (data, `domain/vocabulary/`: generic and retail, always on) and from a
+  tenant's own text where it defines one ("hazardous materials (hazmat)", "OOS stands for out
+  of stock"), the tenant's definition winning over a pack's; nothing to configure.
+  576 labelled pairs in five languages: no false merge (0 of 322 hard negatives, 0 in every
+  class), merge F1 0.84 (exact subject strings before: 0.13).
 
 ### Fixed
 - A document is `READY` only once it is findable. The parse job set `READY` before the index job
@@ -75,6 +111,33 @@ each entry says which one moved. Decisions behind each change are in the
   `graph.enrich_memories` / `graph.enrich_document`, queued once the source is indexed, on the
   `graph` queue below indexing, and one at a time per tenant when a model is reachable
   ([operations](docs/guide/11-operations.md#workers-and-periodic-jobs)).
+- "When I ask for a stock audit, always use a table" opened like a question, so nothing was
+  stored; a "when"/"if" followed by a subject now opens a condition, and the rule is kept with
+  its trigger. A standing rule is recognised wherever its "never"/"always" sits ("For weekly
+  overviews, never include ..."), not only first in the sentence, and in German, Spanish,
+  Arabic and Hindi as well; its exception clause ("unless I type 'include out of stock'") is
+  kept with it (ADR 0037).
+- Single-fact recall across conversations: "The master lock code for the hazardous materials
+  cage in Warehouse 3 is 8492." said in one chat is answered in the user's next one. What a
+  user says - their messages, decisions, feedback and their own `remember` - now defaults to
+  `USER` (every conversation of theirs and every agent acting for them, never another person)
+  instead of the thread it was said in; `visibility="THREAD"` keeps a statement to its
+  conversation and `"WORKSPACE"` shares it with a team, as before. A user's turn relayed by an
+  agent harness is the user's, no longer the agent's private note. Existing rows keep their
+  audience ([concepts](docs/guide/02-concepts.md#scope-and-visibility-are-separate-on-purpose),
+  ADR 0036).
+- A user's sentence is no longer lost when a rule reads all of it: the turn is kept verbatim
+  beside any reading that can lapse, merge or fade (a fact, a task, a procedure, an event, a
+  decision) - "All seasonal merchandise must go to Facility B" survived only as a seven-day
+  task - and the two take one slot in a bundle; forgetting, updating, retracting or
+  correcting either one acts on both, as does a value replaced later in the conversation. A
+  turn longer than 2000 characters is kept in sentence-cut pieces, up to six (about 12,000
+  characters), instead of truncated after the first. The fact rule reads noun-phrase subjects
+  of up to twelve words ("the master lock code for the hazardous materials cage in
+  Warehouse 3"), not five; a longer clause or event is left to the event rule (ADR 0036).
+- A key restricted with `may_act_as` to a user now reads that user's statements from all of
+  their threads, and the other participants of a shared thread no longer read a user's
+  default memories from it (ADR 0036).
 - A document uploaded into a thread that did not exist yet reached `READY` but was never
   returned by `search` or `context`: its THREAD audience named a thread nobody had been
   granted. The upload now creates the thread for the uploader, as a first message does
@@ -103,6 +166,14 @@ each entry says which one moved. Decisions behind each change are in the
   own node is the required companion.
 
 ### Changed
+- The conflict adjudicator (`conflict_adjudication`) is asked about the closest stored memory
+  on the same - or possibly the same - subject, instead of the closest sharing half its words:
+  a fact restated in other words now reaches it, and a fact about another subject that merely
+  shares words ("billing service" / "shipping service") no longer does. A pair the words leave
+  undecided is scored by the multilingual encoder only when the model is enabled.
+- The retail glossary's acronyms are read from the retail vocabulary pack, which adds `ASN`,
+  `BOL`, `RTV`, `POG`, `BOPIS`, `WMS`, `3PL`, `FIFO`, `SOH`, `EDI`, `FC` and `LP` to its query
+  expansion.
 - The context's `procedures` (with `format=full`) is `skills` (`id`, `name`, `steps`,
   `with_skill`, `fixes`, `success_rate`, `runs`), and `tool_search`'s and `POST /v1/tools/hints`'
   `plan` has the same shape. Tool hints are computed for five or more tools (or the catalog);

@@ -18,8 +18,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from memory_service.config.constants import MemoryIntelligenceSettings
-from memory_service.domain.enums import Lifetime, MemoryType, TemporalStatus
-from memory_service.domain.memory import CanonicalMemory
+from memory_service.domain.enums import TemporalStatus
+from memory_service.domain.memory import CanonicalMemory, lasting
 from memory_service.modules.memory.pipeline import TASK_MEMORY_INDEX
 from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.observability.logging import get_logger
@@ -43,17 +43,10 @@ def forgetting_score(memory: CanonicalMemory, *, now: datetime, half_life_days: 
     return round(max(memory.importance, 0.0) * recency * access, 6)
 
 
-#: Categories automatic forgetting leaves alone (``forgetting_protect_core``).
-PROTECTED_CATEGORIES = frozenset({"verbatim_turn", "rule"})
-#: Kinds whose LONG_TERM memories it leaves alone: what the user said about themselves.
-PROTECTED_TYPES = frozenset({MemoryType.USER, MemoryType.PREFERENCE})
-
-
 def protected(memory: CanonicalMemory) -> bool:
-    """Whether automatic forgetting must keep this memory however long it sat unused."""
-    if memory.system_metadata.get("category") in PROTECTED_CATEGORIES:
-        return True
-    return memory.memory_type in PROTECTED_TYPES and memory.lifetime is Lifetime.LONG_TERM
+    """Whether automatic forgetting must keep this memory however long it sat unused
+    (``forgetting_protect_core``): the lasting ones (``domain.memory.lasting``)."""
+    return lasting(memory.system_metadata.get("category"), memory.memory_type, memory.lifetime)
 
 
 @dataclass
