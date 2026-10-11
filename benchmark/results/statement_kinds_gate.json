@@ -109,9 +109,9 @@
       "nli": 30
     },
     "latency_ms_per_sentence": {
-      "p50": 0.179,
-      "p95": 47.96,
-      "mean": 4.487
+      "p50": 0.165,
+      "p95": 48.763,
+      "mean": 4.432
     },
     "errors": [
       {
@@ -376,9 +376,9 @@
       "nli": 6
     },
     "latency_ms_per_sentence": {
-      "p50": 0.191,
-      "p95": 0.674,
-      "mean": 2.151
+      "p50": 0.149,
+      "p95": 0.474,
+      "mean": 2.05
     },
     "errors": [
       {
@@ -527,9 +527,9 @@
           "nli": 18
         },
         "latency_ms_per_sentence": {
-          "p50": 0.201,
-          "p95": 56.618,
-          "mean": 4.626
+          "p50": 0.189,
+          "p95": 54.04,
+          "mean": 4.292
         },
         "errors": [
           {
@@ -955,9 +955,9 @@
           "nli": 23
         },
         "latency_ms_per_sentence": {
-          "p50": 0.215,
-          "p95": 52.766,
-          "mean": 5.544
+          "p50": 0.203,
+          "p95": 52.019,
+          "mean": 5.373
         },
         "errors": [
           {
@@ -1418,12 +1418,12 @@
     }
   },
   "provenance": {
-    "timestamp": "2026-10-10T23:02:16.566924+00:00",
-    "git_commit": "95e50728fdfedaad8549911e9ff23274ed2d825f",
+    "timestamp": "2026-10-11T04:05:33.027700+00:00",
+    "git_commit": "8c1a893aabaaf151af953943f7e8fcad5187f916",
     "host_load": {
-      "loadavg_1m": 1.83,
-      "loadavg_5m": 1.93,
-      "loadavg_15m": 1.62,
+      "loadavg_1m": 1.85,
+      "loadavg_5m": 2.08,
+      "loadavg_15m": 2.21,
       "load_per_core": 0.46
     },
     "python": "3.13.14",
