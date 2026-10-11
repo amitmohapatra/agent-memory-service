@@ -39,6 +39,7 @@ QDRANT_GRPC="${CAPEVAL_QDRANT_GRPC:-6534}"
 FGA_HTTP="${CAPEVAL_FGA_HTTP:-8281}"
 FGA_GRPC="${CAPEVAL_FGA_GRPC:-8283}"
 WORK="${CAPEVAL_WORK:-/var/tmp/capeval_stack}"
+LOGS="${CAPEVAL_LOGS:-$WORK.logs}"
 export PGHOST="${PGHOST:-localhost}" PGUSER="${PGUSER:-memory}" PGPASSWORD="${PGPASSWORD:-memory}"
 
 log() { echo "[isolated-stack $(date +%T)] $*" >&2; }
@@ -69,8 +70,10 @@ teardown() {
   [ -n "$qdrant_pid" ] && kill "$qdrant_pid" 2>/dev/null && sleep 2
   psql -d postgres -qc "drop database if exists $DB with (force)" 2>/dev/null
   redis-cli -n "$REDIS_DB" flushdb >/dev/null 2>&1
+  # the service's logs outlive the store (a few hundred KB), for a run that went wrong
+  mkdir -p "$LOGS" && cp "$WORK"/*.log "$LOGS"/ 2>/dev/null
   rm -rf "$WORK"
-  log "disk after: $(disk)"
+  log "disk after: $(disk); logs in $LOGS"
 }
 
 if [ -e "$WORK" ] || psql -d postgres -Atc "select 1 from pg_database where datname='$DB'" | grep -q 1; then

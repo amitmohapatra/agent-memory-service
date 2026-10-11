@@ -21,7 +21,7 @@
 | `tests/security` | 4 | `security` | PostgreSQL | isolation: the property-based oracle, retrieval and graph reader matrices, tenant binding (chapter 7) — release blocking |
 | `tests/e2e` | 10 | `e2e` | PostgreSQL and Redis | full API flows over HTTP and the SDK, including the README's examples |
 | `tests/agent` | 13 | (`e2e` target) | PostgreSQL and Redis | an agent's whole lifecycle through the SDK alone: onboarding, keys, workspaces, revocation, edge cases |
-| `tests/eval` | 9 | `eval` | PostgreSQL and Redis | the quality gates: retrieval, memory, knowledge graph, grounding, tool memory, capability coverage, and the capability eval suite's fast slice |
+| `tests/eval` | 11 | `eval` | PostgreSQL and Redis | the quality gates: retrieval, memory, knowledge graph, grounding, tool memory, capability coverage, and the capability eval suite's fast slice |
 | `tests/failure` | 1 | `failure` | PostgreSQL and Redis | worker kill, cache flush, blob outage, index rebuild, authorization outage |
 
 Three more markers select tests that need what CI does not have: `docker` (a Docker daemon

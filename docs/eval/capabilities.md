@@ -387,6 +387,25 @@ number is from the `nollm` full run unless the line names another.
   `memory.index` job. While the worker was down (it died when the disk filled), forgets
   committed at once but every point stayed in Qdrant, still marked `current`.
 
+### Since B1, B2 and B3 (main `420bbf3`, core set)
+
+On the core set, context in a new session went from 0.1193 to 0.4787 macro, and in the same
+session from 0.37 to 0.63. Statements now follow the user: single-fact recall in a new
+session rose from 0.02 to 0.99, and test-time learning from 0.00 to 0.93.
+
+Three cells moved the other way. The superseded value now reaches the context unmarked:
+
+- `update_contradiction` in the same session fell from 0.90 to 0.05 (444 `stale_leak`).
+  "Draft a reorder email to our pallet supplier" still gets "Our primary supplier ... is
+  Uline."
+- `temporal_recency` in the same session fell from 0.95 to 0.39 (282 `stale_leak`).
+- `abstention` in a new session fell from 1.00 to 0.31 (347 `no_abstain`): a nearest
+  neighbour now always comes back.
+
+These are the gaps listed above, now visible: stale leaks for **B4 / P4**, abstention for
+**P4**. The core baseline was re-recorded on `420bbf3` from one run. The full `nollm`, `llm`
+and `harness` baselines are still the pre-B1 ones until the nightly full run re-records them.
+
 ## What it does not measure
 
 - Answer quality beyond the assertions: an answer that names the right value in a wrong
