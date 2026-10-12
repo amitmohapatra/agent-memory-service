@@ -121,7 +121,8 @@ findable — `graph.enrich_memories` after `memory.index`, `graph.enrich_documen
 runs on the `graph` queue, below indexing, in a worker pool of its own with as many slots as
 `tasks.worker_concurrency`: it asks the model, and on a slow one, run inside the index jobs,
 it held every worker slot while writes waited minutes to become findable. It is not run one at
-a time per tenant: so serialised, a backlog trailed indexing by an hour, and questions met a
+a time per tenant: so serialised, the capability eval's LLM run still had 552 enrichment jobs
+queued when its questions began, an hour after its first write, and those questions met a
 graph without the facts their answers join on.
 
 ```mermaid

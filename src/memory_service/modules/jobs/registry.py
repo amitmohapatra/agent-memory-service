@@ -80,11 +80,13 @@ def _accounted(name: str, handler: TaskHandler) -> TaskHandler:
 
 
 def _enrichment(tenant_id: str) -> dict[str, Any]:
-    """Where a graph enrichment job runs: on the GRAPH queue, in the worker's graph pool.
-    Enrichment asks the model, which on a slow one takes minutes; inside the index jobs it
+    """Where a graph enrichment job runs: on the GRAPH queue, in the worker's graph pool
+    (``ports.tasks.worker_pools``), never inside the index job that queued it. Enrichment
+    asks the model, which on a slow one takes minutes; when it ran inside the index jobs it
     held every worker slot, and indexing (what makes a write findable) waited behind it. Not
-    serialised per tenant: one job at a time let a backlog of hundreds trail indexing by an
-    hour, and a question asked meanwhile met a graph without the facts its answer joins on."""
+    serialised per tenant either: one job at a time per tenant, the capability eval's LLM run
+    still had 552 enrichment jobs queued when its questions began, an hour after its first
+    write, so those questions met a graph without the facts their answers join on."""
     return {"queue": Queue.GRAPH, "tenant_id": tenant_id}
 
 

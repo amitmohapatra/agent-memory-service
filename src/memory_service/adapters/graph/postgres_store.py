@@ -13,8 +13,9 @@ could only stop waiting, not stop the statement, which then held a pooled connec
 
 The graph is derived state (rebuildable from memories and chunks) but it lives next to the
 canonical rows so that a single database backup restores everything. It uses its own
-sessions rather than the caller's unit of work: enrichment runs inside index jobs and is
-idempotent, so a partial write is repaired by the next run.
+sessions rather than the caller's unit of work: enrichment runs in jobs of its own
+(``graph.enrich_memories`` / ``graph.enrich_document``, queued once the source is indexed) and
+is idempotent, so a partial write is repaired by the next run.
 """
 
 from __future__ import annotations

@@ -110,9 +110,10 @@ each entry says which one moved. Decisions behind each change are in the
   slot taken, indexing, parsing and the other jobs waited up to six minutes, and a memory
   remembered just before a question was not in its context. Enrichment is now a job of its own,
   `graph.enrich_memories` / `graph.enrich_document`, queued once the source is indexed, on the
-  `graph` queue below indexing, in a pool of its own and never one at a time per tenant (so
-  serialised, a backlog trailed indexing by an hour in the capability eval and questions met a
-  graph without their facts) ([operations](docs/guide/11-operations.md#workers-and-periodic-jobs)).
+  `graph` queue below indexing, in a pool of its own - never inside the index job - and never
+  one at a time per tenant (so serialised, the capability eval's LLM run still had 552
+  enrichment jobs queued when its questions began, and they met a graph without their facts)
+  ([operations](docs/guide/11-operations.md#workers-and-periodic-jobs)).
 - "When I ask for a stock audit, always use a table" opened like a question, so nothing was
   stored; a "when"/"if" followed by a subject now opens a condition, and the rule is kept with
   its trigger. A standing rule is recognised wherever its "never"/"always" sits ("For weekly
