@@ -388,6 +388,57 @@ def test_the_gate_is_a_ratchet_with_report_only_targets(tmp_path: Path) -> None:
     assert gate.below_targets(_run(0.9, 100.0), with_target) == []
 
 
+def test_thresholds_do_not_carry_across_identity_schemes(tmp_path: Path) -> None:
+    """Runs that named their users another way indexed other text: their values are another
+    measurement. A run is refused against them; a re-record starts the thresholds afresh."""
+    cell = "context/new_session/single_fact_recall/en"
+    g = tmp_path / "gate.json"
+
+    def named(acc: float, scheme: str | None) -> Path:
+        run = _run(acc, 100.0)
+        run["meta"]["identities"] = scheme
+        path = tmp_path / f"run_{acc}_{(scheme or 'old').replace('/', '_')}.json"
+        path.write_text(json.dumps(run))
+        return path
+
+    old = gate.record([named(0.8, None)], g)
+    current = _run(0.6, 100.0)
+    current["meta"]["identities"] = "scenario-language/v1"
+    refused = gate.check(current, old)
+    assert refused and "named its users another way" in refused[0]
+    # not "a regression" from 0.8: the 0.8 was measured on other index text
+    fresh = gate.record([named(0.6, "scenario-language/v1")], g)
+    assert fresh["baselines"]["nollm"]["cells"][cell]["accuracy"] == 0.6
+    assert fresh["baselines"]["nollm"]["identities"] == "scenario-language/v1"
+    assert gate.check(current, fresh) == []
+    # and from then on it ratchets as before
+    with pytest.raises(SystemExit, match="would record a regression"):
+        gate.record([named(0.4, "scenario-language/v1")], g)
+    with pytest.raises(SystemExit, match="named their users differently"):
+        gate.record([named(0.6, "scenario-language/v1"), named(0.6, None)], tmp_path / "g2.json")
+
+
+def test_eval_identities_are_a_function_of_scenario_and_language() -> None:
+    """Two runs write the same users and threads: nothing drawn per run reaches the store."""
+    from datetime import UTC, datetime
+
+    from benchmark.capabilities.runner import identity, parse, run_day, thread_name
+
+    a = identity("recall-retail-hazmat-code", "en")
+    assert a == identity("recall-retail-hazmat-code", "en")
+    assert a != identity("recall-retail-hazmat-code", "de")
+    assert a != identity("recall-retail-dock-door", "en")
+    # opaque, like a production user id: the subject is indexed with every memory's text
+    assert a.startswith("ce") and "hazmat" not in a and len(a) == 14
+    assert thread_name(a, "s1") == f"{a}-s1"
+    users = {identity(s.id, lang) for s in DATASET.scenarios for lang in LANGUAGES}
+    assert len(users) == len(DATASET.scenarios) * len(LANGUAGES)
+    settings, _ = parse(["--mode", "nollm", "--run-date", "2026-10-12"])
+    assert run_day(settings) == datetime(2026, 10, 12, tzinfo=UTC)
+    settings.run_date = None
+    assert run_day(settings).date() == datetime.now(UTC).date()
+
+
 def test_noise_is_allowed_once(tmp_path: Path) -> None:
     """llm_core implicit_personalization/hi measured 0.5 and 0.667: the threshold is the lower,
     0.5, and its noise is already spent - 0.333 must not pass."""
@@ -739,6 +790,12 @@ async def test_the_runner_drives_the_service_through_the_sdk(app, running) -> No
             )
         ).one()
     assert tuple(live) == (0, 0), f"left behind: {live[0]} memories, {live[1]} threads"
+    # users are named from scenario and language, so a second run must not share the store
+    from benchmark.capabilities.runner import IDENTITIES
+
+    assert payload["meta"]["identities"] == IDENTITIES
+    with pytest.raises(SystemExit, match="must not share a store"):
+        await run(settings, client_factory=factory)
 
 
 def test_a_run_purges_unless_kept_or_reused() -> None:

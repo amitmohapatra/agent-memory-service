@@ -81,6 +81,7 @@ def baseline_of(run: Mapping[str, Any], source: str) -> dict[str, Any]:
     return {
         "source": source,
         "run_date": run["meta"].get("run_date"),
+        "identities": run["meta"].get("identities"),
         "selection": run["meta"].get("selection"),
         "sample": run["meta"].get("sample"),
         "scale": run["meta"].get("scale"),
@@ -104,6 +105,8 @@ def _merge(base: dict[str, Any], other: dict[str, Any]) -> dict[str, Any]:
     run-to-run noise without a blanket tolerance (it has been one cell in 192, by 0.03)."""
     if base["selection"] != other["selection"]:
         raise SystemExit(f"repeat runs of {base['source']} differ in selection")
+    if base.get("identities") != other.get("identities"):
+        raise SystemExit(f"repeat runs of {base['source']} named their users differently")
     cells = dict(base["cells"])
     noisy: dict[str, list[float]] = {k: list(v) for k, v in base.get("noisy", {}).items()}
     for key, cell in other["cells"].items():
@@ -209,6 +212,11 @@ def record(paths: Sequence[Path], gate: Path = GATE) -> dict[str, Any]:
     regressions: list[str] = []
     for key, b in fresh.items():
         prev = previous.get(key) or {}
+        if prev.get("identities") != b.get("identities"):
+            # runs that named their users another way wrote other text to the index (the
+            # subject is indexed with each memory): their values measured something else and
+            # carry nothing - neither a threshold nor a noise range
+            prev = {}
         prev_cells = prev.get("cells") or {}
         noisy = {k: v for k, v in (prev.get("noisy") or {}).items() if carries(k)}
         for k, (lo, hi) in (b.get("noisy") or {}).items():
@@ -271,6 +279,12 @@ def check(
             "dataset changed since the baseline was recorded "
             f"({run['dataset']['sha256'][:12]} != {str(gate.get('dataset_sha256'))[:12]}): "
             "re-record the baseline in the same change"
+        ]
+    if run["meta"].get("identities") != base.get("identities"):
+        return [
+            "the run named its users another way than the baseline's runs "
+            f"({run['meta'].get('identities')} != {base.get('identities')}): what it wrote is "
+            "not what the baseline measured; re-record the baseline in the same change"
         ]
     if not subset and run["meta"].get("selection") != base.get("selection"):
         return [
@@ -407,6 +421,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"CAPABILITY GATE {path}: {verdict}")
         for c in new_cells(run, gate):
             print(f"  + new cell (not gated until recorded): {c}")
+        base = (gate.get("baselines") or {}).get(_subset_of(run) or key_of(run)) or {}
+        if base.get("run_date") and run["meta"].get("run_date") != base["run_date"]:
+            print(
+                f"  note: run date {run['meta'].get('run_date')}, the baseline's "
+                f"{base['run_date']}: each memory is indexed with its date, so cells near a "
+                "floor may move with it (--run-date pins it within a day of the clock)"
+            )
         for t in below_targets(run, gate):
             print(f"  ~ below target (not failed): {t}")
         for f in failures:

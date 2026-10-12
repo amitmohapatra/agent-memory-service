@@ -7,9 +7,18 @@ Modes differ only in the eval tenant's model policy (``data/_modes.json``): ``no
 model at all, ``llm`` the policy's uses through the gateway. ``harness`` is
 ``benchmark.capabilities.harness_mode`` (an agent wrapped by agent-harness answers).
 
-Isolation: one tenant per mode (``capeval-<mode>``, created with the admin credential when
-missing), a service key issued for the run and revoked after it, and a fresh user per
-scenario and language, so nothing a run writes is read by another run or another test.
+Determinism: what a run writes is a function of the dataset, the selection and the run date
+alone. Every user and thread is named from its scenario and language (``identity``), never
+from anything drawn per run: the service indexes a memory's subject with its text, so a
+random user id moved every cosine by a few hundredths and two runs of the same code disagreed
+on cells near the relevance floor. The run date (``--run-date``, default the UTC date the run
+starts) anchors every session and is recorded in the result.
+
+Isolation: since the names repeat from run to run, a run needs a store of its own - the
+isolated stack's (``isolated_stack.sh``: a fresh database, Qdrant, Redis db per run), or at
+least a tenant never used before. The eval tenant (``capeval-<mode>`` unless ``--tenant``) is
+created by the run and a run refuses one that already exists (``--reuse`` aside); a service
+key is issued for the run and revoked after it.
 
 Readiness, never a blind sleep: (1) every write's processing job reaches a terminal state
 (``GET /v1/jobs/{id}``, archive staging excluded - it is scheduled a minute out by design);
@@ -33,7 +42,8 @@ import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from datetime import time as clock_time
 from pathlib import Path
 from typing import Any
 
@@ -141,7 +151,35 @@ class Settings:
     #: how long to wait for graph enrichment and summaries once everything is indexed
     enrich_seconds: float = ENRICH_SECONDS
     out: Path | None = None
+    #: the date every session is anchored to (``Session.day`` is relative to it); None is the
+    #: UTC date the run starts. Recorded as ``meta.run_date``.
+    run_date: date | None = None
+    #: names this run's service key and log lines only - never a user, thread or anything the
+    #: service stores and indexes (``identity``)
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
+
+
+#: the naming scheme ``identity`` implements, recorded with every run
+IDENTITIES = "scenario-language/v1"
+
+
+def identity(scenario_id: str, language: str) -> str:
+    """The user a scenario is written as in one language: the same in every run, opaque like a
+    production user id (the service indexes the subject with each memory's text, so a name
+    that carried the scenario's words would lend its questions a match they did not earn)."""
+    digest = hashlib.sha256(f"{scenario_id}/{language}".encode()).hexdigest()
+    return f"ce{digest[:12]}"
+
+
+def thread_name(user_id: str, name: str) -> str:
+    """A thread of ``user_id``'s, named from the scenario's own session (or question) name."""
+    return f"{user_id}-{name}"
+
+
+def run_day(settings: Settings) -> datetime:
+    """Midnight UTC of the run date: the anchor of every session and generated record."""
+    day = settings.run_date or datetime.now(UTC).date()
+    return datetime.combine(day, clock_time(0), tzinfo=UTC)
 
 
 # --------------------------------------------------------------------------- the service
@@ -363,14 +401,14 @@ async def write_scenario(
                 truth = aggregate(corpus, q.expect["aggregate"], today.date())
                 w.expects[q.id] = aggregate_expect(truth, q.expect["aggregate"])
         for name, turns in corpus.sessions.items():
-            thread = f"ce-{settings.run_id}-{user_id}-{name}"
+            thread = thread_name(user_id, name)
             w.threads.append(thread)
             if not settings.reuse:
                 await _add(service, _ctx(client, w, thread), turns, w)
             if probe := _probe_text(turns):
                 w.last_probe, w.probe_thread = probe, thread
     for session in sorted(s.sessions, key=lambda x: x.day):
-        thread = f"ce-{settings.run_id}-{user_id}-{session.id}"
+        thread = thread_name(user_id, session.id)
         w.threads.append(thread)
         start = session.start(today)
         turns = [
@@ -502,7 +540,9 @@ async def ask(service: Service, w: Written, case: Case, settings: Settings) -> l
     expect = _expect(w, case)
     for placement in settings.placements:
         if placement == "new_session":
-            thread = f"ce-{settings.run_id}-{w.user_id}-ask-{hashlib.sha1(case.key.encode()).hexdigest()[:10]}"
+            thread = thread_name(
+                w.user_id, f"ask-{hashlib.sha1(case.key.encode()).hexdigest()[:10]}"
+            )
             window = True
         else:
             thread = w.threads[-1]
@@ -646,6 +686,7 @@ async def _tenant(settings: Settings, factory: ClientFactory) -> tuple[str, Any]
     modes = load_json("_modes.json")["modes"]
     policy = modes[settings.mode]["policy"]
     if settings.api_key and not settings.admin_key:
+        # the tenant cannot be checked from a service key: ``_fresh_users`` checks the users
         return settings.api_key, {"policy": "unchanged (service key given)"}
     assert settings.admin_key, "an admin credential (--admin-key / CAPEVAL_ADMIN_KEY) is needed"
     admin_key = settings.admin_key
@@ -659,6 +700,9 @@ async def _tenant(settings: Settings, factory: ClientFactory) -> tuple[str, Any]
             # a platform key onboards a tenant and does not act for it: the new tenant's own
             # admin key administers it (a development key may do both)
             admin_key = created.admin_key.token or admin_key
+        else:
+            if not settings.reuse:
+                raise SystemExit(STORE_IN_USE.format(what=f"tenant {settings.tenant!r} exists"))
     async with factory(admin_key) as admin:
         tenant = admin.administer(settings.tenant)
         model = os.environ.get(policy.get("model_env", ""), "")
@@ -681,6 +725,24 @@ async def _tenant(settings: Settings, factory: ClientFactory) -> tuple[str, Any]
         }
 
 
+STORE_IN_USE = (
+    "{what}: the eval names its users by scenario and language, the same in every run, so a "
+    "run must not share a store with an earlier one (its memories, graph and profiles would "
+    "be read as this run's). Run it on a store of its own (benchmark/capabilities/"
+    "isolated_stack.sh, make eval-capabilities-isolated), or name a tenant never used "
+    "(--tenant); --reuse re-asks a kept run's writes on purpose."
+)
+
+
+async def _fresh_users(client: Any, users: Sequence[str]) -> None:
+    """With only a service key the tenant cannot be checked: refuse when any of the run's
+    users already holds a memory (a soft-deleted one is not listed: the admin path, which
+    needs the tenant itself to be new, is the strict one)."""
+    for user in users:
+        async for _ in client.bind(user_id=user).advanced.memories.iter(include_superseded=True):
+            raise SystemExit(STORE_IN_USE.format(what=f"user {user} already has memories"))
+
+
 async def _revoke(settings: Settings, factory: ClientFactory, policy: Mapping[str, Any]) -> None:
     key_id, admin_key = policy.get("key_id"), policy.get("admin_key")
     if not key_id or not admin_key:
@@ -697,14 +759,26 @@ async def run(
     factory = client_factory or default_factory(settings)
     dataset = dataset or load_dataset()
     scenarios = select(dataset, settings.selection)
-    today = datetime.now(UTC)
     if settings.reuse:
-        # the same users, threads and run date as the run being asked again
+        # the same users and threads (named from the scenarios) and the same run date as the
+        # run being asked again
         reused = _reused_meta(settings.reuse)
         if reused["selection"] != settings.selection.describe() or reused["mode"] != settings.mode:
             raise SystemExit("--reuse needs the same mode and selection as the run it reuses")
+        if reused.get("identities") != IDENTITIES:
+            raise SystemExit(
+                "--reuse needs a run whose users were named the way this runner names them"
+            )
         settings.run_id = reused["run_id"]
-        today = datetime.fromisoformat(reused["run_date"]).replace(tzinfo=UTC)
+        settings.run_date = date.fromisoformat(reused["run_date"])
+    today = run_day(settings)
+    work = [
+        (s, lang, identity(s.id, lang))
+        for s in scenarios
+        for lang in languages_of(s, settings.selection)
+    ]
+    if len({user for *_, user in work}) != len(work):
+        raise SystemExit("two scenarios of the selection share an id")
     token, policy = await _tenant(settings, factory)
     client = factory(token)
     service = Service(client, settings.worker_metrics_url)
@@ -712,11 +786,8 @@ async def run(
     cleanup: dict[str, Any] = {"purged": False}
     try:
         version = await client.version()
-        work = [
-            (s, lang, f"ce{settings.run_id}-{i:03d}-{lang}")
-            for i, s in enumerate(scenarios)
-            for lang in languages_of(s, settings.selection)
-        ]
+        if not settings.reuse and settings.api_key and not settings.admin_key:
+            await _fresh_users(client, [user for *_, user in work])
         sem = asyncio.Semaphore(settings.write_concurrency)
 
         async def _write(s: Scenario, lang: str, user: str) -> Written:
@@ -726,7 +797,7 @@ async def run(
                 except Exception as exc:  # noqa: BLE001 - one scenario's failure is recorded, not fatal
                     print(f"write failed {s.id}/{lang}: {exc!r}", file=sys.stderr)
                     w = Written(s, lang, user, error=f"{type(exc).__name__}: {exc}"[:300])
-                    w.threads.append(f"ce-{settings.run_id}-{user}-unwritten")
+                    w.threads.append(thread_name(user, "unwritten"))
                     return w
 
         queues_at_start = await service.queue_depths()
@@ -778,6 +849,9 @@ async def run(
         "memory_url": settings.url,
         "run_id": settings.run_id,
         "run_date": today.date().isoformat(),
+        #: how users and threads are named (``identity``): a pure function of the scenario and
+        #: the language, so two runs on one run date write the same thing
+        "identities": IDENTITIES,
         "selection": settings.selection.describe(),
         "sample": settings.sample,
         "scale": settings.scale,
@@ -871,6 +945,11 @@ def parse(argv: Sequence[str] | None = None) -> tuple[Settings, argparse.Namespa
         "--keep", action="store_true", help="leave the writes in the tenant (for a later --reuse)"
     )
     p.add_argument("--enrich-seconds", type=float, default=ENRICH_SECONDS)
+    p.add_argument(
+        "--run-date",
+        default=os.environ.get("CAPEVAL_RUN_DATE"),
+        help="YYYY-MM-DD the sessions are dated from (default: today, UTC); recorded in the result",
+    )
     p.add_argument("--out", default=None, help="default benchmark/results/capabilities/<mode>.json")
     a = p.parse_args(argv)
     sample: dict[str, Any] = {}
@@ -908,6 +987,7 @@ def parse(argv: Sequence[str] | None = None) -> tuple[Settings, argparse.Namespa
         keep=a.keep,
         enrich_seconds=float(sample.get("enrich_seconds", a.enrich_seconds)),
         out=Path(a.out) if a.out else None,
+        run_date=date.fromisoformat(a.run_date) if a.run_date else None,
     )
     return settings, a
 
