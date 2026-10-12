@@ -180,6 +180,7 @@ PAYLOAD_FIELDS: tuple[str, ...] = (
     "dated_mentions",
     "derived",
     "earlier_value",
+    "replaced_by",
     "document_id",
     "kind",
     "memory_type",

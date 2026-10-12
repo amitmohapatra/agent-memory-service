@@ -628,7 +628,11 @@
         "open",
         "late",
         "waiting",
-        "pending"
+        "pending",
+        "back from",
+        "returned from",
+        "(is|are) back",
+        "came back"
       ],
       "lifecycle_weak": [
         "opened",
@@ -654,7 +658,13 @@
         "signed",
         "expired",
         "finished",
-        "completed"
+        "completed",
+        "hand(ed|s|ing)? (\\S+ ){0,4}over",
+        "handover",
+        "took over",
+        "taken over",
+        "takes over",
+        "passed (\\S+ ){0,4}on to"
       ],
       "correction_weak": [
         "actually",
@@ -1065,7 +1075,10 @@
         "leer",
         "verspätet",
         "fertig",
-        "wieder"
+        "wieder",
+        "zurück aus",
+        "(ist|sind) zurück",
+        "zurückgekehrt"
       ],
       "lifecycle_weak": [
         "eröffnet",
@@ -1077,7 +1090,12 @@
         "eingestellt",
         "angefangen",
         "übernommen",
-        "abgeschlossen"
+        "abgeschlossen",
+        "übergeben",
+        "übergibt",
+        "übergab",
+        "übernimmt",
+        "übernahm"
       ],
       "correction_weak": [
         "eigentlich",
@@ -1472,7 +1490,11 @@
         "lleno",
         "pendiente",
         "funciona(ndo)?",
-        "fallando"
+        "fallando",
+        "(ha|han) vuelto",
+        "volvi(ó|eron)",
+        "regres(ó|aron|ado)",
+        "de vuelta"
       ],
       "lifecycle_weak": [
         "abri(ó|mos|eron)",
@@ -1483,7 +1505,11 @@
         "comenz(ó|amos)",
         "contrat(ó|amos)",
         "inaugur\\w+",
-        "finaliz\\w+"
+        "finaliz\\w+",
+        "traspas\\w+",
+        "entreg(ó|ado|ada)",
+        "cedi(ó|do)",
+        "asumi(ó|do)"
       ],
       "correction_weak": [
         "en lugar de",
@@ -1874,7 +1900,11 @@
         "متأخر",
         "يعمل",
         "تعمل",
-        "معلق"
+        "معلق",
+        "عاد",
+        "عادت",
+        "رجع",
+        "رجعت"
       ],
       "lifecycle_weak": [
         "افتتاح",
@@ -1887,7 +1917,12 @@
         "انتهت",
         "بدأ",
         "بدأنا",
-        "تعاقد"
+        "تعاقد",
+        "سلم",
+        "سلمت",
+        "تسلم",
+        "تولى",
+        "تولت"
       ],
       "correction_weak": [
         "بدلا من",
@@ -1931,7 +1966,6 @@
         "कभी नहीं",
         "कभी",
         "अब से",
-        "आज से",
         "आगे से",
         "भविष्य में",
         "हर बार",
@@ -2251,7 +2285,9 @@
         "उपलब्ध",
         "रुका",
         "अटका",
-        "धीमा"
+        "धीमा",
+        "लौट",
+        "वापस आ"
       ],
       "lifecycle_weak": [
         "खोल",
@@ -2261,7 +2297,10 @@
         "खत्म",
         "लॉन्च",
         "जुड़",
-        "छोड़"
+        "छोड़",
+        "सौंप",
+        "संभाल लिया",
+        "संभाल ली"
       ],
       "correction_weak": [
         "की जगह",

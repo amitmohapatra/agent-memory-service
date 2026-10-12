@@ -73,6 +73,10 @@ def _cacheable(bundle: ContextBundle) -> bool:
     )
 
 
+#: Earlier values (ADR 0038) a bundle carries at most, in its history section: enough for "what
+#: was it before", never enough to crowd the current evidence's budget.
+HISTORY_MAX = 4
+
 #: The model uses a cached bundle's content depends on. A deployment that expands queries
 #: assembles a different bundle from the same query, so it must not read another's cache.
 CACHED_MODEL_USES: tuple[LLMUse, ...] = ("query_expansion",)
@@ -798,6 +802,7 @@ class ContextBuilder:
         knowledge: list[ContextItem] = []
         graph_facts: list[ContextItem] = []
         summaries: list[ContextItem] = []
+        history: list[ContextItem] = []
         # a seed chunk travels with the companions its required evidence groups point at
         # (definition, footnote, cross-reference): either the whole unit fits the budget or
         # the seed is left out, so the bundle never carries a claim without its companion
@@ -866,12 +871,17 @@ class ContextBuilder:
                 continue
             if item.token_estimate > remaining:
                 continue
-            if c.kind == "memory" and (
+            if c.kind == "memory" and c.payload.get("earlier_value"):
+                # an earlier value goes to the history section, never among current evidence
+                if len(history) >= HISTORY_MAX:
+                    continue
+                history.append(item)
+            elif c.kind == "memory" and (
                 primary_memories < self.cfg.memories_max
-                or c.expansion_edge in {"GRAPH_EVIDENCE", "DERIVED_SOURCE"}
+                or c.expansion_edge in {"GRAPH_EVIDENCE", "DERIVED_SOURCE", "REPLACEMENT"}
             ):
                 memories.append(item)
-                if c.expansion_edge not in {"GRAPH_EVIDENCE", "DERIVED_SOURCE"}:
+                if c.expansion_edge not in {"GRAPH_EVIDENCE", "DERIVED_SOURCE", "REPLACEMENT"}:
                     primary_memories += 1
             elif c.kind == "fact" and len(graph_facts) < self.cfg.graph_facts_max:
                 graph_facts.append(item)
@@ -949,7 +959,7 @@ class ContextBuilder:
                         "notes": [*report.notes, "companion evidence exceeded the token budget"],
                     }
                 )
-        if not (knowledge or memories or graph_facts or summaries):
+        if not (knowledge or memories or graph_facts or summaries or history):
             report = report.model_copy(update={"status": EvidenceStatus.INSUFFICIENT})
         # what the retriever found but this bundle does not carry (ranked out, over budget):
         # the grounding cascade checks answers against it for contradictions
@@ -978,6 +988,7 @@ class ContextBuilder:
             knowledge=knowledge,
             graph_facts=graph_facts,
             summaries=summaries,
+            history=history,
             evidence=report,
             token_budget=budget,
             token_estimate=budget - remaining,

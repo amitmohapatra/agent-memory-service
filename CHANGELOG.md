@@ -12,19 +12,25 @@ each entry says which one moved. Decisions behind each change are in the
   user's words follow the user (ADR 0036) the old and the new statement were both current in
   every conversation, and the same-session update and recency cells fell to 0.04 and 0.33. A
   new statement is now compared with the user's own statements in all their conversations:
-  same thing by a shared name or identifier (two things of one kind, "Forklift #3" /
-  "Forklift #4", never), or the multilingual encoder; the NLI head decides. At 0.9 the old
-  statement and every form of it (turn, fact, event, twins) are superseded; at 0.85, or 0.4
-  for a stated change about the same named thing, it stays current as an **earlier value**:
-  ranked after every current item and labelled (`superseded: true` on a full context's
-  memory and on a search result, "(earlier value, since replaced)" in the rendered context).
-  With the tenant's `conflict_adjudication`, the model settles at most three related pairs per
-  message that the head leaves in its unsure band. Forgetting or
-  retracting the newer statement reinstates what it replaced. A failing head or model never
-  costs the message (`memory_replacement_skipped_total`; decisions in
-  `memory_replacements_total`). Migration 0027 adds two partial indexes, online. The full
-  context's `memories[].superseded` is new in the API and the SDK (`ContextMemory.superseded`)
-  (ADR 0038).
+  same thing by a shared name or identifier (two things of one kind, "bike #3" / "bike #4",
+  never), by one subject's single-valued slot read from both with two values (`lives_in`),
+  or by the multilingual encoder; the NLI head decides. At 0.9 the old statement and every
+  form of it (turn, fact, event, twins) are superseded; at 0.85, or 0.4 for a stated change
+  (a correction, a lifecycle or status cue - now also a handover or a return, in five
+  languages) about the same named thing or slot, it stays current as an **earlier value**. A
+  fact a model misread as a standing rule is compared like a fact. With the tenant's
+  `conflict_adjudication`, the model settles at most three related pairs per message that the
+  head leaves in its unsure band. Forgetting or retracting the newer statement reinstates what
+  it replaced. A failing head or model never costs the message
+  (`memory_replacement_skipped_total`; decisions in `memory_replacements_total`). Migration
+  0027 adds two partial indexes, online (ADR 0038).
+- Current and history apart in the context: an earlier value is never among the current
+  memories. It is served in a `history` section of its own (full context `history[]`, each
+  `superseded: true`; "## Earlier values (since replaced)" in the rendered context; handles
+  `h1`..), is no evidence for `/v1/verify`, and never comes without what replaced it: a search
+  that finds an earlier value brings its replacement, before it, past the relevance floor. A
+  sentence shown whole in its turn is not shown again beside it. New in the API and the SDK:
+  `ContextBundle.history`, `ContextMemory.superseded` (ADR 0038).
 - Statement kinds: every sentence a user says is labelled at write with what it does - a
   `FACT`, a standing `RULE`, a `CONDITIONAL_RULE` (an exception or a trigger about the world),
   a `STATUS` of a thing, a `CORRECTION`, or a `LIFECYCLE` change - and the kind is stored on
@@ -77,6 +83,10 @@ each entry says which one moved. Decisions behind each change are in the
   class), merge F1 0.84 (exact subject strings before: 0.13).
 
 ### Fixed
+- A Hindi statement that begins "आज से" ("from today": when a value took effect) was read as a
+  standing rule, stored as a lasting preference and never compared with what it replaced. It
+  is a fact now, as "from today", "ab heute", "desde hoy" and "اعتبارًا من اليوم" already were;
+  "अब से" ("from now on") still makes a rule (ADR 0038).
 - "When I ask for a stock audit, always use a table" opened like a question, so nothing was
   stored; a "when"/"if" followed by a subject now opens a condition, and the rule is kept with
   its trigger. A standing rule is recognised wherever its "never"/"always" sits ("For weekly

@@ -521,6 +521,8 @@ class ContextBundle(BaseModel):
     knowledge: list[ContextPassage] = Field(default_factory=list)
     graph_facts: list[ContextFact] = Field(default_factory=list)
     summaries: list[ContextSummary] = Field(default_factory=list)
+    #: earlier values: what a later statement of the same user replaced (never current)
+    history: list[ContextMemory] = Field(default_factory=list)
     diagnostics: dict[str, Any] | None = None
 
     @property

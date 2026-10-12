@@ -1,9 +1,8 @@
 """A value the user replaces in a later conversation, through the real write and read paths
 (ADR 0038).
 
-"Our primary supplier for heavy-duty pallets is Uline." in March, then "Actually, we
-terminated our contract with Uline ... Our new exclusive pallet supplier is PackagingCorp." in
-May: since a user's words follow the user (ADR 0036) both were current in every conversation,
+"Our main supplier of shipping crates is Brightway." in March, then "We ended the
+Brightway agreement ... Shipping crates now come from Corrimax only." in May: since a user's words follow the user (ADR 0036) both were current in every conversation,
 and the old supplier kept being offered. Consolidation compares a statement only with its own
 conversation, and a turn kept verbatim is never superseded by it - in another language there is
 no reading at all. The hermetic suite's NLI is a stand-in that cannot read a contradiction, so
@@ -35,16 +34,16 @@ pytestmark = pytest.mark.integration
 
 STATEMENTS = {
     "en": (
-        "Our primary supplier for heavy-duty pallets is Uline.",
-        "Actually, we terminated our contract with Uline yesterday due to pricing. "
-        "Our new exclusive pallet supplier is PackagingCorp.",
-        "Who is our pallet supplier?",
+        "Our main supplier of shipping crates is Brightway.",
+        "We ended the Brightway agreement last week over delivery times. "
+        "Shipping crates now come from Corrimax only.",
+        "Who supplies our shipping crates?",
     ),
     "hi": (
-        "हेवी-ड्यूटी पैलेट के लिए हमारा मुख्य सप्लायर Uline है।",
-        "असल में, हमने कल क़ीमतों की वजह से Uline के साथ अपना कॉन्ट्रैक्ट ख़त्म कर दिया। "
-        "पैलेट का हमारा नया एक्सक्लूसिव सप्लायर PackagingCorp है।",
-        "हमारा पैलेट सप्लायर कौन है?",
+        "शिपिंग क्रेट का हमारा मुख्य सप्लायर Brightway है।",
+        "पिछले हफ़्ते डिलीवरी में देरी के कारण हमने Brightway के साथ समझौता ख़त्म कर दिया। "
+        "अब शिपिंग क्रेट सिर्फ़ Corrimax से आते हैं।",
+        "हमारे शिपिंग क्रेट कौन देता है?",
     ),
 }
 
@@ -60,7 +59,7 @@ class ScriptedNLI:
     def __init__(
         self,
         score: float,
-        values: Sequence[str] = ("Uline", "PackagingCorp"),
+        values: Sequence[str] = ("Brightway", "Corrimax"),
         *,
         always: bool = False,
         fail: bool = False,
@@ -163,14 +162,15 @@ async def test_a_value_replaced_in_a_later_conversation_is_closed(
 
     for where in (may, _chat()):  # the same conversation, and a new one
         recalled = await _recalled(container, where, ask)
-        assert "PackagingCorp" in recalled
+        assert "Corrimax" in recalled
         assert old not in recalled.split("\n")
 
 
-async def test_a_weaker_contradiction_is_served_last_as_an_earlier_value(
-    container, uow_factory
+@pytest.mark.parametrize("lang", ["en", "hi"])
+async def test_a_weaker_contradiction_is_served_apart_as_an_earlier_value(
+    container, uow_factory, lang
 ) -> None:
-    old, new, ask = STATEMENTS["en"]
+    old, new, ask = STATEMENTS[lang]
     _scripted(container, 0.87)  # above the earlier-value bar, below the supersede bar
     march, may = _chat(), _chat()
     await _say(container, uow_factory, march, old)
@@ -181,18 +181,17 @@ async def test_a_weaker_contradiction_is_served_last_as_an_earlier_value(
     assert all(earlier_value(m.system_metadata) for m in forms)
 
     bundle = await _full(container, _chat(), ask)
-    memories = bundle["memories"]
-    texts = [m["text"] for m in memories]
-    assert any("PackagingCorp" in t for t in texts)
-    flagged = [m for m in memories if m["text"] == old]
-    assert flagged and all(m.get("superseded") is True for m in flagged), "labelled"
-    assert max(texts.index(m["text"]) for m in flagged) == len(texts) - 1, "ranked last"
-    assert all(
-        texts.index(m["text"]) > i
-        for m in flagged
-        for i, t in enumerate(texts)
-        if "PackagingCorp" in t
-    )
+    texts = [m["text"] for m in bundle.get("memories", [])]
+    assert any("Corrimax" in t for t in texts), "the current value is served"
+    assert old not in texts, "never among the current evidence"
+    history = bundle.get("history", [])
+    assert old in [m["text"] for m in history], "but kept, in the history section"
+    assert all(m.get("superseded") is True for m in history)
+
+    rendered = await container.services["context_builder"].build_api(_chat(), ask)
+    text = json.loads(rendered)["rendered"]
+    current, heading, earlier = text.partition("## Earlier values (since replaced)")
+    assert heading and old in earlier and old not in current
 
 
 async def test_forgetting_the_new_statement_reinstates_the_old_one(container, uow_factory) -> None:
@@ -214,7 +213,7 @@ async def test_forgetting_the_new_statement_reinstates_the_old_one(container, uo
     forms = await _old_forms(container, uow_factory, march, old)
     assert forms and all(m.temporal.status is TemporalStatus.CURRENT for m in forms)
     assert not any(replaced_by(m.system_metadata) for m in forms)
-    assert "Uline" in await _recalled(container, _chat(), ask)
+    assert "Brightway" in await _recalled(container, _chat(), ask)
 
 
 async def test_a_turn_replaced_in_the_same_conversation_closes_too(container, uow_factory) -> None:
@@ -222,7 +221,7 @@ async def test_a_turn_replaced_in_the_same_conversation_closes_too(container, uo
     turn whose reading has the same words; a turn of two sentences stayed current."""
     _scripted(container, 0.97)
     chat = _chat()
-    old = "Our primary supplier for heavy-duty pallets is Uline. We reorder every Monday."
+    old = "Our main supplier of shipping crates is Brightway. We reorder every Monday."
     await _say(container, uow_factory, chat, old)
     await _say(container, uow_factory, chat, STATEMENTS["en"][1])
     [turn] = [
@@ -304,11 +303,11 @@ async def test_rejecting_the_new_statement_reinstates_the_old_one(container, uow
 
 async def test_three_successive_values(container, uow_factory) -> None:
     """A -> B -> C: each replaces the one before; the first stays closed by the second."""
-    values = ("Uline", "PackagingCorp", "PalletPro")
+    values = ("Brightway", "Corrimax", "CrateHub")
     _scripted(container, 0.97, values=values)
-    a = "Our primary supplier for heavy-duty pallets is Uline."
-    b = "We dropped Uline. Our pallet supplier is PackagingCorp now."
-    c = "We dropped PackagingCorp. Our pallet supplier is PalletPro now."
+    a = "Our main supplier of shipping crates is Brightway."
+    b = "We dropped Brightway. Our crate supplier is Corrimax now."
+    c = "We dropped Corrimax. Our crate supplier is CrateHub now."
     first, second, third = _chat(), _chat(), _chat()
     await _say(container, uow_factory, first, a)
     await _say(container, uow_factory, second, b)
@@ -319,8 +318,8 @@ async def test_three_successive_values(container, uow_factory) -> None:
     assert _status(b_forms) == {TemporalStatus.SUPERSEDED}
     b_turn = next(m for m in b_forms if m.system_metadata.get("category") == "verbatim_turn")
     assert all(replaced_by(m.system_metadata) == b_turn.memory_id for m in a_forms)
-    recalled = await _recalled(container, _chat(), "Who is our pallet supplier?")
-    assert "PalletPro" in recalled
+    recalled = await _recalled(container, _chat(), "Who supplies our shipping crates?")
+    assert "CrateHub" in recalled
     assert a not in recalled.split("\n") and b not in recalled.split("\n")
 
 
@@ -340,12 +339,12 @@ async def test_the_same_subject_in_another_language(container, uow_factory) -> N
     ("old", "new"),
     [
         (
-            "Forklift #3 is assigned to the cold room this week.",
-            "Forklift #4 has been repaired and is back on the floor.",
+            "Delivery bike #3 stays in the yard for the week.",
+            "Delivery bike #4 got new brakes and is out on routes again.",
         ),
         (
-            "फ़ोर्कलिफ़्ट #3 इस हफ़्ते कोल्ड रूम में लगा है।",
-            "फ़ोर्कलिफ़्ट #4 ठीक कर दिया गया है और वापस फ़्लोर पर है।",
+            "ट्रॉली #3 इस हफ़्ते गोदाम में रहेगी।",
+            "ट्रॉली #4 की मरम्मत हो गई है और वह फिर से काम पर है।",
         ),
     ],
     ids=["en", "hi"],
@@ -353,8 +352,8 @@ async def test_the_same_subject_in_another_language(container, uow_factory) -> N
 async def test_different_identifiers_are_never_replaced(
     container, uow_factory, old: str, new: str
 ) -> None:
-    """Even a head that reads every pair as a contradiction cannot close Forklift #3 with a
-    statement about Forklift #4."""
+    """Even a head that reads every pair as a contradiction cannot close bike #3 with a
+    statement about bike #4."""
     nli = _scripted(container, 0.99, always=True)
     before, after = _chat(), _chat()
     await _say(container, uow_factory, before, old)
@@ -396,7 +395,7 @@ async def test_concurrent_statements_about_one_subject(container, uow_factory) -
     _scripted(container, 0.97)
     first = _chat()
     await _say(container, uow_factory, first, old)
-    other = "Actually, we stopped buying pallets from Uline. PackagingCorp supplies them now."
+    other = "We no longer buy crates from Brightway. Corrimax supplies them now."
     a, b = _chat(), _chat()
     await asyncio.gather(
         _say(container, uow_factory, a, new), _say(container, uow_factory, b, other)
@@ -421,7 +420,7 @@ async def test_a_failing_head_costs_no_message(container, uow_factory) -> None:
     assert _status(await _old_forms(container, uow_factory, march, old)) == {TemporalStatus.CURRENT}
 
 
-PLAIN_NEW = "Our heavy-duty pallets come from PackagingCorp and Uline."
+PLAIN_NEW = "Our shipping crates come from Corrimax and Brightway."
 
 
 @pytest.mark.parametrize(("verdict", "marked"), [("update", True), (None, False)])
@@ -442,3 +441,52 @@ async def test_the_model_settles_the_heads_unsure_band(
     assert forms and _status(forms) == {TemporalStatus.CURRENT}
     assert all(earlier_value(m.system_metadata) for m in forms) is marked
     assert PLAIN_NEW in {m.content for m in await _memories(uow_factory, may, container)}
+
+
+# --------------------------------------------------------------------------- slots
+
+
+async def test_a_slot_read_from_both_statements_relates_them(container, uow_factory) -> None:
+    """ "I live in Leeds. The commute is short." then "I moved to Bristol last month.": no name
+    in common and no encoder. The rules read the user's ``lives_in`` from both; consolidation
+    closes the old reading (a single-valued slot), and the slot it held relates the turn it
+    came from, which the head's 0.6 then marks as an earlier value."""
+    old, new = "I live in Leeds. The commute is short.", "I moved to Bristol last month."
+    _scripted(container, 0.6, values=("Leeds", "Bristol"))
+    before, after = _chat(), _chat()
+    await _say(container, uow_factory, before, old)
+    await _say(container, uow_factory, after, new)
+    [turn] = await _old_forms(container, uow_factory, before, old)
+    assert turn.temporal.status is TemporalStatus.CURRENT
+    assert earlier_value(turn.system_metadata)
+    bundle = await _full(container, _chat(), "Where do I live?")
+    current = [m["text"] for m in bundle.get("memories", [])]
+    current += [b["text"] for b in bundle.get("profile", [])]
+    assert any("Bristol" in t for t in current) and old not in current
+    assert old in [m["text"] for m in bundle.get("history", [])]
+
+
+async def test_another_subjects_slot_is_left_alone(container, uow_factory) -> None:
+    """The same slot of two subjects is two slots: a user's move says nothing about where
+    another user lives."""
+    old, new = "I live in Leeds. The commute is short.", "I moved to Bristol last month."
+    _scripted(container, 0.6, values=("Leeds", "Bristol"))
+    theirs, mine = _chat("u2"), _chat()
+    await _say(container, uow_factory, theirs, old)
+    await _say(container, uow_factory, mine, new)
+    forms = await _old_forms(container, uow_factory, theirs, old)
+    assert forms and not any(replaced_by(m.system_metadata) for m in forms)
+
+
+async def test_an_earlier_value_found_alone_brings_its_replacement(container, uow_factory) -> None:
+    """A question in the old statement's words: the search finds only the earlier value, and
+    the statement that replaced it is served with it, as current, before it."""
+    old = "Our main supplier of shipping crates is Brightway."
+    new = "We ended the Brightway agreement. Corrimax took over in May."
+    _scripted(container, 0.87)
+    march, may = _chat(), _chat()
+    await _say(container, uow_factory, march, old)
+    await _say(container, uow_factory, may, new)
+    bundle = await _full(container, _chat(), "Who is our main supplier of shipping crates?")
+    assert new in [m["text"] for m in bundle.get("memories", [])]
+    assert old in [m["text"] for m in bundle.get("history", [])]

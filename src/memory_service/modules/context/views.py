@@ -7,7 +7,8 @@ Two forms, each holding only what its reader uses and nothing twice:
   and - when tools were given - the tools that fit, with a confidence the caller can narrow on;
 - **full** (for a caller that builds its own prompt): the same content as structured data -
   the conversation window, the pinned sections, the memories, document passages, graph facts
-  and summaries, the procedures and the tool choices - and no ``rendered`` copy of it.
+  and summaries, the earlier values a later statement replaced (``history``), the procedures
+  and the tool choices - and no ``rendered`` copy of it.
 
 Every number a caller sees is in 0..1: ``relevance`` for an item (its similarity to the
 question, comparable across the bundle), ``confidence`` for a tool. Ranking internals (the raw
@@ -70,6 +71,7 @@ def full_view(bundle: ContextBundle) -> dict[str, Any]:
     _put(body, "knowledge", [_passage(k) for k in bundle.knowledge])
     _put(body, "graph_facts", [_fact(f) for f in bundle.graph_facts if f.item_id not in repeated])
     _put(body, "summaries", [_summary(s) for s in bundle.summaries])
+    _put(body, "history", [_memory(m) for m in bundle.history])
     return body
 
 

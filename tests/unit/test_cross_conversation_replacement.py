@@ -15,16 +15,28 @@ from typing import Any
 import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.context_bundle import ContextItem, _memory_line
+from memory_service.domain.context_bundle import (
+    ContextBundle,
+    ContextItem,
+    ConversationWindow,
+    EvidenceReport,
+    _memory_line,
+)
 from memory_service.domain.enums import (
+    EvidenceStatus,
     MemoryType,
+    QueryType,
     Representation,
     StatementKind,
     TemporalStatus,
 )
+from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.memory import CanonicalMemory, earlier_value, replaced_by
+from memory_service.modules.context.handles import record_of
 from memory_service.modules.context.views import _memory as memory_view
+from memory_service.modules.context.views import full_view
 from memory_service.modules.memory.replacement import (
+    RELATED_COSINE,
     CrossConversationReplacement,
     Grade,
     PairScores,
@@ -32,10 +44,15 @@ from memory_service.modules.memory.replacement import (
     Thresholds,
     anchors,
     decide,
+    misread_rule,
     reinstate,
     relate,
+    slot_changed,
+    slots_of,
+    statement_of,
 )
-from memory_service.modules.retrieval.engine import Candidate, current_first
+from memory_service.modules.memory.statements import Lexicon
+from memory_service.modules.retrieval.engine import Candidate, RetrievalEngine, current_first
 from memory_service.ports.models import NLIScore
 
 pytestmark = pytest.mark.unit
@@ -44,15 +61,15 @@ T0 = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
 T1 = T0 + timedelta(days=40)
 CTX = MemoryExecutionContext(tenant_id="acme", user_id="u1", thread_id="thr_b")
 
-ULINE = "Our primary supplier for heavy-duty pallets is Uline."
-PACKAGINGCORP = (
-    "Actually, we terminated our contract with Uline yesterday due to pricing. "
-    "Our new exclusive pallet supplier is PackagingCorp."
+OLD = "Our main supplier of shipping crates is Brightway."
+NEW = (
+    "We ended the Brightway agreement last week over delivery times. "
+    "Shipping crates now come from Corrimax only."
 )
-ULINE_HI = "हेवी-ड्यूटी पैलेट के लिए हमारा मुख्य सप्लायर Uline है।"
-PACKAGINGCORP_HI = (
-    "असल में, हमने कल क़ीमतों की वजह से Uline के साथ अपना कॉन्ट्रैक्ट ख़त्म कर दिया। "
-    "पैलेट का हमारा नया एक्सक्लूसिव सप्लायर PackagingCorp है।"
+OLD_HI = "शिपिंग क्रेट का हमारा मुख्य सप्लायर Brightway है।"
+NEW_HI = (
+    "पिछले हफ़्ते डिलीवरी में देरी के कारण हमने Brightway के साथ समझौता ख़त्म कर दिया। "
+    "अब शिपिंग क्रेट सिर्फ़ Corrimax से आते हैं।"
 )
 
 
@@ -60,26 +77,26 @@ PACKAGINGCORP_HI = (
 
 
 def test_a_statement_names_its_names_and_identifiers() -> None:
-    a = anchors("Service van #7 is assigned to Ana Silva.", "en")
-    assert "ana silva" in a.names and ("van", "7") in a.ids
+    a = anchors("Delivery bike #7 is assigned to Lior Adler.", "en")
+    assert "lior adler" in a.names and ("bike", "7") in a.ids
     # a sentence-initial capital is not a name; a label before a number is not one either
-    assert "service" not in a.names and "van" not in a.names
-    b = anchors("The reorder point for SKU MK-220 is 40 units.", "en")
-    assert any(v == "mk220" for _, v in b.ids) and "sku" not in b.names
+    assert "delivery" not in a.names and "bike" not in a.names
+    b = anchors("The minimum stock for SKU QX-410 is 25 cases.", "en")
+    assert any(v == "qx410" for _, v in b.ids) and "sku" not in b.names
 
 
 def test_latin_names_inside_another_script_are_names() -> None:
-    a = anchors(ULINE_HI, "hi")
-    assert "uline" in a.names
-    forklift = anchors("फ़ोर्कलिफ़्ट #4 रखरखाव के लिए सेवा से बाहर है।", "hi")
-    assert ("फ़ोर्कलिफ़्ट", "4") in forklift.ids
+    a = anchors(OLD_HI, "hi")
+    assert "brightway" in a.names
+    trolley = anchors("ट्रॉली #4 आज मरम्मत में है।", "hi")
+    assert ("ट्रॉली", "4") in trolley.ids
 
 
 def test_german_nouns_are_not_names_but_names_are() -> None:
-    a = anchors("Bei Chemikalienunfällen im Lager Dave Morris unter Durchwahl 210 anrufen.", "de")
-    b = anchors("Dave Morris hat das Unternehmen verlassen. Leiter ist jetzt Kenji Ito.", "de")
-    assert relate(b, a).shared_name  # "dave morris" inside "lager dave morris"
-    assert not anchors("Kundenretouren laufen wie bisher über Tor 9.", "de").names
+    a = anchors("Bei Stromausfällen im Lager Owen Pike unter Durchwahl 318 anrufen.", "de")
+    b = anchors("Owen Pike ist nicht mehr bei uns. Zuständig ist jetzt Rhea Sood.", "de")
+    assert relate(b, a).shared_name  # "owen pike" inside "lager owen pike"
+    assert not anchors("Leergut geht wie immer über Halle 2.", "de").names
 
 
 # --------------------------------------------------------------------------- relate
@@ -89,18 +106,18 @@ def test_german_nouns_are_not_names_but_names_are() -> None:
     ("new", "old", "lang"),
     [
         (
-            "Forklift #4 has been repaired and is back on the floor.",
-            "Forklift #3 is assigned to the cold room this week.",
+            "Delivery bike #5 got new brakes and is out on routes again.",
+            "Delivery bike #2 stays in the yard for the week.",
             "en",
         ),
         (
-            "फ़ोर्कलिफ़्ट #4 ठीक कर दिया गया है और वापस फ़्लोर पर है।",
-            "फ़ोर्कलिफ़्ट #3 इस हफ़्ते कोल्ड रूम में लगा है।",
+            "ट्रॉली #5 की मरम्मत हो गई है और वह फिर से काम पर है।",
+            "ट्रॉली #2 इस हफ़्ते गोदाम में रहेगी।",
             "hi",
         ),
         (
-            "Y los pañuelos faciales, SKU FT-1180, llevan el UPC 084213551029.",
-            "Para que conste: el UPC de nuestro papel de cocina, SKU PT-2207, es 084213557106.",
+            "Y las bolsas de basura, SKU KV-3301, llevan el UPC 071234560018.",
+            "Para que conste: el UPC del film transparente, SKU LM-8812, es 071234569912.",
             "es",
         ),
     ],
@@ -110,15 +127,15 @@ def test_two_things_of_one_kind_are_apart(new: str, old: str, lang: str) -> None
 
 
 def test_a_shared_name_keeps_a_changed_extension_together() -> None:
-    new = "Dave Morris has left the company. The spill lead is now Kenji Ito, extension 233."
-    old = "For chemical spills in the stockroom, call Dave Morris on extension 210."
+    new = "Owen Pike has left the company. The outage contact is now Rhea Sood, extension 412."
+    old = "For power outages in the warehouse, call Owen Pike on extension 318."
     relation = relate(anchors(new, "en"), anchors(old, "en"), new, old)
     assert relation.shared_name and not relation.apart
 
 
 def test_a_number_that_changed_on_the_same_thing() -> None:
-    new = "Change that: the reorder point for MK-220 is 60 units now."
-    old = "The reorder point for SKU MK-220 (whole milk, 1 gallon) is 40 units."
+    new = "Update: the minimum stock for QX-410 is 40 cases now."
+    old = "The minimum stock for SKU QX-410 (sparkling water, 1 litre) is 25 cases."
     relation = relate(anchors(new, "en"), anchors(old, "en"), new, old)
     assert relation.shared_id and relation.value_changed
 
@@ -144,7 +161,8 @@ def test_a_change_needs_less_about_a_named_thing() -> None:
 
 
 def test_unrelated_or_apart_is_never_replaced() -> None:
-    assert decide(UNANCHORED, PairScores(0.3, 1.0)).grade is None  # "Region South" vs BOGO
+    # "Depot 7 stays in the coastal zone" / "the two-for-one runs only inland"
+    assert decide(UNANCHORED, PairScores(0.3, 1.0)).grade is None
     assert decide(UNANCHORED, PairScores(None, 1.0)).grade is None  # no encoder, no anchor
     apart = Relation(shared_name=False, shared_id=False, apart=True)
     assert decide(apart, PairScores(0.9, 1.0)).grade is None
@@ -154,6 +172,10 @@ def test_unrelated_or_apart_is_never_replaced() -> None:
 def test_thresholds_are_the_measured_ones() -> None:
     t = Thresholds()
     assert (t.earlier, t.change, t.supersede) == (0.85, 0.4, 0.9)
+    assert RELATED_COSINE == 0.5
+    # below the encoder's bar a change cue relates nothing
+    lifecycle = [StatementKind.LIFECYCLE]
+    assert decide(UNANCHORED, PairScores(0.35, 0.99), lifecycle).grade is None
 
 
 # --------------------------------------------------------------------------- write path
@@ -259,12 +281,12 @@ def _setup(old: str, new: str) -> tuple[Any, CanonicalMemory, CanonicalMemory, C
     return _uow([turn, fact, newer]), turn, fact, newer
 
 
-@pytest.mark.parametrize(("old", "new"), [(ULINE, PACKAGINGCORP), (ULINE_HI, PACKAGINGCORP_HI)])
+@pytest.mark.parametrize(("old", "new"), [(OLD, NEW), (OLD_HI, NEW_HI)])
 async def test_a_contradicted_statement_and_every_form_of_it_is_superseded(
     old: str, new: str
 ) -> None:
     uow, turn, fact, newer = _setup(old, new)
-    nli = ScriptedNLI({("PackagingCorp", "Uline"): 0.97})
+    nli = ScriptedNLI({("Corrimax", "Brightway"): 0.97})
     outcome = await CrossConversationReplacement(nli).run(uow, CTX, [newer], now=T1)
     assert {m.memory_id for m in outcome.changed} == {turn.memory_id, fact.memory_id}
     for form in (turn, fact):
@@ -276,8 +298,8 @@ async def test_a_contradicted_statement_and_every_form_of_it_is_superseded(
 
 
 async def test_a_weaker_contradiction_marks_an_earlier_value_that_stays_current() -> None:
-    uow, turn, _, newer = _setup(ULINE, PACKAGINGCORP)
-    nli = ScriptedNLI({("PackagingCorp", "Uline"): 0.87})
+    uow, turn, _, newer = _setup(OLD, NEW)
+    nli = ScriptedNLI({("Corrimax", "Brightway"): 0.87})
     await CrossConversationReplacement(nli).run(uow, CTX, [newer], now=T1)
     stored = uow.memories.rows[turn.memory_id]
     assert stored.temporal.status is TemporalStatus.CURRENT
@@ -285,21 +307,17 @@ async def test_a_weaker_contradiction_marks_an_earlier_value_that_stays_current(
 
 
 async def test_what_is_about_something_else_or_said_later_is_untouched() -> None:
-    other = _memory("Golden Crust delivers bread on Tuesdays.", at=T0, source="msg_c")
-    later = _memory(
-        "Our primary supplier for heavy-duty pallets is Uline.",
-        at=T1 + timedelta(1),
-        source="msg_d",
-    )
-    newer = _memory(PACKAGINGCORP, at=T1, source="msg_b")
+    other = _memory("Fernhill Bakery delivers bread on Tuesdays.", at=T0, source="msg_c")
+    later = _memory(OLD, at=T1 + timedelta(1), source="msg_d")
+    newer = _memory(NEW, at=T1, source="msg_b")
     uow = _uow([other, later, newer])
-    nli = ScriptedNLI({("PackagingCorp", ""): 0.99})
+    nli = ScriptedNLI({("Corrimax", ""): 0.99})
     outcome = await CrossConversationReplacement(nli).run(uow, CTX, [newer], now=T1)
     assert outcome.changed == []  # no shared name with the bakery; the other is newer
 
 
 async def test_without_a_trained_head_nothing_is_compared() -> None:
-    uow, _, _, newer = _setup(ULINE, PACKAGINGCORP)
+    uow, _, _, newer = _setup(OLD, NEW)
     stand_in = SimpleNamespace(representative=False)
     replacement = CrossConversationReplacement(stand_in)  # type: ignore[arg-type]
     assert not replacement.enabled
@@ -307,16 +325,16 @@ async def test_without_a_trained_head_nothing_is_compared() -> None:
 
 
 async def test_another_persons_statement_is_never_replaced() -> None:
-    uow, turn, _, newer = _setup(ULINE, PACKAGINGCORP)
+    uow, turn, _, newer = _setup(OLD, NEW)
     uow.memories.rows[turn.memory_id] = turn.model_copy(update={"owner_principal": "user:u2"})
-    nli = ScriptedNLI({("PackagingCorp", "Uline"): 0.99})
+    nli = ScriptedNLI({("Corrimax", "Brightway"): 0.99})
     outcome = await CrossConversationReplacement(nli).run(uow, CTX, [newer], now=T1)
     assert turn.memory_id not in {m.memory_id for m in outcome.changed}
 
 
 async def test_forgetting_the_newer_statement_reinstates_what_it_replaced() -> None:
-    uow, turn, fact, newer = _setup(ULINE, PACKAGINGCORP)
-    nli = ScriptedNLI({("PackagingCorp", "Uline"): 0.97})
+    uow, turn, fact, newer = _setup(OLD, NEW)
+    nli = ScriptedNLI({("Corrimax", "Brightway"): 0.97})
     await CrossConversationReplacement(nli).run(uow, CTX, [newer], now=T1)
     back = await reinstate(uow, "acme", [newer.memory_id], now=T1)
     assert {m.memory_id for m in back} == {turn.memory_id, fact.memory_id}
@@ -345,7 +363,7 @@ def test_an_earlier_value_is_labelled_wherever_it_is_served() -> None:
     item = ContextItem(
         item_id="m1",
         representation=Representation.MEMORY,
-        text=ULINE,
+        text=OLD,
         citation="memory_id:m1",
         attributes={"earlier_value": True, "observed_at": "2026-03-01T10:00:00+00:00"},
     )
@@ -397,22 +415,23 @@ class FixedEncoder:
         return out
 
 
-SEATTLE = "I live in Seattle, in the Fremont neighbourhood."
-AUSTIN = "Big news: I moved to Austin last month, I'm in an apartment near Zilker Park now."
+LEEDS = "I live in Leeds, near Headingley."
+BRISTOL = "Quick update: I moved to Bristol in spring and rent a flat near Clifton now."
 
 
 def _moved() -> tuple[Any, CanonicalMemory, CanonicalMemory]:
-    old = _memory(SEATTLE, at=T0, source="msg_a")
-    new = _memory(AUSTIN, at=T1, source="msg_b")
+    old = _memory(LEEDS, at=T0, source="msg_a")
+    new = _memory(BRISTOL, at=T1, source="msg_b")
     return _uow([old, new]), old, new
 
 
 async def test_an_unanchored_far_pair_is_never_replaced_or_asked() -> None:
-    """ "I live in Seattle" / "I moved to Austin": no shared name, cosine 0.4. Neither the head
-    nor the model decides it (with Granite such pairs were marked wrongly: ADR 0038)."""
+    """ "I live in Leeds" / "I moved to Bristol": no shared name, no slot read, cosine 0.4.
+    Neither the head nor the model decides it, even beside a change cue and a near-certain
+    contradiction: two different named things that both changed read the same way."""
     uow, _, new = _moved()
-    nli = ScriptedNLI({("Austin", "Seattle"): 0.99})
     assist = FakeAssist("update")
+    nli = ScriptedNLI({("Bristol", "Leeds"): 0.99})
     out = await CrossConversationReplacement(nli, FixedEncoder(0.4), assist=assist).run(  # type: ignore[arg-type]
         uow, CTX, [new], now=T1
     )
@@ -420,11 +439,11 @@ async def test_an_unanchored_far_pair_is_never_replaced_or_asked() -> None:
 
 
 #: no change cue (the lexicon reads it as a plain fact): the head's 0.6 alone marks nothing
-PLAIN_NEW = "Our heavy-duty pallets come from PackagingCorp and Uline."
+PLAIN_NEW = "Our shipping crates come from Corrimax and Brightway."
 
 
 def _band() -> tuple[Any, CanonicalMemory, CanonicalMemory]:
-    old = _memory(ULINE, at=T0, source="msg_a")
+    old = _memory(OLD, at=T0, source="msg_a")
     new = _memory(PLAIN_NEW, at=T1, source="msg_b")
     return _uow([old, new]), old, new
 
@@ -438,7 +457,7 @@ async def test_the_model_settles_the_heads_unsure_band(verdict: str | None, repl
     'update' or 'contradict' marks an earlier value, anything else (or a failed call) none."""
     uow, old, new = _band()
     assist = FakeAssist(verdict)
-    nli = ScriptedNLI({("PackagingCorp", "Uline"): 0.6})
+    nli = ScriptedNLI({("Corrimax", "Brightway"): 0.6})
     out = await CrossConversationReplacement(nli, assist=assist).run(  # type: ignore[arg-type]
         uow, CTX, [new], now=T1
     )
@@ -453,8 +472,8 @@ async def test_the_model_settles_the_heads_unsure_band(verdict: str | None, repl
 async def test_no_contradiction_is_never_put_to_the_model() -> None:
     """Same named thing, the head reads no contradiction ("is back from leave", a multi-hop
     bridge): not asked."""
-    old = _memory("Maria Lopez is on parental leave until further notice.", at=T0, source="msg_a")
-    new = _memory("Maria Lopez is back from parental leave as of Monday.", at=T1, source="msg_b")
+    old = _memory("Ana Petrova is on sabbatical until further notice.", at=T0, source="msg_a")
+    new = _memory("Ana Petrova is back from sabbatical as of Monday.", at=T1, source="msg_b")
     assist = FakeAssist("update")
     out = await CrossConversationReplacement(ScriptedNLI({}), assist=assist).run(  # type: ignore[arg-type]
         _uow([old, new]), CTX, [new], now=T1
@@ -465,13 +484,15 @@ async def test_no_contradiction_is_never_put_to_the_model() -> None:
 async def test_the_model_is_asked_about_three_pairs_at_most() -> None:
     olds = [
         _memory(
-            f"Uline note {n}: our pallets come from Uline.", at=T0 + timedelta(n), source=f"msg_{n}"
+            f"Brightway note {n}: our crates come from Brightway.",
+            at=T0 + timedelta(n),
+            source=f"msg_{n}",
         )
         for n in range(6)
     ]
     new = _memory(PLAIN_NEW, at=T1, source="msg_b")
     assist = FakeAssist("update")
-    nli = ScriptedNLI({("PackagingCorp", "Uline"): 0.6})
+    nli = ScriptedNLI({("Corrimax", "Brightway"): 0.6})
     await CrossConversationReplacement(nli, assist=assist).run(  # type: ignore[arg-type]
         _uow([*olds, new]), CTX, [new], now=T1
     )
@@ -486,6 +507,334 @@ async def test_a_failing_head_raises_to_the_pipeline_which_keeps_the_message() -
         async def entail_groups(self, groups):  # type: ignore[no-untyped-def]
             raise RuntimeError("onnx session failed")
 
-    uow, _, _, newer = _setup(ULINE, PACKAGINGCORP)
+    uow, _, _, newer = _setup(OLD, NEW)
     with pytest.raises(RuntimeError):
         await CrossConversationReplacement(Broken({})).run(uow, CTX, [newer], now=T1)
+
+
+# --------------------------------------------------------------------------- change cues
+
+
+@pytest.mark.parametrize(
+    ("sentence", "kind"),
+    [
+        ("Priya handed the Leeds depot over to Tom on Friday.", StatementKind.LIFECYCLE),
+        ("Jonas hat die Filiale an Mia übergeben.", StatementKind.LIFECYCLE),
+        ("राहुल ने गोदाम 4 सुनीता को सौंप दिया।", StatementKind.LIFECYCLE),
+        ("Ana is back from sabbatical.", StatementKind.STATUS),
+        ("عادت ليلى من الإجازة أمس.", StatementKind.STATUS),
+    ],
+)
+def test_a_handover_and_a_return_are_suspected_changes(sentence: str, kind: StatementKind) -> None:
+    """Weak cues: the lexicon suspects the change, the head (or nothing) confirms it."""
+    label = Lexicon.default().label(sentence)
+    assert label.maybe is kind and not label.decided
+
+
+# --------------------------------------------------------------------------- slots
+
+
+def _reading(
+    content: str, at: datetime, source: str, predicate: str, value: str
+) -> CanonicalMemory:
+    return _memory(
+        content,
+        at=at,
+        source=source,
+        memory_type=MemoryType.USER,
+        subject="user:u1",
+        predicate=predicate,
+        object=value,
+        system_metadata={"category": "attribute"},
+    )
+
+
+def test_a_single_valued_slot_with_another_value_is_a_change() -> None:
+    leeds = slots_of([_reading("I live in Leeds.", T0, "m1", "lives_in", "Leeds")])
+    bristol = slots_of([_reading("I moved to Bristol.", T1, "m2", "lives_in", "Bristol")])
+    assert slot_changed(bristol, leeds)
+    assert not slot_changed(leeds, leeds)  # the same value again is no change
+    # a slot that accumulates is never a change ("likes" one thing, then another)
+    likes = slots_of([_reading("I like jazz.", T0, "m1", "likes", "jazz")])
+    assert likes == {}
+
+
+async def test_a_slot_relates_two_statements_with_nothing_else_in_common() -> None:
+    """The extraction read one slot of one subject from both messages: the turns and the
+    readings are compared without any shared name and without an encoder."""
+    old_turn = _memory("I live in Leeds, near Headingley.", at=T0, source="msg_a")
+    old_fact = _reading("I live in Leeds, near Headingley.", T0, "msg_a", "lives_in", "Leeds")
+    new_turn = _memory(BRISTOL, at=T1, source="msg_b")
+    new_fact = _reading(BRISTOL, T1, "msg_b", "lives_in", "Bristol")
+    uow = _uow([old_turn, old_fact, new_turn, new_fact])
+    nli = ScriptedNLI({("Bristol", "Leeds"): 0.6})
+    out = await CrossConversationReplacement(nli).run(uow, CTX, [new_turn, new_fact], now=T1)
+    assert {m.memory_id for m in out.changed} == {old_turn.memory_id, old_fact.memory_id}
+    assert all(earlier_value(uow.memories.rows[m.memory_id].system_metadata) for m in out.changed)
+
+
+async def test_a_slot_of_another_subject_relates_nothing() -> None:
+    old = _reading("Mum lives in Leeds.", T0, "msg_a", "lives_in", "Leeds")
+    old = old.model_copy(update={"subject": "person:mum"})
+    new_turn = _memory(BRISTOL, at=T1, source="msg_b")
+    new_fact = _reading(BRISTOL, T1, "msg_b", "lives_in", "Bristol")
+    nli = ScriptedNLI({("Bristol", "Leeds"): 0.6})
+    out = await CrossConversationReplacement(nli).run(
+        _uow([old, new_turn, new_fact]), CTX, [new_turn, new_fact], now=T1
+    )
+    assert out.changed == []
+
+
+# --------------------------------------------------------------------------- misread rules
+
+
+def _rule(content: str, at: datetime, source: str) -> CanonicalMemory:
+    return _memory(
+        content,
+        at=at,
+        source=source,
+        memory_type=MemoryType.SEMANTIC,
+        system_metadata={"category": "rule", "statement_kind": "RULE"},
+    )
+
+
+def test_a_fact_stored_as_a_rule_is_misread_and_a_rule_is_not() -> None:
+    assert misread_rule(_rule(OLD, T0, "msg_a"))
+    assert misread_rule(_rule(OLD_HI, T0, "msg_a"))
+    assert not misread_rule(_rule("Always pack fragile items in double boxes.", T0, "msg_a"))
+    assert not misread_rule(_rule("हमेशा नाज़ुक सामान को दो डिब्बों में पैक करो।", T0, "msg_a"))
+
+
+@pytest.mark.parametrize(("old", "new"), [(OLD, NEW), (OLD_HI, NEW_HI)])
+async def test_a_fact_misread_as_a_standing_rule_is_replaced(old: str, new: str) -> None:
+    misread = _rule(old, T0, "msg_a")
+    newer = _memory(new, at=T1, source="msg_b")
+    uow = _uow([misread, newer])
+    nli = ScriptedNLI({("Corrimax", "Brightway"): 0.97})
+    out = await CrossConversationReplacement(nli).run(uow, CTX, [newer], now=T1)
+    assert [m.memory_id for m in out.changed] == [misread.memory_id]
+
+
+async def test_a_standing_rule_is_left_to_the_rule_that_revises_it() -> None:
+    rule = _rule("Always order shipping crates from Brightway.", T0, "msg_a")
+    newer = _memory(NEW, at=T1, source="msg_b")
+    nli = ScriptedNLI({("Corrimax", "Brightway"): 0.97})
+    out = await CrossConversationReplacement(nli).run(_uow([rule, newer]), CTX, [newer], now=T1)
+    assert out.changed == []
+
+
+async def test_a_misread_rule_is_never_compared_on_the_encoder_alone() -> None:
+    misread = _rule("Our crates are stacked six high in the yard.", T0, "msg_a")
+    newer = _memory("We now stack them four high, per the new safety audit.", at=T1, source="msg_b")
+    nli = ScriptedNLI({("four", "six"): 0.99})
+    out = await CrossConversationReplacement(nli, FixedEncoder(0.8)).run(
+        _uow([misread, newer]), CTX, [newer], now=T1
+    )
+    assert out.changed == [] and nli.pairs == []
+
+
+# --------------------------------------------------------------------------- history
+
+
+def _item(item_id: str, text: str, *, earlier: bool = False) -> ContextItem:
+    return ContextItem(
+        item_id=item_id,
+        representation=Representation.MEMORY,
+        text=text,
+        citation=f"memory_id:{item_id}",
+        attributes={
+            "observed_at": "2026-03-01T10:00:00+00:00",
+            **({"earlier_value": True} if earlier else {}),
+        },
+    )
+
+
+def _bundle(**sections: Any) -> ContextBundle:
+    return ContextBundle(
+        query="q",
+        query_type=QueryType.USER_MEMORY,
+        conversation=ConversationWindow(thread_id="t"),
+        evidence=EvidenceReport(status=EvidenceStatus.COMPLETE),
+        token_budget=100,
+        token_estimate=10,
+        **sections,
+    )
+
+
+@pytest.mark.parametrize(("old", "new"), [(OLD, NEW), (OLD_HI, NEW_HI)])
+def test_an_earlier_value_is_rendered_apart_under_its_own_heading(old: str, new: str) -> None:
+    bundle = _bundle(memories=[_item("cur", new)], history=[_item("was", old, earlier=True)])
+    text = bundle.render()
+    current, _, history = text.partition("## Earlier values (since replaced)")
+    assert new in current and old not in current
+    assert old in history and "[h1]" in history
+    assert bundle.handles() == {"m1": "cur", "h1": "was"}
+    view = full_view(bundle)
+    assert [m["text"] for m in view["memories"]] == [new]
+    assert [(m["text"], m["superseded"]) for m in view["history"]] == [(old, True)]
+
+
+def test_an_earlier_value_is_no_evidence_for_a_claim() -> None:
+    bundle = _bundle(memories=[_item("cur", NEW)], history=[_item("was", OLD, earlier=True)])
+    record = record_of(bundle)
+    assert record.handles["h1"] == "was"
+    assert [e.item_id for e in record.evidence] == ["cur"]
+
+
+# --------------------------------------------------------------------------- follow
+
+
+class _Visible:
+    def __init__(self, hidden: frozenset[str] = frozenset()) -> None:
+        self.hidden = hidden
+
+    def allows(self, tenant_id: str, keys: Sequence[str]) -> bool:
+        return not (set(keys) & self.hidden)
+
+
+def _engine(rows: list[CanonicalMemory]) -> Any:
+    by_id = {m.memory_id: m for m in rows}
+
+    class _Uow:
+        memories = SimpleNamespace(
+            get_many=lambda tenant, ids: _async([by_id[i] for i in ids if i in by_id])
+        )
+
+        async def __aenter__(self) -> Any:
+            return self
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+    return SimpleNamespace(uow_factory=_Uow)
+
+
+async def _async(value: Any) -> Any:
+    return value
+
+
+def _earlier_candidate(memory: CanonicalMemory, newer: str) -> Candidate:
+    return _candidate(memory.memory_id, earlier_value=True, replaced_by=newer)
+
+
+@pytest.mark.parametrize(("old", "new"), [(OLD, NEW), (OLD_HI, NEW_HI)])
+async def test_an_earlier_value_brings_what_replaced_it(old: str, new: str) -> None:
+    """A search that found only the old statement serves the new one too, before it."""
+    was = _memory(old, at=T0, source="msg_a")
+    now = _memory(new, at=T1, source="msg_b")
+    found = [_candidate("other"), _earlier_candidate(was, now.memory_id)]
+    diagnostics: dict[str, Any] = {}
+    out = await RetrievalEngine._follow_replacements(
+        _engine([was, now]), CTX, found, _Visible(), diagnostics
+    )
+    assert [c.record_id for c in out] == ["other", now.memory_id, was.memory_id]
+    assert out[1].expansion_edge == "REPLACEMENT" and diagnostics["replacements_followed"] == 1
+
+
+async def test_a_chain_is_followed_to_its_current_end_and_no_further() -> None:
+    a = _memory("A", at=T0, source="m_a")
+    b = _memory("B", at=T0 + timedelta(1), source="m_b")
+    c = _memory("C", at=T1, source="m_c")
+    b = b.model_copy(
+        update={"system_metadata": {"replaced_by": {"memory_id": c.memory_id, "grade": "EARLIER"}}}
+    )
+    out = await RetrievalEngine._follow_replacements(
+        _engine([a, b, c]), CTX, [_earlier_candidate(a, b.memory_id)], _Visible(), {}
+    )
+    assert [x.record_id for x in out] == [c.memory_id, a.memory_id, b.memory_id]
+    assert [x.payload.get("earlier_value", False) for x in out] == [False, True, True]
+
+
+async def test_a_replacement_the_reader_may_not_see_is_not_added() -> None:
+    was = _memory(OLD, at=T0, source="msg_a")
+    now = _memory(NEW, at=T1, source="msg_b")
+    now = now.model_copy(
+        update={"system_metadata": {**now.system_metadata, "visibility_keys": ["user:acme/u2"]}}
+    )
+    found = [_earlier_candidate(was, now.memory_id)]
+    out = await RetrievalEngine._follow_replacements(
+        _engine([was, now]), CTX, found, _Visible(frozenset({"user:acme/u2"})), {}
+    )
+    assert [c.record_id for c in out] == [was.memory_id]
+
+
+def _said_in(item: ContextItem, message: str) -> ContextItem:
+    return item.model_copy(
+        update={
+            "evidence": [
+                EvidenceRef(
+                    source_type=EvidenceSource.MESSAGE,
+                    source_id=message,
+                    message_id=message,
+                    observed_at=T0,
+                )
+            ]
+        }
+    )
+
+
+def test_a_sentence_shown_whole_in_its_turn_is_not_shown_again() -> None:
+    turn = _said_in(_item("turn", "Owen Pike has left. Rhea Sood leads outages now."), "msg_1")
+    reading = _said_in(_item("fact", "Owen Pike has left."), "msg_1")
+    elsewhere = _said_in(_item("other", "Owen Pike has left."), "msg_2")
+    bundle = _bundle(memories=[turn, reading, elsewhere])
+    assert bundle.redundant() == {"fact"}, "the same words from another message stay"
+    assert bundle.render().count("Owen Pike has left.") == 2
+
+
+def test_a_mention_the_history_names_is_not_a_current_fact() -> None:
+    mention = ContextItem(
+        item_id="f",
+        representation=Representation.RELATION,
+        text="user mentions Leeds",
+        citation="fact:f",
+        attributes={"predicate": "mentions", "object": "Leeds"},
+    )
+    bundle = _bundle(
+        memories=[_item("cur", BRISTOL)],
+        history=[_item("was", LEEDS, earlier=True)],
+        graph_facts=[mention],
+    )
+    assert "f" in bundle.redundant()
+    assert "mentions Leeds" not in bundle.render()
+
+
+@pytest.mark.parametrize(
+    ("sentence", "kind"),
+    [
+        ("आज से गोदाम 3 की नई किराया दर ₹40,000 है।", StatementKind.FACT),  # "from today": a date
+        ("From today the new rent for depot 3 is $500.", StatementKind.FACT),
+        ("अब से गोदाम 3 सुबह 6 बजे खुलता है।", StatementKind.RULE),  # "from now on": standing
+        ("From now on depot 3 opens at 6.", StatementKind.RULE),
+    ],
+)
+def test_from_today_dates_a_fact_and_from_now_on_makes_a_rule(
+    sentence: str, kind: StatementKind
+) -> None:
+    """The same in every language: "from today" says when a value took effect, "from now
+    on" makes an arrangement standing."""
+    label = Lexicon.default().label(sentence)
+    assert label.kind is kind and label.decided
+
+
+async def test_a_misread_rule_stored_as_a_preference_is_replaced_too() -> None:
+    misread = _rule(OLD, T0, "msg_a").model_copy(update={"memory_type": MemoryType.PREFERENCE})
+    newer = _memory(NEW, at=T1, source="msg_b")
+    nli = ScriptedNLI({("Corrimax", "Brightway"): 0.97})
+    out = await CrossConversationReplacement(nli).run(_uow([misread, newer]), CTX, [newer], now=T1)
+    assert [m.memory_id for m in out.changed] == [misread.memory_id]
+    plain = _memory("I prefer tables.", at=T0, source="msg_c", memory_type=MemoryType.PREFERENCE)
+    assert not statement_of(plain, "user:u1"), "a preference keeps its own slot rules"
+
+
+async def test_a_replacement_the_search_found_itself_is_kept_with_the_old_value() -> None:
+    """Found by the search, but weakly: it travels with the earlier value it replaced, so the
+    relevance floor never leaves the old value alone."""
+    was = _memory(OLD, at=T0, source="msg_a")
+    now = _memory(NEW, at=T1, source="msg_b")
+    found = [_candidate(now.memory_id), _earlier_candidate(was, now.memory_id)]
+    out = await RetrievalEngine._follow_replacements(
+        _engine([was, now]), CTX, found, _Visible(), {}
+    )
+    assert [c.record_id for c in out] == [now.memory_id, was.memory_id]
+    assert out[0].expanded_from == was.memory_id and out[0].expansion_edge == "REPLACEMENT"

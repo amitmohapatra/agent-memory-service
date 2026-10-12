@@ -1551,6 +1551,21 @@
             "description": "Knowledge-graph facts that bear on it.",
             "title": "Graph Facts"
           },
+          "history": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ContextMemory"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Earlier values: what a later statement of the same user replaced, oldest first, each marked superseded. Never current; kept apart from memories.",
+            "title": "History"
+          },
           "knowledge": {
             "anyOf": [
               {

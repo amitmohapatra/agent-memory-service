@@ -360,4 +360,9 @@ class ContextResponse(BaseModel):
     summaries: list[ContextSummary] | None = Field(
         default=None, description="Document summaries that bear on it."
     )
+    history: list[ContextMemory] | None = Field(
+        default=None,
+        description="Earlier values: what a later statement of the same user replaced, oldest "
+        "first, each marked superseded. Never current; kept apart from memories.",
+    )
     diagnostics: dict[str, Any] | None = Field(default=None, description="only with debug")

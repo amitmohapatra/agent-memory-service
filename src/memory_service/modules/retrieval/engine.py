@@ -21,7 +21,12 @@ from memory_service.domain.enums import QueryType, Representation
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.domain.ids import content_hash
 from memory_service.domain.learning import standing_factor
-from memory_service.domain.memory import CanonicalMemory, earlier_value, unverified_representation
+from memory_service.domain.memory import (
+    CanonicalMemory,
+    earlier_value,
+    replaced_by,
+    unverified_representation,
+)
 from memory_service.domain.script import Script, detect_script
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
@@ -140,7 +145,11 @@ def memory_candidate(memory: CanonicalMemory, *, retriever: str, score: float) -
             "derived": bool(memory.system_metadata.get("source_revisions")),
             "source_observed_to": memory.system_metadata.get("source_observed_to"),
             "temporal_status": memory.temporal.status.value,
-            **({"earlier_value": True} if earlier_value(memory.system_metadata) else {}),
+            **(
+                {"earlier_value": True, "replaced_by": replaced_by(memory.system_metadata)}
+                if earlier_value(memory.system_metadata)
+                else {}
+            ),
             "subject": memory.subject,
             "predicate": memory.predicate,
             "object": memory.object,
@@ -496,6 +505,10 @@ class RetrievalEngine:
                 candidates = await self._expand_derived_sources(
                     ctx, candidates, visibility, diagnostics
                 )
+                if not at:
+                    candidates = await self._follow_replacements(
+                        ctx, candidates, visibility, diagnostics
+                    )
                 candidates = _within_selection(candidates, selected_documents, selected_kinds)
                 if observed is not None:
                     candidates = [c for c in candidates if _observed_within(c, observed)]
@@ -563,6 +576,51 @@ class RetrievalEngine:
         additions = not_in_hand(additions, candidates)
         diagnostics["derived_sources"] = len(additions)
         return [*candidates, *additions]
+
+    async def _follow_replacements(
+        self,
+        ctx: MemoryExecutionContext,
+        candidates: list[Candidate],
+        visibility: VisibilitySpecification,
+        diagnostics: dict[str, Any],
+    ) -> list[Candidate]:
+        """An earlier value never comes without what replaced it (ADR 0038): the statement
+        that replaced it is fetched when the search did not find it, and placed before every
+        earlier value. A chain (A replaced by B, B by C) is followed to its current end, at
+        most ``REPLACEMENT_HOPS`` reads, each one batched; a replacement the reader may not
+        see, or that is no longer current, is not added."""
+        candidates = _carried_by_replaced(candidates)
+        added: list[Candidate] = []
+        frontier = candidates
+        for _ in range(REPLACEMENT_HOPS):
+            present = in_hand([*candidates, *added])
+            wanted: dict[str, Candidate] = {}
+            for c in frontier:
+                newer = c.payload.get("replaced_by") if c.payload.get("earlier_value") else None
+                if newer and newer not in present and len(wanted) < REPLACEMENTS_MAX:
+                    wanted.setdefault(str(newer), c)
+            if not wanted:
+                break
+            async with self.uow_factory() as uow:
+                found = await uow.memories.get_many(ctx.tenant_id, list(wanted))
+            hop = [
+                replace(
+                    memory_candidate(m, retriever="replacement", score=wanted[m.memory_id].score),
+                    expanded_from=wanted[m.memory_id].record_id,
+                    expansion_edge="REPLACEMENT",
+                )
+                for m in found
+                if m.temporal.status.value == "CURRENT"
+                and m.deleted_at is None
+                and visibility.allows(m.tenant_id, m.system_metadata.get("visibility_keys", []))
+            ]
+            hop = not_in_hand(hop, [*candidates, *added])
+            added += hop
+            frontier = hop
+        if not added:
+            return candidates
+        diagnostics["replacements_followed"] = len(added)
+        return current_first([*candidates, *added])
 
     async def _validate_derived(
         self,
@@ -1223,6 +1281,29 @@ def _twin_key(candidate: Candidate) -> tuple | None:
         content_hash(candidate.text) if candidate.text else None
     )
     return (_twin_context(_dedup_context(candidate)), digest) if digest else None
+
+
+def _carried_by_replaced(candidates: list[Candidate]) -> list[Candidate]:
+    """A replacement the search found itself travels with the earlier value it replaced, as
+    one found through it would: the relevance floor never drops it while the old value is
+    served."""
+    replaced = {
+        str(c.payload["replaced_by"]): c.record_id
+        for c in candidates
+        if c.payload.get("earlier_value") and c.payload.get("replaced_by")
+    }
+    return [
+        replace(c, expanded_from=replaced[c.record_id], expansion_edge="REPLACEMENT")
+        if c.record_id in replaced and c.expanded_from is None
+        else c
+        for c in candidates
+    ]
+
+
+#: Reads ``_follow_replacements`` makes at most per request (one per link of a chain), and the
+#: replacements it adds at most per read.
+REPLACEMENT_HOPS = 2
+REPLACEMENTS_MAX = 4
 
 
 def current_first(candidates: Sequence[Candidate]) -> list[Candidate]:

@@ -2,27 +2,29 @@
 
 ADR 0036 made what a user says follow that user (``USER`` visibility) while consolidation still
 compared a new statement only with the memories of its own conversation. A value corrected in a
-later conversation therefore stayed current beside its correction: "Our primary supplier for
-heavy-duty pallets is Uline" in March and "we terminated our contract with Uline ... our new
-supplier is PackagingCorp" in May were both served as current, in every conversation of the
+later conversation therefore stayed current beside its correction: "Our main supplier of
+shipping crates is Brightway" in March and "we ended the Brightway agreement ... crates now
+come from Corrimax" in May were both served as current, in every conversation of the
 user (ADR 0038). This module closes that gap at write time.
 
 For a user's new statement (the turn and what the rules read from it) it reads the user's
 current statements from any of their conversations and asks of each one, cheapest first:
 
-1. **Is it about the same thing?** The two share a name ("Uline", "Maria Lopez") or an
-   identifier ("MK-220", "Forklift #4"), or the multilingual encoder puts them at a cosine of
+1. **Is it about the same thing?** The two share a name ("Brightway", "Ana Petrova") or an
+   identifier ("QX-410", "bike #4"), or the multilingual encoder puts them at a cosine of
    at least ``RELATED_COSINE``. Two statements that label the same kind of thing with
-   different identifiers ("Forklift #3" / "Forklift #4", "Tor 9" / "Tor 14") and share no name
+   different identifiers ("bike #3" / "bike #4", "Halle 2" / "Halle 6") and share no name
    are about two things and are never compared further.
 2. **Does the new one say the old one no longer holds?** The NLI head the grounding cascade
    already loads scores the contradiction both ways (the new turn and each of its sentences
    against the old statement, and the old one against the new turn). A statement the labeller
-   read as a change (``CORRECTION``, ``LIFECYCLE``, ``STATUS``: "Maria Lopez is back from
-   parental leave", "I finished Dune") about a shared name or identifier needs less: the
-   head reads "is back from leave" against "is on leave until further notice" as barely a
-   contradiction. When the tenant allows ``conflict_adjudication``, a related pair the head
-   leaves in between goes to the conflict adjudicator, as consolidation does.
+   read as a change (``CORRECTION``, ``LIFECYCLE``, ``STATUS``: "Ana Petrova is back from
+   sabbatical", "Priya handed the depot over to Tom") about a shared name or identifier needs
+   less: the head reads "is back from sabbatical" against "is on sabbatical until further
+   notice" as barely a contradiction. One subject's single-valued slot read from both
+   statements with two values ("lives_in") relates them like a shared name. When the tenant allows
+   ``conflict_adjudication``, a related pair the head leaves in between goes to the conflict
+   adjudicator, as consolidation does.
 
 What follows from a decision is graded, because a wrong one hides a true statement:
 
@@ -68,6 +70,7 @@ from memory_service.domain.memory import (
     statement_kind_of,
     unverified_representation,
 )
+from memory_service.domain.predicates import is_single_valued
 from memory_service.domain.script import Script, detect_script, script_of
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.ports.models import EmbeddingProvider, NLIProvider
@@ -80,8 +83,8 @@ from memory_service.ports.uow import UnitOfWork
 #:
 #: Least cosine (multilingual encoder) at which two statements with no shared name or
 #: identifier are compared at all: replacements sit at 0.32-0.94, and below 0.5 the head's
-#: contradiction is mostly two unrelated sentences ("Store 61 stays in Region South" /
-#: "the BOGO promotion runs only in Region North" reads as a 1.00 contradiction).
+#: contradiction is mostly two unrelated sentences ("Depot 7 stays in the coastal zone" /
+#: "the two-for-one offer runs only in the inland zone" reads as a 1.00 contradiction).
 RELATED_COSINE = 0.5
 #: Least contradiction (either way, best sentence) that marks the old statement as an earlier
 #: value.
@@ -97,9 +100,10 @@ SUPERSEDE_CONTRADICTION = 0.9
 #: unsure band - a contradiction of at least this much, below the marking thresholds - is put
 #: to the conflict adjudicator, as consolidation does. Measured on the llm_core set with
 #: Granite 3.3 2B, asking it also about pairs the head reads as no contradiction ("is back from
-#: leave") or that only the encoder relates ("I live in Seattle" / "I moved to Austin") marked
-#: four statements, all wrongly (a multi-hop bridge "Employees in the Berlin office follow
-#: the German calendar" by "Lena Vogel joined the Berlin office"): those stay unmarked.
+#: sabbatical") or that only the encoder relates ("I live in Leeds" / "I moved to Bristol")
+#: marked four statements, all wrongly (a bridge between two facts - "staff of the Lyon
+#: office follow the French calendar" by "Ines Moreau joined the Lyon office"): those stay
+#: unmarked.
 ADJUDICATE_FROM = 0.5
 #: The most pairs one observation asks the model about: a bound on the write path's model
 #: calls, the strongest contradictions first.
@@ -139,7 +143,7 @@ def _capitalised(word: str) -> bool:
 
 def _marked(word: str) -> bool:
     """A word that is a name or a code however it is placed: an inner capital or a digit
-    ("FreshWay", "PackagingCorp", "CFO", "MK-220")."""
+    ("BrightWay", "CorriMax", "CFO", "QX-410")."""
     letters = [c for c in word if c.isalpha()]
     return (any(c.isdigit() for c in word) and bool(letters)) or sum(
         c.isupper() for c in letters
@@ -164,8 +168,8 @@ class Anchors:
         return out
 
 
-#: A number with the word that labels it ("Forklift #4", "Tor 14", "aisle 12", "Gabelstapler
-#: Nr. 3", "الرافعة الشوكية رقم 4"): which thing is meant. A number marker between the two is
+#: A number with the word that labels it ("bike #4", "Halle 6", "aisle 12", "Hubwagen
+#: Nr. 3", "العربة رقم 4"): which thing is meant. A number marker between the two is
 #: skipped; a percentage, an amount, a decimal, a time or a date is a quantity and is not read.
 _LABELLED = re.compile(
     r"(?P<label>(?:[^\W\d_]|[\u0300-\u036f\u064b-\u065f\u0670\u0900-\u0963\u0971-\u097f])+"
@@ -388,14 +392,19 @@ class Relation:
     shared_name: bool
     shared_id: bool
     #: the same kind of thing labelled with different identifiers, and no name besides the
-    #: label in common: two things ("Forklift #3" / "Forklift #4", "Tor 9" / "Tor 14")
+    #: label in common: two things ("bike #3" / "bike #4", "Halle 2" / "Halle 6")
     apart: bool
-    #: the same named thing with a number that changed ("MK-220 ... 40 units" / "60 units")
+    #: the same named thing with a number that changed ("QX-410 ... 25 cases" / "40 cases"),
+    #: or the same slot of the same subject with another value (``shared_slot``)
     value_changed: bool = False
+    #: what the extraction read from the two statements names one subject's single-valued
+    #: slot with two values ("user lives_in Leeds" / "user lives_in Bristol"), whatever names
+    #: the sentences share
+    shared_slot: bool = False
 
     @property
     def anchored(self) -> bool:
-        return self.shared_name or self.shared_id
+        return self.shared_name or self.shared_id or self.shared_slot
 
 
 def relate(new: Anchors, old: Anchors, new_text: str = "", old_text: str = "") -> Relation:
@@ -416,7 +425,7 @@ def relate(new: Anchors, old: Anchors, new_text: str = "", old_text: str = "") -
 
 def _clashing(new: Anchors, old: Anchors) -> set[str]:
     """The labels both use for different things ("forklift": 3 / 4), and "#" when each names
-    its own codes and none is the other's ("FT-1180" / "PT-2207")."""
+    its own codes and none is the other's ("KV-3301" / "LM-8812")."""
     mine, theirs = new.labels, old.labels
     out = {
         label
@@ -431,8 +440,8 @@ def _clashing(new: Anchors, old: Anchors) -> set[str]:
 
 
 def _common_names(a: frozenset[str], b: frozenset[str]) -> set[str]:
-    """Names both carry: equal, or one a run of the other's words ("dave morris" in "lager
-    dave morris", where German capitalises the noun before the name)."""
+    """Names both carry: equal, or one a run of the other's words ("owen pike" in "lager
+    owen pike", where German capitalises the noun before the name)."""
     out = set(a & b)
     for x in a:
         for y in b:
@@ -526,9 +535,11 @@ def _norm(text: str) -> str:
 
 # --------------------------------------------------------------------------- the write path
 
-#: Categories never replaced here: a standing rule is replaced by the rule that revises it
-#: (consolidation), and a preference by its own slot rules.
-_KEPT_CATEGORIES = frozenset({"rule"})
+#: The category of a standing rule. A rule is replaced by the rule that revises it
+#: (consolidation), and a preference by its own slot rules - but a statement stored as a rule
+#: only because a model read it as one ("Our main supplier of shipping crates is Brightway"
+#: confirmed as a RULE by the head) is a fact, and is compared like one (``misread_rule``).
+_RULE_CATEGORY = "rule"
 
 
 def statement_of(memory: CanonicalMemory, principal: str) -> bool:
@@ -539,11 +550,56 @@ def statement_of(memory: CanonicalMemory, principal: str) -> bool:
         and memory.temporal.status is TemporalStatus.CURRENT
         and memory.visibility is Visibility.USER
         and memory.owner_principal == principal
-        and memory.memory_type is not MemoryType.PREFERENCE
-        and memory.system_metadata.get("category") not in _KEPT_CATEGORIES
+        and (memory.system_metadata.get("category") != _RULE_CATEGORY or misread_rule(memory))
+        and (memory.memory_type is not MemoryType.PREFERENCE or is_rule(memory))
         and not memory.system_metadata.get("source_revisions")
         and not unverified_representation(memory.system_metadata)
     )
+
+
+def is_rule(memory: CanonicalMemory) -> bool:
+    return memory.system_metadata.get("category") == _RULE_CATEGORY
+
+
+def misread_rule(memory: CanonicalMemory) -> bool:
+    """Stored as a standing rule, although no sentence of it reads as one by the lexicon
+    alone: a model (the head, or the tenant's) made it a rule. Such a statement is compared
+    and replaced like a fact, but only about a shared name, identifier or slot - never on
+    the encoder's cosine alone (``_related``)."""
+    return not _lexically_rule(memory.content)
+
+
+@lru_cache(maxsize=4096)
+def _lexically_rule(text: str) -> bool:
+    from memory_service.modules.memory.native import split_sentences
+    from memory_service.modules.memory.statements import RULE_KINDS, Lexicon
+
+    lexicon = Lexicon.default()
+    for sentence in split_sentences(text) or [text]:
+        label = lexicon.label(sentence)
+        if label.decided and label.kind in RULE_KINDS:
+            return True
+    return False
+
+
+#: ``(subject, predicate)`` -> the values one statement's readings give a single-valued slot
+Slots = dict[tuple[str, str], frozenset[str]]
+
+
+def slots_of(memories: Iterable[CanonicalMemory]) -> Slots:
+    """The single-valued slots the extraction read (``user:u lives_in Bristol``): one subject
+    holds one value of such a slot at a time, so another value of it later is a change."""
+    out: dict[tuple[str, str], set[str]] = {}
+    for m in memories:
+        subject, value = _norm(m.subject or ""), _norm(m.object or "")
+        if subject and value and is_single_valued(m.predicate):
+            out.setdefault((subject, m.predicate or ""), set()).add(value)
+    return {k: frozenset(v) for k, v in out.items()}
+
+
+def slot_changed(new: Slots, old: Slots) -> bool:
+    """A slot both name, with no value in common."""
+    return any(key in old and not (values & old[key]) for key, values in new.items())
 
 
 def _sources(memory: CanonicalMemory) -> set[tuple[str, str]]:
@@ -600,9 +656,12 @@ class CrossConversationReplacement:
         written: Sequence[CanonicalMemory],
         *,
         now: datetime,
+        closed: Sequence[CanonicalMemory] = (),
     ) -> Outcome:
         """Compare the statements of one observation (``written``: what it created) with the
-        user's earlier statements and apply what follows. Unchanged rows are not touched."""
+        user's earlier statements and apply what follows. Unchanged rows are not touched.
+        ``closed``: what consolidation superseded for the same observation (an old value of a
+        single-valued slot), read only for the slot it held."""
         new = [m for m in written if statement_of(m, ctx.principal_id)]
         if not self.enabled or not new:
             return Outcome()
@@ -610,7 +669,13 @@ class CrossConversationReplacement:
         # the rules read when the turn itself was not kept
         units = [m for m in new if m.system_metadata.get("category") == "verbatim_turn"] or new
         earlier = await self._earlier(uow, ctx, new)
-        pairs = await self._related(units, earlier) if earlier else []
+        pairs = (
+            await self._related(
+                units, earlier, slots_of(new), closed=_closed_by(closed, new, ctx.principal_id)
+            )
+            if earlier
+            else []
+        )
         if not pairs:
             return Outcome()
         await self._contradiction(pairs)
@@ -686,10 +751,16 @@ class CrossConversationReplacement:
         return outcome
 
     async def _related(
-        self, units: Sequence[CanonicalMemory], earlier: Sequence[CanonicalMemory]
+        self,
+        units: Sequence[CanonicalMemory],
+        earlier: Sequence[CanonicalMemory],
+        new_slots: Slots | None = None,
+        *,
+        closed: Sequence[CanonicalMemory] = (),
     ) -> list[_Pair]:
         pairs: list[_Pair] = []
         pending: list[_Pair] = []
+        old_slots = _slots_by_source([*earlier, *closed]) if new_slots else {}
         for unit in units:
             mine = anchors(unit.content, unit.lang or None)
             for old in earlier:
@@ -698,10 +769,24 @@ class CrossConversationReplacement:
                 relation = relate(
                     mine, anchors(old.content, old.lang or None), unit.content, old.content
                 )
+                if new_slots and any(
+                    slot_changed(new_slots, old_slots.get(src, {})) for src in _sources(old)
+                ):
+                    # one subject's single-valued slot, another value: the same thing
+                    relation = Relation(
+                        shared_name=relation.shared_name,
+                        shared_id=relation.shared_id,
+                        apart=False,
+                        value_changed=True,
+                        shared_slot=True,
+                    )
                 if relation.apart:
                     continue
                 pair = _Pair(unit, old, relation)
-                (pairs if relation.anchored else pending).append(pair)
+                if relation.anchored:
+                    pairs.append(pair)
+                elif not is_rule(old) and not is_rule(unit):
+                    pending.append(pair)  # a misread rule is compared only when anchored
         return pairs + await self._close_enough(pending)
 
     async def _close_enough(self, pending: Sequence[_Pair]) -> list[_Pair]:
@@ -818,6 +903,29 @@ class CrossConversationReplacement:
             ):
                 forms.setdefault(m.memory_id, m)
         return list(forms.values())
+
+
+def _closed_by(
+    closed: Sequence[CanonicalMemory], new: Sequence[CanonicalMemory], principal: str
+) -> list[CanonicalMemory]:
+    """The user's own memories a new one of this observation superseded."""
+    ids = {m.memory_id for m in new}
+    return [
+        m
+        for m in closed
+        if m.owner_principal == principal
+        and m.temporal.status is TemporalStatus.SUPERSEDED
+        and m.temporal.superseded_by in ids
+    ]
+
+
+def _slots_by_source(memories: Sequence[CanonicalMemory]) -> dict[tuple[str, str], Slots]:
+    """Each message's slots, from what the rules read from it."""
+    by_source: dict[tuple[str, str], list[CanonicalMemory]] = {}
+    for m in memories:
+        for src in _sources(m):
+            by_source.setdefault(src, []).append(m)
+    return {src: slots_of(ms) for src, ms in by_source.items()}
 
 
 def worth_asking(pair: _Pair) -> bool:

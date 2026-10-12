@@ -34,6 +34,7 @@ HANDLE_PREFIXES: dict[str, str] = {
     "f": "graph_facts",
     "s": "summaries",
     "d": "knowledge",
+    "h": "history",
 }
 
 
@@ -424,6 +425,9 @@ class ContextBundle(BaseModel):
     knowledge: list[ContextItem] = Field(default_factory=list)
     graph_facts: list[ContextItem] = Field(default_factory=list)
     summaries: list[ContextItem] = Field(default_factory=list)
+    #: earlier values (ADR 0038): what a later statement of the same user replaced, kept apart
+    #: from the current evidence and rendered under its own heading, never as current
+    history: list[ContextItem] = Field(default_factory=list)
     evidence: EvidenceReport
     token_budget: int
     token_estimate: int
@@ -441,8 +445,9 @@ class ContextBundle(BaseModel):
     def handles(self) -> dict[str, str]:
         """Short, per-bundle handles for what the bundle carries, handle -> item id: ``m1``..
         for memories, ``f1``.. for graph facts, ``s1``.. for summaries, ``d1``.. for
-        document passages, in bundle order. The rendered prompt cites by them, and the
-        service resolves them back within the bundle (update, forget, verify)."""
+        document passages, ``h1``.. for earlier values, in bundle order. The rendered prompt
+        cites by them, and the service resolves them back within the bundle (update, forget,
+        verify)."""
         return {
             f"{prefix}{i}": item.item_id
             for prefix, items in HANDLE_PREFIXES.items()
@@ -451,17 +456,24 @@ class ContextBundle(BaseModel):
 
     def redundant(self) -> frozenset[str]:
         """Items the context would only repeat, left out of what it shows: a memory every
-        source of which is a message the recent conversation already shows, and a
-        ``mentions`` fact whose object the shown text already names. They stay in the bundle
-        (handles, verification); only the rendering and the wire form omit them."""
+        source of which is a message the recent conversation already shows, a memory whose
+        words another shown memory of the same message contains (a sentence read out of a
+        turn that is shown whole), and a ``mentions`` fact whose object the shown text - the
+        history section's included - already names. They stay in the bundle (handles,
+        verification); only the rendering and the wire form omit them."""
         shown = set(self.conversation.message_ids)
         out: set[str] = set()
         for m in self.memories:
             sources = {e.message_id for e in m.evidence if e.message_id}
             if shown and sources and sources <= shown:
                 out.add(m.item_id)
+        out |= _contained(self.memories, out)
         said = " ".join(
-            [self.conversation.rendered, *(m.text for m in self.memories if m.item_id not in out)]
+            [
+                self.conversation.rendered,
+                *(m.text for m in self.memories if m.item_id not in out),
+                *(m.text for m in self.history),
+            ]
         ).casefold()
         for f in self.graph_facts:
             named = str(f.attributes.get("object") or "").casefold()
@@ -499,6 +511,18 @@ class ContextBundle(BaseModel):
                 )
             ordered = sorted(memories, key=lambda m: str(m.attributes.get("observed_at", "")))
             parts.append("## Memories\n" + "\n".join(_timeline_lines(ordered, shown, refs)))
+        if self.history:
+            # replaced values, apart and under a heading that says so: a reader asked for the
+            # current value never finds an old one among the current evidence
+            parts.append(
+                "## Earlier values (since replaced)\n"
+                + "\n".join(
+                    _memory_line(m, refs[m.item_id])
+                    for m in sorted(
+                        self.history, key=lambda m: str(m.attributes.get("observed_at", ""))
+                    )
+                )
+            )
         if facts:
             parts.append("## Facts\n" + "\n".join(f"- [{refs[f.item_id]}] {f.text}" for f in facts))
         if self.summaries:
@@ -519,6 +543,28 @@ class ContextBundle(BaseModel):
         if self.evidence.status is not EvidenceStatus.COMPLETE:
             parts.append(f"## Evidence status\n{self.evidence.status}")
         return "\n\n".join(parts)
+
+
+def _contained(memories: Sequence[ContextItem], out: set[str]) -> set[str]:
+    """Memories whose whole text another shown memory of the same message contains."""
+    norm = {m.item_id: " ".join(m.text.casefold().split()) for m in memories}
+    sources = {m.item_id: {e.message_id for e in m.evidence if e.message_id} for m in memories}
+    found: set[str] = set()
+    for m in memories:
+        if m.item_id in out or not sources[m.item_id] or not norm[m.item_id]:
+            continue
+        for other in memories:
+            if (
+                other.item_id != m.item_id
+                and other.item_id not in out
+                and other.item_id not in found
+                and sources[m.item_id] & sources[other.item_id]
+                and len(norm[other.item_id]) > len(norm[m.item_id])
+                and norm[m.item_id] in norm[other.item_id]
+            ):
+                found.add(m.item_id)
+                break
+    return found
 
 
 def profile_section(profile: Sequence[ProfileBlockView]) -> str | None:

@@ -376,13 +376,15 @@ class ObservationPipeline:
             or observation.agent_authored
         ):
             return set()
-        written = [
-            m
-            for m in await uow.memories.get_many(ctx.tenant_id, sorted(affected))
-            if m.created_at >= since
-        ]
+        touched = await uow.memories.get_many(ctx.tenant_id, sorted(affected))
+        written = [m for m in touched if m.created_at >= since]
+        # what consolidation closed for this observation (a single-valued slot's old value):
+        # the slot it held still tells which earlier statements say the same thing
+        closed = [m for m in touched if m.created_at < since]
         try:
-            outcome = await self.replacement.run(uow, ctx, written, now=datetime.now(UTC))
+            outcome = await self.replacement.run(
+                uow, ctx, written, now=datetime.now(UTC), closed=closed
+            )
         except Exception as exc:  # a failing model never costs the message
             # the head is shared and bounded (a full queue refuses with DependencyUnavailable)
             # and a model can fail outright: the statements are stored, and what they would
