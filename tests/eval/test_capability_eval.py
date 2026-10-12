@@ -493,6 +493,22 @@ def test_the_isolated_stack_refuses_a_live_resource(tmp_path: Path, env: dict, w
     assert not (tmp_path / "ran").exists()
 
 
+def test_the_isolated_stack_refuses_logs_inside_another_runs_work(tmp_path: Path) -> None:
+    import uuid
+
+    other = Path(f"/var/tmp/capeval_test_{uuid.uuid4().hex[:8]}")
+    lock = Path(f"{other}.lock")
+    lock.touch()
+    try:
+        done = _stack(tmp_path, CAPEVAL_LOGS=f"{other}/logs")
+        assert done.returncode == 2 and "inside the WORK of an isolated run" in done.stderr
+        assert not other.exists()
+        own = _stack(tmp_path, CAPEVAL_WORK=f"{other}x", CAPEVAL_LOGS=f"{other}x/logs")
+        assert own.returncode == 2 and "inside this run's WORK" in own.stderr, own.stderr
+    finally:
+        lock.unlink(missing_ok=True)
+
+
 def test_the_isolated_stack_refuses_a_port_that_already_answers(tmp_path: Path) -> None:
     import http.server
     import threading

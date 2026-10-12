@@ -207,14 +207,21 @@ Before it creates anything, the script refuses to start if any of these holds:
 - a Qdrant port is the live one (6333/6334);
 - a port already answers;
 - WORK does not resolve under `/var/tmp/capeval*`;
-- the Redis database is 0, a reserved one (`CAPEVAL_REDIS_RESERVED`) or not empty.
+- the Redis database is 0, a reserved one (`CAPEVAL_REDIS_RESERVED`) or not empty;
+- `PGHOST` is not local, unless `CAPEVAL_ALLOW_REMOTE_PG=1`;
+- `CAPEVAL_LOGS` resolves inside (or to) the WORK of any isolated run, this one's included.
+
+Every path it may delete (WORK, LOGS) is resolved with `realpath -m` before these checks, and
+numbers are read as numbers (`00` is database 0, `06333` is port 6333).
 
 One stack runs at a time: an exclusive lock sits beside WORK. The service starts with a clean
 environment (`env -i`) and from WORK, so no `.env` is read. Both database URLs, including the
 `DIRECT_URL` that migrations, the job queue and graph sessions use, point at the eval
 database. Everything the script creates is written to a manifest. Teardown removes only what
 the manifest names, and signals a process only if its command line is still the one started
-here. When the command ends, the stack is dropped, whether the run passed, failed or was
+here. A process that ignores SIGTERM (a worker draining a job) is sent SIGKILL after
+`CAPEVAL_KILL_WAIT` seconds (default 20), so it cannot outlive its stack and hold the next
+run's port. When the command ends, the stack is dropped, whether the run passed, failed or was
 interrupted. The script deletes the Qdrant collections through the API, stops the instance,
 removes its path, drops the database, flushes the Redis database and removes the blob
 directory. It records the disk before the stack starts and after it is gone; a gate run
@@ -267,7 +274,7 @@ on a fast set, and the full set runs nightly:
 
 | Set | What it runs | Baseline | When |
 |---|---|---|---|
-| `SET=core` | every capability but scale; all five languages and the code-switched phrasings; every phrasing kind and every surface. Questions start once the run's own queued work, summaries and graph enrichment included, has drained (bounded at 15 minutes; about 4 in practice). A run takes about 17 minutes, the isolated stack included | its own, `nollm/core` (cells and context p95), two runs merged: the lower value of each cell, and the cells they disagreed on recorded as noisy | every PR that touches capability work |
+| `SET=core` | every capability but scale; all five languages and the code-switched phrasings; every phrasing kind and every surface. Questions start once the run's own queued work, summaries and graph enrichment included, has drained (bounded at 15 minutes; about 4 in practice). A run takes about 17 minutes, the isolated stack included | its own, `nollm/core` (cells and context p95), ratcheted: each cell's threshold is its best recorded value (two runs recorded together count as their lower value). A run fails below the cell's floor. The floor is the threshold itself, or the threshold less the cell's own spread when the threshold is a carried best value. A noisy cell gets one rerun | every PR that touches capability work |
 | `SET=llm_core` (`MODE=llm`) | a fixed stratified subset of core: per capability (scale aside), the InventorySmart origin scenario and the other-domain scenario with the fewest turns. All five domains, every language and the code-switched phrasings, three phrasing kinds: 20 scenarios, 697 turns, 326 phrasings per surface (`_modes.json` lists them). It runs on the isolated store through the live gateway and the CPU model (`CAPEVAL_GATEWAY=1`, `CAPEVAL_LLM_MODEL`) | its own, `llm/llm_core`, ratcheted like `nollm/core` | every PR that touches capability work |
 | `SET=scale` | capability 7 alone, every language | held to the full baseline's scale cells; its latency is not compared | the PR of a change that targets scale, and nightly |
 | `SET=full` (default) | everything | **no baseline yet**: record it on main first (the 2026-10-08 full runs are pre-B1 and unreproducible) | nightly, once recorded |

@@ -63,6 +63,14 @@ psql_() { PGPASSWORD="$PGPASSWORD_" psql -h "$PGHOST_" -U "$PGUSER_" -d postgres
 for path in "$WORK" "$LOGS"; do
   case "$path" in /var/tmp/capeval*) ;; *) refuse "path '$path' is not under /var/tmp/capeval*" ;; esac
 done
+# LOGS is removed and rewritten: never inside (or equal to) the WORK of any isolated run, this
+# one's included - a WORK is any /var/tmp/capeval* path with a .lock or .manifest beside it
+for marker in /var/tmp/capeval*.lock /var/tmp/capeval*.manifest; do
+  [ -e "$marker" ] || continue
+  other="$(realpath -m "${marker%.*}")"
+  case "$LOGS/" in "$other"/*) refuse "LOGS '$LOGS' is inside the WORK of an isolated run ($other)" ;; esac
+done
+case "$LOGS/" in "$WORK"/*) refuse "LOGS '$LOGS' is inside this run's WORK" ;; esac
 # numbers as numbers: 00 is db 0, 06333 is port 6333
 for v in REDIS_DB API_PORT METRICS_PORT QDRANT_HTTP QDRANT_GRPC FGA_HTTP FGA_GRPC READY_SECONDS; do
   [[ "${!v}" =~ ^[0-9]+$ ]] || refuse "$v '${!v}' is not a number"
