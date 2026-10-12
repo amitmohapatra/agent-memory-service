@@ -43,9 +43,10 @@ GRAPH_QUEUES: tuple[Queue, ...] = (Queue.GRAPH,)
 
 
 #: The interactive queue: besides its place in the shared pool (at the top of
-#: ``QUEUE_PRIORITY``), it has a slot of its own that nothing else can take. On a worker
-#: capped at 2 CPUs the shared pool has one slot, and a 500-page parse held it for minutes
-#: while every remember waited.
+#: ``QUEUE_PRIORITY``), it has slots of its own that no parse, archive, summary or graph job
+#: can take (indexing runs there only when no chat job waits). On a worker capped at 2 CPUs
+#: the shared pool has one slot, and a 500-page parse held it for minutes while every
+#: remember waited.
 CHAT_QUEUES: tuple[Queue, ...] = (Queue.CHAT_FAST,)
 #: How many pools (Procrastinate workers, each with a LISTEN connection) the worker runs
 WORKER_POOL_COUNT: int = 4
@@ -58,30 +59,34 @@ def worker_pools(
     (``concurrency``): every job of one process shares its CPUs, its GIL and its event loop,
     and each model serves one call at a time.
 
-    * chat: ``concurrency // 2`` slots of its own, which a long parse cannot take, and the
-      first claim on the shared pool's (``QUEUE_PRIORITY``). A remember's job is what a
-      write waits for; on one pool of ``concurrency`` slots chat had all of them first.
-    * indexing: up to ``indexing`` slots and at most a quarter, so a write turns findable
-      without a slow model's jobs in front of it.
-    * graph: enrichment is a job of its own. Without a model (``llm``) it is CPU work on
-      the event loop, and gets one slot; with one it waits on the model, and gets
-      ``concurrency // 2`` slots (at least 2) on top of the CPUs.
-    * shared: every other queue, on what is left, and at least one slot.
+    * chat: ``concurrency // 2`` slots of its own, which a parse or a graph backlog cannot
+      take; chat first (``QUEUE_PRIORITY``), and indexing when no chat job waits, so they
+      are not idle while a write's memories wait to be indexed.
+    * indexing: up to ``indexing`` slots and at most a quarter. With a model (``llm``) they
+      are indexing's alone, so a write turns findable while chat jobs wait minutes on the
+      model; without one chat jobs are short and take them first, as on one pool.
+    * graph: enrichment is a job of its own. Without a model it is CPU work on the event
+      loop, and gets one slot; with one it waits on the model, and gets ``concurrency // 2``
+      slots (at least 2) on top of the CPUs.
+    * shared: every other queue, after chat and indexing, on what is left, at least one.
 
-    Every pool has at least one slot, or its queues would never run: below 4 CPUs that is 4
-    slots. The bulkhead wins there over the CPU count; the extra slots wait their turn on a
-    model rather than multiply its threads."""
+    So chat and indexing share their slots by priority as they did in one pool, where chat
+    had every slot during a burst of writes and indexing every slot after it; parsing,
+    archiving, summaries and a graph backlog run beside them, never in their slots. Every
+    pool has at least one slot, or its queues would never run: below 4 CPUs that is 4 slots.
+    The bulkhead wins there over the CPU count; the extra slots wait their turn on a model
+    rather than multiply its threads."""
     chat = max(1, concurrency // 2)
     embedding = min(indexing, max(1, concurrency // 4))
     graph, graph_computes = (max(2, concurrency // 2), 0) if llm else (1, 1)
     shared = max(1, concurrency - chat - embedding - graph_computes)
-    own = (*INDEXING_QUEUES, *GRAPH_QUEUES)
-    rest = [q for q in Queue if q not in own]
+    fast = [*CHAT_QUEUES, *INDEXING_QUEUES]
+    rest = [q for q in Queue if q not in (*fast, *GRAPH_QUEUES)]
     return [
-        (list(INDEXING_QUEUES), embedding),
+        (list(INDEXING_QUEUES) if llm else [*INDEXING_QUEUES, *CHAT_QUEUES], embedding),
         (list(GRAPH_QUEUES), graph),
-        (list(CHAT_QUEUES), chat),
-        (rest, shared),
+        (fast, chat),
+        ([*fast, *rest], shared),
     ]
 
 

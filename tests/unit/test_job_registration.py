@@ -129,21 +129,27 @@ def test_the_outbox_sweep_is_scheduled_not_merely_registered() -> None:
     assert 'Queue.RECONCILE, outbox_sweep, cron="* * * * *"' in source
 
 
-def test_the_worker_runs_every_queue_in_exactly_one_pool() -> None:
-    """Indexing and graph enrichment on slots of their own (``worker_pools``), chat on slots
-    of its own as well as in the shared pool, every other queue in the shared pool: a queue in
-    no pool is never worked."""
+def test_the_worker_runs_every_queue_and_keeps_long_jobs_out_of_chat_and_indexing() -> None:
+    """Chat and indexing on slots of their own (``worker_pools``), which they share by
+    priority, chat first; graph enrichment on slots of its own; every other queue in the
+    shared pool, after chat and indexing. A queue in no pool is never worked, and a parse, an
+    archive, a summary or a graph backlog never holds a slot chat or indexing needs."""
     from memory_service.ports.tasks import Queue, worker_pools
 
-    pools = worker_pools(4, 2)
-    assert pools[:3] == [([Queue.EMBEDDING], 1), ([Queue.GRAPH], 1), ([Queue.CHAT_FAST], 2)]
-    assert pools[3][1] == 1, "the slots that compute: 2 chat + 1 index + 1 graph + 1 shared"
-    assert Queue.CHAT_FAST in pools[3][0], "chat also takes a shared slot, first in line"
-    listed = [q for queues, _ in pools for q in queues]
-    assert set(listed) == set(Queue), "every queue is worked"
-    assert sorted(q for q in listed if q is not Queue.CHAT_FAST) == sorted(
-        q for q in Queue if q is not Queue.CHAT_FAST
-    ), "and, chat apart, in exactly one pool"
+    long_jobs = {q for q in Queue if q not in (Queue.CHAT_FAST, Queue.EMBEDDING)}
+    for llm in (False, True):
+        pools = worker_pools(4, 2, llm=llm)
+        (indexing, i), (graph, g), (chat, c), (shared, s) = pools
+        assert indexing == ([Queue.EMBEDDING] if llm else [Queue.EMBEDDING, Queue.CHAT_FAST]), (
+            "with a model, indexing's slots are its own: chat jobs wait on the model"
+        )
+        assert graph == [Queue.GRAPH] and chat == [Queue.CHAT_FAST, Queue.EMBEDDING]
+        assert shared[:2] == [Queue.CHAT_FAST, Queue.EMBEDDING], "chat, then indexing, first"
+        assert (i, c, s) == (1, 2, 1) and g == (2 if llm else 1)
+        assert not long_jobs & set(indexing + chat), "no long job in chat's or indexing's slots"
+        listed = {q for queues, _ in pools for q in queues}
+        assert listed == set(Queue), "every queue is worked"
+        assert sorted(q for q in shared if q in long_jobs) == sorted(long_jobs - {Queue.GRAPH})
     for cpus in range(1, 9):
         for llm in (False, True):
             embedding, graph, chat, shared = (slots for _, slots in worker_pools(cpus, 2, llm=llm))

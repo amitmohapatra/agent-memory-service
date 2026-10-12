@@ -241,8 +241,8 @@ def test_the_worker_is_built_as_worker_py_builds_it(
     )
     pools = worker_pools_for(settings)
     (indexing, _), (graph, _), (chat, _), (shared, _) = pools
-    assert (indexing, graph, chat) == ([Queue.EMBEDDING], [Queue.GRAPH], [Queue.CHAT_FAST])
-    assert Queue.CHAT_FAST in shared, "chat also comes first in the shared pool"
+    assert indexing[0] is Queue.EMBEDDING and graph == [Queue.GRAPH]
+    assert chat == [Queue.CHAT_FAST, Queue.EMBEDDING] and Queue.DOCUMENT_PARSE in shared
     slots = [n for _, n in pools]
     total = sum(slots)
     assert total == WORKER_SLOTS[llm][cpus]

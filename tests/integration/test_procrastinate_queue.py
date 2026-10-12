@@ -166,7 +166,7 @@ async def test_a_pools_long_jobs_never_hold_another_pools_slots(
     for n in ("g1", "g2", "g3"):
         await queue.enqueue(JobSpec(task_name="test.enrich", queue=Queue.GRAPH, payload={"n": n}))
     pools = worker_pools(concurrency=1, indexing=1)
-    assert pools[0] == ([Queue.EMBEDDING], 1) and pools[1] == ([Queue.GRAPH], 1)
+    assert pools[0] == ([Queue.EMBEDDING, Queue.CHAT_FAST], 1) and pools[1] == ([Queue.GRAPH], 1)
     assert Queue.GRAPH not in pools[-1][0] and Queue.RECONCILE in pools[-1][0]
     worker = asyncio.create_task(queue.run_pools(pools, shutdown_grace_seconds=5))
     try:
@@ -339,8 +339,47 @@ async def test_a_long_parse_never_delays_a_chat_job(
             await queue.enqueue(
                 JobSpec(task_name="test.chat", queue=Queue.CHAT_FAST, payload={"n": n})
             )
-        await _until(lambda: len(chatting) == own)
-        assert len(chatting) == own, "every slot of chat's own runs a remember at once"
+        # chat's own slots at least (without a model the indexing pool's too, chat first)
+        await _until(lambda: len(chatting) >= own)
+    finally:
+        release.set()
+        worker.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker
+
+
+@ON_THE_POOLS_LOOP
+async def test_with_a_model_chat_jobs_waiting_on_it_never_hold_indexing(
+    queue: ProcrastinateTaskQueue,
+) -> None:
+    """With a model, a chat job waits on it (minutes on a small CPU model): chat jobs filling
+    chat's slots and the shared pool's leave indexing its own, and a write turns findable at
+    once. Without one, chat and indexing share their slots by priority (``worker_pools``)."""
+    release = asyncio.Event()
+    chatting: list[int] = []
+    indexed = asyncio.Event()
+
+    async def chat(payload):
+        chatting.append(payload["n"])
+        await release.wait()
+
+    async def index(payload):
+        indexed.set()
+
+    queue.register("test.chat", Queue.CHAT_FAST, chat)
+    queue.register("test.index", Queue.EMBEDDING, index)
+    pools = worker_pools(2, 2, llm=True)
+    assert pools[0] == ([Queue.EMBEDDING], 1)
+    chat_slots = pools[2][1] + pools[3][1]
+    for n in range(chat_slots + 1):  # one more than chat can run
+        await queue.enqueue(JobSpec(task_name="test.chat", queue=Queue.CHAT_FAST, payload={"n": n}))
+    worker = asyncio.create_task(queue.run_pools(pools, shutdown_grace_seconds=5))
+    try:
+        await _until(lambda: len(chatting) == chat_slots)
+        await asyncio.sleep(1)
+        assert len(chatting) == chat_slots, "every slot chat may use is waiting on the model"
+        await queue.enqueue(JobSpec(task_name="test.index", queue=Queue.EMBEDDING))
+        await asyncio.wait_for(indexed.wait(), timeout=10)
     finally:
         release.set()
         worker.cancel()
