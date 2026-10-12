@@ -356,15 +356,22 @@ class TaskTuning:
         """A worker silent for this long is gone: a starting worker prunes it and its running
         jobs are re-queued (``stalled_worker_timeout``), and the periodic reconcile re-queues
         jobs whose worker stopped heartbeating. It must exceed the longest a live worker can
-        stay silent - its last heartbeat's age, the database outage it rides out, then the
-        shutdown grace its running jobs get - or its jobs run twice. 140 s; a worker killed
-        with -9 has its jobs re-queued after that long."""
-        silent = (
+        stay silent (``worker_silence_seconds``), or its jobs run twice: by a heartbeat
+        interval, 145 s. A worker killed with -9 has its jobs re-queued after that long."""
+        return self.worker_silence_seconds + self.worker_heartbeat_seconds
+
+    @property
+    def worker_silence_seconds(self) -> float:
+        """The longest a live worker can go without a heartbeat, 135 s: its last heartbeat's
+        age, the database outage it rides out, the last try of that outage, which waits a
+        pool checkout's timeout before it fails (the outage is checked after each try), then
+        the shutdown grace its running jobs get once it gives up."""
+        return (
             self.worker_heartbeat_seconds
             + self.worker_db_outage_seconds
+            + DATABASE.pool_timeout_seconds
             + OVERLOAD.worker_shutdown_grace_seconds
         )
-        return silent + self.worker_heartbeat_seconds
 
 
 TASKS = TaskTuning()

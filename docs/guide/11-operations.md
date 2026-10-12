@@ -201,7 +201,7 @@ flowchart TB
     OS["periodic.outbox_sweep<br/>re-dispatch outbox rows the fast path missed"]
   end
   subgraph five[Every 5 minutes]
-    RC["periodic.reconcile: outbox sweep, archive repair,<br/>re-queue jobs whose worker stopped heartbeating (140 s)"]
+    RC["periodic.reconcile: outbox sweep, archive repair,<br/>re-queue jobs whose worker stopped heartbeating (145 s)"]
     PQ["periodic.profile_queries: due standing questions"]
     PL["periodic.prefetch_learn: what pulls teach the push"]
     TL["periodic.tools_learn: procedures and procedural edges"]
@@ -303,10 +303,11 @@ connection lost - is ridden out for 90 s (`TASKS.worker_db_outage_seconds`): eac
 logged (`worker.db_retry`) and counted, after a pause growing from 0.5 s to 10 s, and the
 gauge says for how long. Those statements did not take effect (never ran, or rolled back), so a retry
 never applies one twice. A connection lost mid-statement is not retried (whether it committed
-is unknown): the worker exits non-zero. A worker starting prunes only workers silent for 140 s
-(`TASKS.stalled_after_seconds`: a heartbeat's 10 s + the 90 s outage + the 30 s shutdown grace
-+ 10 s), so it never takes the jobs of one that is riding an outage out; the price is that the
-jobs of a worker killed with -9 are re-queued after 140 s, not 30 s. Past 90 s (`worker.db_unavailable`), or when one of its pools
+is unknown): the worker exits non-zero. A worker starting prunes only workers silent for 145 s
+(`TASKS.stalled_after_seconds`, derived: a heartbeat's 10 s + the 90 s outage + the 5 s its last
+try waits for a pool connection + the 30 s shutdown grace, and a heartbeat's 10 s of margin),
+so it never takes the jobs of one that is riding an outage out; the price is that the jobs of a
+worker killed with -9 are re-queued after 145 s, not 30 s. Past 90 s (`worker.db_unavailable`), or when one of its pools
 stops on its own, the worker logs `worker.failed` and exits non-zero for its supervisor to
 restart it (compose: `restart: on-failure`). One pool timeout in a heartbeat, or one job-status
 write to a full disk, used to stop it, and the process exited as if asked to. A log line that

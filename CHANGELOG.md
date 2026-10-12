@@ -76,9 +76,10 @@ each entry says which one moved. Decisions behind each change are in the
   connection for every job it runs at once, and in `staging` and `prod` a `connection_budget`
   below what the worker needs stops it at start instead of being exceeded with a warning
   ([database](docs/deploy/database.md)). A worker starting no
-  longer takes the jobs of one silent for 30 s (Procrastinate's default) but for 140 s
+  longer takes the jobs of one silent for 30 s (Procrastinate's default) but for 145 s
   (`TASKS.stalled_after_seconds`, derived from the heartbeat, the 90 s a worker rides a
-  database outage out and the shutdown grace; a worker killed with -9 waits that long too),
+  database outage out, its last try's pool timeout and the shutdown grace, plus a heartbeat of
+  margin; a worker killed with -9 waits that long too),
   so a job no longer runs twice.
 - `/v1/verify` records no verdict on a run whose context held no evidence. Against an empty
   context every claim is "unsupported" - one the run's own tools returned too - so the judge
