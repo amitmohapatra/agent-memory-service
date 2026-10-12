@@ -51,26 +51,36 @@ CHAT_QUEUES: tuple[Queue, ...] = (Queue.CHAT_FAST,)
 WORKER_POOL_COUNT: int = 4
 
 
-def worker_pools(concurrency: int, indexing: int, graph: int) -> list[tuple[list[Queue], int]]:
-    """The worker's pools. ``concurrency`` (one per CPU the worker may use) is shared between
-    the two pools whose jobs compute - the indexing queues, up to ``indexing`` slots and at
-    most half, and every other queue, the rest - so those slots never outnumber the CPUs.
-    Two pools come on top: the chat queue's own slot, which a long parse cannot take (chat
-    is in the shared pool too, at the top of its priority), and the graph queues' ``graph``
-    slots, which wait on the database and the LLM.
+def worker_pools(
+    concurrency: int, indexing: int, *, llm: bool = False
+) -> list[tuple[list[Queue], int]]:
+    """The worker's pools, sized so the slots whose jobs compute stay about one per CPU
+    (``concurrency``): every job of one process shares its CPUs, its GIL and its event loop,
+    and each model serves one call at a time.
 
-    Every pool has at least one slot, or its queues would never run: at 1 CPU that is three
-    computing slots, not one. The bulkhead wins there over the CPU count; each model computes
-    on threads of its own and serves one call at a time, so the extra slots wait their turn on
-    a model rather than multiply its threads."""
-    embedding = min(indexing, max(1, concurrency // 2))
-    shared = max(1, concurrency - embedding)
+    * chat: ``concurrency // 2`` slots of its own, which a long parse cannot take, and the
+      first claim on the shared pool's (``QUEUE_PRIORITY``). A remember's job is what a
+      write waits for; on one pool of ``concurrency`` slots chat had all of them first.
+    * indexing: up to ``indexing`` slots and at most a quarter, so a write turns findable
+      without a slow model's jobs in front of it.
+    * graph: enrichment is a job of its own. Without a model (``llm``) it is CPU work on
+      the event loop, and gets one slot; with one it waits on the model, and gets
+      ``concurrency // 2`` slots (at least 2) on top of the CPUs.
+    * shared: every other queue, on what is left, and at least one slot.
+
+    Every pool has at least one slot, or its queues would never run: below 4 CPUs that is 4
+    slots. The bulkhead wins there over the CPU count; the extra slots wait their turn on a
+    model rather than multiply its threads."""
+    chat = max(1, concurrency // 2)
+    embedding = min(indexing, max(1, concurrency // 4))
+    graph, graph_computes = (max(2, concurrency // 2), 0) if llm else (1, 1)
+    shared = max(1, concurrency - chat - embedding - graph_computes)
     own = (*INDEXING_QUEUES, *GRAPH_QUEUES)
     rest = [q for q in Queue if q not in own]
     return [
         (list(INDEXING_QUEUES), embedding),
         (list(GRAPH_QUEUES), graph),
-        (list(CHAT_QUEUES), 1),
+        (list(CHAT_QUEUES), chat),
         (rest, shared),
     ]
 

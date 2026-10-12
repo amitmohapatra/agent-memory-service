@@ -118,8 +118,9 @@ until they do, `INVALIDATED` is a status the read filters honour and nothing wri
 Enrichment is a job of its own, queued by the job that indexes the source once the source is
 findable — `graph.enrich_memories` after `memory.index`, `graph.enrich_document` after
 `document.index` (`modules/jobs/registry.py`) — never on the request that wrote the data. It
-runs on the `graph` queue, below indexing, in a worker pool of its own with as many slots as
-`tasks.worker_concurrency`: it asks the model, and on a slow one, run inside the index jobs,
+runs on the `graph` queue, below indexing, in a worker pool of its own - one slot without a
+model, where it is CPU work, and with one half of `tasks.worker_concurrency` (at least 2), on
+top of the slots that compute: it asks the model, and on a slow one, run inside the index jobs,
 it held every worker slot while writes waited minutes to become findable. It is not run one at
 a time per tenant: so serialised, the capability eval's LLM run still had 552 enrichment jobs
 queued when its questions began, an hour after its first write, and those questions met a

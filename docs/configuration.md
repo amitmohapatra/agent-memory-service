@@ -82,8 +82,8 @@ covers the connection budget, PgBouncer and online migrations.
 
 | Variable | Default | Example | Auto | What it does |
 |---|---|---|---|---|
-| `MEMORY__TASKS__WORKER_CONCURRENCY` | auto | `4` | yes: one per available CPU, 1-8 | jobs that run models one worker process runs at once, 1-8: its indexing pool's (up to 2, at most half) and its shared pool's; a slot of chat's own and as many graph slots, which wait on the LLM, come on top |
-| `MEMORY__TASKS__INDEXING_CONCURRENCY` | `2` | `2` | no | of `MEMORY__TASKS__WORKER_CONCURRENCY`, at most this many slots (and never more than half) for the indexing pool, the `embedding` queue's own: the jobs that make a write findable, which a slow model's jobs cannot hold (1-8) |
+| `MEMORY__TASKS__WORKER_CONCURRENCY` | auto | `4` | yes: one per available CPU, 1-8 | jobs that compute one worker process runs at once, 1-8: half are chat's own, up to `MEMORY__TASKS__INDEXING_CONCURRENCY` (at most a quarter) its indexing pool's, one its graph pool's and the rest its shared pool's (each pool at least one); with a model, the graph pool's slots wait on it and come on top, half as many |
+| `MEMORY__TASKS__INDEXING_CONCURRENCY` | `2` | `2` | no | of `MEMORY__TASKS__WORKER_CONCURRENCY`, at most this many slots (and never more than a quarter) for the indexing pool, the `embedding` queue's own: the jobs that make a write findable, which a slow model's jobs cannot hold (1-8) |
 | `MEMORY__TASKS__METRICS_PORT` | `9464` | `9464` | no | where the job worker serves its Prometheus series and healthcheck (1-65535). It cannot be switched off from the environment |
 
 ## Authentication

@@ -8,12 +8,13 @@ closes the container - flushing what services buffered while the pool is still o
 to run with Procrastinate's signal handling switched off, so SIGTERM killed it mid-job and
 the job sat in ``doing`` until the stalled-job reconciler noticed thirty seconds later.
 
-It runs four pools (``ports.tasks.worker_pools``): the indexing queues and every other queue
-share ``tasks.worker_concurrency`` (they run models); the chat queue has a slot of its own and
-the graph queue slots of its own on top (it waits on the LLM). So jobs that wait on a slow
-model never hold the slots that make a write findable, a long parse never holds every slot a
-remember could use, and a graph backlog never holds the slots of parsing, feedback, learning
-and summaries.
+It runs four pools (``application.container.worker_pools_for``, sized by
+``ports.tasks.worker_pools``): chat's own (half of ``tasks.worker_concurrency``), indexing's,
+the graph queue's and the shared one, every pool's computing slots together about one per
+CPU, with only the graph pool's slots on top when they wait on a model. So jobs that wait on a
+slow model never hold the slots that make a write findable, a long parse never holds every
+slot a remember could use, and a graph backlog never holds the slots of parsing, feedback,
+learning and summaries.
 
 A database out of reach (no connection free in the queue pool, the LISTEN connection lost) is
 ridden out for ``TASKS.worker_db_outage_seconds``, each retry logged and counted
@@ -32,13 +33,12 @@ import asyncio
 import contextlib
 
 from memory_service.__about__ import __version__
-from memory_service.application.container import build_container
+from memory_service.application.container import build_container, worker_pools_for
 from memory_service.config.constants import OVERLOAD, SERVICE_NAME, TASKS
 from memory_service.config.settings import get_settings
 from memory_service.observability.logging import configure_logging, get_logger
 from memory_service.observability.metrics import serve_worker_metrics
 from memory_service.observability.tracing import configure_tracing
-from memory_service.ports.tasks import worker_pools
 
 log = get_logger(__name__)
 
@@ -58,18 +58,15 @@ async def main() -> None:
         serve_worker_metrics(settings.tasks.metrics_port)
         sampler = asyncio.create_task(sample_forever(container.database.engine))
     try:
+        pools = worker_pools_for(settings)
         log.info(
             "worker.started",
             concurrency=settings.tasks.worker_concurrency,
-            indexing_concurrency=settings.tasks.indexing_concurrency,
+            pools={",".join(queues): slots for queues, slots in pools},
             metrics_port=settings.tasks.metrics_port,
         )
         await container.tasks.run_pools(
-            worker_pools(
-                settings.tasks.worker_concurrency,
-                settings.tasks.indexing_concurrency,
-                settings.tasks.worker_concurrency,  # the graph pool waits on the LLM
-            ),
+            pools,
             install_signal_handlers=True,
             shutdown_grace_seconds=OVERLOAD.worker_shutdown_grace_seconds,
             db_outage_seconds=TASKS.worker_db_outage_seconds,

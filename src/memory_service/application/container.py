@@ -32,7 +32,7 @@ from memory_service.config.registry import Registries, get_registries
 from memory_service.config.settings import Settings
 from memory_service.domain.fiscal import parse_calendar
 from memory_service.observability.logging import get_logger
-from memory_service.ports.tasks import WORKER_POOL_COUNT
+from memory_service.ports.tasks import WORKER_POOL_COUNT, Queue, worker_pools
 
 log = get_logger(__name__)
 
@@ -162,6 +162,18 @@ class Tuning:
             nli=overrides.nli_settings or constants.NLI,
             llm=overrides.llm or constants.LLM,
         )
+
+
+def worker_pools_for(settings: Settings) -> list[tuple[list[Queue], int]]:
+    """The job worker's pools (``ports.tasks.worker_pools``) for this deployment: what
+    ``worker.py`` runs, and what its connection pools are sized for. The graph pool waits on
+    the model when the deployment has one (``settings.llm.enabled``, which
+    ``llm_assist.available`` follows); without one, enrichment computes."""
+    return worker_pools(
+        settings.tasks.worker_concurrency,
+        settings.tasks.indexing_concurrency,
+        llm=settings.llm.enabled,
+    )
 
 
 @dataclass

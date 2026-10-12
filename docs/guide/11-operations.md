@@ -159,17 +159,26 @@ re-measure on a real corpus).
 Every job is registered in one place, `modules/jobs/registry.py`, and every enqueued task name
 must have a handler there (`tests/unit/test_job_registration.py`). Jobs run on named queues;
 interactive work is prioritised over indexing, summaries and imports (`QUEUE_PRIORITY` in
-`ports/tasks.py`). The worker runs four pools (`worker_pools`). The `embedding` queue, whose
-jobs make a write findable, and every other queue share `tasks.worker_concurrency` (one per
-CPU) on slots of their own - the `embedding` queue up to `tasks.indexing_concurrency` (2) and at
-most half, the rest the shared pool's - because both run models, each on 2 threads of its own.
-Two pools come on top: the `chat-fast` queue's own slot, which a long parse cannot take (on a
-worker capped at 2 CPUs the shared pool has one slot), and the `graph` queue's, as many as
-`tasks.worker_concurrency`, which wait on the LLM. Every pool has at least one slot, so at
-1 CPU three slots compute: the bulkhead wins, and each model serves one call at a time. In one pool, jobs waiting on a slow model held every slot and
-indexing waited minutes behind them, and a graph backlog (an import queues thousands of
-enrichment jobs, which outrank parsing, archiving, reconciliation and summaries) held every slot
-until it drained. Each pool keeps one listening connection outside the queue pool.
+`ports/tasks.py`). The worker runs four pools (`worker_pools`), whose slots that compute come
+to about one per CPU (`tasks.worker_concurrency`): every job of the process shares its CPUs,
+its GIL and its event loop, and each model serves one call at a time.
+
+| Pool | Queues | Slots (1 / 2 / 4 / 8 CPUs) | Why |
+|---|---|---|---|
+| chat | `chat-fast` | half the CPUs, at least 1 (1 / 1 / 2 / 4) | a remember's job, which a write waits for; a long parse cannot take these slots |
+| indexing | `embedding` | up to `tasks.indexing_concurrency` (2), at most a quarter (1 / 1 / 1 / 2) | the jobs that make a write findable, never behind a slow model's |
+| graph | `graph` | 1 without a model; with one, half the CPUs and at least 2, on top (2 / 2 / 2 / 4) | enrichment is CPU work on the event loop without a model, and waits on it with one |
+| shared | every other queue, and `chat-fast` first | what is left, at least 1 (1 / 1 / 1 / 1; with a model 1 / 1 / 1 / 2) | parsing, archiving, feedback, learning, summaries |
+
+Every pool has at least one slot, so below 4 CPUs four slots compute: the bulkhead wins, and
+the extra slots wait their turn on a model. In one pool, jobs waiting on a slow model held
+every slot and indexing waited minutes behind them, and a graph backlog (an import queues
+thousands of enrichment jobs, which outrank parsing, archiving, reconciliation and summaries)
+held every slot until it drained. With a chat slot of its own and every other pool beside it
+(2 indexing slots, as many graph slots as CPUs), the capability eval's writes, which wait for
+their `memory.process_observation` jobs, took 340 s instead of 230 s on 4 CPUs: chat had 3
+slots instead of 4, and 9 slots competed for 4 CPUs. Each pool keeps one listening connection
+outside the queue pool.
 
 | Job | Queue | Triggered by | Retries | Does |
 |---|---|---|---|---|

@@ -181,7 +181,7 @@ def test_the_job_worker_has_queue_connections_for_each_of_its_pools(budget: int 
     from memory_service.config.settings import worker_connection_floor
     from memory_service.ports.tasks import WORKER_POOL_COUNT, worker_pools
 
-    assert len(worker_pools(4, 2, 2)) == WORKER_POOL_COUNT
+    assert len(worker_pools(4, 2)) == WORKER_POOL_COUNT
     database = Settings(_env_file=None, database={"connection_budget": budget}).database
     plan = database.pool_plan(1, queue_workers=WORKER_POOL_COUNT)
     assert plan.queue_max >= 2 * WORKER_POOL_COUNT

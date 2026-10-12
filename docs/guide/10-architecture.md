@@ -48,7 +48,7 @@ the agent harness that consumes the service (ADR 0020).
 | Process | Entry point | Does |
 |---|---|---|
 | API | `memory-api` → `__main__.py:run_api`: `service.workers` uvicorn processes (default: one per available CPU, 1-8) | every HTTP route; each process builds its own container, model set and pools |
-| Worker | `memory-worker` → `worker.py`: Procrastinate, `tasks.worker_concurrency` jobs at once (default: one per available CPU, 1-8), split between the `embedding` queue (up to 2) and every other queue, and on top a slot of `chat-fast`'s own and as many again of the `graph` queue's | every background job (chapter 11) |
+| Worker | `memory-worker` → `worker.py`: Procrastinate, about `tasks.worker_concurrency` computing jobs at once (default: one per available CPU, 1-8) in four pools: half for `chat-fast`'s own, up to 2 (a quarter) for the `embedding` queue, the `graph` queue's (1; with a model, half the CPUs on top) and the rest for every other queue (chapter 11) | every background job (chapter 11) |
 
 | Store | Holds | If lost |
 |---|---|---|

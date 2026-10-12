@@ -130,14 +130,14 @@ def test_the_outbox_sweep_is_scheduled_not_merely_registered() -> None:
 
 
 def test_the_worker_runs_every_queue_in_exactly_one_pool() -> None:
-    """Indexing and graph enrichment on slots of their own (``worker_pools``), chat on one of
-    its own as well as in the shared pool, every other queue in the shared pool: a queue in
+    """Indexing and graph enrichment on slots of their own (``worker_pools``), chat on slots
+    of its own as well as in the shared pool, every other queue in the shared pool: a queue in
     no pool is never worked."""
     from memory_service.ports.tasks import Queue, worker_pools
 
-    pools = worker_pools(4, 2, 2)
-    assert pools[:3] == [([Queue.EMBEDDING], 2), ([Queue.GRAPH], 2), ([Queue.CHAT_FAST], 1)]
-    assert pools[3][1] == 2, "the slots that run models share the 4 CPUs: 2 + 2"
+    pools = worker_pools(4, 2)
+    assert pools[:3] == [([Queue.EMBEDDING], 1), ([Queue.GRAPH], 1), ([Queue.CHAT_FAST], 2)]
+    assert pools[3][1] == 1, "the slots that compute: 2 chat + 1 index + 1 graph + 1 shared"
     assert Queue.CHAT_FAST in pools[3][0], "chat also takes a shared slot, first in line"
     listed = [q for queues, _ in pools for q in queues]
     assert set(listed) == set(Queue), "every queue is worked"
@@ -145,6 +145,11 @@ def test_the_worker_runs_every_queue_in_exactly_one_pool() -> None:
         q for q in Queue if q is not Queue.CHAT_FAST
     ), "and, chat apart, in exactly one pool"
     for cpus in range(1, 9):
-        embedding, _, chat, shared = (slots for _, slots in worker_pools(cpus, 2, 2))
-        assert embedding >= 1 and shared >= 1 and chat == 1
-        assert embedding + shared == max(2, cpus), "models never get more slots than CPUs"
+        for llm in (False, True):
+            embedding, graph, chat, shared = (slots for _, slots in worker_pools(cpus, 2, llm=llm))
+            assert min(embedding, graph, chat, shared) >= 1, "every pool is worked"
+            assert chat == max(1, cpus // 2), "half the CPUs are chat's own"
+            assert embedding <= max(1, cpus // 4) and embedding <= 2
+            computing = chat + embedding + shared + (0 if llm else graph)
+            assert computing <= max(4, cpus + 1), "the slots that compute, about one per CPU"
+            assert graph == (max(2, cpus // 2) if llm else 1), "more only to wait on a model"

@@ -83,10 +83,12 @@ each entry says which one moved. Decisions behind each change are in the
   (`TRELLIS_GROUNDING_SAMPLE`, 10 % by default) never learned a skill from them
   ([trust](docs/guide/06-trust.md)).
 - The worker runs the `embedding` queue - the jobs that make a memory, a document's chunks or a
-  tool findable - and the `graph` queue on slots of their own: `tasks.worker_concurrency` (one
-  per CPU) is split between the `embedding` queue (up to 2) and every other queue, since both
-  run models; the `chat-fast` queue's own slot, which a long parse cannot take, and the
-  `graph` queue's slots (as many as `tasks.worker_concurrency`), which wait on the LLM, come on top. With a slow model, observation extraction
+  tool findable - and the `graph` queue on slots of their own, and the `chat-fast` queue on
+  slots of its own that a long parse cannot take, in four pools whose computing slots come to
+  about one per CPU (`tasks.worker_concurrency`): half are chat's, up to
+  `tasks.indexing_concurrency` (2, a new setting; at most a quarter) indexing's, one the graph
+  queue's and the rest every other queue's, chat first among them. With a model the graph
+  pool's slots wait on it, and it gets half the CPUs (at least 2) on top. With a slow model, observation extraction
   and graph enrichment held every slot, and a tool catalog published just before a question
   waited 14 s to be searchable; and a graph backlog - an import queues thousands of enrichment
   jobs, which outrank parsing, archiving, reconciliation and summaries - held every slot until
