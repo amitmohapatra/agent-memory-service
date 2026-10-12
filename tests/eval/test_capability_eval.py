@@ -439,6 +439,27 @@ def test_eval_identities_are_a_function_of_scenario_and_language() -> None:
     assert run_day(settings).date() == datetime.now(UTC).date()
 
 
+def test_a_run_counts_the_model_calls_its_uses_made() -> None:
+    from benchmark.capabilities.runner import llm_counts
+
+    text = "\n".join(
+        [
+            "# HELP memory_llm_assist_total Module-level LLM assistance",
+            'memory_llm_assist_total{outcome="used",use="relation_extraction"} 40.0',
+            'memory_llm_assist_total{outcome="fallback",use="relation_extraction"} 2.0',
+            'memory_llm_assist_total{outcome="used",use="summaries"} 5.0',
+            'memory_llm_assist_total_created{outcome="used",use="summaries"} 1.7e9',
+            'memory_llm_requests_total{outcome="ok",use="summaries"} 5.0',
+            'memory_llm_requests_total{outcome="circuit_open",use="relation_extraction"} 1.0',
+        ]
+    )
+    counts = llm_counts(text)
+    assert counts["assist"] == {"used": 45.0, "fallback": 2.0}
+    assert counts["assist_by_use"]["relation_extraction"] == {"used": 40.0, "fallback": 2.0}
+    assert counts["requests"] == {"ok": 5.0, "circuit_open": 1.0}
+    assert llm_counts("") == {"assist": {}, "assist_by_use": {}, "requests": {}}
+
+
 def test_noise_is_allowed_once(tmp_path: Path) -> None:
     """llm_core implicit_personalization/hi measured 0.5 and 0.667: the threshold is the lower,
     0.5, and its noise is already spent - 0.333 must not pass."""

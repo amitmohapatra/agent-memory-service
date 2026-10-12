@@ -242,6 +242,20 @@ class Service:
             out[q] = _metric(text, "memory_queue_depth", queue=q) or 0.0
         return out
 
+    async def llm_calls(self) -> dict[str, Any]:
+        """``llm_counts`` of the API process and, when its metrics are reachable, the worker's:
+        how often the run's model uses called the model and how often they fell back."""
+        out: dict[str, Any] = {}
+        with contextlib.suppress(Exception):
+            out["api"] = llm_counts(await self.client.metrics())
+        if self.worker_metrics_url:
+            import httpx
+
+            with contextlib.suppress(Exception):
+                async with httpx.AsyncClient(timeout=5) as http:
+                    out["worker"] = llm_counts((await http.get(self.worker_metrics_url)).text)
+        return out
+
     async def queue_depths(self) -> dict[str, float] | None:
         """Every queue's depth on the worker, whoever's jobs they are: a backlog the eval
         inherits (another tenant's, or an earlier run's) is recorded with the run."""
@@ -261,6 +275,33 @@ class Service:
                 with contextlib.suppress(ValueError):
                     out[queue] = float(line.rsplit(" ", 1)[-1])
         return dict(sorted(out.items()))
+
+
+def llm_counts(text: str) -> dict[str, Any]:
+    """The model calls a process made, from its Prometheus text: ``memory_llm_assist_total``
+    (a use's assistance: ``used`` or ``fallback`` to the model-free path) and
+    ``memory_llm_requests_total`` (gateway calls by outcome: ``ok``, ``circuit_open``, ...)."""
+    import re
+
+    out: dict[str, Any] = {"assist": {}, "assist_by_use": {}, "requests": {}}
+    for line in text.splitlines():
+        for metric, key in (
+            ("memory_llm_assist_total{", "assist"),
+            ("memory_llm_requests_total{", "requests"),
+        ):
+            if not line.startswith(metric):
+                continue
+            labels = dict(re.findall(r'(\w+)="([^"]*)"', line.split("}", 1)[0]))
+            try:
+                value = float(line.rsplit(" ", 1)[-1])
+            except ValueError:
+                continue
+            outcome = labels.get("outcome", "?")
+            out[key][outcome] = out[key].get(outcome, 0.0) + value
+            if key == "assist":
+                by_use = out["assist_by_use"].setdefault(labels.get("use", "?"), {})
+                by_use[outcome] = by_use.get(outcome, 0.0) + value
+    return out
 
 
 def _metric(text: str, name: str, **labels: str) -> float | None:
@@ -830,6 +871,8 @@ async def run(
                 *(_ask(w, c) for w in written for c in cases(w.scenario, w.language))
             )
         ask_seconds = _now() - t_ask
+        llm_calls = await service.llm_calls()
+        print(f"model calls: {_llm_line(llm_calls)}", file=sys.stderr)
     finally:
         # a run leaves the service as it found it, a failed one too
         if should_purge(settings) and written:
@@ -874,6 +917,9 @@ async def run(
             },
         },
         "ask_seconds": round(ask_seconds, 1),
+        #: the model uses' calls over the whole run, per process (all zero in nollm): a run in
+        #: llm mode whose uses mostly fell back measured the model-free path, not the model
+        "llm_calls": llm_calls,
         "reused_writes_of": str(settings.reuse) if settings.reuse else None,
         "cleanup": cleanup,
         #: the users and threads written, so a kept run can be purged later
@@ -885,6 +931,14 @@ async def run(
     if settings.out is not None:
         save_raw(records, meta, settings.out)
     return build(dataset, records, meta)
+
+
+def _llm_line(calls: Mapping[str, Any]) -> str:
+    return "; ".join(
+        f"{proc} used {int(c['assist'].get('used', 0))} fallback {int(c['assist'].get('fallback', 0))} "
+        f"requests { ({k: int(v) for k, v in c['requests'].items()}) }"
+        for proc, c in calls.items()
+    )
 
 
 def owned_by(written: Sequence[Written]) -> dict[str, list[str]]:
