@@ -212,6 +212,89 @@ def test_a_budget_below_the_workers_floor_is_raised_with_a_warning() -> None:
     assert not quiet
 
 
+#: The job worker's slots at 1/2/4/8 CPUs, without a model and with one: the slots that
+#: compute stay about one per CPU (every pool keeps at least one); only the graph pool's, which
+#: wait on the model, come on top. Main had one pool of 1/2/4/8.
+WORKER_SLOTS = {False: {1: 4, 2: 4, 4: 5, 8: 8}, True: {1: 5, 2: 5, 4: 6, 8: 12}}
+
+
+@pytest.mark.parametrize("llm", [False, True])
+@pytest.mark.parametrize("budget", [None, 84])
+@pytest.mark.parametrize("cpus", [1, 2, 4, 8])
+def test_the_worker_is_built_as_worker_py_builds_it(
+    cpus: int, budget: int | None, llm: bool
+) -> None:
+    """The pools ``worker.py`` runs (``worker_pools_for``) and the connection pools its
+    container opens (``process_shape``, then the wiring's ``_pool_plan``), built the same way:
+    the slot total, chat's own slots, and a request pool with a connection for every job
+    running at once. With 17 slots on a request pool of 10, jobs waited for connections."""
+    from memory_service.adapters.wiring import _pool_plan
+    from memory_service.application.container import Container, process_shape, worker_pools_for
+    from memory_service.config.settings import worker_connection_floor
+    from memory_service.ports.tasks import Queue
+
+    settings = Settings(
+        _env_file=None,
+        tasks={"worker_concurrency": cpus},
+        database={"connection_budget": budget},
+        bifrost_url="http://gateway.invalid" if llm else None,
+    )
+    pools = worker_pools_for(settings)
+    (indexing, _), (graph, _), (chat, _), (shared, _) = pools
+    assert (indexing, graph, chat) == ([Queue.EMBEDDING], [Queue.GRAPH], [Queue.CHAT_FAST])
+    assert Queue.CHAT_FAST in shared, "chat also comes first in the shared pool"
+    slots = [n for _, n in pools]
+    total = sum(slots)
+    assert total == WORKER_SLOTS[llm][cpus]
+    assert slots[2] == max(1, cpus // 2), "half the CPUs are chat's own"
+    computing = total - (slots[1] if llm else 0)
+    # about one per CPU: four pools of at least one slot each, so 4 below 4 CPUs, and at 4
+    # the shared pool's one slot is the fifth
+    assert computing <= max(len(pools), cpus + 1)
+
+    container = Container(settings=settings, version="test", **process_shape(settings, "worker"))
+    assert (container.jobs, container.queue_workers) == (total, len(pools))
+    plan = _pool_plan(container)
+    assert plan.main_size + plan.main_overflow >= total, "a request connection per job"
+    assert plan.queue_max >= 2 * len(pools) and plan.listeners == len(pools)
+    if budget is None:  # 28, or what the pools need when that is more
+        floor = worker_connection_floor(len(pools), total)
+        assert plan.total == max(28, floor)
+    else:
+        assert plan.total <= budget, "84 covers the worker at every size"
+
+    api = Container(settings=settings, version="test", **process_shape(settings, "api"))
+    assert (api.queue_workers, api.jobs) == (0, 0), "the API runs no jobs"
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_a_budget_below_the_workers_floor_fails_where_deployed(environment: str) -> None:
+    """A deployed worker refuses a budget below what its pools need rather than open more
+    connections than the operator budgeted for; elsewhere it takes them, with a warning
+    (``test_a_budget_below_the_workers_floor_is_raised_with_a_warning``)."""
+    from memory_service.adapters.wiring import _pool_plan
+    from memory_service.application.container import Container, process_shape
+    from memory_service.config.settings import ConnectionBudgetError, worker_connection_floor
+
+    def worker(environment: str, budget: int) -> Container:
+        settings = Settings(
+            _env_file=None,
+            service={"environment": environment},
+            tasks={"worker_concurrency": 4},
+            database={"connection_budget": budget},
+            bifrost_url=None,
+        )
+        return Container(settings=settings, version="test", **process_shape(settings, "worker"))
+
+    deployed = worker(environment, 20)
+    floor = worker_connection_floor(deployed.queue_workers, deployed.jobs)
+    assert (deployed.jobs, floor) == (5, 21)
+    with pytest.raises(ConnectionBudgetError, match="connection_budget=20 .* needs 21"):
+        _pool_plan(deployed)
+    assert _pool_plan(worker(environment, 21)).total <= 21, "a budget that fits is kept"
+    assert _pool_plan(worker("dev", 20)).total == 21, "elsewhere: raised, with a warning"
+
+
 def test_the_compose_app_goes_through_pgbouncer_and_the_queue_does_not() -> None:
     """Transaction pooling breaks LISTEN/NOTIFY and session parameters, so the request path
     goes through PgBouncer and the session work (queue, graph traversal, migrations) direct."""

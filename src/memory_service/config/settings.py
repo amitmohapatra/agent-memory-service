@@ -121,12 +121,12 @@ class ServiceSettings(BaseModel):
 _CONNECTIONS_PER_PROCESS = 28
 
 
-def _split(per_process: int, queue_workers: int) -> PoolPlan:
+def _split(per_process: int, queue_workers: int, jobs: int = 0) -> PoolPlan:
     """``per_process`` connections between the pools (``DatabaseSettings.pool_plan``)."""
     pooled = per_process - queue_workers
     queue = max(2, pooled // 7, 2 * queue_workers)
     graph = max(2, 2 * pooled // 7)
-    main = max(2, per_process - graph - queue - queue_workers)
+    main = max(2, jobs, per_process - graph - queue - queue_workers)
     return PoolPlan(
         main_size=-(-main // 2),
         main_overflow=main // 2,
@@ -137,14 +137,28 @@ def _split(per_process: int, queue_workers: int) -> PoolPlan:
     )
 
 
-def worker_connection_floor(queue_workers: int) -> int:
-    """The fewest connections a process running ``queue_workers`` Procrastinate workers can
-    split without going over: two pooled and one LISTEN per worker, two each for the request
-    pool and the graph traversal, at least (6 for the API)."""
+def worker_connection_floor(queue_workers: int, jobs: int = 0) -> int:
+    """The fewest connections a process running ``queue_workers`` Procrastinate workers and
+    ``jobs`` jobs at once can split without going over: two pooled and one LISTEN per worker,
+    a request-pool connection per job (at least two) and two for the graph traversal, at least
+    (6 for the API)."""
     share = 4 + 3 * queue_workers
-    while _split(share, queue_workers).total > share:
+    while _split(share, queue_workers, jobs).total > share:
         share += 1
     return max(6, share)
+
+
+class ConnectionBudgetError(ValueError):
+    """``database.connection_budget`` is below what the job worker needs, where a deployed
+    service must not quietly take more connections than the operator budgeted for."""
+
+
+def _below_floor_message(budget: int | None, per_process: int, floor: int) -> str:
+    return (
+        f"connection_budget={budget} gives this worker {per_process} connections; it needs "
+        f"{floor} (two pooled and one LISTEN per queue worker, a request connection per "
+        f"concurrent job, two for the graph traversal)"
+    )
 
 
 @lru_cache(maxsize=8)
@@ -157,8 +171,7 @@ def _warn_budget_below_floor(budget: int | None, per_process: int, floor: int) -
         connection_budget=budget,
         per_process=per_process,
         worker_floor=floor,
-        message=f"connection_budget gives this worker {per_process} connections; it needs "
-        f"{floor} (4 + 3 per queue worker) and takes {floor}",
+        message=_below_floor_message(budget, per_process, floor) + f", and takes {floor}",
     )
 
 
@@ -218,7 +231,9 @@ class DatabaseSettings(BaseModel):
         """The session-capable connection (``direct_url``, else ``url``)."""
         return (self.direct_url or self.url).get_secret_value()
 
-    def pool_plan(self, processes: int, *, queue_workers: int = 0) -> PoolPlan:
+    def pool_plan(
+        self, processes: int, *, queue_workers: int = 0, jobs: int = 0, strict: bool = False
+    ) -> PoolPlan:
         """One process's pools, from the pod's budget::
 
             per_process = connection_budget // processes      (unset: 28)
@@ -226,27 +241,35 @@ class DatabaseSettings(BaseModel):
             pooled      = per_process - listeners
             queue       = max(2, pooled // 7, 2 * queue_workers)
             graph       = max(2, 2 * pooled // 7)             split ceil(g/2) + floor(g/2)
-            main        = max(2, per_process - graph - queue - listeners)
+            main        = max(2, jobs, per_process - graph - queue - listeners)
                                                               split ceil(m/2) + floor(m/2)
 
         A pool's overflow is the burst it may open past its steady size and closes again;
         the budget counts both, because a burst is when the budget matters. The job worker
         runs ``queue_workers`` Procrastinate workers on one queue pool, each with its fetch,
         finishes, heartbeat, abort poll and periodic deferrer: two pooled connections each,
-        or their checkouts time out under load. Its share is at least
-        :func:`worker_connection_floor` (17 for four): a smaller budget is raised to it, with
-        a warning.
+        or their checkouts time out under load; and ``jobs`` jobs at once (every slot of its
+        pools), each holding a request-pool connection while it writes, so the request pool
+        is never smaller than that. Its share is at least :func:`worker_connection_floor`
+        (17 for four workers and up to 10 jobs). A smaller budget fails with
+        :class:`ConnectionBudgetError` when ``strict`` (a deployed service: the operator's
+        budget is a promise to the database); otherwise it is raised to the floor, with a
+        warning. Unset, a process takes the floor when 28 is below it.
         """
         processes = max(1, processes)
+        floor = worker_connection_floor(queue_workers, jobs)
         if self.connection_budget is None:
-            per_process = _CONNECTIONS_PER_PROCESS
+            per_process = max(_CONNECTIONS_PER_PROCESS, floor)
         else:
             per_process = max(6, self.connection_budget // processes)
-        floor = worker_connection_floor(queue_workers)
         if per_process < floor:
+            if strict:
+                raise ConnectionBudgetError(
+                    _below_floor_message(self.connection_budget, per_process, floor)
+                )
             _warn_budget_below_floor(self.connection_budget, per_process, floor)
             per_process = floor
-        return _split(per_process, queue_workers)
+        return _split(per_process, queue_workers, jobs)
 
     @property
     def sync_url(self) -> str:
@@ -517,6 +540,11 @@ class Settings(BaseSettings):
     #: that, so the misconfiguration was invisible: the service started clean and readiness
     #: went green.
     DEPLOYED_ENVIRONMENTS: ClassVar[frozenset[str]] = frozenset({"staging", "prod"})
+
+    @property
+    def deployed(self) -> bool:
+        """``service.environment`` is one of ``DEPLOYED_ENVIRONMENTS``."""
+        return self.service.environment in self.DEPLOYED_ENVIRONMENTS
 
     @property
     def blob_provider(self) -> Literal["gcs", "filesystem"]:

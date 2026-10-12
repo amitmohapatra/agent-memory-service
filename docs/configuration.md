@@ -70,7 +70,7 @@ covers the connection budget, PgBouncer and online migrations.
 | `MEMORY__DATABASE__URL` | `postgresql+psycopg://memory:memory@localhost:5432/memory` | `postgresql+psycopg://memory:<password>@pgbouncer:6432/memory` | no | the request path's connection; may be a transaction-mode PgBouncer |
 | `MEMORY__DATABASE__DIRECT_URL` | unset | `postgresql+psycopg://memory:<password>@postgres:5432/memory` | yes: `URL` | PostgreSQL itself, for the job queue (LISTEN/NOTIFY, job locks), the graph traversal and migrations |
 | `MEMORY__DATABASE__TRANSACTION_POOLER` | `false` | `true` | no | `true` when `URL` is a transaction-mode pooler: no server-side prepared statements, no session parameters at connect |
-| `MEMORY__DATABASE__CONNECTION_BUDGET` | unset | `84` | yes: 28 per process | connections one pod may open, all processes and pools together (at least 6). Each process takes `budget // processes` and splits it 4:2:1 between requests, the graph traversal and the queue |
+| `MEMORY__DATABASE__CONNECTION_BUDGET` | unset | `84` | yes: 28 per process | connections one pod may open, all processes and pools together (at least 6). Each process takes `budget // processes` and splits it 4:2:1 between requests, the graph traversal and the queue; the job worker needs at least a request connection per job and two queue connections per pool, and in `staging`/`prod` refuses to start below that |
 
 ## Cache
 

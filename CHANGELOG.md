@@ -72,7 +72,10 @@ each entry says which one moved. Decisions behind each change are in the
   and makes them `READY`.
 - The job worker's queue pool is sized for its four Procrastinate workers (two connections
   each), and their four LISTEN connections count against `connection_budget`; with four
-  connections for all of them, pool checkouts timed out under load. A worker starting no
+  connections for all of them, pool checkouts timed out under load. Its request pool has a
+  connection for every job it runs at once, and in `staging` and `prod` a `connection_budget`
+  below what the worker needs stops it at start instead of being exceeded with a warning
+  ([database](docs/deploy/database.md)). A worker starting no
   longer takes the jobs of one silent for 30 s (Procrastinate's default) but for 140 s
   (`TASKS.stalled_after_seconds`, derived from the heartbeat, the 90 s a worker rides a
   database outage out and the shutdown grace; a worker killed with -9 waits that long too),
