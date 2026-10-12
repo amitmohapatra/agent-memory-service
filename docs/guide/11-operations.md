@@ -161,7 +161,7 @@ must have a handler there (`tests/unit/test_job_registration.py`). Jobs run on n
 interactive work is prioritised over indexing, summaries and imports (`QUEUE_PRIORITY` in
 `ports/tasks.py`). The worker runs four pools (`worker_pools`). The `embedding` queue, whose
 jobs make a write findable, and every other queue share `tasks.worker_concurrency` (one per
-CPU) on slots of their own - the `embedding` queue up to `TASKS.indexing_concurrency` (2) and at
+CPU) on slots of their own - the `embedding` queue up to `tasks.indexing_concurrency` (2) and at
 most half, the rest the shared pool's - because both run models, each on 2 threads of its own.
 Two pools come on top: the `chat-fast` queue's own slot, which a long parse cannot take (on a
 worker capped at 2 CPUs the shared pool has one slot), and the `graph` queue's, as many as

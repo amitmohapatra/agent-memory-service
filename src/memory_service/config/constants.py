@@ -341,14 +341,6 @@ class TaskTuning:
     #: How long ``memory_reads`` keeps who-read-what. Long enough for an annual access
     #: review with a quarter's slack; the table grows with every recall otherwise.
     read_audit_retention_days: int = 400
-    #: At most this many of the worker's ``tasks.worker_concurrency`` slots (one per CPU it
-    #: may use) go to the indexing pool, the ``embedding`` queue's own, and never more than
-    #: half; the rest are the shared pool's (``worker_pools``). Both run models, and each
-    #: model computes on 2 threads of its own (``adapters/models/_runner.py``) - the encoder,
-    #: ColBERT, NLI and docling each - so the slots that compute are sized to the CPUs: 4
-    #: CPUs, 2 + 2. Only the graph pool's slots come on top: they wait on the LLM, as many as
-    #: ``tasks.worker_concurrency``, the enrichments that ran at once inside the index jobs.
-    indexing_concurrency: int = 2
     #: How long the worker rides out a database that cannot do its queue statements - no
     #: connection free in its queue pool, a full disk, a server going away, its LISTEN
     #: connection lost - retrying with a growing pause (``backoff``)

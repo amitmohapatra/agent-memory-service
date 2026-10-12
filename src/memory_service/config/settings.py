@@ -277,6 +277,10 @@ class TaskSettings(BaseModel):
 
     #: jobs one worker process runs at once; unset, one per available CPU clamped to 1-8
     worker_concurrency: int = Field(default_factory=default_parallelism, ge=1, le=8)
+    #: At most this many of ``worker_concurrency`` go to the indexing pool, the ``embedding``
+    #: queue's own, and never more than half (``ports.tasks.worker_pools``): the jobs
+    #: that make a write findable, on slots a slow model's jobs cannot take.
+    indexing_concurrency: int = Field(default=2, ge=1, le=8)
     #: where the worker serves its Prometheus metrics and healthcheck (``None``: not at all)
     metrics_port: int | None = Field(default=9464, ge=1, le=65535)
 
