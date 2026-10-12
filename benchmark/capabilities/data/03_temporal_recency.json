@@ -1,0 +1,1784 @@
+{
+ "capability": "temporal_recency",
+ "number": 3,
+ "title": "Temporal / recency",
+ "definition": "Understand the timeline of stored facts and prefer the newer state: an update supersedes the earlier incident, a later count supersedes an earlier one.",
+ "scenarios": [
+  {
+   "id": "temporal-retail-forklift",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -4,
+     "at": "08:05",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Log an incident: Forklift #4 is out of service for maintenance.",
+        "de": "Vorfall erfassen: Gabelstapler Nr. 4 ist wegen Wartung außer Betrieb.",
+        "es": "Registra una incidencia: la carretilla n.º 4 está fuera de servicio por mantenimiento.",
+        "ar": "سجّل حادثة: الرافعة الشوكية رقم 4 خارج الخدمة للصيانة.",
+        "hi": "एक घटना दर्ज करो: फ़ोर्कलिफ़्ट #4 रखरखाव के लिए सेवा से बाहर है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Forklift #3 is assigned to the cold room this week.",
+        "de": "Gabelstapler Nr. 3 ist diese Woche dem Kühlraum zugeteilt.",
+        "es": "La carretilla n.º 3 está asignada a la cámara frigorífica esta semana.",
+        "ar": "الرافعة الشوكية رقم 3 مخصصة لغرفة التبريد هذا الأسبوع.",
+        "hi": "फ़ोर्कलिफ़्ट #3 इस हफ़्ते कोल्ड रूम में लगा है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -2,
+     "at": "13:30",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Forklift #4 has been repaired and is back on the floor.",
+        "de": "Gabelstapler Nr. 4 wurde repariert und ist wieder im Einsatz.",
+        "es": "La carretilla n.º 4 ya está reparada y ha vuelto a la nave.",
+        "ar": "تم إصلاح الرافعة الشوكية رقم 4 وعادت إلى العمل.",
+        "hi": "फ़ोर्कलिफ़्ट #4 ठीक कर दिया गया है और वापस फ़्लोर पर है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Which forklifts are currently available for the loading dock?",
+        "de": "Welche Gabelstapler stehen gerade für die Laderampe zur Verfügung?",
+        "es": "¿Qué carretillas están disponibles ahora para el muelle de carga?",
+        "ar": "ما الرافعات الشوكية المتاحة حاليًا لرصيف التحميل؟",
+        "hi": "लोडिंग डॉक के लिए अभी कौन से फ़ोर्कलिफ़्ट उपलब्ध हैं?",
+        "mixed": "Loading dock ke liye abhi kaun se forklifts available hain?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Two trailers are arriving at the dock and I need lifts to unload them.",
+        "de": "Zwei Auflieger kommen an die Rampe, und ich brauche Stapler zum Entladen.",
+        "es": "Llegan dos remolques al muelle y necesito carretillas para descargarlos.",
+        "ar": "مقطورتان تصلان إلى الرصيف وأحتاج إلى رافعات لتفريغهما.",
+        "hi": "दो ट्रेलर डॉक पर आ रहे हैं और उन्हें उतारने के लिए मुझे फ़ोर्कलिफ़्ट चाहिए।",
+        "mixed": "Tengo dos trailers llegando al dock y necesito forklifts, ¿cuáles están ready?"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Is Forklift #4 usable right now?",
+        "de": "Ist Gabelstapler Nr. 4 im Moment einsatzbereit?",
+        "es": "¿Se puede usar ahora la carretilla n.º 4?",
+        "ar": "هل يمكن استخدام الرافعة الشوكية رقم 4 الآن؟",
+        "hi": "क्या फ़ोर्कलिफ़्ट #4 अभी इस्तेमाल हो सकता है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "wich forklfts are availble for the dock",
+        "de": "welche stapler sind verfügbr für die rampe",
+        "es": "que carretiyas estan disponibles para el muele",
+        "ar": "اي رافعات متاحه للرصيف",
+        "hi": "डॉक के लिये कौनसे फोर्कलिफ्ट उपलब्द है"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm planning the afternoon shift on the loading dock and want to assign drivers to machines, but I lost track of which forklifts were down for maintenance this week and which ones are running again — what can I actually use today?",
+        "de": "Ich plane die Nachmittagsschicht an der Laderampe und will Fahrer den Geräten zuteilen, habe aber den Überblick verloren, welche Stapler diese Woche in Wartung waren und welche wieder laufen – was kann ich heute tatsächlich einsetzen?",
+        "es": "Estoy planificando el turno de tarde del muelle y quiero asignar conductores a máquinas, pero he perdido la cuenta de qué carretillas estaban en mantenimiento esta semana y cuáles funcionan de nuevo. ¿Cuáles puedo usar hoy?",
+        "ar": "أخطط لمناوبة بعد الظهر على رصيف التحميل وأريد توزيع السائقين على الآلات، لكنني فقدت المتابعة حول الرافعات التي كانت في الصيانة هذا الأسبوع وتلك التي عادت للعمل — ما الذي يمكنني استخدامه اليوم فعلًا؟",
+        "hi": "मैं लोडिंग डॉक की दोपहर की शिफ़्ट प्लान कर रहा हूँ और ड्राइवरों को मशीनें देनी हैं, पर याद नहीं कि इस हफ़्ते कौन से फ़ोर्कलिफ़्ट रखरखाव में थे और कौन से फिर से चल रहे हैं — आज असल में मैं कौन से इस्तेमाल कर सकता हूँ?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Can I put a driver on #4 this afternoon?",
+        "de": "Kann ich heute Nachmittag einen Fahrer auf die Nr. 4 setzen?",
+        "es": "¿Puedo poner a un conductor en la n.º 4 esta tarde?",
+        "ar": "هل يمكنني وضع سائق على رقم 4 بعد الظهر؟",
+        "hi": "क्या आज दोपहर #4 पर ड्राइवर लगा सकता हूँ?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Forklift #4 isn't still out of service, is it?",
+        "de": "Gabelstapler Nr. 4 ist doch nicht mehr außer Betrieb, oder?",
+        "es": "La carretilla n.º 4 ya no está fuera de servicio, ¿verdad?",
+        "ar": "الرافعة رقم 4 لم تعد خارج الخدمة، صحيح؟",
+        "hi": "फ़ोर्कलिफ़्ट #4 अब भी सेवा से बाहर तो नहीं है ना?",
+        "mixed": "Forklift #4 ist doch nicht mehr out of service, oder?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Earlier this week a forklift went down for maintenance. Where do things stand now?",
+        "de": "Anfang der Woche ist ein Stapler in die Wartung gegangen. Wie ist der Stand jetzt?",
+        "es": "A principios de semana una carretilla entró en mantenimiento. ¿Cómo está ahora?",
+        "ar": "في بداية الأسبوع توقفت رافعة للصيانة. ما الوضع الآن؟",
+        "hi": "इस हफ़्ते की शुरुआत में एक फ़ोर्कलिफ़्ट रखरखाव में गया था। अब क्या स्थिति है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "forklift availability today",
+        "de": "Staplerverfügbarkeit heute",
+        "es": "disponibilidad carretillas hoy",
+        "ar": "توفر الرافعات اليوم",
+        "hi": "आज फ़ोर्कलिफ़्ट उपलब्धता",
+        "mixed": "شو الـ forklifts الـ available اليوم للـ dock؟"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "List the forklifts I can use at the dock right now.",
+        "de": "Nenn mir die Stapler, die ich gerade an der Rampe einsetzen kann.",
+        "es": "Enumera las carretillas que puedo usar en el muelle ahora mismo.",
+        "ar": "اذكر الرافعات التي يمكنني استخدامها عند الرصيف الآن.",
+        "hi": "मुझे अभी डॉक पर इस्तेमाल हो सकने वाले फ़ोर्कलिफ़्ट बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "repaired",
+        "de": "repariert",
+        "es": "reparad",
+        "ar": "إصلاح",
+        "hi": "ठीक कर"
+       }
+      ],
+      "absent": [
+       {
+        "text": {
+         "en": "out of service",
+         "de": "außer Betrieb",
+         "es": "fuera de servicio",
+         "ar": "خارج الخدمة",
+         "hi": "सेवा से बाहर"
+        },
+        "unless": [
+         {
+          "en": "repaired",
+          "de": "repariert",
+          "es": "reparad",
+          "ar": "إصلاح",
+          "hi": "ठीक कर"
+         }
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        {
+         "re": "(?<!\\d)4(?!\\d)"
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "origin": "inventorysmart-3"
+  },
+  {
+   "id": "temporal-retail-stock-count",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -20,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Cycle count: 120 units of SKU BT-310 (AA batteries, 8-pack) on hand in aisle 9.",
+        "de": "Inventur: 120 Stück von Artikel BT-310 (AA-Batterien, 8er-Pack) in Gang 9 vorrätig.",
+        "es": "Conteo cíclico: 120 unidades del SKU BT-310 (pilas AA, pack de 8) en el pasillo 9.",
+        "ar": "جرد دوري: 120 وحدة من SKU BT-310 (بطاريات AA، عبوة 8) متوفرة في الممر 9.",
+        "hi": "साइकिल काउंट: गलियारा 9 में SKU BT-310 (AA बैटरी, 8 का पैक) की 120 यूनिट मौजूद।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -2,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Cycle count: 34 units of SKU BT-310 on hand in aisle 9 after the weekend promo.",
+        "de": "Inventur: Nach der Wochenendaktion sind 34 Stück von Artikel BT-310 in Gang 9 vorrätig.",
+        "es": "Conteo cíclico: tras la promo del fin de semana quedan 34 unidades del SKU BT-310 en el pasillo 9.",
+        "ar": "جرد دوري: بعد عرض نهاية الأسبوع تتوفر 34 وحدة من SKU BT-310 في الممر 9.",
+        "hi": "साइकिल काउंट: वीकेंड प्रोमो के बाद गलियारा 9 में SKU BT-310 की 34 यूनिट बची हैं।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "How many units of BT-310 do we have on hand?",
+        "de": "Wie viele Stück von BT-310 haben wir vorrätig?",
+        "es": "¿Cuántas unidades del BT-310 tenemos?",
+        "ar": "كم وحدة من BT-310 لدينا؟",
+        "hi": "हमारे पास BT-310 की कितनी यूनिट हैं?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "A customer wants 50 packs of the AA batteries, BT-310.",
+        "de": "Ein Kunde möchte 50 Packungen der AA-Batterien, BT-310.",
+        "es": "Un cliente quiere 50 paquetes de pilas AA, BT-310.",
+        "ar": "زبون يريد 50 عبوة من بطاريات AA، BT-310.",
+        "hi": "एक ग्राहक को AA बैटरी BT-310 के 50 पैक चाहिए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What's the current stock level of the 8-pack AA batteries?",
+        "de": "Wie hoch ist der aktuelle Bestand der AA-Batterien im 8er-Pack?",
+        "es": "¿Cuál es el stock actual de las pilas AA de 8?",
+        "ar": "ما مستوى المخزون الحالي لبطاريات AA عبوة 8؟",
+        "hi": "8 वाले AA बैटरी पैक का मौजूदा स्टॉक कितना है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "how mny BT-310 on hnad",
+        "de": "wie viel BT-310 auf lagr",
+        "es": "cuantas BT-310 ay en stock",
+        "ar": "كم BT-310 في المخزن",
+        "hi": "BT-310 कितने स्टोक मे है"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm putting together a bulk quote for a school that wants AA batteries, and before I promise anything I need to know how many of the BT-310 eight-packs are really sitting in aisle 9 right now, not what we had a few weeks ago.",
+        "de": "Ich erstelle ein Mengenangebot für eine Schule, die AA-Batterien will, und bevor ich etwas zusage, muss ich wissen, wie viele BT-310-Achterpacks jetzt wirklich in Gang 9 liegen – nicht, was wir vor ein paar Wochen hatten.",
+        "es": "Estoy preparando un presupuesto por volumen para un colegio que quiere pilas AA y antes de prometer nada necesito saber cuántos packs de 8 BT-310 hay de verdad en el pasillo 9 ahora, no lo que teníamos hace unas semanas.",
+        "ar": "أعدّ عرض سعر بالجملة لمدرسة تريد بطاريات AA، وقبل أن أعد بأي شيء أحتاج إلى معرفة عدد عبوات BT-310 الموجودة فعلًا في الممر 9 الآن، لا ما كان لدينا قبل أسابيع.",
+        "hi": "मैं एक स्कूल के लिए AA बैटरी का बल्क कोटेशन बना रहा हूँ, और कुछ भी वादा करने से पहले जानना है कि अभी गलियारा 9 में BT-310 के आठ वाले कितने पैक सच में हैं, न कि कुछ हफ़्ते पहले कितने थे।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Can I sell 50 BT-310 today?",
+        "de": "Kann ich heute 50 BT-310 verkaufen?",
+        "es": "¿Puedo vender hoy 50 BT-310?",
+        "ar": "هل يمكنني بيع 50 من BT-310 اليوم؟",
+        "hi": "क्या मैं आज 50 BT-310 बेच सकता हूँ?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "We don't still have 120 of BT-310, do we?",
+        "de": "Wir haben doch nicht mehr 120 Stück BT-310, oder?",
+        "es": "Ya no tenemos 120 BT-310, ¿verdad?",
+        "ar": "لم يعد لدينا 120 من BT-310، صحيح؟",
+        "hi": "हमारे पास अब भी BT-310 की 120 यूनिट तो नहीं हैं ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "After the last count, where did BT-310 land?",
+        "de": "Wo stand BT-310 nach der letzten Zählung?",
+        "es": "Tras el último conteo, ¿en cuánto quedó el BT-310?",
+        "ar": "بعد آخر جرد، كم أصبح BT-310؟",
+        "hi": "पिछली गिनती के बाद BT-310 कितना रहा?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "BT-310 on hand",
+        "de": "BT-310 Bestand",
+        "es": "existencias BT-310",
+        "ar": "مخزون BT-310",
+        "hi": "BT-310 स्टॉक"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me the current on-hand count for BT-310.",
+        "de": "Sag mir den aktuellen Bestand von BT-310.",
+        "es": "Dime las existencias actuales del BT-310.",
+        "ar": "أخبرني بالكمية المتوفرة حاليًا من BT-310.",
+        "hi": "मुझे BT-310 का मौजूदा स्टॉक बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "34"
+      ],
+      "absent": [
+       {
+        "text": "120",
+        "unless": [
+         "34"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "34"
+       ],
+       "absent": [
+        "120"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "temporal-retail-shelf-price",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -30,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Shelf price for Sunny Crunch cereal is $3.49.",
+        "de": "Der Regalpreis für Sunny-Crunch-Müsli beträgt 3,49 $ ($3.49).",
+        "es": "El precio en lineal de los cereales Sunny Crunch es de $3.49.",
+        "ar": "سعر الرف لحبوب Sunny Crunch هو $3.49.",
+        "hi": "Sunny Crunch सीरियल का शेल्फ़ प्राइस $3.49 है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -3,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "New shelf price for Sunny Crunch cereal from today: $3.99.",
+        "de": "Neuer Regalpreis für Sunny-Crunch-Müsli ab heute: $3.99.",
+        "es": "Nuevo precio en lineal de los cereales Sunny Crunch desde hoy: $3.99.",
+        "ar": "سعر الرف الجديد لحبوب Sunny Crunch اعتبارًا من اليوم: $3.99.",
+        "hi": "आज से Sunny Crunch सीरियल का नया शेल्फ़ प्राइस: $3.99।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the shelf price of Sunny Crunch?",
+        "de": "Was kostet Sunny Crunch im Regal?",
+        "es": "¿Cuál es el precio en lineal de Sunny Crunch?",
+        "ar": "ما سعر الرف لـ Sunny Crunch؟",
+        "hi": "Sunny Crunch का शेल्फ़ प्राइस क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm printing new shelf tags for the cereal aisle.",
+        "de": "Ich drucke neue Regaletiketten für den Müsligang.",
+        "es": "Estoy imprimiendo etiquetas nuevas para el pasillo de cereales.",
+        "ar": "أطبع ملصقات أسعار جديدة لممر الحبوب.",
+        "hi": "मैं सीरियल वाले गलियारे के लिए नए शेल्फ़ टैग छाप रहा हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How much do we charge for a box of Sunny Crunch now?",
+        "de": "Wie viel verlangen wir jetzt für eine Packung Sunny Crunch?",
+        "es": "¿Cuánto cobramos ahora por una caja de Sunny Crunch?",
+        "ar": "كم نتقاضى الآن مقابل علبة Sunny Crunch؟",
+        "hi": "अब Sunny Crunch के एक डिब्बे के कितने लेते हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "sunny crnch price",
+        "de": "preis sunny crnch",
+        "es": "precio suny crunch",
+        "ar": "سعر سني كرنش",
+        "hi": "सनी क्रंच का दाम"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "A customer at register 2 says the Sunny Crunch box rang up differently from what she remembered paying last month, and I want to tell her the correct current shelf price before I call a supervisor over — what is it?",
+        "de": "Eine Kundin an Kasse 2 sagt, Sunny Crunch sei anders abgerechnet worden als letzten Monat, und ich will ihr den korrekten aktuellen Regalpreis nennen, bevor ich die Aufsicht hole – wie hoch ist er?",
+        "es": "Una clienta en la caja 2 dice que la caja de Sunny Crunch le ha salido a un precio distinto del que pagó el mes pasado, y quiero decirle el precio actual correcto antes de llamar a un supervisor. ¿Cuál es?",
+        "ar": "زبونة عند الصندوق 2 تقول إن علبة Sunny Crunch سُجلت بسعر مختلف عما دفعته الشهر الماضي، وأريد أن أخبرها بسعر الرف الحالي الصحيح قبل أن أنادي المشرف — كم هو؟",
+        "hi": "काउंटर 2 पर एक ग्राहक कह रही हैं कि Sunny Crunch का दाम पिछले महीने से अलग लगा, और सुपरवाइज़र बुलाने से पहले मैं उन्हें सही मौजूदा शेल्फ़ प्राइस बताना चाहता हूँ — वह क्या है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Customer disputing the Sunny Crunch price.",
+        "de": "Kundin beanstandet den Preis von Sunny Crunch.",
+        "es": "Clienta que reclama el precio de Sunny Crunch.",
+        "ar": "زبونة تعترض على سعر Sunny Crunch.",
+        "hi": "ग्राहक Sunny Crunch के दाम पर सवाल कर रही है।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Sunny Crunch isn't $3.49 anymore, is it?",
+        "de": "Sunny Crunch kostet nicht mehr $3.49, oder?",
+        "es": "Sunny Crunch ya no cuesta $3.49, ¿verdad?",
+        "ar": "Sunny Crunch لم يعد بسعر $3.49، صحيح؟",
+        "hi": "Sunny Crunch अब $3.49 का नहीं है ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "The cereal price changed a few days ago — what is it now?",
+        "de": "Der Müslipreis hat sich vor ein paar Tagen geändert – wie hoch ist er jetzt?",
+        "es": "El precio del cereal cambió hace unos días; ¿cuál es ahora?",
+        "ar": "تغيّر سعر الحبوب قبل أيام — كم أصبح الآن؟",
+        "hi": "कुछ दिन पहले सीरियल का दाम बदला था — अब कितना है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Sunny Crunch shelf price",
+        "de": "Sunny Crunch Regalpreis",
+        "es": "precio lineal Sunny Crunch",
+        "ar": "سعر رف Sunny Crunch",
+        "hi": "Sunny Crunch शेल्फ़ प्राइस"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the current Sunny Crunch shelf price.",
+        "de": "Gib mir den aktuellen Regalpreis von Sunny Crunch.",
+        "es": "Dame el precio actual en lineal de Sunny Crunch.",
+        "ar": "أعطني سعر الرف الحالي لـ Sunny Crunch.",
+        "hi": "मुझे Sunny Crunch का मौजूदा शेल्फ़ प्राइस दो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "3.99"
+      ],
+      "absent": [
+       {
+        "text": "3.49",
+        "unless": [
+         "3.99"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "3.99"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "temporal-retail-po-status",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -10,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "PO-88120 for 600 cases of canned tomatoes was confirmed by the supplier.",
+        "de": "PO-88120 über 600 Kartons Dosentomaten wurde vom Lieferanten bestätigt.",
+        "es": "El proveedor confirmó la PO-88120 de 600 cajas de tomate en conserva.",
+        "ar": "أكّد المورّد أمر الشراء PO-88120 لـ 600 صندوق من الطماطم المعلبة.",
+        "hi": "सप्लायर ने डिब्बाबंद टमाटर के 600 केस वाले PO-88120 की पुष्टि की।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -6,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "PO-88120 has shipped from the supplier's warehouse.",
+        "de": "PO-88120 hat das Lager des Lieferanten verlassen.",
+        "es": "La PO-88120 ha salido del almacén del proveedor.",
+        "ar": "تم شحن PO-88120 من مستودع المورّد.",
+        "hi": "PO-88120 सप्लायर के गोदाम से शिप हो गया है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s3",
+     "day": -1,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "PO-88120 was delivered and received in full at DC-2.",
+        "de": "PO-88120 wurde geliefert und vollständig in DC-2 vereinnahmt.",
+        "es": "La PO-88120 se entregó y se recibió completa en DC-2.",
+        "ar": "تم تسليم PO-88120 واستلامه بالكامل في DC-2.",
+        "hi": "PO-88120 डिलीवर हो गया और DC-2 में पूरा प्राप्त हुआ।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the status of PO-88120?",
+        "de": "Wie ist der Status von PO-88120?",
+        "es": "¿En qué estado está la PO-88120?",
+        "ar": "ما حالة PO-88120؟",
+        "hi": "PO-88120 का स्टेटस क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The canned tomato section is nearly empty, I'm wondering about our order.",
+        "de": "Das Regal mit Dosentomaten ist fast leer, ich frage mich, was mit unserer Bestellung ist.",
+        "es": "La sección de tomate en conserva está casi vacía y me pregunto por nuestro pedido.",
+        "ar": "قسم الطماطم المعلبة شبه فارغ، أتساءل عن طلبنا.",
+        "hi": "डिब्बाबंद टमाटर वाला सेक्शन लगभग ख़ाली है, सोच रहा हूँ हमारे ऑर्डर का क्या हुआ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Has the canned tomato order arrived yet?",
+        "de": "Ist die Bestellung mit den Dosentomaten schon angekommen?",
+        "es": "¿Ha llegado ya el pedido de tomate en conserva?",
+        "ar": "هل وصل طلب الطماطم المعلبة بعد؟",
+        "hi": "क्या डिब्बाबंद टमाटर का ऑर्डर आ गया?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "staus of PO-88120",
+        "de": "staus von PO-88120",
+        "es": "estado de la PO-88120 porfa",
+        "ar": "شو وضع PO-88120",
+        "hi": "PO-88120 का स्टेटस कया है"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I need to update the regional planner on our open purchase orders before tomorrow's call, and the one I'm unsure about is the big canned tomato order, PO-88120 — is it still on the road or has it actually landed?",
+        "de": "Ich muss den regionalen Planer vor dem Telefonat morgen über unsere offenen Bestellungen informieren, und unsicher bin ich bei der großen Tomatenbestellung PO-88120 – ist sie noch unterwegs oder schon angekommen?",
+        "es": "Tengo que poner al día al planificador regional sobre nuestras órdenes abiertas antes de la llamada de mañana, y la que no tengo clara es el gran pedido de tomate, la PO-88120. ¿Sigue en camino o ya ha llegado?",
+        "ar": "أحتاج إلى إطلاع المخطط الإقليمي على أوامر الشراء المفتوحة قبل مكالمة الغد، والطلب الذي لست متأكدًا منه هو طلب الطماطم الكبير PO-88120 — هل ما زال في الطريق أم وصل فعلًا؟",
+        "hi": "कल की कॉल से पहले मुझे रीजनल प्लानर को हमारे खुले ऑर्डर बताने हैं, और जिसके बारे में पक्का नहीं वह टमाटर का बड़ा ऑर्डर PO-88120 है — क्या वह अभी रास्ते में है या पहुँच गया?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Still waiting on those tomatoes?",
+        "de": "Warten wir noch auf die Tomaten?",
+        "es": "¿Seguimos esperando esos tomates?",
+        "ar": "هل ما زلنا ننتظر تلك الطماطم؟",
+        "hi": "क्या हम अब भी उन टमाटरों का इंतज़ार कर रहे हैं?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "PO-88120 isn't still in transit, is it?",
+        "de": "PO-88120 ist doch nicht mehr unterwegs, oder?",
+        "es": "La PO-88120 ya no está en tránsito, ¿verdad?",
+        "ar": "PO-88120 لم يعد في الطريق، صحيح؟",
+        "hi": "PO-88120 अब भी रास्ते में तो नहीं है ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "The tomato PO we've been tracking — where did it end up?",
+        "de": "Die Tomatenbestellung, die wir verfolgt haben – wo ist sie gelandet?",
+        "es": "La PO de tomates que estábamos siguiendo, ¿en qué quedó?",
+        "ar": "أمر شراء الطماطم الذي كنا نتابعه — إلى أين انتهى؟",
+        "hi": "टमाटर वाला PO जिसे हम ट्रैक कर रहे थे — उसका क्या हुआ?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "PO-88120 status",
+        "de": "Status PO-88120",
+        "es": "estado PO-88120",
+        "ar": "حالة PO-88120",
+        "hi": "PO-88120 स्टेटस"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Update me on PO-88120.",
+        "de": "Gib mir den aktuellen Stand zu PO-88120.",
+        "es": "Ponme al día de la PO-88120.",
+        "ar": "أطلعني على مستجدات PO-88120.",
+        "hi": "मुझे PO-88120 का अपडेट दो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "DC-2"
+      ],
+      "absent": [
+       {
+        "text": {
+         "en": "has shipped",
+         "de": "Lager des Lieferanten verlassen",
+         "es": "ha salido del almacén",
+         "ar": "تم شحن",
+         "hi": "शिप हो गया"
+        },
+        "unless": [
+         "DC-2"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "DC-2"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "temporal-retail-store-manager",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -60,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Store 21's manager is Carlos Ruiz.",
+        "de": "Filialleiter von Filiale 21 ist Carlos Ruiz.",
+        "es": "El encargado de la Tienda 21 es Carlos Ruiz.",
+        "ar": "مدير المتجر 21 هو Carlos Ruiz.",
+        "hi": "स्टोर 21 के मैनेजर Carlos Ruiz हैं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -5,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Carlos Ruiz has handed Store 21 over to Aisha Khan, effective today; Carlos moves to the regional office.",
+        "de": "Carlos Ruiz hat Filiale 21 mit Wirkung von heute an Aisha Khan übergeben; Carlos wechselt ins Regionalbüro.",
+        "es": "Carlos Ruiz ha traspasado la Tienda 21 a Aisha Khan con efecto desde hoy; Carlos pasa a la oficina regional.",
+        "ar": "سلّم Carlos Ruiz المتجر 21 إلى Aisha Khan اعتبارًا من اليوم، وينتقل Carlos إلى المكتب الإقليمي.",
+        "hi": "Carlos Ruiz ने आज से स्टोर 21 Aisha Khan को सौंप दिया है; Carlos रीजनल ऑफ़िस जा रहे हैं।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Who manages Store 21?",
+        "de": "Wer leitet Filiale 21?",
+        "es": "¿Quién dirige la Tienda 21?",
+        "ar": "من يدير المتجر 21؟",
+        "hi": "स्टोर 21 का मैनेजर कौन है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I need sign-off from the Store 21 manager on the markdowns.",
+        "de": "Ich brauche die Freigabe der Filialleitung von 21 für die Preisreduzierungen.",
+        "es": "Necesito la aprobación del encargado de la Tienda 21 para las rebajas.",
+        "ar": "أحتاج إلى موافقة مدير المتجر 21 على التخفيضات.",
+        "hi": "मार्कडाउन के लिए मुझे स्टोर 21 के मैनेजर की मंज़ूरी चाहिए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Who's in charge at Store 21 these days?",
+        "de": "Wer hat in Filiale 21 derzeit das Sagen?",
+        "es": "¿Quién está al frente de la Tienda 21 ahora?",
+        "ar": "من المسؤول عن المتجر 21 هذه الأيام؟",
+        "hi": "आजकल स्टोर 21 का इंचार्ज कौन है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "who manges stor 21",
+        "de": "wer leited filale 21",
+        "es": "quien dirije la tienda 21",
+        "ar": "مين مدير المتجر 21",
+        "hi": "स्टोर 21 का मनेजर कोन है"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm sending out the quarterly safety audit results and each store manager has to acknowledge theirs, so I need the right name for Store 21 — I know there was some reshuffling recently.",
+        "de": "Ich verschicke die Ergebnisse des Quartals-Sicherheitsaudits, und jede Filialleitung muss ihres bestätigen, also brauche ich den richtigen Namen für Filiale 21 – ich weiß, dass es kürzlich Umbesetzungen gab.",
+        "es": "Estoy enviando los resultados de la auditoría trimestral de seguridad y cada encargado tiene que firmar la suya, así que necesito el nombre correcto para la Tienda 21; sé que hubo cambios hace poco.",
+        "ar": "أرسل نتائج تدقيق السلامة الفصلي، وعلى كل مدير متجر أن يقرّ بنتيجته، لذا أحتاج الاسم الصحيح للمتجر 21 — أعلم أنه حدثت تغييرات مؤخرًا.",
+        "hi": "मैं तिमाही सुरक्षा ऑडिट के नतीजे भेज रहा हूँ और हर स्टोर मैनेजर को अपना स्वीकार करना है, इसलिए स्टोर 21 के लिए सही नाम चाहिए — मुझे पता है हाल में कुछ फेरबदल हुआ था।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Store 21 audit sign-off — to whom?",
+        "de": "Audit-Bestätigung Filiale 21 – an wen?",
+        "es": "Firma de la auditoría de la Tienda 21: ¿a quién?",
+        "ar": "توقيع تدقيق المتجر 21 — لمن؟",
+        "hi": "स्टोर 21 ऑडिट साइन-ऑफ़ — किसे?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Carlos isn't running Store 21 anymore, is he? Who is?",
+        "de": "Carlos leitet Filiale 21 nicht mehr, oder? Wer dann?",
+        "es": "Carlos ya no dirige la Tienda 21, ¿verdad? ¿Quién?",
+        "ar": "لم يعد Carlos يدير المتجر 21، صحيح؟ من إذن؟",
+        "hi": "Carlos अब स्टोर 21 नहीं चलाते ना? फिर कौन?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "There was a handover at Store 21 a little while back — who took over?",
+        "de": "In Filiale 21 gab es vor Kurzem eine Übergabe – wer hat übernommen?",
+        "es": "Hubo un traspaso en la Tienda 21 hace poco; ¿quién se hizo cargo?",
+        "ar": "حدث تسليم في المتجر 21 قبل فترة قصيرة — من تولى المسؤولية؟",
+        "hi": "कुछ समय पहले स्टोर 21 में हैंडओवर हुआ था — किसने संभाला?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Store 21 manager",
+        "de": "Filialleitung 21",
+        "es": "encargado Tienda 21",
+        "ar": "مدير المتجر 21",
+        "hi": "स्टोर 21 मैनेजर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me who runs Store 21.",
+        "de": "Sag mir, wer Filiale 21 leitet.",
+        "es": "Dime quién dirige la Tienda 21.",
+        "ar": "أخبرني من يدير المتجر 21.",
+        "hi": "मुझे बताओ स्टोर 21 कौन चलाता है।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "Aisha Khan"
+      ],
+      "absent": [
+       {
+        "text": "Carlos Ruiz",
+        "unless": [
+         "Aisha Khan"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "Aisha Khan"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "temporal-retail-aisle-reset",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -9,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The planogram reset of aisle 12 started today; expect empty bays.",
+        "de": "Der Planogramm-Umbau von Gang 12 hat heute begonnen; mit leeren Fächern ist zu rechnen.",
+        "es": "Hoy ha empezado el cambio de planograma del pasillo 12; habrá huecos vacíos.",
+        "ar": "بدأت اليوم إعادة ترتيب المخطط للممر 12؛ توقعوا رفوفًا فارغة.",
+        "hi": "आज गलियारा 12 का प्लैनोग्राम रीसेट शुरू हुआ; ख़ाली बे दिखेंगे।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -1,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The aisle 12 reset is finished and every bay is restocked.",
+        "de": "Der Umbau von Gang 12 ist abgeschlossen und alle Fächer sind wieder befüllt.",
+        "es": "El cambio del pasillo 12 está terminado y todos los huecos están repuestos.",
+        "ar": "اكتملت إعادة ترتيب الممر 12 وأُعيد تعبئة كل الرفوف.",
+        "hi": "गलियारा 12 का रीसेट पूरा हो गया है और हर बे फिर से भर दिया गया है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Is the aisle 12 reset done?",
+        "de": "Ist der Umbau von Gang 12 fertig?",
+        "es": "¿Está terminado el cambio del pasillo 12?",
+        "ar": "هل انتهت إعادة ترتيب الممر 12؟",
+        "hi": "क्या गलियारा 12 का रीसेट हो गया?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Regional is visiting tomorrow and will walk aisle 12.",
+        "de": "Morgen kommt die Regionalleitung und geht durch Gang 12.",
+        "es": "Mañana viene la dirección regional y recorrerá el pasillo 12.",
+        "ar": "الإدارة الإقليمية ستزورنا غدًا وستتفقد الممر 12.",
+        "hi": "कल रीजनल टीम आ रही है और गलियारा 12 देखेगी।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Are there still empty bays in aisle 12?",
+        "de": "Gibt es in Gang 12 noch leere Fächer?",
+        "es": "¿Sigue habiendo huecos vacíos en el pasillo 12?",
+        "ar": "هل ما زالت هناك رفوف فارغة في الممر 12؟",
+        "hi": "क्या गलियारा 12 में अब भी ख़ाली बे हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "is isle 12 reset finshed",
+        "de": "ist gang 12 umbau fertik",
+        "es": "ya acabo el cambio del pasiyo 12",
+        "ar": "هل خلص ترتيب الممر 12",
+        "hi": "गलियारा 12 का रिसेट खतम हुआ क्या"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I've been off for a week and before I schedule the night crew I need to know whether the planogram work in aisle 12 is still going on or wrapped up — last I heard it had just started and half the shelves were bare.",
+        "de": "Ich war eine Woche weg, und bevor ich die Nachtschicht einplane, muss ich wissen, ob der Planogramm-Umbau in Gang 12 noch läuft oder fertig ist – zuletzt hieß es, er habe gerade begonnen und die Hälfte der Regale sei leer.",
+        "es": "He estado una semana fuera y antes de programar al equipo de noche necesito saber si el cambio de planograma del pasillo 12 sigue o ya terminó; lo último que supe es que acababa de empezar y medio lineal estaba vacío.",
+        "ar": "كنت في إجازة لمدة أسبوع، وقبل أن أجدول طاقم الليل أحتاج إلى معرفة ما إذا كان العمل على المخطط في الممر 12 مستمرًا أم انتهى — آخر ما سمعته أنه بدأ للتو ونصف الرفوف فارغ.",
+        "hi": "मैं एक हफ़्ते छुट्टी पर था, और नाइट क्रू शेड्यूल करने से पहले जानना है कि गलियारा 12 का प्लैनोग्राम काम अभी चल रहा है या ख़त्म हो गया — आख़िरी बार सुना था कि वह अभी शुरू हुआ था और आधी शेल्फ़ ख़ाली थीं।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Do I still need the night crew on aisle 12?",
+        "de": "Brauche ich die Nachtschicht noch für Gang 12?",
+        "es": "¿Sigo necesitando al equipo de noche en el pasillo 12?",
+        "ar": "هل ما زلت أحتاج طاقم الليل في الممر 12؟",
+        "hi": "क्या गलियारा 12 पर अब भी नाइट क्रू चाहिए?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Aisle 12 isn't still half empty, is it?",
+        "de": "Gang 12 ist doch nicht mehr halb leer, oder?",
+        "es": "El pasillo 12 ya no está medio vacío, ¿verdad?",
+        "ar": "الممر 12 لم يعد نصف فارغ، صحيح؟",
+        "hi": "गलियारा 12 अब भी आधा ख़ाली तो नहीं है ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "The reset that started last week — how did it go?",
+        "de": "Der Umbau, der letzte Woche begonnen hat – wie ist er gelaufen?",
+        "es": "El cambio que empezó la semana pasada, ¿cómo acabó?",
+        "ar": "إعادة الترتيب التي بدأت الأسبوع الماضي — كيف انتهت؟",
+        "hi": "जो रीसेट पिछले हफ़्ते शुरू हुआ था — उसका क्या हुआ?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "aisle 12 reset status",
+        "de": "Status Umbau Gang 12",
+        "es": "estado cambio pasillo 12",
+        "ar": "حالة ترتيب الممر 12",
+        "hi": "गलियारा 12 रीसेट स्टेटस"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me where the aisle 12 reset stands.",
+        "de": "Sag mir, wie es um den Umbau von Gang 12 steht.",
+        "es": "Dime cómo va el cambio del pasillo 12.",
+        "ar": "أخبرني بوضع إعادة ترتيب الممر 12.",
+        "hi": "मुझे बताओ गलियारा 12 का रीसेट कहाँ तक पहुँचा।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "finished",
+        "de": "abgeschlossen",
+        "es": "terminado",
+        "ar": "اكتملت",
+        "hi": "पूरा हो गया"
+       }
+      ],
+      "absent": [
+       {
+        "text": {
+         "en": "started today",
+         "de": "heute begonnen",
+         "es": "ha empezado",
+         "ar": "بدأت اليوم",
+         "hi": "शुरू हुआ"
+        },
+        "unless": [
+         {
+          "en": "finished",
+          "de": "abgeschlossen",
+          "es": "terminado",
+          "ar": "اكتملت",
+          "hi": "पूरा हो गया"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "temporal-personal-reading",
+   "domain": "personal",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -45,
+     "at": "22:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "I'm reading Dune at the moment — about a third of the way through.",
+        "de": "Ich lese gerade Dune – ungefähr ein Drittel habe ich durch.",
+        "es": "Ahora mismo estoy leyendo Dune, voy por un tercio.",
+        "ar": "أقرأ رواية Dune حاليًا — أنهيت نحو ثلثها.",
+        "hi": "मैं इन दिनों Dune पढ़ रहा हूँ — लगभग एक तिहाई हो गई है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -12,
+     "at": "08:30",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "I finished Dune last night. Loved the ending.",
+        "de": "Ich habe Dune gestern Abend zu Ende gelesen. Das Ende war großartig.",
+        "es": "Anoche terminé Dune. Me encantó el final.",
+        "ar": "أنهيت Dune الليلة الماضية. أحببت النهاية.",
+        "hi": "कल रात मैंने Dune ख़त्म की। अंत बहुत अच्छा लगा।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Am I still reading Dune?",
+        "de": "Lese ich Dune noch?",
+        "es": "¿Sigo leyendo Dune?",
+        "ar": "هل ما زلت أقرأ Dune؟",
+        "hi": "क्या मैं अब भी Dune पढ़ रहा हूँ?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Recommend what I should pick up after my current book.",
+        "de": "Empfiehl mir, was ich nach meinem aktuellen Buch lesen soll.",
+        "es": "Recomiéndame qué leer después de mi libro actual.",
+        "ar": "اقترح علي ما أقرأه بعد كتابي الحالي.",
+        "hi": "मेरी मौजूदा किताब के बाद क्या पढ़ूँ, सुझाओ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How far along am I with Dune?",
+        "de": "Wie weit bin ich mit Dune?",
+        "es": "¿Por dónde voy con Dune?",
+        "ar": "إلى أين وصلت في Dune؟",
+        "hi": "Dune में मैं कहाँ तक पहुँचा?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "am i stil readin dune",
+        "de": "lese ich dune noch imer",
+        "es": "sigo leyendo dun",
+        "ar": "هل لسا اقرا ديون",
+        "hi": "क्या मै अभी भी ड्यून पढ रहा हु"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "My book club asked everyone to share what they're in the middle of reading this month, and I honestly can't remember if I'm still working through Dune or whether I wrapped it up — what's my status?",
+        "de": "Mein Buchclub will, dass jeder erzählt, was er diesen Monat gerade liest, und ich weiß ehrlich nicht mehr, ob ich noch an Dune lese oder es schon beendet habe – wie ist mein Stand?",
+        "es": "Mi club de lectura pide que cada uno cuente qué está leyendo este mes y, sinceramente, no recuerdo si sigo con Dune o ya lo terminé. ¿Cómo voy?",
+        "ar": "طلب نادي الكتاب من الجميع مشاركة ما يقرؤونه هذا الشهر، وبصراحة لا أتذكر إن كنت ما زلت أقرأ Dune أم أنهيته — ما وضعي؟",
+        "hi": "मेरे बुक क्लब ने सबसे पूछा है कि इस महीने क्या पढ़ रहे हैं, और सच कहूँ तो याद नहीं कि मैं अभी Dune पढ़ रहा हूँ या ख़त्म कर चुका — मेरी स्थिति क्या है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Book club wants my current read.",
+        "de": "Der Buchclub will wissen, was ich gerade lese.",
+        "es": "El club de lectura quiere saber qué leo ahora.",
+        "ar": "نادي الكتاب يريد معرفة ما أقرؤه الآن.",
+        "hi": "बुक क्लब को मेरी मौजूदा किताब चाहिए।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "I'm not still in the middle of Dune, am I?",
+        "de": "Ich bin doch nicht mehr mitten in Dune, oder?",
+        "es": "Ya no voy por la mitad de Dune, ¿verdad?",
+        "ar": "لم أعد في منتصف Dune، صحيح؟",
+        "hi": "मैं अब भी Dune के बीच में तो नहीं हूँ ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Weeks ago I mentioned a book I'd started. Did I ever finish it?",
+        "de": "Vor Wochen habe ich ein Buch erwähnt, das ich angefangen hatte. Habe ich es je beendet?",
+        "es": "Hace semanas mencioné un libro que había empezado. ¿Lo terminé?",
+        "ar": "قبل أسابيع ذكرت كتابًا بدأته. هل أنهيته؟",
+        "hi": "हफ़्तों पहले मैंने एक किताब का ज़िक्र किया था जो शुरू की थी। क्या मैंने उसे ख़त्म किया?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Dune progress",
+        "de": "Fortschritt Dune",
+        "es": "progreso Dune",
+        "ar": "تقدمي في Dune",
+        "hi": "Dune प्रगति"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me whether I've finished Dune.",
+        "de": "Sag mir, ob ich Dune beendet habe.",
+        "es": "Dime si he terminado Dune.",
+        "ar": "أخبرني إن كنت أنهيت Dune.",
+        "hi": "बताओ मैंने Dune ख़त्म की या नहीं।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "finished Dune",
+        "de": "Dune gestern Abend zu Ende",
+        "es": "terminé Dune",
+        "ar": "أنهيت Dune",
+        "hi": "Dune ख़त्म"
+       }
+      ],
+      "absent": [
+       {
+        "text": {
+         "en": "a third of the way",
+         "de": "ein Drittel",
+         "es": "un tercio",
+         "ar": "ثلثها",
+         "hi": "एक तिहाई"
+        },
+        "unless": [
+         {
+          "en": "finished",
+          "de": "zu Ende",
+          "es": "terminé",
+          "ar": "أنهيت",
+          "hi": "ख़त्म"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "temporal-it-vpn-incident",
+   "domain": "it_support",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -2,
+     "at": "07:10",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "INC-5521 opened: the VPN is down for the Madrid office; engineers investigating.",
+        "de": "INC-5521 eröffnet: Das VPN für das Büro in Madrid ist ausgefallen; Techniker untersuchen.",
+        "es": "INC-5521 abierta: la VPN de la oficina de Madrid está caída; los técnicos investigan.",
+        "ar": "فُتحت INC-5521: شبكة VPN معطلة لمكتب مدريد؛ المهندسون يحققون.",
+        "hi": "INC-5521 खोला गया: मैड्रिड ऑफ़िस का VPN बंद है; इंजीनियर जाँच कर रहे हैं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -1,
+     "at": "16:40",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "INC-5521 resolved: VPN access restored for the Madrid office after a certificate renewal.",
+        "de": "INC-5521 gelöst: VPN-Zugang für das Büro in Madrid nach Zertifikatserneuerung wiederhergestellt.",
+        "es": "INC-5521 resuelta: acceso VPN restablecido para la oficina de Madrid tras renovar el certificado.",
+        "ar": "حُلّت INC-5521: أعيد الوصول إلى VPN لمكتب مدريد بعد تجديد الشهادة.",
+        "hi": "INC-5521 हल: सर्टिफ़िकेट रिन्यू करने के बाद मैड्रिड ऑफ़िस का VPN एक्सेस बहाल।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Is the Madrid VPN still down?",
+        "de": "Ist das VPN in Madrid immer noch ausgefallen?",
+        "es": "¿Sigue caída la VPN de Madrid?",
+        "ar": "هل ما زالت VPN مدريد معطلة؟",
+        "hi": "क्या मैड्रिड का VPN अब भी बंद है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "A Madrid colleague says she can't reach the file server from home.",
+        "de": "Eine Kollegin in Madrid sagt, sie kommt von zu Hause nicht auf den Dateiserver.",
+        "es": "Una compañera de Madrid dice que no llega al servidor de archivos desde casa.",
+        "ar": "زميلة في مدريد تقول إنها لا تستطيع الوصول إلى خادم الملفات من المنزل.",
+        "hi": "मैड्रिड की एक सहकर्मी कह रही हैं कि घर से फ़ाइल सर्वर तक नहीं पहुँच पा रहीं।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What's the current state of the Madrid VPN incident?",
+        "de": "Wie ist der aktuelle Stand beim VPN-Vorfall in Madrid?",
+        "es": "¿Cuál es el estado actual de la incidencia de VPN de Madrid?",
+        "ar": "ما الوضع الحالي لحادثة VPN في مدريد؟",
+        "hi": "मैड्रिड VPN वाली घटना की मौजूदा स्थिति क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "is madrd vpn stil broken",
+        "de": "ist madrid vpn imer noch kaput",
+        "es": "sigue rota la vpn de madri",
+        "ar": "هل في بي ان مدريد لسا خربانة",
+        "hi": "मेड्रिड वीपीएन अभी भी खराब है क्या"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm writing the weekly service report and need to say whether the Madrid office still has VPN problems or whether that incident from earlier this week got sorted — what's the latest on it?",
+        "de": "Ich schreibe den wöchentlichen Servicebericht und muss angeben, ob das Büro in Madrid noch VPN-Probleme hat oder ob der Vorfall von Anfang der Woche behoben ist – was ist der neueste Stand?",
+        "es": "Estoy redactando el informe semanal de servicio y tengo que indicar si la oficina de Madrid sigue con problemas de VPN o si la incidencia de principios de semana se resolvió. ¿Qué hay de nuevo?",
+        "ar": "أكتب تقرير الخدمة الأسبوعي وعلي أن أذكر ما إذا كان مكتب مدريد لا يزال يعاني من مشاكل VPN أم أن حادثة بداية الأسبوع حُلّت — ما آخر المستجدات؟",
+        "hi": "मैं साप्ताहिक सर्विस रिपोर्ट लिख रहा हूँ और बताना है कि मैड्रिड ऑफ़िस में अब भी VPN की दिक़्क़त है या इस हफ़्ते की शुरुआत वाली घटना सुलझ गई — ताज़ा जानकारी क्या है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Madrid users complaining again?",
+        "de": "Beschweren sich die Nutzer in Madrid wieder?",
+        "es": "¿Otra vez quejas de los usuarios de Madrid?",
+        "ar": "مستخدمو مدريد يشتكون مجددًا؟",
+        "hi": "मैड्रिड के यूज़र फिर शिकायत कर रहे हैं?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "INC-5521 isn't still open, is it?",
+        "de": "INC-5521 ist doch nicht mehr offen, oder?",
+        "es": "INC-5521 ya no sigue abierta, ¿verdad?",
+        "ar": "INC-5521 لم تعد مفتوحة، صحيح؟",
+        "hi": "INC-5521 अब भी खुला तो नहीं है ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "That VPN outage from a couple of days ago — was it fixed?",
+        "de": "Der VPN-Ausfall von vor ein paar Tagen – wurde er behoben?",
+        "es": "La caída de VPN de hace un par de días, ¿se arregló?",
+        "ar": "انقطاع VPN قبل يومين — هل أُصلح؟",
+        "hi": "दो दिन पहले वाला VPN आउटेज — ठीक हुआ?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "INC-5521 status",
+        "de": "Status INC-5521",
+        "es": "estado INC-5521",
+        "ar": "حالة INC-5521",
+        "hi": "INC-5521 स्टेटस"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the latest on INC-5521.",
+        "de": "Gib mir den neuesten Stand zu INC-5521.",
+        "es": "Dame lo último sobre INC-5521.",
+        "ar": "أعطني آخر مستجدات INC-5521.",
+        "hi": "मुझे INC-5521 का ताज़ा हाल दो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "resolved",
+        "de": "gelöst",
+        "es": "resuelta",
+        "ar": "حُلّت",
+        "hi": "INC-5521 हल"
+       }
+      ],
+      "absent": [
+       {
+        "text": {
+         "en": "engineers investigating",
+         "de": "Techniker untersuchen",
+         "es": "los técnicos investigan",
+         "ar": "المهندسون يحققون",
+         "hi": "इंजीनियर जाँच कर रहे हैं"
+        },
+        "unless": [
+         {
+          "en": "resolved",
+          "de": "gelöst",
+          "es": "resuelta",
+          "ar": "حُلّت",
+          "hi": "INC-5521 हल"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "temporal-finance-leave",
+   "domain": "finance_hr",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -50,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Maria Lopez from accounts payable is on parental leave until further notice.",
+        "de": "Maria Lopez aus der Kreditorenbuchhaltung ist bis auf Weiteres in Elternzeit.",
+        "es": "Maria Lopez, de cuentas a pagar, está de baja parental hasta nuevo aviso.",
+        "ar": "Maria Lopez من قسم الحسابات الدائنة في إجازة والدية حتى إشعار آخر.",
+        "hi": "अकाउंट्स पेएबल की Maria Lopez अगली सूचना तक पैरेंटल लीव पर हैं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -3,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Maria Lopez is back from parental leave as of Monday and taking her old desk again.",
+        "de": "Maria Lopez ist seit Montag aus der Elternzeit zurück und sitzt wieder an ihrem alten Platz.",
+        "es": "Maria Lopez ha vuelto de la baja parental desde el lunes y retoma su puesto.",
+        "ar": "عادت Maria Lopez من الإجازة الوالدية منذ الاثنين وتعود إلى مكتبها القديم.",
+        "hi": "Maria Lopez सोमवार से पैरेंटल लीव से लौट आई हैं और फिर से अपनी पुरानी जगह संभाल रही हैं।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Is Maria Lopez available for the audit kickoff?",
+        "de": "Ist Maria Lopez für den Audit-Auftakt verfügbar?",
+        "es": "¿Está disponible Maria Lopez para el arranque de la auditoría?",
+        "ar": "هل Maria Lopez متاحة لاجتماع انطلاق التدقيق؟",
+        "hi": "क्या Maria Lopez ऑडिट किकऑफ़ के लिए उपलब्ध हैं?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I want accounts payable represented at Thursday's audit meeting.",
+        "de": "Ich möchte, dass die Kreditorenbuchhaltung beim Audit-Termin am Donnerstag vertreten ist.",
+        "es": "Quiero que cuentas a pagar esté representada en la reunión de auditoría del jueves.",
+        "ar": "أريد تمثيل قسم الحسابات الدائنة في اجتماع التدقيق يوم الخميس.",
+        "hi": "मैं चाहता हूँ कि गुरुवार की ऑडिट मीटिंग में अकाउंट्स पेएबल से कोई हो।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Is Maria still on leave?",
+        "de": "Ist Maria noch in Elternzeit?",
+        "es": "¿Sigue Maria de baja?",
+        "ar": "هل ما زالت ماريا في إجازة؟",
+        "hi": "क्या मारिया अब भी छुट्टी पर हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "is maria lopz bak from leave",
+        "de": "ist maria lopez zurük aus der elternzeit",
+        "es": "ya volvio maria lopes de la baja",
+        "ar": "هل رجعت ماريا لوبيز من الاجازه",
+        "hi": "मारिया लोपेज छुट्टी से वापस आई क्या"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm building the attendee list for the external audit kickoff, and I'd normally include Maria Lopez from accounts payable, but the last I knew she was out on parental leave — can I count on her or should I ask someone else?",
+        "de": "Ich stelle die Teilnehmerliste für den Auftakt der externen Prüfung zusammen und würde normalerweise Maria Lopez aus der Kreditorenbuchhaltung einladen, aber zuletzt war sie in Elternzeit – kann ich mit ihr rechnen oder soll ich jemand anderen fragen?",
+        "es": "Estoy armando la lista de asistentes al arranque de la auditoría externa y normalmente incluiría a Maria Lopez de cuentas a pagar, pero lo último que supe es que estaba de baja parental. ¿Cuento con ella o pregunto a otra persona?",
+        "ar": "أعدّ قائمة الحضور لاجتماع انطلاق التدقيق الخارجي، وعادةً أضم Maria Lopez من الحسابات الدائنة، لكن آخر ما عرفته أنها في إجازة والدية — هل أعتمد عليها أم أسأل شخصًا آخر؟",
+        "hi": "मैं बाहरी ऑडिट किकऑफ़ की उपस्थित सूची बना रहा हूँ, और आम तौर पर अकाउंट्स पेएबल से Maria Lopez को रखता, पर आख़िरी जानकारी यह थी कि वह पैरेंटल लीव पर हैं — क्या उन पर भरोसा करूँ या किसी और से पूछूँ?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Can Maria join Thursday?",
+        "de": "Kann Maria am Donnerstag dabei sein?",
+        "es": "¿Puede venir Maria el jueves?",
+        "ar": "هل يمكن لماريا الانضمام الخميس؟",
+        "hi": "क्या मारिया गुरुवार को आ सकती हैं?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Maria isn't still on parental leave, is she?",
+        "de": "Maria ist doch nicht mehr in Elternzeit, oder?",
+        "es": "Maria ya no está de baja parental, ¿verdad?",
+        "ar": "ماريا لم تعد في الإجازة الوالدية، صحيح؟",
+        "hi": "मारिया अब भी पैरेंटल लीव पर तो नहीं हैं ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Any update on Maria's leave since we last talked about it?",
+        "de": "Gibt es seit unserem letzten Gespräch Neues zu Marias Elternzeit?",
+        "es": "¿Alguna novedad sobre la baja de Maria desde la última vez que hablamos?",
+        "ar": "هل من جديد بشأن إجازة ماريا منذ آخر حديث لنا؟",
+        "hi": "पिछली बार बात के बाद से मारिया की छुट्टी पर कोई अपडेट?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Maria Lopez availability",
+        "de": "Verfügbarkeit Maria Lopez",
+        "es": "disponibilidad Maria Lopez",
+        "ar": "توفر Maria Lopez",
+        "hi": "Maria Lopez उपलब्धता"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Check if Maria Lopez is back at work.",
+        "de": "Prüf, ob Maria Lopez wieder arbeitet.",
+        "es": "Comprueba si Maria Lopez ha vuelto al trabajo.",
+        "ar": "تحقق مما إذا عادت Maria Lopez إلى العمل.",
+        "hi": "जाँचो कि Maria Lopez काम पर लौटीं या नहीं।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "is back",
+        "de": "zurück",
+        "es": "ha vuelto",
+        "ar": "عادت",
+        "hi": "लौट आई"
+       }
+      ],
+      "absent": [
+       {
+        "text": {
+         "en": "until further notice",
+         "de": "bis auf Weiteres",
+         "es": "hasta nuevo aviso",
+         "ar": "حتى إشعار آخر",
+         "hi": "अगली सूचना तक"
+        },
+        "unless": [
+         {
+          "en": "is back",
+          "de": "zurück",
+          "es": "ha vuelto",
+          "ar": "عادت",
+          "hi": "लौट आई"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "temporal-field-compressor",
+   "domain": "field_service",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -6,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Work order WO-3310: the compressor at Site 12 failed; unit offline.",
+        "de": "Arbeitsauftrag WO-3310: Der Kompressor an Standort 12 ist ausgefallen; Anlage offline.",
+        "es": "Orden de trabajo WO-3310: el compresor del Emplazamiento 12 ha fallado; equipo fuera de línea.",
+        "ar": "أمر العمل WO-3310: تعطل الضاغط في الموقع 12؛ الوحدة متوقفة.",
+        "hi": "वर्क ऑर्डर WO-3310: साइट 12 का कंप्रेसर ख़राब; यूनिट ऑफ़लाइन।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -1,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "WO-3310 closed: the Site 12 compressor was replaced and the unit is running normally.",
+        "de": "WO-3310 abgeschlossen: Der Kompressor an Standort 12 wurde ersetzt und die Anlage läuft normal.",
+        "es": "WO-3310 cerrada: se sustituyó el compresor del Emplazamiento 12 y el equipo funciona con normalidad.",
+        "ar": "أُغلق WO-3310: استُبدل ضاغط الموقع 12 والوحدة تعمل بشكل طبيعي.",
+        "hi": "WO-3310 बंद: साइट 12 का कंप्रेसर बदल दिया गया और यूनिट सामान्य चल रही है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Is the compressor at Site 12 working?",
+        "de": "Funktioniert der Kompressor an Standort 12?",
+        "es": "¿Funciona el compresor del Emplazamiento 12?",
+        "ar": "هل يعمل الضاغط في الموقع 12؟",
+        "hi": "क्या साइट 12 का कंप्रेसर चल रहा है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The customer at Site 12 asked whether we need to come back out.",
+        "de": "Der Kunde an Standort 12 fragt, ob wir noch mal rausfahren müssen.",
+        "es": "El cliente del Emplazamiento 12 pregunta si tenemos que volver.",
+        "ar": "سأل العميل في الموقع 12 إن كنا بحاجة للعودة.",
+        "hi": "साइट 12 के ग्राहक ने पूछा है कि क्या हमें फिर आना पड़ेगा।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What's the status of WO-3310?",
+        "de": "Wie ist der Status von WO-3310?",
+        "es": "¿En qué estado está la WO-3310?",
+        "ar": "ما حالة WO-3310؟",
+        "hi": "WO-3310 का स्टेटस क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "is site 12 compresser runing",
+        "de": "läuft der kompresor an standort 12",
+        "es": "funsiona el compresor del sitio 12",
+        "ar": "هل ضاغط الموقع 12 شغال",
+        "hi": "साईट 12 का कम्प्रेसर चल रहा है क्या"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm reviewing open jobs for the north region and there's a note from last week about a failed compressor at Site 12 — I need to know if that unit is still offline or if someone has already dealt with it before I dispatch a tech.",
+        "de": "Ich gehe die offenen Aufträge der Region Nord durch, und es gibt eine Notiz von letzter Woche über einen ausgefallenen Kompressor an Standort 12 – ich muss wissen, ob die Anlage noch offline ist oder ob sich schon jemand darum gekümmert hat, bevor ich einen Techniker schicke.",
+        "es": "Estoy revisando los trabajos abiertos de la zona norte y hay una nota de la semana pasada sobre un compresor averiado en el Emplazamiento 12; necesito saber si sigue fuera de línea o si alguien ya lo resolvió antes de mandar a un técnico.",
+        "ar": "أراجع الأعمال المفتوحة للمنطقة الشمالية، وهناك ملاحظة من الأسبوع الماضي عن ضاغط معطل في الموقع 12 — أحتاج أن أعرف إن كانت الوحدة لا تزال متوقفة أم أن أحدًا عالجها قبل أن أرسل فنيًا.",
+        "hi": "मैं नॉर्थ रीजन के खुले काम देख रहा हूँ और पिछले हफ़्ते का एक नोट है कि साइट 12 का कंप्रेसर ख़राब हुआ — टेक्नीशियन भेजने से पहले जानना है कि यूनिट अब भी ऑफ़लाइन है या किसी ने उसे ठीक कर दिया।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Do I dispatch someone to Site 12?",
+        "de": "Schicke ich jemanden zu Standort 12?",
+        "es": "¿Mando a alguien al Emplazamiento 12?",
+        "ar": "هل أرسل أحدًا إلى الموقع 12؟",
+        "hi": "क्या साइट 12 पर किसी को भेजूँ?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Site 12's compressor isn't still offline, is it?",
+        "de": "Der Kompressor an Standort 12 ist doch nicht mehr offline, oder?",
+        "es": "El compresor del Emplazamiento 12 ya no está fuera de línea, ¿verdad?",
+        "ar": "ضاغط الموقع 12 لم يعد متوقفًا، صحيح؟",
+        "hi": "साइट 12 का कंप्रेसर अब भी ऑफ़लाइन तो नहीं है ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "That compressor failure from last week — what happened in the end?",
+        "de": "Der Kompressorausfall von letzter Woche – was ist am Ende passiert?",
+        "es": "La avería del compresor de la semana pasada, ¿cómo terminó?",
+        "ar": "عطل الضاغط من الأسبوع الماضي — ماذا حدث في النهاية؟",
+        "hi": "पिछले हफ़्ते वाली कंप्रेसर ख़राबी — आख़िर में क्या हुआ?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "WO-3310",
+        "de": "WO-3310",
+        "es": "WO-3310",
+        "ar": "WO-3310",
+        "hi": "WO-3310"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me if Site 12 needs another visit.",
+        "de": "Sag mir, ob Standort 12 noch einen Einsatz braucht.",
+        "es": "Dime si el Emplazamiento 12 necesita otra visita.",
+        "ar": "أخبرني إن كان الموقع 12 يحتاج زيارة أخرى.",
+        "hi": "बताओ क्या साइट 12 पर फिर जाना होगा।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "replaced",
+        "de": "ersetzt",
+        "es": "sustituyó",
+        "ar": "استُبدل",
+        "hi": "बदल दिया"
+       }
+      ],
+      "absent": [
+       {
+        "text": {
+         "en": "unit offline",
+         "de": "Anlage offline",
+         "es": "fuera de línea",
+         "ar": "الوحدة متوقفة",
+         "hi": "यूनिट ऑफ़लाइन"
+        },
+        "unless": [
+         {
+          "en": "replaced",
+          "de": "ersetzt",
+          "es": "sustituyó",
+          "ar": "استُبدل",
+          "hi": "बदल दिया"
+         }
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

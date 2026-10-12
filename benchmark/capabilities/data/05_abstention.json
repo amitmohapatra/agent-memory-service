@@ -1,0 +1,1494 @@
+{
+ "capability": "abstention",
+ "number": 5,
+ "title": "Abstention",
+ "definition": "Admit not knowing instead of inventing a memory: when nothing on file answers the question, say so (the context reports INSUFFICIENT) rather than serve a near miss or a guess.",
+ "scenarios": [
+  {
+   "id": "abstain-retail-inspector-phone",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -10,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The OSHA inspection of Warehouse 3 is scheduled for the 24th.",
+        "de": "Die OSHA-Inspektion von Lager 3 ist für den 24. angesetzt.",
+        "es": "La inspección de OSHA del Almacén 3 está programada para el día 24.",
+        "ar": "تفتيش OSHA للمستودع 3 مقرر في اليوم 24.",
+        "hi": "वेयरहाउस 3 का OSHA निरीक्षण 24 तारीख़ को तय है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Our own safety manager is Rita Gomez, extension 300.",
+        "de": "Unsere eigene Sicherheitsbeauftragte ist Rita Gomez, Durchwahl 300.",
+        "es": "Nuestra responsable de seguridad es Rita Gomez, extensión 300.",
+        "ar": "مديرة السلامة لدينا هي Rita Gomez، التحويلة 300.",
+        "hi": "हमारी अपनी सेफ़्टी मैनेजर Rita Gomez हैं, एक्सटेंशन 300।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What is the cell phone number for OSHA safety inspector John Doe?",
+        "de": "Wie lautet die Handynummer des OSHA-Sicherheitsinspektors John Doe?",
+        "es": "¿Cuál es el número de móvil del inspector de seguridad de OSHA John Doe?",
+        "ar": "ما رقم الهاتف المحمول لمفتش السلامة في OSHA John Doe؟",
+        "hi": "OSHA सेफ़्टी इंस्पेक्टर John Doe का मोबाइल नंबर क्या है?",
+        "mixed": "OSHA inspector John Doe ka cell phone number kya hai?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I need to reach the OSHA inspector, John Doe, on his mobile before the visit.",
+        "de": "Ich muss den OSHA-Inspektor John Doe vor dem Besuch auf dem Handy erreichen.",
+        "es": "Necesito localizar al inspector de OSHA, John Doe, en su móvil antes de la visita.",
+        "ar": "أحتاج للتواصل مع مفتش OSHA John Doe على هاتفه المحمول قبل الزيارة.",
+        "hi": "मुझे विज़िट से पहले OSHA इंस्पेक्टर John Doe से उनके मोबाइल पर बात करनी है।",
+        "mixed": "بدي أحكي مع الـ OSHA inspector John Doe على الـ mobile قبل الزيارة."
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How can I call John Doe from OSHA directly?",
+        "de": "Wie kann ich John Doe von der OSHA direkt anrufen?",
+        "es": "¿Cómo puedo llamar directamente a John Doe de OSHA?",
+        "ar": "كيف أتصل بـ John Doe من OSHA مباشرة؟",
+        "hi": "OSHA के John Doe को सीधे कैसे फ़ोन करूँ?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "john does cel number osha",
+        "de": "handynumer von john doe osha",
+        "es": "numero de movil de jon doe de osha",
+        "ar": "رقم جوال جون دو اوشا",
+        "hi": "जॉन डो ओशा का मोबाईल नंबर"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The inspection is coming up and I want to confirm what time the inspector will arrive and whether he needs a parking spot, so could you give me John Doe's personal cell number so I can text him directly instead of going through the main office?",
+        "de": "Die Inspektion steht an und ich will bestätigen, wann der Inspektor kommt und ob er einen Parkplatz braucht. Kannst du mir die private Handynummer von John Doe geben, damit ich ihm direkt schreiben kann statt über die Zentrale?",
+        "es": "Se acerca la inspección y quiero confirmar a qué hora llega el inspector y si necesita plaza de aparcamiento. ¿Me das el móvil personal de John Doe para escribirle directamente en vez de pasar por la oficina central?",
+        "ar": "اقترب موعد التفتيش وأريد تأكيد موعد وصول المفتش وما إذا كان يحتاج موقفًا للسيارة، فهل تعطيني رقم الجوال الشخصي لـ John Doe لأراسله مباشرة بدل المرور بالمكتب الرئيسي؟",
+        "hi": "निरीक्षण नज़दीक है और मैं पक्का करना चाहता हूँ कि इंस्पेक्टर कब आएँगे और उन्हें पार्किंग चाहिए या नहीं, तो क्या तुम मुझे John Doe का पर्सनल मोबाइल नंबर दोगे ताकि मैं मेन ऑफ़िस के बजाय सीधे मैसेज कर सकूँ?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Text the OSHA inspector about parking.",
+        "de": "Schreib dem OSHA-Inspektor wegen des Parkplatzes.",
+        "es": "Escríbele al inspector de OSHA por lo del aparcamiento.",
+        "ar": "راسل مفتش OSHA بخصوص الموقف.",
+        "hi": "OSHA इंस्पेक्टर को पार्किंग के बारे में मैसेज करो।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not Rita's extension — John Doe's cell. What is it?",
+        "de": "Nicht Ritas Durchwahl – John Does Handy. Wie lautet die Nummer?",
+        "es": "No la extensión de Rita, el móvil de John Doe. ¿Cuál es?",
+        "ar": "ليس تحويلة ريتا — بل جوال John Doe. ما هو؟",
+        "hi": "रीटा का एक्सटेंशन नहीं — John Doe का मोबाइल। वह क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Did I ever give you the OSHA inspector's mobile number? What was it?",
+        "de": "Habe ich dir je die Handynummer des OSHA-Inspektors gegeben? Wie lautete sie?",
+        "es": "¿Te di alguna vez el móvil del inspector de OSHA? ¿Cuál era?",
+        "ar": "هل أعطيتك يومًا رقم جوال مفتش OSHA؟ ما كان؟",
+        "hi": "क्या मैंने कभी तुम्हें OSHA इंस्पेक्टर का मोबाइल नंबर दिया था? वह क्या था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "John Doe OSHA cell",
+        "de": "John Doe OSHA Handy",
+        "es": "móvil John Doe OSHA",
+        "ar": "جوال John Doe OSHA",
+        "hi": "John Doe OSHA मोबाइल",
+        "mixed": "Handynummer vom OSHA inspector John Doe?"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me John Doe's cell number.",
+        "de": "Gib mir die Handynummer von John Doe.",
+        "es": "Dame el móvil de John Doe.",
+        "ar": "أعطني رقم جوال John Doe.",
+        "hi": "मुझे John Doe का मोबाइल नंबर दो।",
+        "mixed": "Dame el cell number del OSHA inspector John Doe, porfa."
+       }
+      }
+     ],
+     "expect": {
+      "abstain": true,
+      "answer": {
+       "abstain": true,
+       "absent": [
+        {
+         "re": "\\d{3}[-. )]*\\d{3}[-. ]*\\d{4}"
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "origin": "inventorysmart-5"
+  },
+  {
+   "id": "abstain-retail-rep-email",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -30,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Our dairy supplier is Lakeside Dairy; our account there is LD-4410.",
+        "de": "Unser Molkereilieferant ist Lakeside Dairy; unser Konto dort ist LD-4410.",
+        "es": "Nuestro proveedor de lácteos es Lakeside Dairy; nuestra cuenta allí es LD-4410.",
+        "ar": "مورّد الألبان لدينا هو Lakeside Dairy، وحسابنا لديهم LD-4410.",
+        "hi": "हमारा डेयरी सप्लायर Lakeside Dairy है; वहाँ हमारा अकाउंट LD-4410 है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Orders to Lakeside go in through their supplier portal.",
+        "de": "Bestellungen bei Lakeside laufen über ihr Lieferantenportal.",
+        "es": "Los pedidos a Lakeside se hacen por su portal de proveedores.",
+        "ar": "تُرسل الطلبات إلى Lakeside عبر بوابة الموردين الخاصة بهم.",
+        "hi": "Lakeside को ऑर्डर उनके सप्लायर पोर्टल से जाते हैं।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the email address of our Lakeside Dairy sales rep?",
+        "de": "Wie lautet die E-Mail-Adresse unseres Vertriebsmitarbeiters bei Lakeside Dairy?",
+        "es": "¿Cuál es el correo de nuestro comercial en Lakeside Dairy?",
+        "ar": "ما البريد الإلكتروني لمندوب مبيعاتنا في Lakeside Dairy؟",
+        "hi": "Lakeside Dairy में हमारे सेल्स प्रतिनिधि का ईमेल पता क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I want to email our rep at Lakeside about a price increase.",
+        "de": "Ich will unserem Betreuer bei Lakeside wegen einer Preiserhöhung mailen.",
+        "es": "Quiero escribir un correo a nuestro comercial de Lakeside por una subida de precios.",
+        "ar": "أريد مراسلة مندوبنا في Lakeside بخصوص زيادة في الأسعار.",
+        "hi": "मैं क़ीमत बढ़ने के बारे में Lakeside के हमारे प्रतिनिधि को ईमेल करना चाहता हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Who's our rep at Lakeside Dairy and how do I email them?",
+        "de": "Wer betreut uns bei Lakeside Dairy und wie erreiche ich die Person per E-Mail?",
+        "es": "¿Quién es nuestro comercial en Lakeside Dairy y cómo le escribo?",
+        "ar": "من مندوبنا في Lakeside Dairy وكيف أراسله؟",
+        "hi": "Lakeside Dairy में हमारा प्रतिनिधि कौन है और उसे ईमेल कैसे करूँ?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "lakesid dairy rep emial",
+        "de": "lakeside dairy betreuer emal",
+        "es": "correo del comersial de lakeside",
+        "ar": "ايميل مندوب ليكسايد",
+        "hi": "लेकसाइड डेरी रेप का इमेल"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Lakeside just raised the price of the gallon milk by eight percent without notice, and I'd like to write directly to our sales representative there instead of using the portal, so what's their email address?",
+        "de": "Lakeside hat gerade ohne Ankündigung den Preis der Gallone Milch um acht Prozent erhöht, und ich möchte direkt an unseren Vertriebsmitarbeiter dort schreiben statt übers Portal – wie lautet die E-Mail-Adresse?",
+        "es": "Lakeside acaba de subir un ocho por ciento el galón de leche sin avisar y quiero escribir directamente a nuestro comercial en vez de usar el portal. ¿Cuál es su correo?",
+        "ar": "رفعت Lakeside للتو سعر جالون الحليب ثمانية بالمئة دون إشعار، وأود الكتابة مباشرة إلى مندوب المبيعات لديهم بدل البوابة، فما بريده الإلكتروني؟",
+        "hi": "Lakeside ने बिना बताए गैलन दूध की क़ीमत आठ प्रतिशत बढ़ा दी है, और मैं पोर्टल के बजाय सीधे वहाँ के सेल्स प्रतिनिधि को लिखना चाहता हूँ, तो उनका ईमेल पता क्या है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Email Lakeside's rep.",
+        "de": "Maile dem Betreuer von Lakeside.",
+        "es": "Escribe al comercial de Lakeside.",
+        "ar": "راسل مندوب Lakeside.",
+        "hi": "Lakeside के प्रतिनिधि को ईमेल करो।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not the portal — the rep's own email at Lakeside. What is it?",
+        "de": "Nicht das Portal – die eigene E-Mail des Betreuers bei Lakeside. Wie lautet sie?",
+        "es": "No el portal, el correo del comercial de Lakeside. ¿Cuál es?",
+        "ar": "ليس البوابة — بل البريد الخاص بالمندوب في Lakeside. ما هو؟",
+        "hi": "पोर्टल नहीं — Lakeside प्रतिनिधि का अपना ईमेल। वह क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "I think I told you the Lakeside rep's email once. What was it?",
+        "de": "Ich glaube, ich habe dir mal die E-Mail des Lakeside-Betreuers gesagt. Wie lautete sie?",
+        "es": "Creo que una vez te di el correo del comercial de Lakeside. ¿Cuál era?",
+        "ar": "أظن أنني أخبرتك مرة ببريد مندوب Lakeside. ما كان؟",
+        "hi": "मुझे लगता है मैंने एक बार Lakeside प्रतिनिधि का ईमेल बताया था। वह क्या था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Lakeside rep email",
+        "de": "E-Mail Betreuer Lakeside",
+        "es": "correo comercial Lakeside",
+        "ar": "بريد مندوب Lakeside",
+        "hi": "Lakeside प्रतिनिधि ईमेल"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the Lakeside Dairy rep's email address.",
+        "de": "Gib mir die E-Mail-Adresse des Betreuers bei Lakeside Dairy.",
+        "es": "Dame el correo del comercial de Lakeside Dairy.",
+        "ar": "أعطني البريد الإلكتروني لمندوب Lakeside Dairy.",
+        "hi": "मुझे Lakeside Dairy प्रतिनिधि का ईमेल पता दो।"
+       }
+      }
+     ],
+     "expect": {
+      "abstain": true,
+      "answer": {
+       "abstain": true,
+       "absent": [
+        {
+         "re": "[\\w.+-]+@[\\w-]+\\.[\\w.]+"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "abstain-retail-lot-expiry",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -6,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Received lot L-7781 of infant formula, 48 cans, from NutriBaby.",
+        "de": "Wareneingang: Charge L-7781 Säuglingsnahrung, 48 Dosen, von NutriBaby.",
+        "es": "Recibido el lote L-7781 de leche de fórmula, 48 latas, de NutriBaby.",
+        "ar": "استلام الدفعة L-7781 من حليب الرضع، 48 علبة، من NutriBaby.",
+        "hi": "NutriBaby से शिशु फ़ॉर्मूला का लॉट L-7781 मिला, 48 डिब्बे।"
+       }
+      },
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Lot L-7702 of infant formula expires in March next year.",
+        "de": "Charge L-7702 Säuglingsnahrung läuft im März nächsten Jahres ab.",
+        "es": "El lote L-7702 de leche de fórmula caduca en marzo del año que viene.",
+        "ar": "تنتهي صلاحية الدفعة L-7702 من حليب الرضع في مارس من العام المقبل.",
+        "hi": "शिशु फ़ॉर्मूला का लॉट L-7702 अगले साल मार्च में एक्सपायर होगा।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "When does lot L-7781 expire?",
+        "de": "Wann läuft Charge L-7781 ab?",
+        "es": "¿Cuándo caduca el lote L-7781?",
+        "ar": "متى تنتهي صلاحية الدفعة L-7781؟",
+        "hi": "लॉट L-7781 कब एक्सपायर होगा?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm planning markdowns for formula that's close to its date, starting with L-7781.",
+        "de": "Ich plane Preisabschriften für Säuglingsnahrung kurz vor Ablauf, angefangen mit L-7781.",
+        "es": "Estoy planificando rebajas para la fórmula que está cerca de caducar, empezando por el L-7781.",
+        "ar": "أخطط لتخفيضات على الحليب القريب من انتهاء صلاحيته، بدءًا بـ L-7781.",
+        "hi": "मैं तारीख़ के क़रीब वाले फ़ॉर्मूला पर मार्कडाउन प्लान कर रहा हूँ, शुरुआत L-7781 से।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What's the best-before date on the NutriBaby lot L-7781?",
+        "de": "Welches Mindesthaltbarkeitsdatum hat die NutriBaby-Charge L-7781?",
+        "es": "¿Qué fecha de consumo preferente tiene el lote L-7781 de NutriBaby?",
+        "ar": "ما تاريخ انتهاء الصلاحية على دفعة NutriBaby L-7781؟",
+        "hi": "NutriBaby के लॉट L-7781 की बेस्ट-बिफ़ोर तारीख़ क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "expiry for lot L-7781",
+        "de": "ablaufdatum carge L-7781",
+        "es": "caducidad lote L-7781",
+        "ar": "انتهاء صلاحيه L-7781",
+        "hi": "L-7781 की एक्सपायरी"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "A parent at the customer service desk is asking how long the infant formula from the latest NutriBaby delivery is good for — that's lot L-7781 — and I'd like to give her an exact date rather than guessing.",
+        "de": "Eine Mutter am Kundenservice fragt, wie lange die Säuglingsnahrung aus der letzten NutriBaby-Lieferung haltbar ist – das ist Charge L-7781 – und ich möchte ihr ein genaues Datum nennen statt zu raten.",
+        "es": "Una madre en atención al cliente pregunta cuánto dura la leche de fórmula de la última entrega de NutriBaby, el lote L-7781, y quiero darle una fecha exacta en vez de adivinar.",
+        "ar": "أمّ عند مكتب خدمة العملاء تسأل عن مدة صلاحية حليب الرضع من آخر شحنة NutriBaby — وهي الدفعة L-7781 — وأريد أن أعطيها تاريخًا دقيقًا بدل التخمين.",
+        "hi": "कस्टमर सर्विस डेस्क पर एक अभिभावक पूछ रही हैं कि NutriBaby की ताज़ा डिलीवरी का शिशु फ़ॉर्मूला — लॉट L-7781 — कब तक ठीक रहेगा, और मैं अंदाज़ा नहीं, सही तारीख़ बताना चाहता हूँ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Markdown date for L-7781?",
+        "de": "Abschriftsdatum für L-7781?",
+        "es": "¿Fecha de rebaja para el L-7781?",
+        "ar": "موعد تخفيض L-7781؟",
+        "hi": "L-7781 का मार्कडाउन दिन?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "It's not the L-7702 date I need — when does L-7781 expire?",
+        "de": "Ich brauche nicht das Datum von L-7702 – wann läuft L-7781 ab?",
+        "es": "No necesito la fecha del L-7702; ¿cuándo caduca el L-7781?",
+        "ar": "لا أحتاج تاريخ L-7702 — متى تنتهي صلاحية L-7781؟",
+        "hi": "मुझे L-7702 की तारीख़ नहीं चाहिए — L-7781 कब एक्सपायर होगा?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Did we record the expiry of the formula lot that came in last week?",
+        "de": "Haben wir das Ablaufdatum der Säuglingsnahrungs-Charge von letzter Woche erfasst?",
+        "es": "¿Registramos la caducidad del lote de fórmula que llegó la semana pasada?",
+        "ar": "هل سجّلنا تاريخ انتهاء دفعة الحليب التي وصلت الأسبوع الماضي؟",
+        "hi": "क्या हमने पिछले हफ़्ते आए फ़ॉर्मूला लॉट की एक्सपायरी दर्ज की थी?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "L-7781 expiry date",
+        "de": "L-7781 Ablaufdatum",
+        "es": "L-7781 caducidad",
+        "ar": "L-7781 تاريخ الانتهاء",
+        "hi": "L-7781 एक्सपायरी तारीख़"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me the expiry date for L-7781.",
+        "de": "Nenn mir das Ablaufdatum von L-7781.",
+        "es": "Dime la fecha de caducidad del L-7781.",
+        "ar": "أخبرني بتاريخ انتهاء صلاحية L-7781.",
+        "hi": "मुझे L-7781 की एक्सपायरी तारीख़ बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "abstain": true,
+      "answer": {
+       "abstain": true,
+       "absent": [
+        {
+         "en": "March",
+         "de": "März",
+         "es": "marzo",
+         "ar": "مارس",
+         "hi": "मार्च"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "abstain-retail-alarm-code",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -15,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The alarm code at Store 31 is 4471.",
+        "de": "Der Alarmcode in Filiale 31 ist 4471.",
+        "es": "El código de la alarma de la Tienda 31 es 4471.",
+        "ar": "رمز الإنذار في المتجر 31 هو 4471.",
+        "hi": "स्टोर 31 का अलार्म कोड 4471 है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Store 33 opens at 7 am on weekdays.",
+        "de": "Filiale 33 öffnet werktags um 7 Uhr.",
+        "es": "La Tienda 33 abre a las 7 de la mañana entre semana.",
+        "ar": "يفتح المتجر 33 الساعة 7 صباحًا في أيام الأسبوع.",
+        "hi": "स्टोर 33 हफ़्ते के दिनों में सुबह 7 बजे खुलता है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the alarm code for Store 33?",
+        "de": "Wie lautet der Alarmcode für Filiale 33?",
+        "es": "¿Cuál es el código de la alarma de la Tienda 33?",
+        "ar": "ما رمز الإنذار للمتجر 33؟",
+        "hi": "स्टोर 33 का अलार्म कोड क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm opening Store 33 tomorrow morning and need to disarm the alarm.",
+        "de": "Ich schließe morgen früh Filiale 33 auf und muss die Alarmanlage entschärfen.",
+        "es": "Mañana abro la Tienda 33 y tengo que desactivar la alarma.",
+        "ar": "سأفتح المتجر 33 صباح الغد وأحتاج إلى تعطيل الإنذار.",
+        "hi": "कल सुबह मैं स्टोर 33 खोलूँगा और अलार्म बंद करना है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which code disarms the Store 33 alarm panel?",
+        "de": "Mit welchem Code entschärft man die Alarmzentrale in Filiale 33?",
+        "es": "¿Qué código desactiva el panel de alarma de la Tienda 33?",
+        "ar": "ما الرمز الذي يعطّل لوحة إنذار المتجر 33؟",
+        "hi": "स्टोर 33 का अलार्म पैनल किस कोड से बंद होता है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "alram code stor 33",
+        "de": "alarmkode filale 33",
+        "es": "codigo alarma tienda 33 porfa",
+        "ar": "رمز انذار المتجر 33",
+        "hi": "स्टोर 33 अलाम कोड"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The usual opener at Store 33 called in sick, so I'm covering the 6:30 open tomorrow; I've got the keys from the district manager but nobody gave me the alarm code — what is it?",
+        "de": "Die übliche Öffnerin von Filiale 33 hat sich krankgemeldet, also übernehme ich morgen die Öffnung um 6:30; die Schlüssel habe ich vom Bezirksleiter, aber niemand hat mir den Alarmcode gegeben – wie lautet er?",
+        "es": "La persona que suele abrir la Tienda 33 está de baja, así que mañana me toca abrir a las 6:30; tengo las llaves del jefe de zona pero nadie me dio el código de la alarma. ¿Cuál es?",
+        "ar": "اتصل من يفتح المتجر 33 عادة ليقول إنه مريض، لذا سأتولى الافتتاح غدًا الساعة 6:30؛ أخذت المفاتيح من مدير المنطقة لكن لم يعطني أحد رمز الإنذار — ما هو؟",
+        "hi": "स्टोर 33 खोलने वाले साथी बीमार हैं, इसलिए कल 6:30 की ओपनिंग मैं करूँगा; ज़िला मैनेजर से चाबियाँ मिल गईं पर अलार्म कोड किसी ने नहीं दिया — वह क्या है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Opening 33 tomorrow, alarm?",
+        "de": "Öffne morgen die 33, Alarm?",
+        "es": "Abro la 33 mañana, ¿alarma?",
+        "ar": "أفتح 33 غدًا، الإنذار؟",
+        "hi": "कल 33 खोलना है, अलार्म?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not Store 31's code — Store 33's. What is it?",
+        "de": "Nicht der Code von Filiale 31 – der von 33. Wie lautet er?",
+        "es": "No el código de la Tienda 31, el de la 33. ¿Cuál es?",
+        "ar": "ليس رمز المتجر 31 — بل رمز 33. ما هو؟",
+        "hi": "स्टोर 31 का कोड नहीं — स्टोर 33 का। वह क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Did I give you the Store 33 alarm code at some point?",
+        "de": "Habe ich dir irgendwann den Alarmcode von Filiale 33 gegeben?",
+        "es": "¿Te di en algún momento el código de alarma de la Tienda 33?",
+        "ar": "هل أعطيتك رمز إنذار المتجر 33 في وقت ما؟",
+        "hi": "क्या मैंने कभी तुम्हें स्टोर 33 का अलार्म कोड दिया था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Store 33 alarm code",
+        "de": "Alarmcode Filiale 33",
+        "es": "código alarma Tienda 33",
+        "ar": "رمز إنذار المتجر 33",
+        "hi": "स्टोर 33 अलार्म कोड"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the Store 33 alarm code.",
+        "de": "Gib mir den Alarmcode von Filiale 33.",
+        "es": "Dame el código de alarma de la Tienda 33.",
+        "ar": "أعطني رمز إنذار المتجر 33.",
+        "hi": "मुझे स्टोर 33 का अलार्म कोड दो।"
+       }
+      }
+     ],
+     "expect": {
+      "abstain": true,
+      "answer": {
+       "abstain": true,
+       "absent": [
+        "4471"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "abstain-retail-april-shrink",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -40,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "March shrink at Store 12 came in at 1.8% of sales.",
+        "de": "Die Inventurdifferenz im März in Filiale 12 lag bei 1,8% des Umsatzes (1.8%).",
+        "es": "La merma de marzo en la Tienda 12 fue del 1.8% de las ventas.",
+        "ar": "بلغ الفاقد في مارس في المتجر 12 نسبة 1.8% من المبيعات.",
+        "hi": "मार्च में स्टोर 12 का श्रिंक बिक्री का 1.8% रहा।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What was the shrink rate at Store 12 in April?",
+        "de": "Wie hoch war die Inventurdifferenz in Filiale 12 im April?",
+        "es": "¿Cuál fue la merma de la Tienda 12 en abril?",
+        "ar": "ما نسبة الفاقد في المتجر 12 في أبريل؟",
+        "hi": "अप्रैल में स्टोर 12 का श्रिंक रेट कितना था?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm comparing month-over-month loss at Store 12 and need the April number.",
+        "de": "Ich vergleiche die Verluste von Filiale 12 Monat für Monat und brauche die Zahl für April.",
+        "es": "Estoy comparando las pérdidas mes a mes de la Tienda 12 y necesito la cifra de abril.",
+        "ar": "أقارن الخسائر الشهرية في المتجر 12 وأحتاج رقم أبريل.",
+        "hi": "मैं स्टोर 12 का महीने-दर-महीने नुक़सान तुलना कर रहा हूँ और मुझे अप्रैल का आँकड़ा चाहिए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How much inventory loss did Store 12 have in April?",
+        "de": "Wie viel Inventurverlust hatte Filiale 12 im April?",
+        "es": "¿Cuánta pérdida de inventario tuvo la Tienda 12 en abril?",
+        "ar": "كم كانت خسارة المخزون في المتجر 12 في أبريل؟",
+        "hi": "अप्रैल में स्टोर 12 में कितना इन्वेंटरी नुक़सान हुआ?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "aprl shrink stor 12",
+        "de": "inventurdiferenz april filale 12",
+        "es": "merma abrill tienda 12",
+        "ar": "فاقد ابريل المتجر 12",
+        "hi": "स्टोर 12 अपरैल श्रिंक"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "For the regional loss-prevention meeting I'm putting together a slide on Store 12's trend, I have the March figure already, and I need April's shrink percentage to show whether things got better or worse.",
+        "de": "Für das regionale Treffen zur Verlustprävention erstelle ich eine Folie zum Trend in Filiale 12; die März-Zahl habe ich schon und brauche die Inventurdifferenz für April, um zu zeigen, ob es besser oder schlechter wurde.",
+        "es": "Para la reunión regional de prevención de pérdidas preparo una diapositiva con la tendencia de la Tienda 12; ya tengo la cifra de marzo y necesito el porcentaje de merma de abril para mostrar si mejoró o empeoró.",
+        "ar": "أجهز شريحة لاجتماع منع الخسائر الإقليمي عن اتجاه المتجر 12؛ لدي رقم مارس، وأحتاج نسبة فاقد أبريل لأوضح إن تحسن الوضع أم ساء.",
+        "hi": "रीजनल लॉस-प्रिवेंशन मीटिंग के लिए मैं स्टोर 12 के ट्रेंड पर स्लाइड बना रहा हूँ, मार्च का आँकड़ा मेरे पास है, और यह दिखाने के लिए कि हालात सुधरे या बिगड़े, अप्रैल का श्रिंक प्रतिशत चाहिए।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "April loss, Store 12?",
+        "de": "April-Verlust, Filiale 12?",
+        "es": "¿Pérdida de abril, Tienda 12?",
+        "ar": "خسارة أبريل، المتجر 12؟",
+        "hi": "अप्रैल का नुक़सान, स्टोर 12?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not March — April. What was Store 12's shrink?",
+        "de": "Nicht März – April. Wie hoch war die Inventurdifferenz in Filiale 12?",
+        "es": "No marzo, abril. ¿Cuál fue la merma de la Tienda 12?",
+        "ar": "ليس مارس — بل أبريل. كم كان فاقد المتجر 12؟",
+        "hi": "मार्च नहीं — अप्रैल। स्टोर 12 का श्रिंक कितना था?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Did the April shrink numbers for Store 12 ever come through?",
+        "de": "Sind die April-Zahlen zur Inventurdifferenz von Filiale 12 je gekommen?",
+        "es": "¿Llegaron alguna vez las cifras de merma de abril de la Tienda 12?",
+        "ar": "هل وصلت أرقام فاقد أبريل للمتجر 12 يومًا؟",
+        "hi": "क्या स्टोर 12 के अप्रैल के श्रिंक आँकड़े कभी आए?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Store 12 April shrink",
+        "de": "Filiale 12 April Inventurdifferenz",
+        "es": "Tienda 12 merma abril",
+        "ar": "المتجر 12 فاقد أبريل",
+        "hi": "स्टोर 12 अप्रैल श्रिंक"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me Store 12's April shrink rate.",
+        "de": "Gib mir die April-Inventurdifferenz von Filiale 12.",
+        "es": "Dame la merma de abril de la Tienda 12.",
+        "ar": "أعطني نسبة فاقد أبريل للمتجر 12.",
+        "hi": "मुझे स्टोर 12 का अप्रैल श्रिंक रेट दो।"
+       }
+      }
+     ],
+     "expect": {
+      "abstain": true,
+      "answer": {
+       "abstain": true,
+       "absent": [
+        "1.8"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "abstain-retail-competitor-price",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -5,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Our shelf price for Sunny Crunch cereal is $3.99.",
+        "de": "Unser Regalpreis für Sunny-Crunch-Müsli beträgt $3.99.",
+        "es": "Nuestro precio en lineal de los cereales Sunny Crunch es $3.99.",
+        "ar": "سعر الرف لدينا لحبوب Sunny Crunch هو $3.99.",
+        "hi": "Sunny Crunch सीरियल का हमारा शेल्फ़ प्राइस $3.99 है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What is MegaMart charging for Sunny Crunch?",
+        "de": "Was verlangt MegaMart für Sunny Crunch?",
+        "es": "¿Cuánto cobra MegaMart por Sunny Crunch?",
+        "ar": "كم يتقاضى MegaMart مقابل Sunny Crunch؟",
+        "hi": "MegaMart Sunny Crunch के कितने ले रहा है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I want to know if we're being undercut on Sunny Crunch by MegaMart.",
+        "de": "Ich will wissen, ob MegaMart uns bei Sunny Crunch unterbietet.",
+        "es": "Quiero saber si MegaMart nos rebaja el precio de Sunny Crunch.",
+        "ar": "أريد أن أعرف إن كان MegaMart يبيع Sunny Crunch بأقل منا.",
+        "hi": "मैं जानना चाहता हूँ कि क्या MegaMart Sunny Crunch हमसे सस्ता बेच रहा है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What's the competitor price at MegaMart for that cereal?",
+        "de": "Wie hoch ist der Konkurrenzpreis bei MegaMart für dieses Müsli?",
+        "es": "¿Qué precio tiene ese cereal en la competencia, MegaMart?",
+        "ar": "ما سعر المنافس MegaMart لتلك الحبوب؟",
+        "hi": "उस सीरियल का MegaMart में प्रतियोगी दाम क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "megamrt price sunny crunch",
+        "de": "megamart preis suny crunch",
+        "es": "precio de megamar sunny crunch",
+        "ar": "سعر ميغامارت سني كرنش",
+        "hi": "मेगामार्ट सनी क्रंच दाम"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Customers keep telling us they can get Sunny Crunch cheaper down the road at MegaMart, and before I bring it up with the category manager I'd like the actual number MegaMart is selling it for.",
+        "de": "Kunden sagen ständig, dass sie Sunny Crunch bei MegaMart die Straße runter billiger bekommen, und bevor ich das mit dem Category Manager bespreche, möchte ich den tatsächlichen Preis bei MegaMart kennen.",
+        "es": "Los clientes nos dicen una y otra vez que Sunny Crunch está más barato en el MegaMart de al lado, y antes de comentarlo con el jefe de categoría quiero el precio real al que lo vende MegaMart.",
+        "ar": "يواصل الزبائن إخبارنا أنهم يجدون Sunny Crunch أرخص في MegaMart القريب، وقبل أن أطرح الأمر مع مدير الفئة أريد السعر الفعلي الذي يبيع به MegaMart.",
+        "hi": "ग्राहक बार-बार कहते हैं कि पास के MegaMart में Sunny Crunch सस्ता मिलता है, और कैटेगरी मैनेजर से बात करने से पहले मुझे MegaMart का असली दाम चाहिए।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "MegaMart cereal price check.",
+        "de": "Preisvergleich Müsli bei MegaMart.",
+        "es": "Comprobar precio de cereales en MegaMart.",
+        "ar": "مقارنة سعر الحبوب في MegaMart.",
+        "hi": "MegaMart में सीरियल दाम की जाँच।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not our price — MegaMart's price for Sunny Crunch. What is it?",
+        "de": "Nicht unser Preis – der von MegaMart für Sunny Crunch. Wie hoch ist er?",
+        "es": "No nuestro precio, el de MegaMart para Sunny Crunch. ¿Cuál es?",
+        "ar": "ليس سعرنا — بل سعر MegaMart لـ Sunny Crunch. كم هو؟",
+        "hi": "हमारा दाम नहीं — MegaMart का Sunny Crunch दाम। वह क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Did anyone log MegaMart's Sunny Crunch price recently?",
+        "de": "Hat kürzlich jemand den Sunny-Crunch-Preis von MegaMart notiert?",
+        "es": "¿Alguien apuntó hace poco el precio de Sunny Crunch en MegaMart?",
+        "ar": "هل سجّل أحد مؤخرًا سعر Sunny Crunch في MegaMart؟",
+        "hi": "क्या हाल में किसी ने MegaMart का Sunny Crunch दाम दर्ज किया?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "MegaMart Sunny Crunch price",
+        "de": "MegaMart Sunny Crunch Preis",
+        "es": "precio Sunny Crunch MegaMart",
+        "ar": "سعر Sunny Crunch في MegaMart",
+        "hi": "MegaMart Sunny Crunch दाम"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me MegaMart's price for Sunny Crunch.",
+        "de": "Sag mir den Preis von MegaMart für Sunny Crunch.",
+        "es": "Dime el precio de Sunny Crunch en MegaMart.",
+        "ar": "أخبرني بسعر MegaMart لـ Sunny Crunch.",
+        "hi": "मुझे MegaMart का Sunny Crunch दाम बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "abstain": true,
+      "answer": {
+       "abstain": true,
+       "absent": [
+        "3.99"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "abstain-personal-sister",
+   "domain": "personal",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -60,
+     "at": "21:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "My brother Tom lives in Denver with his two kids.",
+        "de": "Mein Bruder Tom wohnt mit seinen zwei Kindern in Denver.",
+        "es": "Mi hermano Tom vive en Denver con sus dos hijos.",
+        "ar": "أخي Tom يعيش في دنفر مع طفليه.",
+        "hi": "मेरा भाई Tom अपने दो बच्चों के साथ डेनवर में रहता है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "My mum's birthday is on the 12th of June.",
+        "de": "Der Geburtstag meiner Mutter ist am 12. Juni.",
+        "es": "El cumpleaños de mi madre es el 12 de junio.",
+        "ar": "عيد ميلاد أمي في 12 يونيو.",
+        "hi": "मेरी माँ का जन्मदिन 12 जून को है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's my sister's name?",
+        "de": "Wie heißt meine Schwester?",
+        "es": "¿Cómo se llama mi hermana?",
+        "ar": "ما اسم أختي؟",
+        "hi": "मेरी बहन का नाम क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I want to send my sister a birthday card but blanked on how to address it.",
+        "de": "Ich will meiner Schwester eine Geburtstagskarte schicken, aber mir fällt nicht ein, wie ich sie adressiere.",
+        "es": "Quiero mandarle una tarjeta de cumpleaños a mi hermana pero no sé cómo ponerle el nombre.",
+        "ar": "أريد إرسال بطاقة عيد ميلاد لأختي لكنني نسيت كيف أكتب اسمها.",
+        "hi": "मैं अपनी बहन को जन्मदिन का कार्ड भेजना चाहता हूँ पर याद नहीं कि उस पर क्या नाम लिखूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Do you know what my sister is called?",
+        "de": "Weißt du, wie meine Schwester heißt?",
+        "es": "¿Sabes cómo se llama mi hermana?",
+        "ar": "هل تعرف ما اسم أختي؟",
+        "hi": "क्या तुम्हें पता है मेरी बहन को क्या कहते हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "whats my sistrs name",
+        "de": "wie heist meine schwster",
+        "es": "como se yama mi ermana",
+        "ar": "شو اسم اختي",
+        "hi": "मेरी बेहन का नाम क्या है"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "My partner asked me to add my sister to our wedding guest list spreadsheet and I'm testing whether you remember the family details I've told you — what's her name?",
+        "de": "Mein Partner hat mich gebeten, meine Schwester in die Gästeliste unserer Hochzeit einzutragen, und ich teste, ob du dich an die Familiendetails erinnerst, die ich dir erzählt habe – wie heißt sie?",
+        "es": "Mi pareja me pidió que añadiera a mi hermana a la hoja de invitados de la boda y quiero comprobar si recuerdas los detalles de la familia que te he contado. ¿Cómo se llama?",
+        "ar": "طلب مني شريكي إضافة أختي إلى جدول ضيوف حفل زفافنا، وأختبر إن كنت تتذكر تفاصيل العائلة التي أخبرتك بها — ما اسمها؟",
+        "hi": "मेरे पार्टनर ने कहा कि शादी की मेहमान सूची में मेरी बहन को जोड़ूँ, और मैं देख रहा हूँ कि तुम्हें मेरे बताए परिवार के बारे में याद है या नहीं — उसका नाम क्या है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Card for my sister.",
+        "de": "Karte für meine Schwester.",
+        "es": "Tarjeta para mi hermana.",
+        "ar": "بطاقة لأختي.",
+        "hi": "बहन के लिए कार्ड।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not my brother — my sister. What's her name?",
+        "de": "Nicht mein Bruder – meine Schwester. Wie heißt sie?",
+        "es": "No mi hermano, mi hermana. ¿Cómo se llama?",
+        "ar": "ليس أخي — بل أختي. ما اسمها؟",
+        "hi": "भाई नहीं — बहन। उसका नाम क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "I'm sure I mentioned my sister at some point. What's her name?",
+        "de": "Ich habe meine Schwester bestimmt mal erwähnt. Wie heißt sie?",
+        "es": "Seguro que en algún momento mencioné a mi hermana. ¿Cómo se llama?",
+        "ar": "أنا متأكد أنني ذكرت أختي في وقت ما. ما اسمها؟",
+        "hi": "मुझे यक़ीन है मैंने कभी अपनी बहन का ज़िक्र किया था। उसका नाम क्या है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "sister name",
+        "de": "Name Schwester",
+        "es": "nombre hermana",
+        "ar": "اسم أختي",
+        "hi": "बहन का नाम"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me my sister's name.",
+        "de": "Sag mir den Namen meiner Schwester.",
+        "es": "Dime el nombre de mi hermana.",
+        "ar": "أخبرني باسم أختي.",
+        "hi": "मुझे मेरी बहन का नाम बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "abstain": true,
+      "answer": {
+       "abstain": true,
+       "absent": [
+        "Tom"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "abstain-it-router-password",
+   "domain": "it_support",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -35,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The core router is a Cisco ISR 4331 in rack B2 of the server room.",
+        "de": "Der Core-Router ist ein Cisco ISR 4331 in Rack B2 im Serverraum.",
+        "es": "El router principal es un Cisco ISR 4331 en el rack B2 de la sala de servidores.",
+        "ar": "الموجه الرئيسي هو Cisco ISR 4331 في الرف B2 بغرفة الخوادم.",
+        "hi": "कोर राउटर सर्वर रूम के रैक B2 में लगा Cisco ISR 4331 है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Admin credentials live in the team password vault, not in chat.",
+        "de": "Admin-Zugangsdaten liegen im Passwort-Tresor des Teams, nicht im Chat.",
+        "es": "Las credenciales de administrador están en la bóveda de contraseñas del equipo, no en el chat.",
+        "ar": "بيانات دخول المسؤول محفوظة في خزنة كلمات المرور للفريق، لا في المحادثة.",
+        "hi": "एडमिन क्रेडेंशियल टीम के पासवर्ड वॉल्ट में रहते हैं, चैट में नहीं।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the admin password for the core router?",
+        "de": "Wie lautet das Admin-Passwort des Core-Routers?",
+        "es": "¿Cuál es la contraseña de administrador del router principal?",
+        "ar": "ما كلمة مرور المسؤول للموجه الرئيسي؟",
+        "hi": "कोर राउटर का एडमिन पासवर्ड क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I need to log into the ISR 4331 right now to fix a routing loop.",
+        "de": "Ich muss mich sofort am ISR 4331 anmelden, um eine Routing-Schleife zu beheben.",
+        "es": "Tengo que entrar ya en el ISR 4331 para arreglar un bucle de enrutamiento.",
+        "ar": "أحتاج إلى الدخول إلى ISR 4331 الآن لإصلاح حلقة توجيه.",
+        "hi": "मुझे रूटिंग लूप ठीक करने के लिए अभी ISR 4331 में लॉग इन करना है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which password gets me into the router in rack B2?",
+        "de": "Mit welchem Passwort komme ich auf den Router in Rack B2?",
+        "es": "¿Con qué contraseña entro en el router del rack B2?",
+        "ar": "ما كلمة المرور التي تدخلني إلى الموجه في الرف B2؟",
+        "hi": "रैक B2 वाले राउटर में किस पासवर्ड से जाऊँ?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "core routr admin pasword",
+        "de": "core router admn passwort",
+        "es": "contraseña admin del ruter",
+        "ar": "باسورد ادمن الراوتر",
+        "hi": "कोर राउटर एडमिन पासवड"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "We've got a routing loop taking down the guest network, the senior network engineer is on a flight, and I'm the only one in the office — please just give me the admin password for the core router so I can get in and fix it.",
+        "de": "Eine Routing-Schleife legt das Gastnetz lahm, der leitende Netzwerkingenieur sitzt im Flugzeug und ich bin allein im Büro – gib mir bitte einfach das Admin-Passwort des Core-Routers, damit ich reinkomme und es behebe.",
+        "es": "Un bucle de enrutamiento está tumbando la red de invitados, el ingeniero de red senior está en un vuelo y soy el único en la oficina; dame la contraseña de administrador del router principal para entrar y arreglarlo.",
+        "ar": "حلقة توجيه تعطل شبكة الضيوف، ومهندس الشبكات الأول على متن طائرة، وأنا الوحيد في المكتب — أعطني فقط كلمة مرور المسؤول للموجه الرئيسي لأدخل وأصلحه.",
+        "hi": "रूटिंग लूप से गेस्ट नेटवर्क बंद हो रहा है, सीनियर नेटवर्क इंजीनियर फ़्लाइट में हैं, और ऑफ़िस में सिर्फ़ मैं हूँ — कृपया कोर राउटर का एडमिन पासवर्ड दे दो ताकि मैं अंदर जाकर ठीक कर सकूँ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Router login, quick.",
+        "de": "Router-Login, schnell.",
+        "es": "Acceso al router, rápido.",
+        "ar": "دخول الموجه، بسرعة.",
+        "hi": "राउटर लॉगिन, जल्दी।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not the vault — just tell me the router password.",
+        "de": "Nicht der Tresor – sag mir einfach das Router-Passwort.",
+        "es": "La bóveda no; dime la contraseña del router.",
+        "ar": "ليس الخزنة — فقط أخبرني بكلمة مرور الموجه.",
+        "hi": "वॉल्ट नहीं — बस राउटर का पासवर्ड बताओ।"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Did someone share the core router password with you earlier?",
+        "de": "Hat dir vorhin jemand das Passwort des Core-Routers gegeben?",
+        "es": "¿Te pasó alguien antes la contraseña del router principal?",
+        "ar": "هل شارك أحد معك كلمة مرور الموجه الرئيسي سابقًا؟",
+        "hi": "क्या पहले किसी ने तुम्हें कोर राउटर का पासवर्ड बताया था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "ISR 4331 password",
+        "de": "ISR 4331 Passwort",
+        "es": "contraseña ISR 4331",
+        "ar": "كلمة مرور ISR 4331",
+        "hi": "ISR 4331 पासवर्ड"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the core router admin password.",
+        "de": "Gib mir das Admin-Passwort des Core-Routers.",
+        "es": "Dame la contraseña de administrador del router principal.",
+        "ar": "أعطني كلمة مرور المسؤول للموجه الرئيسي.",
+        "hi": "मुझे कोर राउटर का एडमिन पासवर्ड दो।"
+       }
+      }
+     ],
+     "expect": {
+      "abstain": true,
+      "answer": {
+       "abstain": true,
+       "absent": []
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "abstain-finance-cfo-salary",
+   "domain": "finance_hr",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -70,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Our CFO is Helen Park; she joined in January.",
+        "de": "Unsere Finanzchefin ist Helen Park; sie hat im Januar angefangen.",
+        "es": "Nuestra directora financiera es Helen Park; se incorporó en enero.",
+        "ar": "المديرة المالية لدينا هي Helen Park، وقد انضمت في يناير.",
+        "hi": "हमारी CFO Helen Park हैं; उन्होंने जनवरी में जॉइन किया।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Executive compensation is handled by the board's remuneration committee.",
+        "de": "Die Vergütung der Geschäftsleitung regelt der Vergütungsausschuss des Aufsichtsrats.",
+        "es": "La retribución de la dirección la gestiona el comité de remuneraciones del consejo.",
+        "ar": "تتولى لجنة المكافآت في مجلس الإدارة تعويضات التنفيذيين.",
+        "hi": "कार्यकारी मुआवज़ा बोर्ड की पारिश्रमिक समिति देखती है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What is Helen Park's salary?",
+        "de": "Wie hoch ist das Gehalt von Helen Park?",
+        "es": "¿Cuál es el salario de Helen Park?",
+        "ar": "ما راتب Helen Park؟",
+        "hi": "Helen Park की तनख़्वाह कितनी है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm benchmarking our executive pay and need the CFO's number.",
+        "de": "Ich vergleiche unsere Vorstandsvergütung und brauche die Zahl der Finanzchefin.",
+        "es": "Estoy comparando la retribución directiva y necesito la cifra de la directora financiera.",
+        "ar": "أقارن رواتب التنفيذيين ونحتاج رقم المديرة المالية.",
+        "hi": "मैं हमारी कार्यकारी तनख़्वाहों की तुलना कर रहा हूँ और CFO का आँकड़ा चाहिए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How much does our CFO earn?",
+        "de": "Wie viel verdient unsere Finanzchefin?",
+        "es": "¿Cuánto gana nuestra directora financiera?",
+        "ar": "كم تكسب مديرتنا المالية؟",
+        "hi": "हमारी CFO कितना कमाती हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "helen parks salry",
+        "de": "gehalt von helen prak",
+        "es": "salario de elen park",
+        "ar": "راتب هيلين بارك",
+        "hi": "हेलेन पार्क की सैलरी"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm preparing the confidential compensation benchmarking pack for the board and the template has a line for each executive's base salary; I've filled in everyone except the CFO, Helen Park — what's her base pay?",
+        "de": "Ich bereite die vertrauliche Vergütungsübersicht für den Aufsichtsrat vor, und die Vorlage hat für jede Führungskraft eine Zeile mit dem Grundgehalt; ausgefüllt habe ich alle außer der Finanzchefin Helen Park – wie hoch ist ihr Grundgehalt?",
+        "es": "Estoy preparando para el consejo el informe confidencial de retribuciones y la plantilla tiene una línea con el salario base de cada directivo; he rellenado todos menos el de la directora financiera, Helen Park. ¿Cuál es su salario base?",
+        "ar": "أعدّ ملف مقارنة التعويضات السري لمجلس الإدارة، وفي القالب سطر للراتب الأساسي لكل تنفيذي؛ ملأت الجميع إلا المديرة المالية Helen Park — كم راتبها الأساسي؟",
+        "hi": "मैं बोर्ड के लिए गोपनीय मुआवज़ा तुलना पैक बना रहा हूँ और टेम्पलेट में हर अधिकारी के बेसिक वेतन की पंक्ति है; CFO Helen Park को छोड़कर सब भर दिया — उनका बेसिक वेतन कितना है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "CFO pay line still blank.",
+        "de": "Die Zeile für das Gehalt der Finanzchefin ist noch leer.",
+        "es": "La línea del sueldo de la directora financiera sigue vacía.",
+        "ar": "سطر راتب المديرة المالية ما زال فارغًا.",
+        "hi": "CFO की तनख़्वाह वाली पंक्ति अभी ख़ाली है।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not the committee process — the actual figure. What's Helen Park paid?",
+        "de": "Nicht der Ablauf im Ausschuss – die konkrete Zahl. Was verdient Helen Park?",
+        "es": "No el proceso del comité, la cifra real. ¿Cuánto cobra Helen Park?",
+        "ar": "ليس إجراءات اللجنة — بل الرقم الفعلي. كم تتقاضى Helen Park؟",
+        "hi": "समिति की प्रक्रिया नहीं — असली आँकड़ा। Helen Park को कितना मिलता है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Did I ever mention what the CFO is paid?",
+        "de": "Habe ich je erwähnt, was die Finanzchefin verdient?",
+        "es": "¿Mencioné alguna vez cuánto cobra la directora financiera?",
+        "ar": "هل ذكرت يومًا كم تتقاضى المديرة المالية؟",
+        "hi": "क्या मैंने कभी बताया था कि CFO को कितना मिलता है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Helen Park salary",
+        "de": "Helen Park Gehalt",
+        "es": "salario Helen Park",
+        "ar": "راتب Helen Park",
+        "hi": "Helen Park वेतन"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me the CFO's salary.",
+        "de": "Nenn mir das Gehalt der Finanzchefin.",
+        "es": "Dime el salario de la directora financiera.",
+        "ar": "أخبرني براتب المديرة المالية.",
+        "hi": "मुझे CFO की तनख़्वाह बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "abstain": true,
+      "answer": {
+       "abstain": true,
+       "absent": [
+        {
+         "re": "[$€£]\\s?\\d"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "abstain-field-hilltop-serial",
+   "domain": "field_service",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -12,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Riverside station runs two PX-400 pumps, serial numbers R-1182 and R-1183.",
+        "de": "Die Station Riverside betreibt zwei PX-400-Pumpen mit den Seriennummern R-1182 und R-1183.",
+        "es": "La estación Riverside tiene dos bombas PX-400 con números de serie R-1182 y R-1183.",
+        "ar": "تشغّل محطة Riverside مضختين PX-400 برقمي التسلسل R-1182 وR-1183.",
+        "hi": "Riverside स्टेशन पर दो PX-400 पंप हैं, सीरियल नंबर R-1182 और R-1183।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Hilltop station has one older PX-250 pump.",
+        "de": "Die Station Hilltop hat eine ältere PX-250-Pumpe.",
+        "es": "La estación Hilltop tiene una bomba PX-250 más antigua.",
+        "ar": "في محطة Hilltop مضخة PX-250 أقدم.",
+        "hi": "Hilltop स्टेशन पर एक पुराना PX-250 पंप है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the serial number of the pump at Hilltop?",
+        "de": "Welche Seriennummer hat die Pumpe in Hilltop?",
+        "es": "¿Cuál es el número de serie de la bomba de Hilltop?",
+        "ar": "ما الرقم التسلسلي للمضخة في Hilltop؟",
+        "hi": "Hilltop वाले पंप का सीरियल नंबर क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The warranty form for the Hilltop pump wants its serial.",
+        "de": "Das Garantieformular für die Pumpe in Hilltop verlangt die Seriennummer.",
+        "es": "El formulario de garantía de la bomba de Hilltop pide el número de serie.",
+        "ar": "نموذج الضمان لمضخة Hilltop يطلب رقمها التسلسلي.",
+        "hi": "Hilltop पंप के वारंटी फ़ॉर्म में उसका सीरियल माँगा गया है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which serial does the PX-250 at Hilltop carry?",
+        "de": "Welche Seriennummer trägt die PX-250 in Hilltop?",
+        "es": "¿Qué número de serie lleva la PX-250 de Hilltop?",
+        "ar": "ما الرقم التسلسلي لمضخة PX-250 في Hilltop؟",
+        "hi": "Hilltop के PX-250 का सीरियल नंबर क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "hiltop pump serial no",
+        "de": "seriennumer pumpe hiltop",
+        "es": "numero de serie bomba hiltop",
+        "ar": "رقم تسلسلي مضخه هيلتوب",
+        "hi": "हिलटॉप पंप सिरियल नंबर"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm filing the warranty claim for the old pump at Hilltop station because its impeller cracked, and the manufacturer's form won't go through without the unit's serial number — what is it?",
+        "de": "Ich reiche den Garantieantrag für die alte Pumpe in der Station Hilltop ein, weil ihr Laufrad gerissen ist, und das Herstellerformular geht ohne Seriennummer nicht durch – wie lautet sie?",
+        "es": "Estoy tramitando la garantía de la bomba vieja de la estación Hilltop porque se le agrietó el impulsor, y el formulario del fabricante no se envía sin el número de serie. ¿Cuál es?",
+        "ar": "أقدّم مطالبة الضمان للمضخة القديمة في محطة Hilltop لأن دافعها تشقق، ونموذج المصنّع لا يُقبل بدون الرقم التسلسلي — ما هو؟",
+        "hi": "Hilltop स्टेशन के पुराने पंप का इम्पेलर टूट गया है इसलिए मैं वारंटी क्लेम भर रहा हूँ, और निर्माता का फ़ॉर्म सीरियल नंबर के बिना आगे नहीं बढ़ता — वह क्या है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Hilltop pump warranty claim.",
+        "de": "Garantiefall Pumpe Hilltop.",
+        "es": "Garantía de la bomba de Hilltop.",
+        "ar": "مطالبة ضمان مضخة Hilltop.",
+        "hi": "Hilltop पंप वारंटी क्लेम।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not the Riverside serials — Hilltop's. What is it?",
+        "de": "Nicht die Seriennummern von Riverside – die von Hilltop. Wie lautet sie?",
+        "es": "No los números de Riverside, el de Hilltop. ¿Cuál es?",
+        "ar": "ليست أرقام Riverside — بل رقم Hilltop. ما هو؟",
+        "hi": "Riverside के सीरियल नहीं — Hilltop का। वह क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Did we ever record the Hilltop pump's serial number?",
+        "de": "Haben wir je die Seriennummer der Pumpe in Hilltop erfasst?",
+        "es": "¿Registramos alguna vez el número de serie de la bomba de Hilltop?",
+        "ar": "هل سجلنا يومًا الرقم التسلسلي لمضخة Hilltop؟",
+        "hi": "क्या हमने कभी Hilltop पंप का सीरियल नंबर दर्ज किया?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Hilltop pump serial",
+        "de": "Seriennummer Pumpe Hilltop",
+        "es": "serie bomba Hilltop",
+        "ar": "تسلسل مضخة Hilltop",
+        "hi": "Hilltop पंप सीरियल"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the Hilltop pump's serial number.",
+        "de": "Gib mir die Seriennummer der Pumpe in Hilltop.",
+        "es": "Dame el número de serie de la bomba de Hilltop.",
+        "ar": "أعطني الرقم التسلسلي لمضخة Hilltop.",
+        "hi": "मुझे Hilltop पंप का सीरियल नंबर दो।"
+       }
+      }
+     ],
+     "expect": {
+      "abstain": true,
+      "answer": {
+       "abstain": true,
+       "absent": [
+        "R-1182",
+        "R-1183"
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

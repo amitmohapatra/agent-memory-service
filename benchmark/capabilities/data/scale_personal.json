@@ -1,0 +1,160 @@
+{
+ "name": "scale_personal",
+ "description": "Three years of a household's weekly spending log by category.",
+ "years": 3,
+ "entities": {
+  "category": [
+   {
+    "id": "CAT-GROC",
+    "name": {
+     "en": "groceries",
+     "de": "Lebensmittel",
+     "es": "supermercado",
+     "ar": "البقالة",
+     "hi": "किराना"
+    }
+   },
+   {
+    "id": "CAT-DINE",
+    "name": {
+     "en": "dining out",
+     "de": "Essen gehen",
+     "es": "restaurantes",
+     "ar": "المطاعم",
+     "hi": "बाहर खाना"
+    }
+   },
+   {
+    "id": "CAT-TRAN",
+    "name": {
+     "en": "transport",
+     "de": "Verkehr",
+     "es": "transporte",
+     "ar": "المواصلات",
+     "hi": "परिवहन"
+    }
+   },
+   {
+    "id": "CAT-UTIL",
+    "name": {
+     "en": "utilities",
+     "de": "Nebenkosten",
+     "es": "suministros",
+     "ar": "المرافق",
+     "hi": "बिजली-पानी"
+    }
+   },
+   {
+    "id": "CAT-ENTR",
+    "name": {
+     "en": "entertainment",
+     "de": "Unterhaltung",
+     "es": "ocio",
+     "ar": "الترفيه",
+     "hi": "मनोरंजन"
+    }
+   },
+   {
+    "id": "CAT-HLTH",
+    "name": {
+     "en": "health",
+     "de": "Gesundheit",
+     "es": "salud",
+     "ar": "الصحة",
+     "hi": "स्वास्थ्य"
+    }
+   },
+   {
+    "id": "CAT-CLTH",
+    "name": {
+     "en": "clothing",
+     "de": "Kleidung",
+     "es": "ropa",
+     "ar": "الملابس",
+     "hi": "कपड़े"
+    }
+   },
+   {
+    "id": "CAT-TRVL",
+    "name": {
+     "en": "travel",
+     "de": "Reisen",
+     "es": "viajes",
+     "ar": "السفر",
+     "hi": "यात्रा"
+    }
+   },
+   {
+    "id": "CAT-GIFT",
+    "name": {
+     "en": "gifts",
+     "de": "Geschenke",
+     "es": "regalos",
+     "ar": "الهدايا",
+     "hi": "उपहार"
+    }
+   },
+   {
+    "id": "CAT-HOME",
+    "name": {
+     "en": "home repairs",
+     "de": "Reparaturen",
+     "es": "reparaciones del hogar",
+     "ar": "إصلاحات المنزل",
+     "hi": "घर की मरम्मत"
+    }
+   }
+  ]
+ },
+ "records": {
+  "log": {
+   "every": "week",
+   "role": "EVENT",
+   "lines_from": "category",
+   "header": {
+    "en": "Weekly spending log {period}:",
+    "de": "Wöchentliches Ausgabenprotokoll {period}:",
+    "es": "Registro semanal de gastos {period}:",
+    "ar": "سجل الإنفاق الأسبوعي {period}:",
+    "hi": "साप्ताहिक ख़र्च लॉग {period}:"
+   },
+   "line": {
+    "en": "{category} ({category.name}): ${amount}",
+    "de": "{category} ({category.name}): ${amount}",
+    "es": "{category} ({category.name}): ${amount}",
+    "ar": "{category} ({category.name}): ${amount}",
+    "hi": "{category} ({category.name}): ${amount}"
+   },
+   "fields": {
+    "amount": {
+     "min": 0,
+     "max": 180
+    }
+   },
+   "boost": [
+    {
+     "period": {
+      "year_offset": -1,
+      "quarter": 3
+     },
+     "keys": [
+      "CAT-TRVL",
+      "CAT-DINE",
+      "CAT-CLTH"
+     ],
+     "field": "amount",
+     "factor": 4
+    }
+   ]
+  }
+ },
+ "sizes": {
+  "standard": {},
+  "large": {
+   "years": 4,
+   "every": {
+    "log": "day"
+   }
+  }
+ }
+}

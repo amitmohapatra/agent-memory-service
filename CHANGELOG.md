@@ -8,6 +8,20 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- The capability eval suite (`benchmark/capabilities/`): eleven memory capabilities -
+  single-fact recall, multi-hop, recency, update, abstention, forgetting, scale, procedures,
+  corrections, implicit and explicit personalization - as 105 scenarios over five domains,
+  1,110 phrasings in each of English, German, Spanish, Arabic and Hindi plus code-switched
+  ones, with a deterministic dev/held-out split. It drives the running service through the SDK
+  (`nollm`, `llm` and agent-harness modes), waits on the service's own readiness signals,
+  scores the pushed context, the agent's search and the harness's answers, and records the
+  baseline in `benchmark/results/capability_gate.json` as a ratchet: each cell's threshold is
+  its best recorded accuracy, and a drop beyond the cell's own measured noise, or a context p95
+  rise over 10 %, fails `make eval-capabilities-gate`. A PR is gated on the core set
+  (`SET=core`, nollm) and the `llm_core` set (llm mode), each run on a store of its own that
+  is dropped afterwards; scale and the full set run nightly. Every run forgets what it wrote when it ends, through the API
+  (`--keep` to keep it) ([the capability eval suite](docs/eval/capabilities.md)). Measures;
+  changes no behaviour.
 - Statement kinds: every sentence a user says is labelled at write with what it does - a
   `FACT`, a standing `RULE`, a `CONDITIONAL_RULE` (an exception or a trigger about the world),
   a `STATUS` of a thing, a `CORRECTION`, or a `LIFECYCLE` change - and the kind is stored on

@@ -1,0 +1,1696 @@
+{
+ "capability": "update_contradiction",
+ "number": 4,
+ "title": "Update & contradiction",
+ "definition": "Replace an outdated fact when the user states a conflicting one: serve the new value and stop serving the old one as current.",
+ "scenarios": [
+  {
+   "id": "update-retail-pallet-supplier",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -40,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Our primary supplier for heavy-duty pallets is Uline.",
+        "de": "Unser Hauptlieferant für Schwerlastpaletten ist Uline.",
+        "es": "Nuestro proveedor principal de palés de carga pesada es Uline.",
+        "ar": "مورّدنا الرئيسي لمنصات التحميل الثقيلة هو Uline.",
+        "hi": "हेवी-ड्यूटी पैलेट के लिए हमारा मुख्य सप्लायर Uline है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -3,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Actually, we terminated our contract with Uline yesterday due to pricing. Our new exclusive pallet supplier is PackagingCorp.",
+        "de": "Übrigens haben wir gestern den Vertrag mit Uline wegen der Preise gekündigt. Unser neuer exklusiver Palettenlieferant ist PackagingCorp.",
+        "es": "En realidad, ayer rescindimos el contrato con Uline por los precios. Nuestro nuevo proveedor exclusivo de palés es PackagingCorp.",
+        "ar": "في الواقع، أنهينا عقدنا مع Uline أمس بسبب الأسعار. مورّدنا الحصري الجديد للمنصات هو PackagingCorp.",
+        "hi": "दरअसल, हमने कल क़ीमतों की वजह से Uline के साथ अनुबंध ख़त्म कर दिया। हमारा नया एक्सक्लूसिव पैलेट सप्लायर PackagingCorp है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Draft a reorder email to our pallet supplier for 500 heavy-duty pallets.",
+        "de": "Entwirf eine Nachbestellungs-E-Mail an unseren Palettenlieferanten über 500 Schwerlastpaletten.",
+        "es": "Redacta un correo de reposición a nuestro proveedor de palés pidiendo 500 palés de carga pesada.",
+        "ar": "اكتب مسودة بريد إعادة طلب إلى مورّد المنصات لدينا لـ 500 منصة ثقيلة.",
+        "hi": "हमारे पैलेट सप्लायर को 500 हेवी-ड्यूटी पैलेट के रीऑर्डर का ईमेल ड्राफ़्ट करो।",
+        "mixed": "Hamare pallet supplier ko 500 heavy-duty pallets ka reorder email draft karo."
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "We're down to our last few heavy-duty pallets.",
+        "de": "Wir haben nur noch ein paar Schwerlastpaletten.",
+        "es": "Nos quedan los últimos palés de carga pesada.",
+        "ar": "لم يتبقَّ لدينا إلا القليل من المنصات الثقيلة.",
+        "hi": "हमारे पास बस कुछ ही हेवी-ड्यूटी पैलेट बचे हैं।",
+        "mixed": "Nos estamos quedando sin heavy-duty pallets, ¿a qué supplier le escribo?"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Who do we buy heavy-duty pallets from these days?",
+        "de": "Bei wem kaufen wir derzeit Schwerlastpaletten?",
+        "es": "¿A quién le compramos ahora los palés de carga pesada?",
+        "ar": "ممن نشتري المنصات الثقيلة هذه الأيام؟",
+        "hi": "आजकल हम हेवी-ड्यूटी पैलेट किससे ख़रीदते हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "draft reordr email to pallet suplier 500 pallets",
+        "de": "nachbestellmail an palettenlieferant 500 palettn",
+        "es": "correo de repocision al proveedor de pales 500",
+        "ar": "ايميل اعادة طلب لمورد المنصات 500 منصه",
+        "hi": "पैलेट सप्लायर को 500 पैलेट का रिऑर्डर ईमेल"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The warehouse manager says we'll run out of heavy-duty pallets by the end of next week because of the holiday volume, so please put together a short, polite reorder email for 500 of them to whichever company we're buying pallets from now, asking for delivery to DC-1 within ten days.",
+        "de": "Der Lagerleiter sagt, dass uns wegen des Feiertagsgeschäfts bis Ende nächster Woche die Schwerlastpaletten ausgehen. Bitte schreib eine kurze, höfliche Nachbestellung über 500 Stück an die Firma, bei der wir jetzt Paletten kaufen, mit Lieferung an DC-1 innerhalb von zehn Tagen.",
+        "es": "El jefe de almacén dice que por el volumen de las fiestas nos quedaremos sin palés de carga pesada a finales de la semana que viene, así que prepara un correo breve y educado pidiendo 500 a la empresa a la que compramos ahora los palés, con entrega en DC-1 en diez días.",
+        "ar": "يقول مدير المستودع إن المنصات الثقيلة ستنفد بحلول نهاية الأسبوع المقبل بسبب حجم موسم الأعياد، لذا جهّز بريدًا قصيرًا ومهذبًا لإعادة طلب 500 منصة من الشركة التي نشتري منها المنصات الآن، مع طلب التسليم إلى DC-1 خلال عشرة أيام.",
+        "hi": "वेयरहाउस मैनेजर कहते हैं कि त्योहारों की भीड़ की वजह से अगले हफ़्ते के अंत तक हेवी-ड्यूटी पैलेट ख़त्म हो जाएँगे, तो जिस कंपनी से हम अब पैलेट ख़रीदते हैं उसे 500 पैलेट का छोटा, विनम्र रीऑर्डर ईमेल तैयार करो और दस दिन में DC-1 पर डिलीवरी माँगो।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Pallet reorder needs to go out today.",
+        "de": "Die Palettennachbestellung muss heute raus.",
+        "es": "El pedido de palés tiene que salir hoy.",
+        "ar": "يجب إرسال طلب المنصات اليوم.",
+        "hi": "पैलेट का रीऑर्डर आज ही जाना है।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Don't send it to the old pallet supplier — who's the current one?",
+        "de": "Schick es nicht an den alten Palettenlieferanten – wer ist der aktuelle?",
+        "es": "No lo mandes al antiguo proveedor de palés; ¿quién es el actual?",
+        "ar": "لا ترسله إلى مورّد المنصات القديم — من المورّد الحالي؟",
+        "hi": "पुराने पैलेट सप्लायर को मत भेजना — मौजूदा कौन है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "We changed pallet vendors recently, right? Write the 500-pallet reorder to the right one.",
+        "de": "Wir haben kürzlich den Palettenlieferanten gewechselt, oder? Schreib die Nachbestellung über 500 Paletten an den richtigen.",
+        "es": "Hace poco cambiamos de proveedor de palés, ¿no? Escribe el pedido de 500 palés al correcto.",
+        "ar": "غيّرنا مورّد المنصات مؤخرًا، صحيح؟ اكتب طلب الـ 500 منصة للمورّد الصحيح.",
+        "hi": "हमने हाल में पैलेट वेंडर बदला था ना? 500 पैलेट का रीऑर्डर सही वाले को लिखो।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "pallet supplier reorder 500",
+        "de": "Palettenlieferant Nachbestellung 500",
+        "es": "proveedor palés pedido 500",
+        "ar": "مورّد المنصات طلب 500",
+        "hi": "पैलेट सप्लायर रीऑर्डर 500",
+        "mixed": "مين الـ pallet supplier الحالي؟ بدي reorder لـ 500."
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Write the reorder email for 500 heavy-duty pallets.",
+        "de": "Schreib die Nachbestellungs-E-Mail für 500 Schwerlastpaletten.",
+        "es": "Escribe el correo de pedido de 500 palés de carga pesada.",
+        "ar": "اكتب بريد إعادة الطلب لـ 500 منصة ثقيلة.",
+        "hi": "500 हेवी-ड्यूटी पैलेट का रीऑर्डर ईमेल लिखो।",
+        "mixed": "Schreib die reorder email für 500 heavy-duty pallets an unseren supplier."
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "PackagingCorp"
+      ],
+      "absent": [
+       {
+        "text": "Uline",
+        "unless": [
+         "PackagingCorp"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "PackagingCorp"
+       ],
+       "absent": [
+        "Uline"
+       ]
+      }
+     }
+    }
+   ],
+   "origin": "inventorysmart-4"
+  },
+  {
+   "id": "update-retail-returns-depot",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -75,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Customer returns are consolidated at the Elm Street depot.",
+        "de": "Kundenretouren werden im Depot in der Elm Street gesammelt.",
+        "es": "Las devoluciones de clientes se agrupan en el depósito de Elm Street.",
+        "ar": "تُجمع مرتجعات العملاء في مستودع Elm Street.",
+        "hi": "ग्राहकों के रिटर्न Elm Street डिपो में इकट्ठा होते हैं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -6,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Correction: the Elm Street depot has closed. Returns now go to the new depot at 45 Harbor Road.",
+        "de": "Korrektur: Das Depot in der Elm Street ist geschlossen. Retouren gehen jetzt an das neue Depot in der 45 Harbor Road.",
+        "es": "Corrección: el depósito de Elm Street ha cerrado. Las devoluciones van ahora al nuevo depósito de 45 Harbor Road.",
+        "ar": "تصحيح: أُغلق مستودع Elm Street. المرتجعات تذهب الآن إلى المستودع الجديد في 45 Harbor Road.",
+        "hi": "सुधार: Elm Street डिपो बंद हो गया है। रिटर्न अब 45 Harbor Road वाले नए डिपो में जाते हैं।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Where do we send customer returns?",
+        "de": "Wohin schicken wir Kundenretouren?",
+        "es": "¿A dónde enviamos las devoluciones de clientes?",
+        "ar": "إلى أين نرسل مرتجعات العملاء؟",
+        "hi": "ग्राहकों के रिटर्न कहाँ भेजते हैं?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I've got a cage of returned items ready for pickup.",
+        "de": "Ich habe einen Rollcontainer mit Retouren abholbereit.",
+        "es": "Tengo una jaula de artículos devueltos lista para recoger.",
+        "ar": "لدي قفص من المرتجعات جاهز للاستلام.",
+        "hi": "मेरे पास रिटर्न सामान का एक केज पिकअप के लिए तैयार है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What's the address of the returns depot?",
+        "de": "Wie lautet die Adresse des Retourendepots?",
+        "es": "¿Cuál es la dirección del depósito de devoluciones?",
+        "ar": "ما عنوان مستودع المرتجعات؟",
+        "hi": "रिटर्न डिपो का पता क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "were do retuns go",
+        "de": "wohin gehn retouren",
+        "es": "a donde van las deboluciones",
+        "ar": "وين تروح المرتجعات",
+        "hi": "रिटर्न कहा जाते है"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The courier is booked for tomorrow morning to collect this week's customer returns and he wants the delivery address on the manifest tonight; I want to make sure I give him the right depot since I heard something changed.",
+        "de": "Der Kurier ist für morgen früh gebucht, um die Retouren dieser Woche abzuholen, und will heute Abend die Lieferadresse auf dem Frachtbrief; ich will ihm das richtige Depot nennen, weil ich gehört habe, dass sich etwas geändert hat.",
+        "es": "El mensajero viene mañana por la mañana a recoger las devoluciones de esta semana y quiere la dirección de entrega en el manifiesto esta noche; quiero darle el depósito correcto porque he oído que algo cambió.",
+        "ar": "حُجز المندوب صباح الغد لاستلام مرتجعات هذا الأسبوع ويريد عنوان التسليم في البيان الليلة؛ أريد أن أعطيه المستودع الصحيح لأنني سمعت أن شيئًا تغيّر.",
+        "hi": "कूरियर कल सुबह इस हफ़्ते के रिटर्न लेने आएगा और आज रात मैनिफ़ेस्ट पर डिलीवरी पता चाहता है; मैं सही डिपो बताना चाहता हूँ क्योंकि सुना है कुछ बदला है।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Courier wants the returns address.",
+        "de": "Der Kurier will die Retourenadresse.",
+        "es": "El mensajero quiere la dirección de devoluciones.",
+        "ar": "المندوب يريد عنوان المرتجعات.",
+        "hi": "कूरियर को रिटर्न का पता चाहिए।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Returns don't go to Elm Street anymore, do they?",
+        "de": "Retouren gehen nicht mehr in die Elm Street, oder?",
+        "es": "Las devoluciones ya no van a Elm Street, ¿verdad?",
+        "ar": "المرتجعات لم تعد تذهب إلى Elm Street، صحيح؟",
+        "hi": "रिटर्न अब Elm Street नहीं जाते ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "You mentioned a depot change a while ago — where do returns go now?",
+        "de": "Du hattest vor einer Weile einen Depotwechsel erwähnt – wohin gehen Retouren jetzt?",
+        "es": "Mencionaste hace un tiempo un cambio de depósito; ¿a dónde van ahora las devoluciones?",
+        "ar": "ذكرت قبل فترة تغيير المستودع — إلى أين تذهب المرتجعات الآن؟",
+        "hi": "तुमने कुछ समय पहले डिपो बदलने की बात कही थी — रिटर्न अब कहाँ जाते हैं?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "returns depot address",
+        "de": "Adresse Retourendepot",
+        "es": "dirección depósito devoluciones",
+        "ar": "عنوان مستودع المرتجعات",
+        "hi": "रिटर्न डिपो पता"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the address where returns should be shipped.",
+        "de": "Gib mir die Adresse, an die Retouren geschickt werden.",
+        "es": "Dame la dirección a la que hay que enviar las devoluciones.",
+        "ar": "أعطني العنوان الذي تُشحن إليه المرتجعات.",
+        "hi": "मुझे वह पता दो जहाँ रिटर्न भेजने हैं।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "Harbor Road"
+      ],
+      "absent": [
+       {
+        "text": "Elm Street",
+        "unless": [
+         "Harbor Road"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "Harbor Road"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "update-retail-reorder-point",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -25,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The reorder point for SKU MK-220 (whole milk, 1 gallon) is 40 units.",
+        "de": "Der Meldebestand für Artikel MK-220 (Vollmilch, 1 Gallone) liegt bei 40 Stück.",
+        "es": "El punto de pedido del SKU MK-220 (leche entera, 1 galón) es de 40 unidades.",
+        "ar": "نقطة إعادة الطلب لـ SKU MK-220 (حليب كامل الدسم، جالون واحد) هي 40 وحدة.",
+        "hi": "SKU MK-220 (फ़ुल क्रीम दूध, 1 गैलन) का रीऑर्डर पॉइंट 40 यूनिट है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -4,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Change that: the reorder point for MK-220 is 60 units now, demand went up.",
+        "de": "Ändere das: Der Meldebestand für MK-220 liegt jetzt bei 60 Stück, die Nachfrage ist gestiegen.",
+        "es": "Cámbialo: el punto de pedido del MK-220 es ahora de 60 unidades, ha subido la demanda.",
+        "ar": "عدّل ذلك: نقطة إعادة الطلب لـ MK-220 أصبحت 60 وحدة الآن، فقد زاد الطلب.",
+        "hi": "इसे बदलो: MK-220 का रीऑर्डर पॉइंट अब 60 यूनिट है, माँग बढ़ गई है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the reorder point for MK-220?",
+        "de": "Wie hoch ist der Meldebestand für MK-220?",
+        "es": "¿Cuál es el punto de pedido del MK-220?",
+        "ar": "ما نقطة إعادة الطلب لـ MK-220؟",
+        "hi": "MK-220 का रीऑर्डर पॉइंट क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "We have 52 gallons of whole milk left. Should I reorder?",
+        "de": "Wir haben noch 52 Gallonen Vollmilch. Soll ich nachbestellen?",
+        "es": "Nos quedan 52 galones de leche entera. ¿Hago pedido?",
+        "ar": "تبقّى لدينا 52 جالونًا من الحليب كامل الدسم. هل أعيد الطلب؟",
+        "hi": "हमारे पास 52 गैलन फ़ुल क्रीम दूध बचा है। रीऑर्डर करूँ?"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "At what stock level do we reorder the gallon of whole milk?",
+        "de": "Bei welchem Bestand bestellen wir die Gallone Vollmilch nach?",
+        "es": "¿Con qué nivel de existencias pedimos el galón de leche entera?",
+        "ar": "عند أي مستوى مخزون نعيد طلب جالون الحليب كامل الدسم؟",
+        "hi": "किस स्टॉक स्तर पर हम एक गैलन फ़ुल क्रीम दूध रीऑर्डर करते हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "reordr point MK-220",
+        "de": "meldebestnd MK-220",
+        "es": "punto de pedio MK-220",
+        "ar": "نقطه اعاده الطلب MK-220",
+        "hi": "MK-220 रिऑडर पॉइंट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm setting up the automatic replenishment rule in the new system for our dairy items and the first one is the one-gallon whole milk, MK-220 — what threshold should I enter so it triggers a reorder at the right time?",
+        "de": "Ich richte im neuen System die automatische Nachschubregel für unsere Milchprodukte ein, und der erste Artikel ist die Gallone Vollmilch, MK-220 – welchen Schwellenwert soll ich eintragen, damit rechtzeitig nachbestellt wird?",
+        "es": "Estoy configurando en el sistema nuevo la regla de reposición automática de lácteos y el primero es la leche entera de un galón, MK-220. ¿Qué umbral pongo para que pida a tiempo?",
+        "ar": "أضبط قاعدة التزويد التلقائي في النظام الجديد لمنتجات الألبان، وأولها جالون الحليب كامل الدسم MK-220 — ما الحد الذي أدخله ليُطلق إعادة الطلب في الوقت المناسب؟",
+        "hi": "मैं नए सिस्टम में डेयरी आइटम के लिए ऑटोमैटिक रीप्लेनिशमेंट नियम सेट कर रहा हूँ और पहला एक गैलन फ़ुल क्रीम दूध MK-220 है — कौन सी सीमा डालूँ ताकि सही समय पर रीऑर्डर हो?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Milk at 52 — time to order?",
+        "de": "Milch bei 52 – Zeit zum Bestellen?",
+        "es": "Leche en 52: ¿toca pedir?",
+        "ar": "الحليب عند 52 — هل حان وقت الطلب؟",
+        "hi": "दूध 52 पर — ऑर्डर का समय?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "The MK-220 reorder point isn't 40 anymore, is it?",
+        "de": "Der Meldebestand von MK-220 ist nicht mehr 40, oder?",
+        "es": "El punto de pedido del MK-220 ya no es 40, ¿verdad?",
+        "ar": "نقطة إعادة طلب MK-220 لم تعد 40، صحيح؟",
+        "hi": "MK-220 का रीऑर्डर पॉइंट अब 40 नहीं है ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "We adjusted the milk reorder point recently — what's it set to?",
+        "de": "Wir haben den Meldebestand für Milch neulich angepasst – worauf steht er?",
+        "es": "Ajustamos hace poco el punto de pedido de la leche; ¿en cuánto está?",
+        "ar": "عدّلنا مؤخرًا نقطة إعادة طلب الحليب — على كم ضُبطت؟",
+        "hi": "हमने हाल में दूध का रीऑर्डर पॉइंट बदला था — अभी कितना है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "MK-220 reorder point",
+        "de": "MK-220 Meldebestand",
+        "es": "MK-220 punto de pedido",
+        "ar": "MK-220 نقطة إعادة الطلب",
+        "hi": "MK-220 रीऑर्डर पॉइंट"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me the MK-220 reorder threshold.",
+        "de": "Nenn mir den Meldebestand von MK-220.",
+        "es": "Dime el umbral de pedido del MK-220.",
+        "ar": "أخبرني بحد إعادة طلب MK-220.",
+        "hi": "मुझे MK-220 की रीऑर्डर सीमा बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "60"
+      ],
+      "absent": [
+       {
+        "text": "40",
+        "unless": [
+         "60"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "60"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "update-retail-spill-contact",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -80,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "For chemical spills in the stockroom, call Dave Morris on extension 210.",
+        "de": "Bei Chemikalienunfällen im Lager Dave Morris unter Durchwahl 210 anrufen.",
+        "es": "Para derrames químicos en el almacén, llama a Dave Morris a la extensión 210.",
+        "ar": "في حال انسكاب مواد كيميائية في المخزن، اتصل بـ Dave Morris على التحويلة 210.",
+        "hi": "स्टॉकरूम में केमिकल गिरने पर Dave Morris को एक्सटेंशन 210 पर फ़ोन करें।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -7,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Dave Morris has left the company. The spill response lead is now Kenji Ito, extension 233.",
+        "de": "Dave Morris hat das Unternehmen verlassen. Zuständig für Chemikalienunfälle ist jetzt Kenji Ito, Durchwahl 233.",
+        "es": "Dave Morris ha dejado la empresa. El responsable de derrames es ahora Kenji Ito, extensión 233.",
+        "ar": "غادر Dave Morris الشركة. مسؤول الاستجابة للانسكابات الآن هو Kenji Ito، التحويلة 233.",
+        "hi": "Dave Morris कंपनी छोड़ चुके हैं। अब स्पिल रिस्पॉन्स के प्रमुख Kenji Ito हैं, एक्सटेंशन 233।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Who do I call about a chemical spill?",
+        "de": "Wen rufe ich bei einem Chemikalienunfall an?",
+        "es": "¿A quién llamo por un derrame químico?",
+        "ar": "بمن أتصل بشأن انسكاب كيميائي؟",
+        "hi": "केमिकल गिरने पर किसे फ़ोन करूँ?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "A bottle of bleach just broke in the stockroom.",
+        "de": "Im Lager ist gerade eine Flasche Bleiche zerbrochen.",
+        "es": "Se acaba de romper una botella de lejía en el almacén.",
+        "ar": "انكسرت للتو زجاجة مبيّض في المخزن.",
+        "hi": "स्टॉकरूम में अभी ब्लीच की बोतल टूट गई।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Who's our spill response contact and what's the extension?",
+        "de": "Wer ist unser Ansprechpartner für Chemikalienunfälle und welche Durchwahl hat er?",
+        "es": "¿Quién es nuestro contacto para derrames y cuál es su extensión?",
+        "ar": "من جهة الاتصال للاستجابة للانسكابات وما التحويلة؟",
+        "hi": "हमारा स्पिल रिस्पॉन्स संपर्क कौन है और एक्सटेंशन क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "who to cal for chemcal spil",
+        "de": "wen anrufn bei chemikalien unfal",
+        "es": "a quien yamo por derame quimico",
+        "ar": "مين اتصل عليه لانسكاب كيماوي",
+        "hi": "केमिकल स्पिल के लिये किसे फोन करु"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "One of the night stockers knocked over a jug of drain cleaner in the back room, it's leaking under the racking, everyone's stepped away, and I need the right person on the phone right now — who handles spills and what's their extension?",
+        "de": "Einer aus der Nachtschicht hat im Lager einen Kanister Abflussreiniger umgestoßen, es läuft unter das Regal, alle sind zurückgetreten, und ich brauche sofort die richtige Person am Telefon – wer ist für Chemikalienunfälle zuständig und welche Durchwahl?",
+        "es": "Un reponedor del turno de noche ha volcado una garrafa de desatascador en la trastienda, se está saliendo bajo las estanterías, todos se han apartado y necesito a la persona adecuada al teléfono ya. ¿Quién se ocupa de los derrames y cuál es su extensión?",
+        "ar": "أسقط أحد عمال الليل عبوة منظف مجاري في الغرفة الخلفية، والسائل يتسرب تحت الرفوف، وابتعد الجميع، وأحتاج الشخص المناسب على الهاتف الآن — من المسؤول عن الانسكابات وما تحويلته؟",
+        "hi": "नाइट स्टॉकर से पीछे वाले कमरे में ड्रेन क्लीनर का जग गिर गया, वह रैक के नीचे फैल रहा है, सब दूर हट गए हैं, और मुझे अभी सही व्यक्ति फ़ोन पर चाहिए — स्पिल कौन संभालता है और उसका एक्सटेंशन क्या है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Spill in the back room — who's on it?",
+        "de": "Unfall im Lager – wer ist zuständig?",
+        "es": "Derrame en la trastienda: ¿quién se encarga?",
+        "ar": "انسكاب في الغرفة الخلفية — من المسؤول؟",
+        "hi": "पीछे के कमरे में स्पिल — कौन देखेगा?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "It's not Dave Morris anymore for spills, is it? Who then?",
+        "de": "Für Chemikalienunfälle ist nicht mehr Dave Morris zuständig, oder? Wer dann?",
+        "es": "Para derrames ya no es Dave Morris, ¿verdad? ¿Quién entonces?",
+        "ar": "لم يعد Dave Morris مسؤولًا عن الانسكابات، صحيح؟ من إذن؟",
+        "hi": "स्पिल के लिए अब Dave Morris नहीं हैं ना? फिर कौन?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "You were told about a change in the spill contact last week — who is it now?",
+        "de": "Letzte Woche wurde dir eine Änderung beim Ansprechpartner für Chemikalienunfälle mitgeteilt – wer ist es jetzt?",
+        "es": "La semana pasada te avisaron de un cambio en el contacto de derrames; ¿quién es ahora?",
+        "ar": "أُبلغت الأسبوع الماضي بتغيير جهة اتصال الانسكابات — من هي الآن؟",
+        "hi": "पिछले हफ़्ते तुम्हें स्पिल संपर्क बदलने के बारे में बताया गया था — अब कौन है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "spill contact extension",
+        "de": "Durchwahl Chemikalienunfall",
+        "es": "extensión derrames",
+        "ar": "تحويلة الانسكابات",
+        "hi": "स्पिल संपर्क एक्सटेंशन"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the spill response contact.",
+        "de": "Gib mir den Ansprechpartner für Chemikalienunfälle.",
+        "es": "Dame el contacto de respuesta a derrames.",
+        "ar": "أعطني جهة الاتصال للاستجابة للانسكابات.",
+        "hi": "मुझे स्पिल रिस्पॉन्स संपर्क दो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "Kenji Ito"
+      ],
+      "absent": [
+       {
+        "text": "Dave Morris",
+        "unless": [
+         "Kenji Ito"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "233"
+       ],
+       "absent": [
+        "210"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "update-retail-bakery-day",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -45,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Fresh bakery deliveries from Golden Crust arrive on Tuesdays.",
+        "de": "Die frischen Backwaren von Golden Crust kommen dienstags.",
+        "es": "Las entregas de panadería fresca de Golden Crust llegan los martes.",
+        "ar": "تصل شحنات المخبوزات الطازجة من Golden Crust يوم الثلاثاء.",
+        "hi": "Golden Crust की ताज़ा बेकरी डिलीवरी मंगलवार को आती है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -8,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Golden Crust switched our bakery deliveries to Thursday starting this month.",
+        "de": "Golden Crust hat unsere Backwarenlieferungen ab diesem Monat auf Donnerstag umgestellt.",
+        "es": "Golden Crust ha pasado nuestras entregas de panadería al jueves a partir de este mes.",
+        "ar": "نقلت Golden Crust توصيل المخبوزات إلينا إلى يوم الخميس اعتبارًا من هذا الشهر.",
+        "hi": "Golden Crust ने इस महीने से हमारी बेकरी डिलीवरी गुरुवार कर दी है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What day does Golden Crust deliver?",
+        "de": "An welchem Tag liefert Golden Crust?",
+        "es": "¿Qué día reparte Golden Crust?",
+        "ar": "في أي يوم توصّل Golden Crust؟",
+        "hi": "Golden Crust किस दिन डिलीवरी करता है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm scheduling who receives the bread delivery this week.",
+        "de": "Ich plane, wer diese Woche die Brotlieferung annimmt.",
+        "es": "Estoy organizando quién recibe la entrega de pan esta semana.",
+        "ar": "أجدول من يستلم شحنة الخبز هذا الأسبوع.",
+        "hi": "मैं तय कर रहा हूँ कि इस हफ़्ते ब्रेड डिलीवरी कौन लेगा।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "When does the bakery truck come now?",
+        "de": "Wann kommt der Bäckerei-Lkw jetzt?",
+        "es": "¿Cuándo viene ahora el camión de panadería?",
+        "ar": "متى تأتي شاحنة المخبز الآن؟",
+        "hi": "बेकरी का ट्रक अब कब आता है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "wat day golden crst delivry",
+        "de": "welcher tag golden krust lieferung",
+        "es": "que dia reparte golden crus",
+        "ar": "اي يوم توصيل قولدن كرست",
+        "hi": "गोल्डन क्रस्ट डिलीवरी कोनसे दिन"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm building next week's receiving roster and I want someone from the bakery team on the dock when the Golden Crust truck shows up, so I need to know which day it actually comes these days.",
+        "de": "Ich erstelle den Wareneingangsplan für nächste Woche und will jemanden aus dem Bäckereiteam an der Rampe haben, wenn der Golden-Crust-Lkw kommt, also muss ich wissen, an welchem Tag er inzwischen kommt.",
+        "es": "Estoy haciendo el cuadrante de recepción de la semana que viene y quiero a alguien de panadería en el muelle cuando llegue el camión de Golden Crust, así que necesito saber qué día viene ahora.",
+        "ar": "أعدّ جدول الاستلام للأسبوع المقبل وأريد شخصًا من فريق المخبز على الرصيف عند وصول شاحنة Golden Crust، لذا أحتاج إلى معرفة اليوم الذي تأتي فيه حاليًا.",
+        "hi": "मैं अगले हफ़्ते का रिसीविंग रोस्टर बना रहा हूँ और चाहता हूँ कि Golden Crust का ट्रक आने पर बेकरी टीम से कोई डॉक पर हो, इसलिए जानना है कि आजकल वह किस दिन आता है।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Bread truck day?",
+        "de": "Tag des Brot-Lkw?",
+        "es": "¿Día del camión del pan?",
+        "ar": "يوم شاحنة الخبز؟",
+        "hi": "ब्रेड ट्रक का दिन?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Golden Crust doesn't come on Tuesdays anymore, does it?",
+        "de": "Golden Crust kommt nicht mehr dienstags, oder?",
+        "es": "Golden Crust ya no viene los martes, ¿verdad?",
+        "ar": "Golden Crust لم تعد تأتي يوم الثلاثاء، صحيح؟",
+        "hi": "Golden Crust अब मंगलवार को नहीं आता ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "The bakery schedule changed a little while ago — what's the new day?",
+        "de": "Der Bäckereiplan hat sich vor einiger Zeit geändert – welcher Tag ist es jetzt?",
+        "es": "El horario de panadería cambió hace poco; ¿cuál es el nuevo día?",
+        "ar": "تغيّر جدول المخبز قبل فترة — ما اليوم الجديد؟",
+        "hi": "कुछ समय पहले बेकरी का शेड्यूल बदला था — नया दिन कौन सा है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Golden Crust delivery day",
+        "de": "Liefertag Golden Crust",
+        "es": "día reparto Golden Crust",
+        "ar": "يوم توصيل Golden Crust",
+        "hi": "Golden Crust डिलीवरी दिन"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me which day Golden Crust delivers.",
+        "de": "Sag mir, an welchem Tag Golden Crust liefert.",
+        "es": "Dime qué día reparte Golden Crust.",
+        "ar": "أخبرني بيوم توصيل Golden Crust.",
+        "hi": "मुझे बताओ Golden Crust किस दिन डिलीवर करता है।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "Thursday",
+        "de": "Donnerstag",
+        "es": "jueves",
+        "ar": "الخميس",
+        "hi": "गुरुवार"
+       }
+      ],
+      "absent": [
+       {
+        "text": {
+         "en": "Tuesday",
+         "de": "Dienstag",
+         "es": "martes",
+         "ar": "الثلاثاء",
+         "hi": "मंगलवार"
+        },
+        "unless": [
+         {
+          "en": "Thursday",
+          "de": "Donnerstag",
+          "es": "jueves",
+          "ar": "الخميس",
+          "hi": "गुरुवार"
+         }
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        {
+         "en": "Thursday",
+         "de": "Donnerstag",
+         "es": "jueves",
+         "ar": "الخميس",
+         "hi": "गुरुवार"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "update-retail-promo-discount",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -21,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The spring garden promo is 15% off all planters.",
+        "de": "Die Frühlings-Gartenaktion bietet 15% Rabatt auf alle Pflanzgefäße.",
+        "es": "La promoción de jardín de primavera es un 15% de descuento en todas las jardineras.",
+        "ar": "عرض الحديقة الربيعي هو خصم 15% على جميع أحواض الزرع.",
+        "hi": "स्प्रिंग गार्डन प्रोमो में सभी प्लांटर पर 15% छूट है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -2,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Marketing revised the spring garden promo: it's 20% off all planters now.",
+        "de": "Das Marketing hat die Frühlings-Gartenaktion geändert: Jetzt gibt es 20% Rabatt auf alle Pflanzgefäße.",
+        "es": "Marketing ha revisado la promoción de jardín de primavera: ahora es un 20% de descuento en todas las jardineras.",
+        "ar": "عدّل التسويق عرض الحديقة الربيعي: أصبح الخصم 20% على جميع أحواض الزرع.",
+        "hi": "मार्केटिंग ने स्प्रिंग गार्डन प्रोमो बदल दिया है: अब सभी प्लांटर पर 20% छूट है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the discount on planters in the spring promo?",
+        "de": "Wie viel Rabatt gibt es in der Frühlingsaktion auf Pflanzgefäße?",
+        "es": "¿Qué descuento tienen las jardineras en la promo de primavera?",
+        "ar": "ما الخصم على أحواض الزرع في العرض الربيعي؟",
+        "hi": "स्प्रिंग प्रोमो में प्लांटर पर कितनी छूट है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm making the signs for the planter display.",
+        "de": "Ich mache die Schilder für das Pflanzgefäß-Display.",
+        "es": "Estoy haciendo los carteles para la exposición de jardineras.",
+        "ar": "أصنع اللافتات لعرض أحواض الزرع.",
+        "hi": "मैं प्लांटर डिस्प्ले के साइन बना रहा हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How much off are planters right now?",
+        "de": "Wie stark sind Pflanzgefäße gerade reduziert?",
+        "es": "¿Cuánto descuento tienen ahora las jardineras?",
+        "ar": "كم الخصم على أحواض الزرع حاليًا؟",
+        "hi": "अभी प्लांटर पर कितनी छूट है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "plantr promo discont",
+        "de": "rabat pflanzgefäse aktion",
+        "es": "descuendo jardineras promo",
+        "ar": "خصم احواض الزرع العرض",
+        "hi": "प्लांटर प्रोमो डिसकाउंट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "A customer at the garden centre counter is asking how much she'd save on three large ceramic planters under the spring promotion, and I want to quote the right percentage before ringing her up.",
+        "de": "Eine Kundin an der Gartencenter-Theke fragt, wie viel sie mit der Frühlingsaktion bei drei großen Keramiktöpfen spart, und ich will den richtigen Prozentsatz nennen, bevor ich kassiere.",
+        "es": "Una clienta en el mostrador del centro de jardinería pregunta cuánto se ahorraría en tres jardineras grandes de cerámica con la promoción de primavera, y quiero darle el porcentaje correcto antes de cobrarle.",
+        "ar": "زبونة عند منضدة مركز الحدائق تسأل كم ستوفر على ثلاثة أحواض خزفية كبيرة ضمن العرض الربيعي، وأريد ذكر النسبة الصحيحة قبل المحاسبة.",
+        "hi": "गार्डन सेंटर काउंटर पर एक ग्राहक पूछ रही हैं कि स्प्रिंग प्रमोशन में तीन बड़े सिरेमिक प्लांटर पर कितनी बचत होगी, और बिल बनाने से पहले मैं सही प्रतिशत बताना चाहता हूँ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Planter sign percentage?",
+        "de": "Prozentsatz fürs Pflanzgefäß-Schild?",
+        "es": "¿Porcentaje para el cartel de jardineras?",
+        "ar": "نسبة لافتة أحواض الزرع؟",
+        "hi": "प्लांटर साइन पर प्रतिशत?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "The planter discount isn't 15% anymore, right?",
+        "de": "Der Rabatt auf Pflanzgefäße ist nicht mehr 15%, oder?",
+        "es": "El descuento de las jardineras ya no es del 15%, ¿verdad?",
+        "ar": "خصم أحواض الزرع لم يعد 15%، صحيح؟",
+        "hi": "प्लांटर की छूट अब 15% नहीं है ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Marketing tweaked the spring promo recently — where did it land?",
+        "de": "Das Marketing hat die Frühlingsaktion neulich angepasst – wo liegt sie jetzt?",
+        "es": "Marketing retocó hace poco la promo de primavera; ¿cómo quedó?",
+        "ar": "عدّل التسويق العرض الربيعي مؤخرًا — على ماذا استقر؟",
+        "hi": "मार्केटिंग ने हाल में स्प्रिंग प्रोमो बदला था — अब कितना है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "spring promo planters",
+        "de": "Frühlingsaktion Pflanzgefäße",
+        "es": "promo primavera jardineras",
+        "ar": "عرض الربيع أحواض الزرع",
+        "hi": "स्प्रिंग प्रोमो प्लांटर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me the current planter discount.",
+        "de": "Nenn mir den aktuellen Rabatt auf Pflanzgefäße.",
+        "es": "Dime el descuento actual de las jardineras.",
+        "ar": "أخبرني بالخصم الحالي على أحواض الزرع.",
+        "hi": "मुझे प्लांटर पर मौजूदा छूट बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "20%"
+      ],
+      "absent": [
+       {
+        "text": "15%",
+        "unless": [
+         "20%"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "20"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "update-personal-moved",
+   "domain": "personal",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -200,
+     "at": "20:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "I live in Seattle, in the Fremont neighbourhood.",
+        "de": "Ich wohne in Seattle, im Viertel Fremont.",
+        "es": "Vivo en Seattle, en el barrio de Fremont.",
+        "ar": "أعيش في Seattle، في حي Fremont.",
+        "hi": "मैं Seattle में, Fremont मोहल्ले में रहता हूँ।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -20,
+     "at": "19:15",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Big news: I moved to Austin last month, I'm in an apartment near Zilker Park now.",
+        "de": "Große Neuigkeit: Ich bin letzten Monat nach Austin gezogen und wohne jetzt in einer Wohnung beim Zilker Park.",
+        "es": "Gran noticia: el mes pasado me mudé a Austin; ahora vivo en un piso cerca de Zilker Park.",
+        "ar": "خبر كبير: انتقلت إلى Austin الشهر الماضي، وأسكن الآن في شقة قرب Zilker Park.",
+        "hi": "बड़ी ख़बर: पिछले महीने मैं Austin आ गया, अब Zilker Park के पास एक अपार्टमेंट में रहता हूँ।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Find me a dentist near where I live.",
+        "de": "Such mir einen Zahnarzt in meiner Nähe.",
+        "es": "Búscame un dentista cerca de donde vivo.",
+        "ar": "ابحث لي عن طبيب أسنان قرب مكان سكني.",
+        "hi": "मेरे घर के पास कोई डेंटिस्ट ढूँढो।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "My tooth has been aching since yesterday.",
+        "de": "Mein Zahn tut seit gestern weh.",
+        "es": "Me duele una muela desde ayer.",
+        "ar": "ضرسي يؤلمني منذ أمس.",
+        "hi": "कल से मेरे दाँत में दर्द है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which city do I live in?",
+        "de": "In welcher Stadt wohne ich?",
+        "es": "¿En qué ciudad vivo?",
+        "ar": "في أي مدينة أعيش؟",
+        "hi": "मैं किस शहर में रहता हूँ?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "dentst near my hous",
+        "de": "zahnartz in meiner nähe",
+        "es": "dentista serca de mi casa",
+        "ar": "دكتور اسنان قريب من بيتي",
+        "hi": "मेरे घर के पास डेंटीस्ट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I need to register with a new dentist since I haven't had a check-up in over a year, ideally somewhere I can walk or take a short bus ride to from home — can you suggest how to find one in my area?",
+        "de": "Ich muss mich bei einem neuen Zahnarzt anmelden, weil ich seit über einem Jahr nicht zur Kontrolle war, am besten irgendwo, wo ich von zu Hause zu Fuß oder mit einer kurzen Busfahrt hinkomme – wie finde ich einen in meiner Gegend?",
+        "es": "Tengo que darme de alta con un dentista nuevo porque llevo más de un año sin revisión, idealmente en algún sitio al que pueda ir andando o en un trayecto corto de autobús desde casa. ¿Cómo encuentro uno en mi zona?",
+        "ar": "أحتاج للتسجيل لدى طبيب أسنان جديد لأنني لم أجرِ فحصًا منذ أكثر من عام، ويفضَّل أن يكون قريبًا أستطيع الوصول إليه مشيًا أو بحافلة قصيرة من المنزل — كيف أجد واحدًا في منطقتي؟",
+        "hi": "मुझे नए डेंटिस्ट के पास रजिस्टर करना है क्योंकि एक साल से चेक-अप नहीं हुआ, बेहतर हो कि घर से पैदल या छोटी बस की दूरी पर हो — अपने इलाक़े में कैसे ढूँढूँ?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Weather this weekend at home?",
+        "de": "Wetter am Wochenende bei mir zu Hause?",
+        "es": "¿Tiempo este fin de semana en casa?",
+        "ar": "الطقس في عطلة نهاية الأسبوع حيث أسكن؟",
+        "hi": "इस वीकेंड मेरे शहर में मौसम?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "I don't live in Seattle anymore — where do I live now?",
+        "de": "Ich wohne nicht mehr in Seattle – wo wohne ich jetzt?",
+        "es": "Ya no vivo en Seattle; ¿dónde vivo ahora?",
+        "ar": "لم أعد أعيش في Seattle — أين أعيش الآن؟",
+        "hi": "मैं अब Seattle में नहीं रहता — अब कहाँ रहता हूँ?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Since my move, what city should you assume for local suggestions?",
+        "de": "Von welcher Stadt sollst du seit meinem Umzug bei lokalen Vorschlägen ausgehen?",
+        "es": "Desde mi mudanza, ¿qué ciudad debes suponer para sugerencias locales?",
+        "ar": "منذ انتقالي، أي مدينة يجب أن تفترضها للاقتراحات المحلية؟",
+        "hi": "मेरे शिफ़्ट होने के बाद लोकल सुझावों के लिए कौन सा शहर मानोगे?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "my city",
+        "de": "meine Stadt",
+        "es": "mi ciudad",
+        "ar": "مدينتي",
+        "hi": "मेरा शहर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Recommend a good brunch spot near my home.",
+        "de": "Empfiehl mir ein gutes Brunch-Lokal in der Nähe meiner Wohnung.",
+        "es": "Recomiéndame un buen sitio para el brunch cerca de casa.",
+        "ar": "اقترح مكانًا جيدًا للفطور المتأخر قرب منزلي.",
+        "hi": "मेरे घर के पास कोई अच्छी ब्रंच जगह बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "Austin"
+      ],
+      "absent": [
+       {
+        "text": "Seattle",
+        "unless": [
+         "Austin"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "Austin"
+       ],
+       "absent": [
+        "Seattle"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "update-it-ticketing",
+   "domain": "it_support",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -120,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Users log IT tickets in Zendesk.",
+        "de": "Nutzer erfassen IT-Tickets in Zendesk.",
+        "es": "Los usuarios registran los tickets de TI en Zendesk.",
+        "ar": "يسجّل المستخدمون تذاكر تقنية المعلومات في Zendesk.",
+        "hi": "यूज़र IT टिकट Zendesk में दर्ज करते हैं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -10,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "We migrated the helpdesk from Zendesk to Freshservice; the old Zendesk queue is read-only.",
+        "de": "Wir haben den Helpdesk von Zendesk auf Freshservice migriert; die alte Zendesk-Queue ist nur noch lesbar.",
+        "es": "Hemos migrado el helpdesk de Zendesk a Freshservice; la antigua cola de Zendesk es de solo lectura.",
+        "ar": "نقلنا مكتب الدعم من Zendesk إلى Freshservice؛ قائمة Zendesk القديمة للقراءة فقط.",
+        "hi": "हमने हेल्पडेस्क Zendesk से Freshservice पर माइग्रेट कर दिया है; पुरानी Zendesk क्यू अब सिर्फ़ पढ़ने के लिए है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Where should users log IT tickets?",
+        "de": "Wo sollen Nutzer IT-Tickets erfassen?",
+        "es": "¿Dónde deben registrar los usuarios los tickets de TI?",
+        "ar": "أين يجب أن يسجّل المستخدمون تذاكر تقنية المعلومات؟",
+        "hi": "यूज़र IT टिकट कहाँ दर्ज करें?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "A new hire's laptop won't connect to Wi-Fi and she wants to report it.",
+        "de": "Der Laptop einer neuen Kollegin verbindet sich nicht mit dem WLAN, und sie will es melden.",
+        "es": "El portátil de una nueva empleada no se conecta al wifi y quiere notificarlo.",
+        "ar": "حاسوب موظفة جديدة لا يتصل بشبكة Wi-Fi وتريد الإبلاغ عن ذلك.",
+        "hi": "एक नई कर्मचारी का लैपटॉप Wi-Fi से नहीं जुड़ रहा और वह रिपोर्ट करना चाहती है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which tool do we use for helpdesk tickets now?",
+        "de": "Welches Tool nutzen wir jetzt für Helpdesk-Tickets?",
+        "es": "¿Qué herramienta usamos ahora para los tickets del helpdesk?",
+        "ar": "ما الأداة التي نستخدمها الآن لتذاكر الدعم؟",
+        "hi": "अब हेल्पडेस्क टिकट के लिए कौन सा टूल इस्तेमाल करते हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "wher do i log a ticket",
+        "de": "wo erfase ich ein ticket",
+        "es": "donde abro un tiquet",
+        "ar": "وين اسجل تذكره",
+        "hi": "टिकट कहा डालु"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm writing the onboarding guide for next month's new starters and there's a section on how to get IT help — I want to point them at the right ticketing system, not something we've retired.",
+        "de": "Ich schreibe den Onboarding-Leitfaden für die neuen Kolleginnen und Kollegen nächsten Monat, und es gibt einen Abschnitt dazu, wie man IT-Hilfe bekommt – ich will sie auf das richtige Ticketsystem verweisen, nicht auf eins, das wir abgeschafft haben.",
+        "es": "Estoy escribiendo la guía de bienvenida para las incorporaciones del mes que viene y hay una sección sobre cómo pedir ayuda a TI; quiero indicarles el sistema de tickets correcto, no uno que ya hayamos retirado.",
+        "ar": "أكتب دليل التهيئة للموظفين الجدد الشهر المقبل، وفيه قسم عن كيفية الحصول على مساعدة تقنية المعلومات — أريد توجيههم إلى نظام التذاكر الصحيح، لا إلى نظام أوقفناه.",
+        "hi": "मैं अगले महीने आने वाले नए लोगों के लिए ऑनबोर्डिंग गाइड लिख रहा हूँ और उसमें IT मदद पाने का हिस्सा है — मैं उन्हें सही टिकटिंग सिस्टम बताना चाहता हूँ, बंद किया हुआ नहीं।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Printer jam, need to report it.",
+        "de": "Papierstau, muss es melden.",
+        "es": "Atasco en la impresora, tengo que notificarlo.",
+        "ar": "انحشار في الطابعة، أحتاج للإبلاغ.",
+        "hi": "प्रिंटर में पेपर फँसा, रिपोर्ट करना है।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "We don't use Zendesk for tickets anymore, right?",
+        "de": "Wir nutzen Zendesk nicht mehr für Tickets, oder?",
+        "es": "Ya no usamos Zendesk para los tickets, ¿verdad?",
+        "ar": "لم نعد نستخدم Zendesk للتذاكر، صحيح؟",
+        "hi": "हम अब टिकट के लिए Zendesk इस्तेमाल नहीं करते ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "After the helpdesk migration we talked about, where do tickets go?",
+        "de": "Wohin gehen Tickets nach der Helpdesk-Migration, über die wir gesprochen haben?",
+        "es": "Tras la migración del helpdesk de la que hablamos, ¿a dónde van los tickets?",
+        "ar": "بعد ترحيل مكتب الدعم الذي تحدثنا عنه، إلى أين تذهب التذاكر؟",
+        "hi": "जिस हेल्पडेस्क माइग्रेशन की बात हुई थी, उसके बाद टिकट कहाँ जाते हैं?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "ticketing system",
+        "de": "Ticketsystem",
+        "es": "sistema de tickets",
+        "ar": "نظام التذاكر",
+        "hi": "टिकटिंग सिस्टम"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell users where to raise IT tickets.",
+        "de": "Sag den Nutzern, wo sie IT-Tickets aufmachen.",
+        "es": "Dile a los usuarios dónde abrir tickets de TI.",
+        "ar": "أخبر المستخدمين أين يفتحون تذاكر تقنية المعلومات.",
+        "hi": "यूज़र्स को बताओ IT टिकट कहाँ बनाएँ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "Freshservice"
+      ],
+      "absent": [
+       {
+        "text": "Zendesk",
+        "unless": [
+         "Freshservice"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "Freshservice"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "update-finance-approval-limit",
+   "domain": "finance_hr",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -150,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Team leads can approve expenses up to $500.",
+        "de": "Teamleiter dürfen Ausgaben bis $500 genehmigen.",
+        "es": "Los jefes de equipo pueden aprobar gastos de hasta $500.",
+        "ar": "يمكن لقادة الفرق الموافقة على المصروفات حتى $500.",
+        "hi": "टीम लीड $500 तक के ख़र्च मंज़ूर कर सकते हैं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -14,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Policy update: the team lead expense approval limit was raised to $1,000.",
+        "de": "Richtlinienänderung: Das Genehmigungslimit für Teamleiter wurde auf $1,000 angehoben.",
+        "es": "Actualización de la política: el límite de aprobación de gastos de los jefes de equipo sube a $1,000.",
+        "ar": "تحديث السياسة: رُفع حد موافقة قادة الفرق على المصروفات إلى $1,000.",
+        "hi": "नीति अपडेट: टीम लीड की ख़र्च मंज़ूरी सीमा बढ़ाकर $1,000 कर दी गई है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the team lead approval limit for expenses?",
+        "de": "Wie hoch ist das Genehmigungslimit für Teamleiter bei Ausgaben?",
+        "es": "¿Cuál es el límite de aprobación de gastos de un jefe de equipo?",
+        "ar": "ما حد موافقة قائد الفريق على المصروفات؟",
+        "hi": "टीम लीड की ख़र्च मंज़ूरी सीमा क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I have an $800 software invoice — can my team lead approve it?",
+        "de": "Ich habe eine Softwarerechnung über $800 – kann mein Teamleiter sie genehmigen?",
+        "es": "Tengo una factura de software de $800; ¿puede aprobarla mi jefe de equipo?",
+        "ar": "لدي فاتورة برمجيات بقيمة $800 — هل يمكن لقائد فريقي الموافقة عليها؟",
+        "hi": "मेरे पास $800 का सॉफ़्टवेयर बिल है — क्या मेरा टीम लीड इसे मंज़ूर कर सकता है?"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Up to what amount can team leads sign off spending?",
+        "de": "Bis zu welchem Betrag dürfen Teamleiter Ausgaben freigeben?",
+        "es": "¿Hasta qué importe pueden aprobar gastos los jefes de equipo?",
+        "ar": "حتى أي مبلغ يمكن لقادة الفرق اعتماد الإنفاق؟",
+        "hi": "टीम लीड कितनी रक़म तक ख़र्च मंज़ूर कर सकते हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "team lead aproval limt",
+        "de": "genemigungs limit teamleiter",
+        "es": "limite de aprovacion jefe de equipo",
+        "ar": "حد موافقه قائد الفريق",
+        "hi": "टीम लीड अप्रूवल लिमट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm about to submit an $800 purchase for a design tool licence and I'd rather not send it up to the department head if I don't have to, so I need to know what the current team lead approval ceiling is under our expense policy.",
+        "de": "Ich will gleich einen Kauf über $800 für eine Designtool-Lizenz einreichen und ihn nicht unnötig an die Abteilungsleitung schicken, also muss ich wissen, wie hoch das aktuelle Genehmigungslimit für Teamleiter laut unserer Spesenrichtlinie ist.",
+        "es": "Estoy a punto de enviar una compra de $800 de una licencia de una herramienta de diseño y preferiría no subirla al jefe de departamento si no hace falta, así que necesito saber cuál es el límite actual de aprobación de los jefes de equipo según nuestra política de gastos.",
+        "ar": "أنا على وشك تقديم طلب شراء بقيمة $800 لرخصة أداة تصميم، وأفضّل ألا أرفعه إلى رئيس القسم إن لم يكن ضروريًا، لذا أحتاج إلى معرفة سقف موافقة قائد الفريق الحالي في سياسة المصروفات.",
+        "hi": "मैं डिज़ाइन टूल लाइसेंस की $800 की ख़रीद जमा करने वाला हूँ और ज़रूरत न हो तो इसे विभाग प्रमुख तक नहीं भेजना चाहता, इसलिए जानना है कि हमारी ख़र्च नीति में टीम लीड की मौजूदा मंज़ूरी सीमा क्या है।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "$800 — team lead or department head?",
+        "de": "$800 – Teamleiter oder Abteilungsleitung?",
+        "es": "$800: ¿jefe de equipo o jefe de departamento?",
+        "ar": "$800 — قائد الفريق أم رئيس القسم؟",
+        "hi": "$800 — टीम लीड या विभाग प्रमुख?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "The team lead limit isn't still $500, is it?",
+        "de": "Das Limit für Teamleiter ist doch nicht mehr $500, oder?",
+        "es": "El límite de los jefes de equipo ya no es $500, ¿verdad?",
+        "ar": "حد قائد الفريق لم يعد $500، صحيح؟",
+        "hi": "टीम लीड की सीमा अब भी $500 तो नहीं है ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "There was an expense policy update a couple of weeks ago — what's the team lead limit now?",
+        "de": "Vor ein paar Wochen gab es eine Änderung der Spesenrichtlinie – wie hoch ist das Teamleiter-Limit jetzt?",
+        "es": "Hace un par de semanas cambió la política de gastos; ¿cuál es ahora el límite de los jefes de equipo?",
+        "ar": "حدث تحديث لسياسة المصروفات قبل أسبوعين — كم حد قائد الفريق الآن؟",
+        "hi": "दो हफ़्ते पहले ख़र्च नीति बदली थी — अब टीम लीड की सीमा कितनी है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "team lead expense limit",
+        "de": "Ausgabenlimit Teamleiter",
+        "es": "límite gastos jefe de equipo",
+        "ar": "حد مصروفات قائد الفريق",
+        "hi": "टीम लीड ख़र्च सीमा"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me the current team lead approval limit.",
+        "de": "Nenn mir das aktuelle Genehmigungslimit für Teamleiter.",
+        "es": "Dime el límite actual de aprobación de los jefes de equipo.",
+        "ar": "أخبرني بحد موافقة قائد الفريق الحالي.",
+        "hi": "मुझे टीम लीड की मौजूदा मंज़ूरी सीमा बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "1000"
+      ],
+      "absent": [
+       {
+        "text": "$500",
+        "unless": [
+         "1000"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "1000"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "update-field-van-assignment",
+   "domain": "field_service",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -90,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Service van #7 is assigned to Ana Silva.",
+        "de": "Servicewagen Nr. 7 ist Ana Silva zugeteilt.",
+        "es": "La furgoneta de servicio n.º 7 está asignada a Ana Silva.",
+        "ar": "شاحنة الخدمة رقم 7 مخصصة لـ Ana Silva.",
+        "hi": "सर्विस वैन #7 Ana Silva को दी गई है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -5,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Van #7 has been reassigned to Peter Brandt; Ana Silva drives van #9 from now on.",
+        "de": "Wagen Nr. 7 wurde Peter Brandt zugeteilt; Ana Silva fährt ab sofort Wagen Nr. 9.",
+        "es": "La furgoneta n.º 7 se ha reasignado a Peter Brandt; Ana Silva conduce desde ahora la n.º 9.",
+        "ar": "أعيد تخصيص الشاحنة رقم 7 لـ Peter Brandt؛ وتقود Ana Silva الشاحنة رقم 9 من الآن.",
+        "hi": "वैन #7 अब Peter Brandt को दी गई है; Ana Silva अब से वैन #9 चलाएँगी।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Who drives van #7?",
+        "de": "Wer fährt Wagen Nr. 7?",
+        "es": "¿Quién conduce la furgoneta n.º 7?",
+        "ar": "من يقود الشاحنة رقم 7؟",
+        "hi": "वैन #7 कौन चलाता है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Van #7 got a parking ticket downtown yesterday.",
+        "de": "Wagen Nr. 7 hat gestern in der Innenstadt einen Strafzettel bekommen.",
+        "es": "La furgoneta n.º 7 recibió ayer una multa de aparcamiento en el centro.",
+        "ar": "حصلت الشاحنة رقم 7 على مخالفة وقوف في وسط المدينة أمس.",
+        "hi": "वैन #7 को कल शहर में पार्किंग चालान मिला।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Who's van 7 assigned to these days?",
+        "de": "Wem ist Wagen 7 derzeit zugeteilt?",
+        "es": "¿A quién está asignada ahora la furgoneta 7?",
+        "ar": "لمن خُصصت الشاحنة 7 هذه الأيام؟",
+        "hi": "आजकल वैन 7 किसके पास है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "who drivs van 7",
+        "de": "wer färt wagen 7",
+        "es": "quien conduse la furgo 7",
+        "ar": "مين يسوق الفان 7",
+        "hi": "वैन 7 कोन चलाता है"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The fleet company sent over a speeding notice for van #7 from last Thursday, and I have to forward it to whoever is driving that vehicle now so they can respond within fourteen days — who should get it?",
+        "de": "Die Flottenfirma hat einen Blitzerbescheid für Wagen Nr. 7 vom letzten Donnerstag geschickt, und ich muss ihn an die Person weiterleiten, die das Fahrzeug jetzt fährt, damit sie innerhalb von vierzehn Tagen reagiert – wer bekommt ihn?",
+        "es": "La empresa de flota ha enviado una multa por exceso de velocidad de la furgoneta n.º 7 del jueves pasado y tengo que reenviársela a quien conduce ahora ese vehículo para que responda en catorce días. ¿A quién se la mando?",
+        "ar": "أرسلت شركة الأسطول إشعار سرعة زائدة للشاحنة رقم 7 من الخميس الماضي، وعلي تحويله لمن يقود هذه المركبة الآن ليرد خلال أربعة عشر يومًا — لمن أرسله؟",
+        "hi": "फ़्लीट कंपनी ने पिछले गुरुवार का वैन #7 का ओवरस्पीडिंग नोटिस भेजा है, और मुझे उसे उस व्यक्ति को भेजना है जो अब वह गाड़ी चलाता है ताकि वह चौदह दिन में जवाब दे — किसे भेजूँ?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Speeding notice for van #7.",
+        "de": "Blitzerbescheid für Wagen Nr. 7.",
+        "es": "Multa de velocidad de la furgoneta n.º 7.",
+        "ar": "إشعار سرعة للشاحنة رقم 7.",
+        "hi": "वैन #7 का स्पीडिंग नोटिस।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Ana Silva doesn't drive van #7 anymore, does she?",
+        "de": "Ana Silva fährt Wagen Nr. 7 nicht mehr, oder?",
+        "es": "Ana Silva ya no conduce la n.º 7, ¿verdad?",
+        "ar": "Ana Silva لم تعد تقود الشاحنة رقم 7، صحيح؟",
+        "hi": "Ana Silva अब वैन #7 नहीं चलातीं ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "After the van reshuffle last week, who has #7?",
+        "de": "Wer hat nach dem Fahrzeugtausch letzte Woche die Nr. 7?",
+        "es": "Tras el cambio de furgonetas de la semana pasada, ¿quién tiene la n.º 7?",
+        "ar": "بعد إعادة توزيع الشاحنات الأسبوع الماضي، من لديه رقم 7؟",
+        "hi": "पिछले हफ़्ते वैन बदलने के बाद #7 किसके पास है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "van #7 driver",
+        "de": "Fahrer Wagen Nr. 7",
+        "es": "conductor furgoneta n.º 7",
+        "ar": "سائق الشاحنة رقم 7",
+        "hi": "वैन #7 ड्राइवर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me who van #7 belongs to now.",
+        "de": "Sag mir, wem Wagen Nr. 7 jetzt gehört.",
+        "es": "Dime de quién es ahora la furgoneta n.º 7.",
+        "ar": "أخبرني لمن الشاحنة رقم 7 الآن.",
+        "hi": "मुझे बताओ वैन #7 अब किसकी है।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "Peter Brandt"
+      ],
+      "absent": [
+       {
+        "text": "Ana Silva",
+        "unless": [
+         "Peter Brandt"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "Peter Brandt"
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}
