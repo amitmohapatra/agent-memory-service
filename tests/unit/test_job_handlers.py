@@ -301,7 +301,7 @@ async def test_a_document_is_parsed_indexed_marked_ready_then_enriched_by_its_ow
         Queue.GRAPH,
         payload,
         "enrich:dcv_1",
-        None,  # no model reachable: native enrichment is fast and runs in parallel
+        None,  # never serialised per tenant
     )
     await queue.handlers[TASK_GRAPH_ENRICH_DOCUMENT](job.payload)
     assert graph.calls == [("enrich_document", ("acme", "doc_1"), {})]
@@ -351,7 +351,9 @@ async def test_indexing_memories_makes_them_findable_then_moves_their_revisions(
         (TASK_PROFILE_REFRESH, {"tenant_id": "acme", "user_id": "u2"}),
         (TASK_GRAPH_ENRICH_MEMORIES, enrich),
     ]
-    assert (uow.jobs[1].queue, uow.jobs[1].lock) == (Queue.GRAPH, "graph-enrich:acme")
+    # its own job in the graph pool, never one at a time per tenant: serialised, a backlog
+    # trailed indexing by an hour and questions met a graph without their facts
+    assert (uow.jobs[1].queue, uow.jobs[1].lock) == (Queue.GRAPH, None)
     assert uow.commits == 2
     await queue.handlers[TASK_GRAPH_ENRICH_MEMORIES](enrich)
     assert graph.calls == [("enrich_memories", ("acme", ["mem_1", "mem_2"]), {})]

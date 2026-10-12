@@ -62,14 +62,13 @@ async def main() -> None:
             "worker.started",
             concurrency=settings.tasks.worker_concurrency,
             indexing_concurrency=TASKS.indexing_concurrency,
-            graph_concurrency=TASKS.graph_concurrency,
             metrics_port=settings.tasks.metrics_port,
         )
         await container.tasks.run_pools(
             worker_pools(
                 settings.tasks.worker_concurrency,
                 TASKS.indexing_concurrency,
-                TASKS.graph_concurrency,
+                settings.tasks.worker_concurrency,  # the graph pool waits on the LLM
             ),
             install_signal_handlers=True,
             shutdown_grace_seconds=OVERLOAD.worker_shutdown_grace_seconds,

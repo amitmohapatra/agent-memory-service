@@ -164,8 +164,8 @@ jobs make a write findable, and every other queue share `tasks.worker_concurrenc
 CPU) on slots of their own - the `embedding` queue up to `TASKS.indexing_concurrency` (2) and at
 most half, the rest the shared pool's - because both run models, each on 2 threads of its own.
 Two pools come on top: the `chat-fast` queue's own slot, which a long parse cannot take (on a
-worker capped at 2 CPUs the shared pool has one slot), and the `graph` queue's
-`TASKS.graph_concurrency` (2), which wait on the LLM. Every pool has at least one slot, so at
+worker capped at 2 CPUs the shared pool has one slot), and the `graph` queue's, as many as
+`tasks.worker_concurrency`, which wait on the LLM. Every pool has at least one slot, so at
 1 CPU three slots compute: the bulkhead wins, and each model serves one call at a time. In one pool, jobs waiting on a slow model held every slot and
 indexing waited minutes behind them, and a graph backlog (an import queues thousands of
 enrichment jobs, which outrank parsing, archiving, reconciliation and summaries) held every slot
@@ -175,10 +175,10 @@ until it drained. Each pool keeps one listening connection outside the queue poo
 |---|---|---|---|---|
 | `memory.process_observation` | `chat-fast` | each message | 5 | the memory pipeline (chapter 10) |
 | `memory.index` | `embedding` | every memory change | 5 | index or remove, bump revisions, queue a profile refresh and the graph enrichment |
-| `graph.enrich_memories` | `graph` | `memory.index` | 5 | the memories' entities and relations; one at a time per tenant when a model is reachable |
+| `graph.enrich_memories` | `graph` | `memory.index` | 5 | the memories' entities and relations |
 | `document.parse` | `document-parse` | upload | 3 | parse, hierarchy, chunks, Document Context Graph |
 | `document.index` | `embedding` | parse | 5 | index chunks and summaries, mark the document `READY`, queue the graph enrichment; when it gives up, the document is `FAILED` ("index failed: ...") for `memory-reindex` to finish |
-| `graph.enrich_document` | `graph` | `document.index` | 5 | the document's entities and relations; one at a time per tenant when a model is reachable |
+| `graph.enrich_document` | `graph` | `document.index` | 5 | the document's entities and relations |
 | `archive.stage_message` | `archive` | each message, 60 s coalesced per thread | 10 | compress, upload, verify, manifest (ADR 0006) |
 | `feedback.project` | `reconcile` | an applied verdict | 3 | apply it (chapter 6) |
 | `summary.refresh` | `summary` | every 20 messages | 3 | the thread's durable summary, then its searchable episode |

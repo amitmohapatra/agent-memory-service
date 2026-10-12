@@ -3,6 +3,6 @@ assignments: the registration check reads them as module-level string constants)
 
 TASK_MEMORY_INDEX = "memory.index"
 #: Graph enrichment of indexed memories / of an indexed document version: its own job on the
-#: GRAPH queue, one at a time per tenant, so the LLM calls it makes never hold back indexing
+#: GRAPH queue, in a pool of its own, so the LLM calls it makes never hold back indexing
 TASK_GRAPH_ENRICH_MEMORIES = "graph.enrich_memories"
 TASK_GRAPH_ENRICH_DOCUMENT = "graph.enrich_document"

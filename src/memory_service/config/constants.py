@@ -346,12 +346,9 @@ class TaskTuning:
     #: half; the rest are the shared pool's (``worker_pools``). Both run models, and each
     #: model computes on 2 threads of its own (``adapters/models/_runner.py``) - the encoder,
     #: ColBERT, NLI and docling each - so the slots that compute are sized to the CPUs: 4
-    #: CPUs, 2 + 2. Only the graph pool's slots come on top: they wait on the LLM.
+    #: CPUs, 2 + 2. Only the graph pool's slots come on top: they wait on the LLM, as many as
+    #: ``tasks.worker_concurrency``, the enrichments that ran at once inside the index jobs.
     indexing_concurrency: int = 2
-    #: Worker slots of the graph pool, the ``graph`` queue's own (``worker_pools``), on top of
-    #: ``tasks.worker_concurrency``: enrichment waits on the database and the LLM, and with a
-    #: model reachable it is one job at a time per tenant.
-    graph_concurrency: int = 2
     #: How long the worker rides out a database that cannot do its queue statements - no
     #: connection free in its queue pool, a full disk, a server going away, its LISTEN
     #: connection lost - retrying with a growing pause (``backoff``)

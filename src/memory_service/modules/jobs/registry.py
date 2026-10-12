@@ -79,16 +79,13 @@ def _accounted(name: str, handler: TaskHandler) -> TaskHandler:
     return run
 
 
-def _enrichment(tenant_id: str, *, asks_a_model: bool) -> dict[str, Any]:
-    """Where a graph enrichment job runs: on the GRAPH queue, below indexing, and - when the
-    deployment can reach a model - one at a time per tenant (``lock``). Enrichment asks the
-    model, which on a slow one takes minutes; inside the index jobs it held every worker slot,
-    and indexing (what makes a write findable) waited behind it for minutes. The lock leaves
-    the other slots to indexing; without a model, enrichment is fast and runs in parallel."""
-    options: dict[str, Any] = {"queue": Queue.GRAPH, "tenant_id": tenant_id}
-    if asks_a_model:
-        options["lock"] = f"graph-enrich:{tenant_id}"
-    return options
+def _enrichment(tenant_id: str) -> dict[str, Any]:
+    """Where a graph enrichment job runs: on the GRAPH queue, in the worker's graph pool.
+    Enrichment asks the model, which on a slow one takes minutes; inside the index jobs it
+    held every worker slot, and indexing (what makes a write findable) waited behind it. Not
+    serialised per tenant: one job at a time let a backlog of hundreds trail indexing by an
+    hour, and a question asked meanwhile met a graph without the facts its answer joins on."""
+    return {"queue": Queue.GRAPH, "tenant_id": tenant_id}
 
 
 def register_handlers(container: Container) -> None:
@@ -121,10 +118,6 @@ def register_handlers(container: Container) -> None:
         if ingestion is not None:
             await ingestion.parse_document(payload["tenant_id"], payload["document_id"])
 
-    def asks_a_model() -> bool:
-        assist = container.services.get("llm_assist")
-        return assist is not None and bool(assist.available)
-
     async def enrich_later(spec: JobSpec) -> None:
         """Queue graph enrichment as a job of its own (``_enrichment``), if a graph is wired."""
         if container.services.get("graph") is None:
@@ -149,7 +142,7 @@ def register_handlers(container: Container) -> None:
                 task_name=TASK_GRAPH_ENRICH_DOCUMENT,
                 payload={"tenant_id": tenant_id, "document_id": document_id},
                 idempotency_key=f"enrich:{version}" if version else None,
-                **_enrichment(tenant_id, asks_a_model=asks_a_model()),
+                **_enrichment(tenant_id),
             )
         )
 
@@ -186,7 +179,7 @@ def register_handlers(container: Container) -> None:
             JobSpec(
                 task_name=TASK_GRAPH_ENRICH_MEMORIES,
                 payload={"tenant_id": tenant_id, "memory_ids": memory_ids},
-                **_enrichment(tenant_id, asks_a_model=asks_a_model()),
+                **_enrichment(tenant_id),
             )
         )
 

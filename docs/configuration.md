@@ -82,7 +82,7 @@ covers the connection budget, PgBouncer and online migrations.
 
 | Variable | Default | Example | Auto | What it does |
 |---|---|---|---|---|
-| `MEMORY__TASKS__WORKER_CONCURRENCY` | auto | `4` | yes: one per available CPU, 1-8 | jobs that run models one worker process runs at once, 1-8: its indexing pool's (up to 2, at most half) and its shared pool's; a slot of chat's own and the 2 slots of its graph pool, which wait on the LLM, come on top |
+| `MEMORY__TASKS__WORKER_CONCURRENCY` | auto | `4` | yes: one per available CPU, 1-8 | jobs that run models one worker process runs at once, 1-8: its indexing pool's (up to 2, at most half) and its shared pool's; a slot of chat's own and as many graph slots, which wait on the LLM, come on top |
 | `MEMORY__TASKS__METRICS_PORT` | `9464` | `9464` | no | where the job worker serves its Prometheus series and healthcheck (1-65535). It cannot be switched off from the environment |
 
 ## Authentication

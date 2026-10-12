@@ -86,7 +86,7 @@ each entry says which one moved. Decisions behind each change are in the
   tool findable - and the `graph` queue on slots of their own: `tasks.worker_concurrency` (one
   per CPU) is split between the `embedding` queue (up to 2) and every other queue, since both
   run models; the `chat-fast` queue's own slot, which a long parse cannot take, and the
-  `graph` queue's 2 slots, which wait on the LLM, come on top. With a slow model, observation extraction
+  `graph` queue's slots (as many as `tasks.worker_concurrency`), which wait on the LLM, come on top. With a slow model, observation extraction
   and graph enrichment held every slot, and a tool catalog published just before a question
   waited 14 s to be searchable; and a graph backlog - an import queues thousands of enrichment
   jobs, which outrank parsing, archiving, reconciliation and summaries - held every slot until
@@ -110,8 +110,9 @@ each entry says which one moved. Decisions behind each change are in the
   slot taken, indexing, parsing and the other jobs waited up to six minutes, and a memory
   remembered just before a question was not in its context. Enrichment is now a job of its own,
   `graph.enrich_memories` / `graph.enrich_document`, queued once the source is indexed, on the
-  `graph` queue below indexing, and one at a time per tenant when a model is reachable
-  ([operations](docs/guide/11-operations.md#workers-and-periodic-jobs)).
+  `graph` queue below indexing, in a pool of its own and never one at a time per tenant (so
+  serialised, a backlog trailed indexing by an hour in the capability eval and questions met a
+  graph without their facts) ([operations](docs/guide/11-operations.md#workers-and-periodic-jobs)).
 - "When I ask for a stock audit, always use a table" opened like a question, so nothing was
   stored; a "when"/"if" followed by a subject now opens a condition, and the rule is kept with
   its trigger. A standing rule is recognised wherever its "never"/"always" sits ("For weekly
