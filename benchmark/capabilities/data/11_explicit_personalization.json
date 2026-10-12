@@ -1,0 +1,1786 @@
+{
+ "capability": "explicit_personalization",
+ "number": 11,
+ "title": "Explicit personalization",
+ "definition": "Customise responses by rules the user stated outright, including their conditional exceptions (\"never X unless I say Y\").",
+ "scenarios": [
+  {
+   "id": "explicit-retail-zero-stock",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -30,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Never include items with a stock level of zero in my weekly category overviews unless I specifically type 'include out of stock'.",
+        "de": "Nimm in meine wöchentlichen Kategorieübersichten nie Artikel mit Bestand null auf, es sei denn, ich schreibe ausdrücklich 'auch ausverkaufte'.",
+        "es": "No incluyas nunca artículos con stock cero en mis resúmenes semanales por categoría, salvo que escriba expresamente 'incluir agotados'.",
+        "ar": "لا تُدرج أبدًا الأصناف ذات المخزون صفر في ملخصاتي الأسبوعية للفئات، إلا إذا كتبت صراحةً 'تضمين النافد'.",
+        "hi": "मेरे साप्ताहिक श्रेणी सारांश में शून्य स्टॉक वाले आइटम कभी शामिल मत करना, जब तक मैं ख़ास तौर पर 'आउट ऑफ़ स्टॉक शामिल करो' न लिखूँ।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "data",
+     "day": -1,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Aisle 12 stock: AA-01 picture frames 14; AA-02 photo albums 0; AA-03 scrapbook paper 22; AA-04 glue sticks 0; AA-05 washi tape 9.",
+        "de": "Bestand Gang 12: AA-01 Bilderrahmen 14; AA-02 Fotoalben 0; AA-03 Scrapbook-Papier 22; AA-04 Klebestifte 0; AA-05 Washi-Tape 9.",
+        "es": "Stock del pasillo 12: AA-01 marcos de fotos 14; AA-02 álbumes de fotos 0; AA-03 papel de scrapbook 22; AA-04 barras de pegamento 0; AA-05 cinta washi 9.",
+        "ar": "مخزون الممر 12: AA-01 إطارات صور 14؛ AA-02 ألبومات صور 0؛ AA-03 ورق سكرابوك 22؛ AA-04 أصابع صمغ 0؛ AA-05 شريط واشي 9.",
+        "hi": "गलियारा 12 स्टॉक: AA-01 फ़ोटो फ़्रेम 14; AA-02 फ़ोटो एल्बम 0; AA-03 स्क्रैपबुक पेपर 22; AA-04 ग्लू स्टिक 0; AA-05 वाशी टेप 9।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Give me a category overview for Aisle 12.",
+        "de": "Gib mir eine Kategorieübersicht für Gang 12.",
+        "es": "Dame un resumen por categoría del pasillo 12.",
+        "ar": "أعطني ملخص الفئة للممر 12.",
+        "hi": "गलियारा 12 का श्रेणी सारांश दो।",
+        "mixed": "Aisle 12 ka category overview do."
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm walking Aisle 12 with the district manager in an hour.",
+        "de": "Ich gehe in einer Stunde mit dem Bezirksleiter durch Gang 12.",
+        "es": "Dentro de una hora recorro el pasillo 12 con el jefe de zona.",
+        "ar": "سأتجول في الممر 12 مع مدير المنطقة بعد ساعة.",
+        "hi": "एक घंटे में मैं ज़िला मैनेजर के साथ गलियारा 12 का दौरा करूँगा।",
+        "mixed": "Voy a recorrer el Aisle 12 con el district manager, ¿me das el overview?"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Summarise what's on the shelves in Aisle 12 this week.",
+        "de": "Fasse zusammen, was diese Woche in Gang 12 im Regal steht.",
+        "es": "Resume lo que hay en las estanterías del pasillo 12 esta semana.",
+        "ar": "لخّص ما على رفوف الممر 12 هذا الأسبوع.",
+        "hi": "इस हफ़्ते गलियारा 12 की शेल्फ़ पर क्या है, उसका सार दो।"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "categry overvew isle 12",
+        "de": "kategorie übersict gang 12",
+        "es": "resumen categoria pasiyo 12",
+        "ar": "ملخص فئه الممر 12",
+        "hi": "गलियारा 12 केटेगरी ओवरव्यू"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "It's the weekly review again and I need the usual category overview for Aisle 12 — the crafts and photo section — so I can see at a glance what we're carrying and how much of it.",
+        "de": "Es ist wieder Wochenrückblick, und ich brauche die übliche Kategorieübersicht für Gang 12 – Basteln und Foto –, damit ich auf einen Blick sehe, was wir führen und wie viel davon.",
+        "es": "Vuelve a tocar la revisión semanal y necesito el resumen por categoría de siempre del pasillo 12 (manualidades y foto) para ver de un vistazo qué tenemos y cuánto.",
+        "ar": "حان موعد المراجعة الأسبوعية مجددًا، وأحتاج ملخص الفئة المعتاد للممر 12 — قسم الحِرف والصور — لأرى بنظرة ما نحمله وكميته.",
+        "hi": "फिर से साप्ताहिक समीक्षा है और मुझे गलियारा 12 — क्राफ़्ट और फ़ोटो सेक्शन — का हमेशा वाला श्रेणी सारांश चाहिए ताकि एक नज़र में दिखे कि हम क्या रखते हैं और कितना।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Aisle 12 overview, weekly.",
+        "de": "Übersicht Gang 12, wöchentlich.",
+        "es": "Resumen semanal del pasillo 12.",
+        "ar": "ملخص أسبوعي للممر 12.",
+        "hi": "गलियारा 12 का साप्ताहिक सारांश।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Don't pad it — what's the Aisle 12 category overview?",
+        "de": "Nichts aufblähen – wie sieht die Kategorieübersicht für Gang 12 aus?",
+        "es": "Sin relleno: ¿cuál es el resumen por categoría del pasillo 12?",
+        "ar": "بلا حشو — ما ملخص الفئة للممر 12؟",
+        "hi": "बेवजह मत भरो — गलियारा 12 का श्रेणी सारांश क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Same as every week — the category overview for Aisle 12.",
+        "de": "Wie jede Woche – die Kategorieübersicht für Gang 12.",
+        "es": "Como cada semana: el resumen por categoría del pasillo 12.",
+        "ar": "كما كل أسبوع — ملخص الفئة للممر 12.",
+        "hi": "हर हफ़्ते की तरह — गलियारा 12 का श्रेणी सारांश।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Aisle 12 category overview",
+        "de": "Kategorieübersicht Gang 12",
+        "es": "resumen categoría pasillo 12",
+        "ar": "ملخص فئة الممر 12",
+        "hi": "गलियारा 12 श्रेणी सारांश",
+        "mixed": "Category overview für Aisle 12, bitte."
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Prepare the Aisle 12 category overview.",
+        "de": "Erstell die Kategorieübersicht für Gang 12.",
+        "es": "Prepara el resumen por categoría del pasillo 12.",
+        "ar": "جهّز ملخص الفئة للممر 12.",
+        "hi": "गलियारा 12 का श्रेणी सारांश तैयार करो।",
+        "mixed": "اعطيني الـ category overview للـ Aisle 12."
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "include out of stock",
+        "de": "auch ausverkaufte",
+        "es": "incluir agotados",
+        "ar": "تضمين النافد",
+        "hi": "आउट ऑफ़ स्टॉक शामिल करो"
+       },
+       "AA-01"
+      ],
+      "answer": {
+       "contains": [
+        "AA-01",
+        "AA-03",
+        "AA-05"
+       ],
+       "absent": [
+        "AA-02",
+        "AA-04"
+       ]
+      }
+     }
+    },
+    {
+     "id": "q2",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Give me a category overview for Aisle 12 — include out of stock.",
+        "de": "Gib mir eine Kategorieübersicht für Gang 12 – auch ausverkaufte.",
+        "es": "Dame un resumen por categoría del pasillo 12: incluir agotados.",
+        "ar": "أعطني ملخص الفئة للممر 12 — تضمين النافد.",
+        "hi": "गलियारा 12 का श्रेणी सारांश दो — आउट ऑफ़ स्टॉक शामिल करो।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I need to see every gap in Aisle 12 for the reorder meeting; include out of stock.",
+        "de": "Für das Nachbestellmeeting muss ich jede Lücke in Gang 12 sehen; auch ausverkaufte.",
+        "es": "Necesito ver todos los huecos del pasillo 12 para la reunión de pedidos; incluir agotados.",
+        "ar": "أحتاج رؤية كل فراغ في الممر 12 لاجتماع إعادة الطلب؛ تضمين النافد.",
+        "hi": "रीऑर्डर मीटिंग के लिए गलियारा 12 की हर कमी देखनी है; आउट ऑफ़ स्टॉक शामिल करो।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Summarise Aisle 12 this week, include out of stock.",
+        "de": "Fasse Gang 12 diese Woche zusammen, auch ausverkaufte.",
+        "es": "Resume el pasillo 12 esta semana, incluir agotados.",
+        "ar": "لخّص الممر 12 هذا الأسبوع، تضمين النافد.",
+        "hi": "इस हफ़्ते गलियारा 12 का सार दो, आउट ऑफ़ स्टॉक शामिल करो।"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "isle 12 overvew include out of stock",
+        "de": "gang 12 übersict auch ausverkaufte",
+        "es": "pasiyo 12 resumen incluir agotados",
+        "ar": "الممر 12 ملخص تضمين النافد",
+        "hi": "गलियारा 12 ओवरव्यू आउट ऑफ़ स्टॉक शामिल करो"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "For tomorrow's reorder meeting I want the full picture of Aisle 12, gaps and all, so this time include out of stock in the category overview.",
+        "de": "Für das Nachbestellmeeting morgen will ich das vollständige Bild von Gang 12 mit allen Lücken, also diesmal auch ausverkaufte in der Kategorieübersicht.",
+        "es": "Para la reunión de pedidos de mañana quiero la foto completa del pasillo 12, con huecos y todo, así que esta vez incluir agotados en el resumen por categoría.",
+        "ar": "لاجتماع إعادة الطلب غدًا أريد الصورة الكاملة للممر 12 بكل فراغاته، لذا هذه المرة تضمين النافد في ملخص الفئة.",
+        "hi": "कल की रीऑर्डर मीटिंग के लिए मुझे गलियारा 12 की पूरी तस्वीर चाहिए, कमियों समेत, इसलिए इस बार श्रेणी सारांश में आउट ऑफ़ स्टॉक शामिल करो।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Aisle 12, include out of stock.",
+        "de": "Gang 12, auch ausverkaufte.",
+        "es": "Pasillo 12, incluir agotados.",
+        "ar": "الممر 12، تضمين النافد.",
+        "hi": "गलियारा 12, आउट ऑफ़ स्टॉक शामिल करो।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Don't leave the empty ones out this time — include out of stock for Aisle 12.",
+        "de": "Lass die leeren diesmal nicht weg – auch ausverkaufte für Gang 12.",
+        "es": "Esta vez no quites los vacíos: incluir agotados en el pasillo 12.",
+        "ar": "لا تستبعد الفارغة هذه المرة — تضمين النافد للممر 12.",
+        "hi": "इस बार ख़ाली वाले मत हटाना — गलियारा 12 के लिए आउट ऑफ़ स्टॉक शामिल करो।"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "The usual Aisle 12 overview, but include out of stock.",
+        "de": "Die übliche Übersicht für Gang 12, aber auch ausverkaufte.",
+        "es": "El resumen de siempre del pasillo 12, pero incluir agotados.",
+        "ar": "ملخص الممر 12 المعتاد، لكن تضمين النافد.",
+        "hi": "गलियारा 12 का हमेशा वाला सारांश, पर आउट ऑफ़ स्टॉक शामिल करो।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Aisle 12 overview include out of stock",
+        "de": "Übersicht Gang 12 auch ausverkaufte",
+        "es": "resumen pasillo 12 incluir agotados",
+        "ar": "ملخص الممر 12 تضمين النافد",
+        "hi": "गलियारा 12 सारांश आउट ऑफ़ स्टॉक शामिल करो"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Prepare the Aisle 12 overview and include out of stock.",
+        "de": "Erstell die Übersicht für Gang 12, auch ausverkaufte.",
+        "es": "Prepara el resumen del pasillo 12 e incluir agotados.",
+        "ar": "جهّز ملخص الممر 12 مع تضمين النافد.",
+        "hi": "गलियारा 12 का सारांश तैयार करो और आउट ऑफ़ स्टॉक शामिल करो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "include out of stock",
+        "de": "auch ausverkaufte",
+        "es": "incluir agotados",
+        "ar": "تضمين النافد",
+        "hi": "आउट ऑफ़ स्टॉक शामिल करो"
+       },
+       "AA-02"
+      ],
+      "answer": {
+       "contains": [
+        "AA-01",
+        "AA-02",
+        "AA-04"
+       ]
+      }
+     }
+    }
+   ],
+   "origin": "inventorysmart-11"
+  },
+  {
+   "id": "explicit-retail-competitor-supplier",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -40,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Never suggest suppliers owned by MegaGroup — they're our competitor's parent company.",
+        "de": "Schlag nie Lieferanten vor, die zu MegaGroup gehören – das ist die Muttergesellschaft unseres Konkurrenten.",
+        "es": "No sugieras nunca proveedores que pertenezcan a MegaGroup: es la matriz de nuestro competidor.",
+        "ar": "لا تقترح أبدًا موردين تملكهم MegaGroup — فهي الشركة الأم لمنافسنا.",
+        "hi": "MegaGroup के स्वामित्व वाले सप्लायर कभी मत सुझाना — वह हमारे प्रतियोगी की मूल कंपनी है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "data",
+     "day": -5,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Paper bag supplier options: BagCo (owned by MegaGroup), GreenSack, PaperWorks Ltd, Kraftline.",
+        "de": "Optionen für Papiertüten-Lieferanten: BagCo (gehört zu MegaGroup), GreenSack, PaperWorks Ltd, Kraftline.",
+        "es": "Opciones de proveedores de bolsas de papel: BagCo (propiedad de MegaGroup), GreenSack, PaperWorks Ltd, Kraftline.",
+        "ar": "خيارات موردي الأكياس الورقية: BagCo (مملوكة لـ MegaGroup)، GreenSack، PaperWorks Ltd، Kraftline.",
+        "hi": "पेपर बैग सप्लायर विकल्प: BagCo (MegaGroup के स्वामित्व में), GreenSack, PaperWorks Ltd, Kraftline।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Suggest three suppliers for paper bags.",
+        "de": "Schlag drei Lieferanten für Papiertüten vor.",
+        "es": "Sugiere tres proveedores de bolsas de papel.",
+        "ar": "اقترح ثلاثة موردين للأكياس الورقية.",
+        "hi": "पेपर बैग के लिए तीन सप्लायर सुझाओ।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "We need a new paper bag vendor.",
+        "de": "Wir brauchen einen neuen Papiertüten-Lieferanten.",
+        "es": "Necesitamos un nuevo proveedor de bolsas de papel.",
+        "ar": "نحتاج إلى مورّد جديد للأكياس الورقية.",
+        "hi": "हमें नया पेपर बैग वेंडर चाहिए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Who could supply our paper bags?",
+        "de": "Wer könnte unsere Papiertüten liefern?",
+        "es": "¿Quién podría suministrarnos las bolsas de papel?",
+        "ar": "من يمكنه توريد أكياسنا الورقية؟",
+        "hi": "हमारे पेपर बैग कौन सप्लाई कर सकता है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "sugest supliers for paper bgs",
+        "de": "lieferantn für papiertütn vorschlagn",
+        "es": "sugiere provedores de bolsas de papel",
+        "ar": "اقترح موردين اكياس ورق",
+        "hi": "पेपर बैग के सप्लायर सुझाव"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Our paper bag contract is up next month and procurement wants three candidate suppliers on the table by Thursday — who would you put forward?",
+        "de": "Unser Papiertütenvertrag läuft nächsten Monat aus, und der Einkauf will bis Donnerstag drei Kandidaten auf dem Tisch – wen würdest du vorschlagen?",
+        "es": "Nuestro contrato de bolsas de papel vence el mes que viene y compras quiere tres proveedores candidatos antes del jueves. ¿Cuáles propondrías?",
+        "ar": "ينتهي عقد الأكياس الورقية الشهر المقبل، والمشتريات تريد ثلاثة موردين مرشحين بحلول الخميس — من ترشّح؟",
+        "hi": "हमारा पेपर बैग अनुबंध अगले महीने ख़त्म हो रहा है और प्रोक्योरमेंट गुरुवार तक तीन उम्मीदवार सप्लायर चाहता है — तुम किन्हें आगे रखोगे?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Paper bag vendor options?",
+        "de": "Optionen für Papiertüten-Lieferanten?",
+        "es": "¿Opciones de proveedor de bolsas?",
+        "ar": "خيارات مورّد الأكياس؟",
+        "hi": "पेपर बैग वेंडर विकल्प?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Don't just list everyone — which three paper bag suppliers should we consider?",
+        "de": "Nicht einfach alle aufzählen – welche drei Papiertüten-Lieferanten sollen wir prüfen?",
+        "es": "No los pongas todos: ¿qué tres proveedores de bolsas consideramos?",
+        "ar": "لا تذكر الجميع — أي ثلاثة موردين للأكياس نأخذ بالاعتبار؟",
+        "hi": "सबको मत गिनाओ — कौन से तीन पेपर बैग सप्लायर देखें?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Keeping my rules in mind, who should supply our paper bags?",
+        "de": "Unter Beachtung meiner Regeln: Wer soll unsere Papiertüten liefern?",
+        "es": "Teniendo en cuenta mis reglas, ¿quién debería suministrar las bolsas?",
+        "ar": "مع مراعاة قواعدي، من يجب أن يورّد أكياسنا الورقية؟",
+        "hi": "मेरे नियम ध्यान में रखते हुए हमारे पेपर बैग कौन सप्लाई करे?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "paper bag suppliers",
+        "de": "Papiertüten-Lieferanten",
+        "es": "proveedores bolsas papel",
+        "ar": "موردو الأكياس الورقية",
+        "hi": "पेपर बैग सप्लायर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "List three paper bag suppliers.",
+        "de": "Nenn drei Papiertüten-Lieferanten.",
+        "es": "Enumera tres proveedores de bolsas de papel.",
+        "ar": "اذكر ثلاثة موردين للأكياس الورقية.",
+        "hi": "तीन पेपर बैग सप्लायर बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "competitor",
+        "de": "Konkurrenten",
+        "es": "competidor",
+        "ar": "لمنافسنا",
+        "hi": "प्रतियोगी"
+       },
+       "GreenSack"
+      ],
+      "answer": {
+       "contains": [
+        "GreenSack"
+       ],
+       "absent": [
+        "BagCo"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "explicit-retail-sales-rounding",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -35,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "When I ask for sales numbers, always round to the nearest thousand and write them with a k, like 12k.",
+        "de": "Wenn ich nach Umsatzzahlen frage, runde immer auf volle Tausend und schreib sie mit k, etwa 12k.",
+        "es": "Cuando te pida cifras de ventas, redondea siempre al millar más cercano y escríbelas con k, por ejemplo 12k.",
+        "ar": "عندما أطلب أرقام المبيعات، قرّبها دائمًا إلى أقرب ألف واكتبها بحرف k، مثل 12k.",
+        "hi": "जब मैं बिक्री के आँकड़े माँगूँ, हमेशा निकटतम हज़ार तक गोल करना और k के साथ लिखना, जैसे 12k।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "data",
+     "day": -2,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Store 12 sales last week: $48,730.",
+        "de": "Umsatz Filiale 12 letzte Woche: $48,730.",
+        "es": "Ventas de la Tienda 12 la semana pasada: $48,730.",
+        "ar": "مبيعات المتجر 12 الأسبوع الماضي: $48,730.",
+        "hi": "पिछले हफ़्ते स्टोर 12 की बिक्री: $48,730।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What were Store 12's sales last week?",
+        "de": "Wie hoch war der Umsatz von Filiale 12 letzte Woche?",
+        "es": "¿Cuánto vendió la Tienda 12 la semana pasada?",
+        "ar": "كم كانت مبيعات المتجر 12 الأسبوع الماضي؟",
+        "hi": "पिछले हफ़्ते स्टोर 12 की बिक्री कितनी थी?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The regional manager wants Store 12's number from last week.",
+        "de": "Der Regionalleiter will die Zahl von Filiale 12 aus der letzten Woche.",
+        "es": "El jefe regional quiere la cifra de la Tienda 12 de la semana pasada.",
+        "ar": "يريد المدير الإقليمي رقم المتجر 12 من الأسبوع الماضي.",
+        "hi": "रीजनल मैनेजर को पिछले हफ़्ते का स्टोर 12 का आँकड़ा चाहिए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How much did Store 12 sell last week?",
+        "de": "Wie viel hat Filiale 12 letzte Woche verkauft?",
+        "es": "¿Cuánto vendió la Tienda 12 la semana pasada en total?",
+        "ar": "ما حجم مبيعات المتجر 12 الأسبوع الماضي؟",
+        "hi": "स्टोर 12 ने पिछले हफ़्ते कितना बेचा?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "stor 12 sals last wek",
+        "de": "umsaz filale 12 letzte woch",
+        "es": "ventas tienda 12 semana pasda",
+        "ar": "مبيعات المتجر 12 الاسبوع اللي فات",
+        "hi": "स्टोर 12 पिछले हफते सेल्स"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm putting together the Monday huddle notes and need last week's sales figure for Store 12 to compare against the district average.",
+        "de": "Ich stelle die Notizen für die Montagsrunde zusammen und brauche den Umsatz von Filiale 12 aus der letzten Woche, um ihn mit dem Bezirksschnitt zu vergleichen.",
+        "es": "Estoy preparando las notas de la reunión del lunes y necesito las ventas de la Tienda 12 de la semana pasada para compararlas con la media de la zona.",
+        "ar": "أجهّز ملاحظات اجتماع الاثنين وأحتاج رقم مبيعات المتجر 12 للأسبوع الماضي لمقارنته بمتوسط المنطقة.",
+        "hi": "मैं सोमवार की मीटिंग के नोट्स बना रहा हूँ और ज़िला औसत से तुलना के लिए पिछले हफ़्ते की स्टोर 12 की बिक्री चाहिए।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Store 12, last week's sales?",
+        "de": "Filiale 12, Umsatz letzte Woche?",
+        "es": "Tienda 12, ¿ventas de la semana pasada?",
+        "ar": "المتجر 12، مبيعات الأسبوع الماضي؟",
+        "hi": "स्टोर 12, पिछले हफ़्ते की बिक्री?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not the exact cents — what did Store 12 do last week?",
+        "de": "Nicht auf den Cent genau – was hat Filiale 12 letzte Woche gemacht?",
+        "es": "Sin céntimos: ¿cuánto hizo la Tienda 12 la semana pasada?",
+        "ar": "ليس بالسنتات — كم حقق المتجر 12 الأسبوع الماضي؟",
+        "hi": "सेंट तक नहीं — पिछले हफ़्ते स्टोर 12 ने कितना किया?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "The way I like my numbers — Store 12 sales last week?",
+        "de": "So, wie ich meine Zahlen mag – Umsatz Filiale 12 letzte Woche?",
+        "es": "Como me gustan las cifras: ¿ventas de la Tienda 12 la semana pasada?",
+        "ar": "بالطريقة التي أحب بها أرقامي — مبيعات المتجر 12 الأسبوع الماضي؟",
+        "hi": "मेरे पसंद के तरीक़े से — पिछले हफ़्ते स्टोर 12 की बिक्री?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Store 12 weekly sales",
+        "de": "Filiale 12 Wochenumsatz",
+        "es": "Tienda 12 ventas semanales",
+        "ar": "المتجر 12 المبيعات الأسبوعية",
+        "hi": "स्टोर 12 साप्ताहिक बिक्री"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me Store 12's sales for last week.",
+        "de": "Nenn mir den Umsatz von Filiale 12 für letzte Woche.",
+        "es": "Dime las ventas de la Tienda 12 de la semana pasada.",
+        "ar": "أخبرني بمبيعات المتجر 12 للأسبوع الماضي.",
+        "hi": "मुझे पिछले हफ़्ते की स्टोर 12 की बिक्री बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "nearest thousand",
+        "de": "volle Tausend",
+        "es": "millar más cercano",
+        "ar": "أقرب ألف",
+        "hi": "निकटतम हज़ार"
+       },
+       "48730"
+      ],
+      "answer": {
+       "contains": [
+        "49k"
+       ],
+       "absent": [
+        "48730"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "explicit-retail-no-clearance",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -28,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Exclude clearance items from any reorder suggestions you give me.",
+        "de": "Schließ Abverkaufsartikel aus allen Nachbestellvorschlägen aus, die du mir machst.",
+        "es": "Excluye los artículos de liquidación de cualquier sugerencia de pedido que me hagas.",
+        "ar": "استبعد أصناف التصفية من أي اقتراحات إعادة طلب تقدمها لي.",
+        "hi": "मुझे दिए किसी भी रीऑर्डर सुझाव में क्लीयरेंस आइटम शामिल मत करना।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "data",
+     "day": -2,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Toy aisle low stock: TY-14 puzzle cube 3 left (clearance); RG-20 building blocks 4 left; RG-31 plush bear 2 left.",
+        "de": "Spielwarengang, niedriger Bestand: TY-14 Zauberwürfel noch 3 (Abverkauf); RG-20 Bausteine noch 4; RG-31 Plüschbär noch 2.",
+        "es": "Pasillo de juguetes con poco stock: TY-14 cubo rompecabezas quedan 3 (liquidación); RG-20 bloques de construcción quedan 4; RG-31 oso de peluche quedan 2.",
+        "ar": "ممر الألعاب منخفض المخزون: TY-14 مكعب الألغاز تبقّى 3 (تصفية)؛ RG-20 مكعبات بناء تبقّى 4؛ RG-31 دب محشو تبقّى 2.",
+        "hi": "खिलौना गलियारे में कम स्टॉक: TY-14 पज़ल क्यूब 3 बचे (क्लीयरेंस); RG-20 बिल्डिंग ब्लॉक 4 बचे; RG-31 टेडी बेयर 2 बचे।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What should I reorder for the toy aisle?",
+        "de": "Was soll ich für den Spielwarengang nachbestellen?",
+        "es": "¿Qué pido para el pasillo de juguetes?",
+        "ar": "ماذا أعيد طلبه لممر الألعاب؟",
+        "hi": "खिलौना गलियारे के लिए क्या रीऑर्डर करूँ?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The toy aisle is looking thin.",
+        "de": "Der Spielwarengang sieht ziemlich leer aus.",
+        "es": "El pasillo de juguetes se ve escaso.",
+        "ar": "ممر الألعاب يبدو شبه فارغ.",
+        "hi": "खिलौना गलियारा ख़ाली-ख़ाली लग रहा है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which toys need restocking?",
+        "de": "Welche Spielwaren müssen nachgefüllt werden?",
+        "es": "¿Qué juguetes hay que reponer?",
+        "ar": "ما الألعاب التي تحتاج إلى إعادة تعبئة؟",
+        "hi": "किन खिलौनों को फिर से भरना है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "reordr toys isle",
+        "de": "nachbestelen spielwarn gang",
+        "es": "pedido pasiyo de juguetes",
+        "ar": "اعاده طلب ممر الالعاب",
+        "hi": "खिलोना गलियारा रिऑर्डर"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm placing the weekly toy order this afternoon and a few things are running low in the aisle — what would you have me reorder?",
+        "de": "Ich gebe heute Nachmittag die wöchentliche Spielwarenbestellung auf, und ein paar Dinge werden im Gang knapp – was soll ich nachbestellen?",
+        "es": "Esta tarde hago el pedido semanal de juguetes y hay varias cosas bajas en el pasillo; ¿qué me recomiendas pedir?",
+        "ar": "سأقدّم طلب الألعاب الأسبوعي بعد الظهر وبعض الأصناف تنفد في الممر — ماذا تريدني أن أعيد طلبه؟",
+        "hi": "आज दोपहर मैं साप्ताहिक खिलौना ऑर्डर दे रहा हूँ और गलियारे में कुछ चीज़ें कम हो रही हैं — क्या रीऑर्डर करूँ?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Toy order time.",
+        "de": "Zeit für die Spielwarenbestellung.",
+        "es": "Hora del pedido de juguetes.",
+        "ar": "حان وقت طلب الألعاب.",
+        "hi": "खिलौना ऑर्डर का समय।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not everything that's low — what should I actually reorder for toys?",
+        "de": "Nicht alles, was knapp ist – was soll ich bei Spielwaren tatsächlich nachbestellen?",
+        "es": "No todo lo que esté bajo: ¿qué debería pedir de verdad de juguetes?",
+        "ar": "ليس كل ما هو منخفض — ماذا أعيد طلبه فعلًا من الألعاب؟",
+        "hi": "जो कुछ कम है वह सब नहीं — खिलौनों में असल में क्या रीऑर्डर करूँ?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "With my usual rules, what toys go on the reorder?",
+        "de": "Mit meinen üblichen Regeln: Welche Spielwaren kommen auf die Nachbestellung?",
+        "es": "Con mis reglas de siempre, ¿qué juguetes van en el pedido?",
+        "ar": "بقواعدي المعتادة، أي ألعاب تدخل في إعادة الطلب؟",
+        "hi": "मेरे सामान्य नियमों के साथ कौन से खिलौने रीऑर्डर में जाएँगे?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "toy reorder list",
+        "de": "Nachbestellliste Spielwaren",
+        "es": "lista pedido juguetes",
+        "ar": "قائمة إعادة طلب الألعاب",
+        "hi": "खिलौना रीऑर्डर सूची"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Suggest the toy reorder.",
+        "de": "Schlag die Spielwaren-Nachbestellung vor.",
+        "es": "Sugiere el pedido de juguetes.",
+        "ar": "اقترح إعادة طلب الألعاب.",
+        "hi": "खिलौना रीऑर्डर सुझाओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "reorder suggestions",
+        "de": "Nachbestellvorschlägen",
+        "es": "sugerencia de pedido",
+        "ar": "اقتراحات إعادة طلب",
+        "hi": "रीऑर्डर सुझाव"
+       },
+       "RG-20"
+      ],
+      "answer": {
+       "contains": [
+        "RG-20",
+        "RG-31"
+       ],
+       "absent": [
+        "TY-14"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "explicit-retail-store-line",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -50,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Never give vendors my personal cell, 555-0199; always give them the store line, 555-0100.",
+        "de": "Gib Lieferanten nie meine private Handynummer 555-0199; nenn ihnen immer die Filialnummer 555-0100.",
+        "es": "No des nunca a los proveedores mi móvil personal, 555-0199; dales siempre la línea de la tienda, 555-0100.",
+        "ar": "لا تعطِ الموردين رقم جوالي الشخصي 555-0199 أبدًا؛ أعطهم دائمًا خط المتجر 555-0100.",
+        "hi": "वेंडरों को मेरा पर्सनल मोबाइल 555-0199 कभी मत देना; हमेशा स्टोर लाइन 555-0100 देना।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Draft a message to a new vendor with our contact details.",
+        "de": "Entwirf eine Nachricht an einen neuen Lieferanten mit unseren Kontaktdaten.",
+        "es": "Redacta un mensaje a un nuevo proveedor con nuestros datos de contacto.",
+        "ar": "اكتب رسالة إلى مورّد جديد تتضمن بيانات الاتصال الخاصة بنا.",
+        "hi": "नए वेंडर के लिए हमारी संपर्क जानकारी के साथ संदेश का मसौदा बनाओ।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "A new candle supplier asked how to reach us.",
+        "de": "Ein neuer Kerzenlieferant hat gefragt, wie er uns erreicht.",
+        "es": "Un nuevo proveedor de velas preguntó cómo contactarnos.",
+        "ar": "سأل مورّد شموع جديد كيف يتواصل معنا.",
+        "hi": "एक नए मोमबत्ती सप्लायर ने पूछा कि हमसे कैसे संपर्क करे।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which phone number should vendors call us on?",
+        "de": "Unter welcher Nummer sollen uns Lieferanten anrufen?",
+        "es": "¿A qué número deben llamarnos los proveedores?",
+        "ar": "على أي رقم يجب أن يتصل بنا الموردون؟",
+        "hi": "वेंडर हमें किस नंबर पर फ़ोन करें?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "draft vendr msg with contct info",
+        "de": "nachricht an lieferant mit kontakdaten",
+        "es": "mensaje a provedor con datos de contacto",
+        "ar": "رساله لمورد مع بيانات التواصل",
+        "hi": "वेंडर को कॉन्टैक्ट के साथ मैसेज"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "We just signed up a new candle supplier for the holiday range and I want to send them a welcome note with the details they should use to reach us about deliveries.",
+        "de": "Wir haben gerade einen neuen Kerzenlieferanten für das Feiertagssortiment gewonnen, und ich will ihm eine Willkommensnachricht mit den Kontaktdaten schicken, die er für Lieferungen nutzen soll.",
+        "es": "Acabamos de dar de alta a un nuevo proveedor de velas para la gama de fiestas y quiero enviarle una nota de bienvenida con los datos que debe usar para contactarnos por las entregas.",
+        "ar": "تعاقدنا للتو مع مورّد شموع جديد لتشكيلة الأعياد، وأريد إرسال رسالة ترحيب تتضمن البيانات التي يستخدمها للتواصل معنا بشأن التوريد.",
+        "hi": "हमने त्योहारी रेंज के लिए अभी एक नया मोमबत्ती सप्लायर जोड़ा है और मैं उन्हें स्वागत नोट भेजना चाहता हूँ जिसमें डिलीवरी के लिए हमसे संपर्क की जानकारी हो।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Vendor welcome note.",
+        "de": "Willkommensnachricht für den Lieferanten.",
+        "es": "Nota de bienvenida al proveedor.",
+        "ar": "رسالة ترحيب بالمورّد.",
+        "hi": "वेंडर स्वागत नोट।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not my personal number — what contact do I give the new vendor?",
+        "de": "Nicht meine private Nummer – welchen Kontakt gebe ich dem neuen Lieferanten?",
+        "es": "Mi número personal no: ¿qué contacto le doy al nuevo proveedor?",
+        "ar": "ليس رقمي الشخصي — أي رقم أعطي المورّد الجديد؟",
+        "hi": "मेरा पर्सनल नंबर नहीं — नए वेंडर को कौन सा संपर्क दूँ?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Following my rule for vendors, write the new supplier a contact note.",
+        "de": "Nach meiner Regel für Lieferanten: Schreib dem neuen Lieferanten eine Kontaktnachricht.",
+        "es": "Siguiendo mi norma para proveedores, escribe al nuevo proveedor una nota de contacto.",
+        "ar": "وفق قاعدتي للموردين، اكتب للمورّد الجديد رسالة تواصل.",
+        "hi": "वेंडरों के मेरे नियम के अनुसार नए सप्लायर को संपर्क नोट लिखो।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "vendor contact number",
+        "de": "Kontaktnummer für Lieferanten",
+        "es": "número de contacto proveedores",
+        "ar": "رقم التواصل للموردين",
+        "hi": "वेंडर संपर्क नंबर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Write the new vendor our contact details.",
+        "de": "Schreib dem neuen Lieferanten unsere Kontaktdaten.",
+        "es": "Escribe al nuevo proveedor nuestros datos de contacto.",
+        "ar": "اكتب للمورّد الجديد بيانات اتصالنا.",
+        "hi": "नए वेंडर को हमारी संपर्क जानकारी लिखो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "555-0100"
+      ],
+      "answer": {
+       "contains": [
+        "555-0100"
+       ],
+       "absent": [
+        "555-0199"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "explicit-retail-no-sunday",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -60,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Never book deliveries on Sundays — the receiving dock is closed.",
+        "de": "Buch nie Lieferungen am Sonntag – der Wareneingang ist geschlossen.",
+        "es": "No reserves nunca entregas en domingo: el muelle de recepción está cerrado.",
+        "ar": "لا تحجز التوريدات أبدًا يوم الأحد — رصيف الاستلام مغلق.",
+        "hi": "रविवार को कभी डिलीवरी बुक मत करना — रिसीविंग डॉक बंद रहता है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "data",
+     "day": -3,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Golden Crust can deliver on Sunday, Tuesday or Thursday next week.",
+        "de": "Golden Crust kann nächste Woche am Sonntag, Dienstag oder Donnerstag liefern.",
+        "es": "Golden Crust puede entregar el domingo, el martes o el jueves de la semana que viene.",
+        "ar": "يمكن لـ Golden Crust التوريد يوم الأحد أو الثلاثاء أو الخميس الأسبوع المقبل.",
+        "hi": "Golden Crust अगले हफ़्ते रविवार, मंगलवार या गुरुवार को डिलीवर कर सकता है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Book the next Golden Crust delivery.",
+        "de": "Buch die nächste Lieferung von Golden Crust.",
+        "es": "Reserva la próxima entrega de Golden Crust.",
+        "ar": "احجز التوريد القادم من Golden Crust.",
+        "hi": "Golden Crust की अगली डिलीवरी बुक करो।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Golden Crust sent their available slots for next week.",
+        "de": "Golden Crust hat seine freien Termine für nächste Woche geschickt.",
+        "es": "Golden Crust ha enviado sus huecos disponibles para la semana que viene.",
+        "ar": "أرسلت Golden Crust مواعيدها المتاحة للأسبوع المقبل.",
+        "hi": "Golden Crust ने अगले हफ़्ते के उपलब्ध स्लॉट भेजे हैं।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which day should the bakery delivery come next week?",
+        "de": "An welchem Tag soll die Backwarenlieferung nächste Woche kommen?",
+        "es": "¿Qué día debería llegar la entrega de panadería la semana que viene?",
+        "ar": "في أي يوم يجب أن يصل توريد المخبوزات الأسبوع المقبل؟",
+        "hi": "अगले हफ़्ते बेकरी डिलीवरी किस दिन आए?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "book goldn crust delivry",
+        "de": "golden krust lieferung bucen",
+        "es": "reserva entrega golden crus",
+        "ar": "احجز توصيل قولدن كرست",
+        "hi": "गोल्डन क्रस्ट डिलिवरी बुक"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Golden Crust emailed three possible delivery days for next week and wants an answer by tonight; please pick one and draft the confirmation.",
+        "de": "Golden Crust hat drei mögliche Liefertage für nächste Woche gemailt und will bis heute Abend eine Antwort; such bitte einen aus und entwirf die Bestätigung.",
+        "es": "Golden Crust ha enviado tres días posibles de entrega para la semana que viene y quiere respuesta esta noche; elige uno y redacta la confirmación.",
+        "ar": "أرسلت Golden Crust ثلاثة أيام ممكنة للتوريد الأسبوع المقبل وتريد ردًا الليلة؛ اختر واحدًا واكتب التأكيد.",
+        "hi": "Golden Crust ने अगले हफ़्ते के तीन संभावित डिलीवरी दिन ईमेल किए हैं और आज रात तक जवाब चाहता है; एक चुनो और पुष्टि का मसौदा बनाओ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Bakery slot, next week?",
+        "de": "Bäckerei-Termin nächste Woche?",
+        "es": "¿Hueco de panadería la semana que viene?",
+        "ar": "موعد المخبز الأسبوع المقبل؟",
+        "hi": "अगले हफ़्ते बेकरी स्लॉट?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Don't just take the first slot — book the Golden Crust delivery.",
+        "de": "Nimm nicht einfach den ersten Termin – buch die Golden-Crust-Lieferung.",
+        "es": "No cojas el primer hueco sin más: reserva la entrega de Golden Crust.",
+        "ar": "لا تأخذ أول موعد فقط — احجز توريد Golden Crust.",
+        "hi": "बस पहला स्लॉट मत लेना — Golden Crust डिलीवरी बुक करो।"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "With my scheduling rules, when should Golden Crust deliver?",
+        "de": "Mit meinen Terminregeln: Wann soll Golden Crust liefern?",
+        "es": "Con mis normas de agenda, ¿cuándo debería entregar Golden Crust?",
+        "ar": "وفق قواعد الجدولة لدي، متى يجب أن توصّل Golden Crust؟",
+        "hi": "मेरे शेड्यूलिंग नियमों के साथ Golden Crust कब डिलीवर करे?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Golden Crust delivery day",
+        "de": "Liefertag Golden Crust",
+        "es": "día entrega Golden Crust",
+        "ar": "يوم توريد Golden Crust",
+        "hi": "Golden Crust डिलीवरी दिन"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Schedule Golden Crust's next delivery.",
+        "de": "Plane die nächste Lieferung von Golden Crust ein.",
+        "es": "Programa la próxima entrega de Golden Crust.",
+        "ar": "جدول التوريد القادم لـ Golden Crust.",
+        "hi": "Golden Crust की अगली डिलीवरी शेड्यूल करो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "Never book deliveries on Sundays",
+        "de": "nie Lieferungen am Sonntag",
+        "es": "nunca entregas en domingo",
+        "ar": "لا تحجز التوريدات أبدًا يوم الأحد",
+        "hi": "रविवार को कभी डिलीवरी"
+       }
+      ],
+      "answer": {
+       "contains": [
+        [
+         {
+          "en": "Tuesday",
+          "de": "Dienstag",
+          "es": "martes",
+          "ar": "الثلاثاء",
+          "hi": "मंगलवार"
+         },
+         {
+          "en": "Thursday",
+          "de": "Donnerstag",
+          "es": "jueves",
+          "ar": "الخميس",
+          "hi": "गुरुवार"
+         }
+        ]
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "explicit-personal-no-cilantro",
+   "domain": "personal",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -90,
+     "at": "20:30",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Never suggest recipes with cilantro — I can't stand it.",
+        "de": "Schlag nie Rezepte mit Koriander vor – ich kann ihn nicht ausstehen.",
+        "es": "No me sugieras nunca recetas con cilantro: no lo soporto.",
+        "ar": "لا تقترح أبدًا وصفات فيها الكزبرة — لا أطيقها.",
+        "hi": "कभी धनिया वाली रेसिपी मत सुझाना — मुझे बिल्कुल पसंद नहीं।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Suggest a dinner recipe with chicken and rice.",
+        "de": "Schlag ein Abendessen mit Hähnchen und Reis vor.",
+        "es": "Sugiéreme una receta de cena con pollo y arroz.",
+        "ar": "اقترح وصفة عشاء بالدجاج والأرز.",
+        "hi": "चिकन और चावल वाली डिनर रेसिपी सुझाओ।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I've got chicken thighs and rice and no plan for dinner.",
+        "de": "Ich habe Hähnchenschenkel und Reis und keinen Plan fürs Abendessen.",
+        "es": "Tengo contramuslos de pollo y arroz y ninguna idea para cenar.",
+        "ar": "لدي أفخاذ دجاج وأرز ولا خطة للعشاء.",
+        "hi": "मेरे पास चिकन थाई और चावल हैं और डिनर का कोई प्लान नहीं।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What can I cook tonight with chicken and rice?",
+        "de": "Was kann ich heute Abend mit Hähnchen und Reis kochen?",
+        "es": "¿Qué puedo cocinar esta noche con pollo y arroz?",
+        "ar": "ماذا أطبخ الليلة بالدجاج والأرز؟",
+        "hi": "आज रात चिकन और चावल से क्या बनाऊँ?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "chiken and rise recipie",
+        "de": "rezpt hänchen reis",
+        "es": "receta de poyo con aros",
+        "ar": "وصفه دجاج ورز",
+        "hi": "चिकन चावल रेसपी"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Friends are coming over tomorrow and I'd like to make something a bit special with chicken and rice — maybe something Latin American or Southeast Asian — give me a recipe.",
+        "de": "Morgen kommen Freunde, und ich möchte etwas Besonderes mit Hähnchen und Reis machen – vielleicht lateinamerikanisch oder südostasiatisch –, gib mir ein Rezept.",
+        "es": "Mañana vienen amigos y quiero hacer algo un poco especial con pollo y arroz, quizá latinoamericano o del sudeste asiático; dame una receta.",
+        "ar": "سيزورني أصدقاء غدًا وأود تحضير شيء مميز بالدجاج والأرز — ربما من أمريكا اللاتينية أو جنوب شرق آسيا — أعطني وصفة.",
+        "hi": "कल दोस्त आ रहे हैं और मैं चिकन और चावल से कुछ ख़ास बनाना चाहता हूँ — शायद लैटिन अमेरिकी या दक्षिण-पूर्व एशियाई — कोई रेसिपी दो।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Chicken, rice, dinner — ideas?",
+        "de": "Hähnchen, Reis, Abendessen – Ideen?",
+        "es": "Pollo, arroz, cena: ¿ideas?",
+        "ar": "دجاج، أرز، عشاء — أفكار؟",
+        "hi": "चिकन, चावल, डिनर — कोई आइडिया?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Nothing I hate, please — what's a good chicken and rice dish?",
+        "de": "Bitte nichts, was ich hasse – was ist ein gutes Gericht mit Hähnchen und Reis?",
+        "es": "Nada que odie, por favor: ¿qué buen plato de pollo con arroz hay?",
+        "ar": "لا شيء أكرهه من فضلك — ما طبق جيد بالدجاج والأرز؟",
+        "hi": "कुछ ऐसा नहीं जो मुझे नापसंद हो — चिकन और चावल की अच्छी डिश क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "You know my taste — recipe for chicken and rice?",
+        "de": "Du kennst meinen Geschmack – Rezept für Hähnchen mit Reis?",
+        "es": "Conoces mis gustos: ¿receta de pollo con arroz?",
+        "ar": "تعرف ذوقي — وصفة دجاج بالأرز؟",
+        "hi": "तुम्हें मेरा स्वाद पता है — चिकन और चावल की रेसिपी?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "chicken rice recipe",
+        "de": "Rezept Hähnchen Reis",
+        "es": "receta pollo arroz",
+        "ar": "وصفة دجاج أرز",
+        "hi": "चिकन चावल रेसिपी"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me a chicken and rice recipe.",
+        "de": "Gib mir ein Rezept mit Hähnchen und Reis.",
+        "es": "Dame una receta de pollo con arroz.",
+        "ar": "أعطني وصفة دجاج بالأرز.",
+        "hi": "मुझे चिकन और चावल की रेसिपी दो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "cilantro",
+        "de": "Koriander",
+        "es": "cilantro",
+        "ar": "الكزبرة",
+        "hi": "धनिया"
+       }
+      ],
+      "answer": {
+       "absent": [
+        {
+         "en": "cilantro",
+         "de": "Koriander",
+         "es": "cilantro",
+         "ar": "كزبرة",
+         "hi": "धनिया"
+        },
+        "coriander"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "explicit-it-trading-window",
+   "domain": "it_support",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -45,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Never schedule maintenance on the trading servers between 09:00 and 11:00 — that's the trading window.",
+        "de": "Plane nie Wartung an den Handelsservern zwischen 09:00 und 11:00 – das ist das Handelsfenster.",
+        "es": "No programes nunca mantenimiento en los servidores de trading entre las 09:00 y las 11:00: es la ventana de negociación.",
+        "ar": "لا تجدول أبدًا صيانة خوادم التداول بين 09:00 و11:00 — فهذه نافذة التداول.",
+        "hi": "ट्रेडिंग सर्वर पर 09:00 से 11:00 के बीच कभी मेंटेनेंस मत रखना — वह ट्रेडिंग विंडो है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "data",
+     "day": -2,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Patch KB-2291 is pending for trading servers trd-01 and trd-02; estimated downtime 40 minutes.",
+        "de": "Patch KB-2291 steht für die Handelsserver trd-01 und trd-02 aus; geschätzte Ausfallzeit 40 Minuten.",
+        "es": "El parche KB-2291 está pendiente para los servidores de trading trd-01 y trd-02; parada estimada de 40 minutos.",
+        "ar": "التحديث KB-2291 معلق لخوادم التداول trd-01 وtrd-02؛ مدة التوقف المقدرة 40 دقيقة.",
+        "hi": "ट्रेडिंग सर्वर trd-01 और trd-02 के लिए पैच KB-2291 बाक़ी है; अनुमानित डाउनटाइम 40 मिनट।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "When can we patch the trading servers this week?",
+        "de": "Wann können wir diese Woche die Handelsserver patchen?",
+        "es": "¿Cuándo podemos parchear esta semana los servidores de trading?",
+        "ar": "متى يمكننا تحديث خوادم التداول هذا الأسبوع؟",
+        "hi": "इस हफ़्ते ट्रेडिंग सर्वर कब पैच कर सकते हैं?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "KB-2291 still isn't applied on trd-01 and trd-02.",
+        "de": "KB-2291 ist auf trd-01 und trd-02 immer noch nicht eingespielt.",
+        "es": "KB-2291 sigue sin aplicarse en trd-01 y trd-02.",
+        "ar": "لم يُطبَّق KB-2291 بعد على trd-01 وtrd-02.",
+        "hi": "KB-2291 अभी भी trd-01 और trd-02 पर नहीं लगा।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Propose a maintenance slot for the trading servers.",
+        "de": "Schlag ein Wartungsfenster für die Handelsserver vor.",
+        "es": "Propón una ventana de mantenimiento para los servidores de trading.",
+        "ar": "اقترح موعد صيانة لخوادم التداول.",
+        "hi": "ट्रेडिंग सर्वर के लिए मेंटेनेंस स्लॉट सुझाओ।"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "when to pach trading servrs",
+        "de": "wann handelsservr patchen",
+        "es": "cuando parcheo servidres de trading",
+        "ar": "متى نحدث سيرفرات التداول",
+        "hi": "ट्रेडिंग सर्वर कब पेच करे"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Security wants KB-2291 on trd-01 and trd-02 by Friday; it needs about 40 minutes of downtime per box, so give me a schedule for this week that won't get me in trouble with the trading desk.",
+        "de": "Die Security will KB-2291 bis Freitag auf trd-01 und trd-02; es braucht pro Server etwa 40 Minuten Ausfall, also gib mir einen Plan für diese Woche, mit dem ich keinen Ärger mit dem Handel bekomme.",
+        "es": "Seguridad quiere KB-2291 en trd-01 y trd-02 antes del viernes; necesita unos 40 minutos de parada por máquina, así que dame un calendario para esta semana que no me cause problemas con la mesa de trading.",
+        "ar": "يريد فريق الأمن تطبيق KB-2291 على trd-01 وtrd-02 بحلول الجمعة؛ يحتاج نحو 40 دقيقة توقف لكل خادم، فأعطني جدولًا لهذا الأسبوع لا يسبب لي مشكلة مع مكتب التداول.",
+        "hi": "सिक्योरिटी शुक्रवार तक trd-01 और trd-02 पर KB-2291 चाहती है; हर सर्वर पर लगभग 40 मिनट का डाउनटाइम लगेगा, तो इस हफ़्ते का ऐसा शेड्यूल दो जिससे ट्रेडिंग डेस्क से परेशानी न हो।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Patch window for trd-01?",
+        "de": "Patchfenster für trd-01?",
+        "es": "¿Ventana de parcheo para trd-01?",
+        "ar": "نافذة التحديث لـ trd-01؟",
+        "hi": "trd-01 का पैच विंडो?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not during trading — when do we patch?",
+        "de": "Nicht während des Handels – wann patchen wir?",
+        "es": "Durante el trading no: ¿cuándo parcheamos?",
+        "ar": "ليس خلال التداول — متى نحدّث؟",
+        "hi": "ट्रेडिंग के दौरान नहीं — कब पैच करें?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "With my maintenance rules, when can KB-2291 go on?",
+        "de": "Mit meinen Wartungsregeln: Wann kann KB-2291 eingespielt werden?",
+        "es": "Con mis normas de mantenimiento, ¿cuándo se puede aplicar KB-2291?",
+        "ar": "وفق قواعد الصيانة لدي، متى يمكن تطبيق KB-2291؟",
+        "hi": "मेरे मेंटेनेंस नियमों के साथ KB-2291 कब लग सकता है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "trading server patch time",
+        "de": "Patchzeit Handelsserver",
+        "es": "hora parcheo servidores trading",
+        "ar": "وقت تحديث خوادم التداول",
+        "hi": "ट्रेडिंग सर्वर पैच समय"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Schedule the KB-2291 patch on the trading servers.",
+        "de": "Plane den Patch KB-2291 für die Handelsserver ein.",
+        "es": "Programa el parche KB-2291 en los servidores de trading.",
+        "ar": "جدول تحديث KB-2291 على خوادم التداول.",
+        "hi": "ट्रेडिंग सर्वर पर KB-2291 पैच शेड्यूल करो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "09:00",
+       "KB-2291"
+      ],
+      "answer": {
+       "contains": [
+        "KB-2291"
+       ],
+       "absent": [
+        {
+         "re": "\\b(09|9|10):[0-5]\\d\\b"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "explicit-finance-eur-only",
+   "domain": "finance_hr",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -70,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Always report our figures in EUR, never in USD.",
+        "de": "Gib unsere Zahlen immer in EUR an, nie in USD.",
+        "es": "Expresa siempre nuestras cifras en EUR, nunca en USD.",
+        "ar": "اعرض أرقامنا دائمًا باليورو EUR، ولا تستخدم USD أبدًا.",
+        "hi": "हमारे आँकड़े हमेशा EUR में बताना, USD में कभी नहीं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "data",
+     "day": -4,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Q2 revenue: EUR 4.2 million (USD 4.5 million at the June rate).",
+        "de": "Umsatz Q2: EUR 4.2 Mio. (USD 4.5 Mio. zum Juni-Kurs).",
+        "es": "Ingresos del T2: EUR 4.2 millones (USD 4.5 millones al cambio de junio).",
+        "ar": "إيرادات الربع الثاني: EUR 4.2 مليون (USD 4.5 مليون بسعر يونيو).",
+        "hi": "Q2 राजस्व: EUR 4.2 मिलियन (जून की दर पर USD 4.5 मिलियन)।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What was our Q2 revenue?",
+        "de": "Wie hoch war unser Umsatz im zweiten Quartal?",
+        "es": "¿Cuáles fueron nuestros ingresos del segundo trimestre?",
+        "ar": "كم كانت إيراداتنا في الربع الثاني؟",
+        "hi": "हमारा Q2 राजस्व कितना था?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The board pack needs the Q2 revenue line.",
+        "de": "Die Unterlagen für den Aufsichtsrat brauchen die Q2-Umsatzzeile.",
+        "es": "El dossier del consejo necesita la línea de ingresos del T2.",
+        "ar": "ملف مجلس الإدارة يحتاج سطر إيرادات الربع الثاني.",
+        "hi": "बोर्ड पैक में Q2 राजस्व की पंक्ति चाहिए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How much did we bring in during Q2?",
+        "de": "Wie viel haben wir im Q2 eingenommen?",
+        "es": "¿Cuánto ingresamos en el T2?",
+        "ar": "كم حققنا في الربع الثاني؟",
+        "hi": "Q2 में हमने कितना कमाया?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "q2 revenu figur",
+        "de": "q2 umsaz zahl",
+        "es": "ingresos t2 sifra",
+        "ar": "رقم ايرادات الربع الثاني",
+        "hi": "Q2 रेवेन्यु आंकडा"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm finalising the slide on quarterly performance for Thursday's board meeting and need the Q2 revenue figure stated the way we always report it.",
+        "de": "Ich stelle die Folie zur Quartalsentwicklung für die Aufsichtsratssitzung am Donnerstag fertig und brauche den Q2-Umsatz so angegeben, wie wir ihn immer berichten.",
+        "es": "Estoy cerrando la diapositiva de resultados trimestrales para el consejo del jueves y necesito los ingresos del T2 expresados como siempre los reportamos.",
+        "ar": "أضع اللمسات الأخيرة على شريحة الأداء الفصلي لاجتماع مجلس الإدارة يوم الخميس، وأحتاج رقم إيرادات الربع الثاني بالطريقة التي نعرضها دائمًا.",
+        "hi": "मैं गुरुवार की बोर्ड मीटिंग के लिए तिमाही प्रदर्शन वाली स्लाइड पूरी कर रहा हूँ और Q2 राजस्व उसी तरह चाहिए जैसे हम हमेशा बताते हैं।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Q2 revenue line?",
+        "de": "Q2-Umsatzzeile?",
+        "es": "¿Línea de ingresos del T2?",
+        "ar": "سطر إيرادات الربع الثاني؟",
+        "hi": "Q2 राजस्व पंक्ति?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not in dollars — what was Q2 revenue?",
+        "de": "Nicht in Dollar – wie hoch war der Q2-Umsatz?",
+        "es": "En dólares no: ¿cuáles fueron los ingresos del T2?",
+        "ar": "ليس بالدولار — كم كانت إيرادات الربع الثاني؟",
+        "hi": "डॉलर में नहीं — Q2 राजस्व कितना था?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "The usual way — Q2 revenue?",
+        "de": "Wie üblich – Q2-Umsatz?",
+        "es": "Como siempre: ¿ingresos del T2?",
+        "ar": "بالطريقة المعتادة — إيرادات الربع الثاني؟",
+        "hi": "हमेशा की तरह — Q2 राजस्व?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Q2 revenue",
+        "de": "Umsatz Q2",
+        "es": "ingresos T2",
+        "ar": "إيرادات الربع الثاني",
+        "hi": "Q2 राजस्व"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me Q2 revenue.",
+        "de": "Nenn mir den Q2-Umsatz.",
+        "es": "Dime los ingresos del T2.",
+        "ar": "أخبرني بإيرادات الربع الثاني.",
+        "hi": "मुझे Q2 राजस्व बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "never in USD",
+        "de": "nie in USD",
+        "es": "nunca en USD",
+        "ar": "ولا تستخدم USD",
+        "hi": "USD में कभी नहीं"
+       },
+       "4.2"
+      ],
+      "answer": {
+       "contains": [
+        [
+         "EUR",
+         "€"
+        ],
+        "4.2"
+       ],
+       "absent": [
+        "USD",
+        "4.5"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "explicit-field-no-north-fridays",
+   "domain": "field_service",
+   "sessions": [
+    {
+     "id": "rule",
+     "day": -50,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Never assign me jobs north of the river on Fridays — I pick up my kids at 3.",
+        "de": "Teil mir freitags nie Aufträge nördlich des Flusses zu – ich hole um 3 meine Kinder ab.",
+        "es": "No me asignes nunca trabajos al norte del río los viernes: recojo a mis hijos a las 3.",
+        "ar": "لا تكلّفني أبدًا بأعمال شمال النهر أيام الجمعة — أصطحب أطفالي الساعة 3.",
+        "hi": "शुक्रवार को मुझे नदी के उत्तर वाले काम कभी मत देना — मैं 3 बजे बच्चों को लेने जाता हूँ।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "data",
+     "day": -2,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Open jobs this Friday: J-11 boiler check (north of the river); J-12 HVAC filter swap (south side); J-13 pump inspection (north of the river).",
+        "de": "Offene Aufträge diesen Freitag: J-11 Kesselprüfung (nördlich des Flusses); J-12 Filterwechsel Klimaanlage (Südseite); J-13 Pumpeninspektion (nördlich des Flusses).",
+        "es": "Trabajos abiertos este viernes: J-11 revisión de caldera (al norte del río); J-12 cambio de filtro de climatización (lado sur); J-13 inspección de bomba (al norte del río).",
+        "ar": "أعمال مفتوحة هذا الجمعة: J-11 فحص غلاية (شمال النهر)؛ J-12 تغيير فلتر التكييف (الجهة الجنوبية)؛ J-13 فحص مضخة (شمال النهر).",
+        "hi": "इस शुक्रवार के खुले काम: J-11 बॉयलर जाँच (नदी के उत्तर); J-12 HVAC फ़िल्टर बदलना (दक्षिण की ओर); J-13 पंप निरीक्षण (नदी के उत्तर)।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Which jobs can I take this Friday?",
+        "de": "Welche Aufträge kann ich diesen Freitag übernehmen?",
+        "es": "¿Qué trabajos puedo coger este viernes?",
+        "ar": "ما الأعمال التي يمكنني أخذها هذا الجمعة؟",
+        "hi": "इस शुक्रवार मैं कौन से काम ले सकता हूँ?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Dispatch is filling Friday's board.",
+        "de": "Die Disposition füllt den Plan für Freitag.",
+        "es": "Despacho está llenando el cuadro del viernes.",
+        "ar": "قسم التوزيع يملأ جدول الجمعة.",
+        "hi": "डिस्पैच शुक्रवार का बोर्ड भर रहा है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What should I be assigned on Friday?",
+        "de": "Was soll mir am Freitag zugeteilt werden?",
+        "es": "¿Qué me deberían asignar el viernes?",
+        "ar": "ما الذي يجب أن يُسند إلي يوم الجمعة؟",
+        "hi": "शुक्रवार को मुझे क्या सौंपा जाए?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "frday jobs for me",
+        "de": "freitag aufträg für mich",
+        "es": "trabajos del biernes para mi",
+        "ar": "شغلات الجمعه الي",
+        "hi": "मेरे शुक्रवार के काम"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Dispatch asked me to claim my jobs for this Friday from the open list before noon, so tell me which of the open ones I should take.",
+        "de": "Die Disposition will, dass ich mir bis Mittag meine Aufträge für diesen Freitag aus der offenen Liste nehme – sag mir, welche ich nehmen soll.",
+        "es": "Despacho me pidió que coja mis trabajos del viernes de la lista abierta antes de mediodía; dime cuáles debería coger.",
+        "ar": "طلب مني قسم التوزيع اختيار أعمالي لهذا الجمعة من القائمة المفتوحة قبل الظهر، فأخبرني أيها آخذ.",
+        "hi": "डिस्पैच ने कहा है कि दोपहर से पहले खुली सूची से इस शुक्रवार के अपने काम ले लूँ, तो बताओ कौन से लूँ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Friday assignments?",
+        "de": "Freitagsaufträge?",
+        "es": "¿Asignaciones del viernes?",
+        "ar": "مهام الجمعة؟",
+        "hi": "शुक्रवार के काम?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not just whatever's open — which Friday jobs fit me?",
+        "de": "Nicht einfach alles Offene – welche Freitagsaufträge passen zu mir?",
+        "es": "No cualquier cosa abierta: ¿qué trabajos del viernes me encajan?",
+        "ar": "ليس أي عمل مفتوح — أي أعمال الجمعة تناسبني؟",
+        "hi": "जो भी खुला है वह नहीं — शुक्रवार के कौन से काम मेरे लिए ठीक हैं?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Remembering my Friday rule, which jobs should I take?",
+        "de": "Denk an meine Freitagsregel – welche Aufträge soll ich nehmen?",
+        "es": "Recordando mi norma de los viernes, ¿qué trabajos cojo?",
+        "ar": "تذكّر قاعدتي ليوم الجمعة — أي أعمال آخذ؟",
+        "hi": "मेरा शुक्रवार वाला नियम याद रखते हुए कौन से काम लूँ?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Friday jobs",
+        "de": "Freitagsaufträge",
+        "es": "trabajos viernes",
+        "ar": "أعمال الجمعة",
+        "hi": "शुक्रवार के काम"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Pick my jobs for this Friday.",
+        "de": "Such meine Aufträge für diesen Freitag aus.",
+        "es": "Elige mis trabajos para este viernes.",
+        "ar": "اختر أعمالي لهذا الجمعة.",
+        "hi": "इस शुक्रवार के मेरे काम चुनो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "kids",
+        "de": "Kinder",
+        "es": "hijos",
+        "ar": "أطفالي",
+        "hi": "बच्चों"
+       },
+       "J-12"
+      ],
+      "answer": {
+       "contains": [
+        "J-12"
+       ],
+       "absent": [
+        "J-11",
+        "J-13"
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

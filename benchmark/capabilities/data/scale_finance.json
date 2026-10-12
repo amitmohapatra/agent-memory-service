@@ -1,0 +1,140 @@
+{
+ "name": "scale_finance",
+ "description": "Three years of weekly travel expense claims per department.",
+ "years": 3,
+ "entities": {
+  "dept": [
+   {
+    "id": "DEP-SAL",
+    "name": {
+     "en": "Sales",
+     "de": "Vertrieb",
+     "es": "Ventas",
+     "ar": "المبيعات",
+     "hi": "सेल्स"
+    }
+   },
+   {
+    "id": "DEP-MKT",
+    "name": {
+     "en": "Marketing",
+     "de": "Marketing",
+     "es": "Marketing",
+     "ar": "التسويق",
+     "hi": "मार्केटिंग"
+    }
+   },
+   {
+    "id": "DEP-ENG",
+    "name": {
+     "en": "Engineering",
+     "de": "Entwicklung",
+     "es": "Ingeniería",
+     "ar": "الهندسة",
+     "hi": "इंजीनियरिंग"
+    }
+   },
+   {
+    "id": "DEP-FIN",
+    "name": {
+     "en": "Finance",
+     "de": "Finanzen",
+     "es": "Finanzas",
+     "ar": "المالية",
+     "hi": "वित्त"
+    }
+   },
+   {
+    "id": "DEP-HR",
+    "name": {
+     "en": "HR",
+     "de": "Personal",
+     "es": "RR. HH.",
+     "ar": "الموارد البشرية",
+     "hi": "HR"
+    }
+   },
+   {
+    "id": "DEP-OPS",
+    "name": {
+     "en": "Operations",
+     "de": "Betrieb",
+     "es": "Operaciones",
+     "ar": "العمليات",
+     "hi": "ऑपरेशंस"
+    }
+   },
+   {
+    "id": "DEP-LEG",
+    "name": {
+     "en": "Legal",
+     "de": "Recht",
+     "es": "Legal",
+     "ar": "القانونية",
+     "hi": "लीगल"
+    }
+   },
+   {
+    "id": "DEP-SUP",
+    "name": {
+     "en": "Support",
+     "de": "Support",
+     "es": "Soporte",
+     "ar": "الدعم",
+     "hi": "सपोर्ट"
+    }
+   }
+  ]
+ },
+ "records": {
+  "log": {
+   "every": "week",
+   "role": "EVENT",
+   "lines_from": "dept",
+   "header": {
+    "en": "Weekly travel expense claims {period}:",
+    "de": "Wöchentliche Reisekostenabrechnungen {period}:",
+    "es": "Gastos de viaje semanales {period}:",
+    "ar": "مطالبات نفقات السفر الأسبوعية {period}:",
+    "hi": "साप्ताहिक यात्रा ख़र्च दावे {period}:"
+   },
+   "line": {
+    "en": "{dept} ({dept.name}): ${travel}",
+    "de": "{dept} ({dept.name}): ${travel}",
+    "es": "{dept} ({dept.name}): ${travel}",
+    "ar": "{dept} ({dept.name}): ${travel}",
+    "hi": "{dept} ({dept.name}): ${travel}"
+   },
+   "fields": {
+    "travel": {
+     "min": 0,
+     "max": 2500
+    }
+   },
+   "boost": [
+    {
+     "period": {
+      "year_offset": -1,
+      "quarter": 3
+     },
+     "keys": [
+      "DEP-SAL",
+      "DEP-LEG",
+      "DEP-SUP"
+     ],
+     "field": "travel",
+     "factor": 4
+    }
+   ]
+  }
+ },
+ "sizes": {
+  "standard": {},
+  "large": {
+   "years": 4,
+   "every": {
+    "log": "day"
+   }
+  }
+ }
+}
