@@ -228,9 +228,20 @@ SERVICE_ENV=(
   MEMORY__SEARCH__QDRANT_GRPC_PORT="$QDRANT_GRPC"
   MEMORY__AUTHORIZATION__OPENFGA_API_URL="http://127.0.0.1:$FGA_HTTP"
 )
-# the model gateway only when asked for (llm mode): its URL and key from the caller's env
+# the model gateway only when asked for (llm mode): its URL and key from the caller's env, and
+# a model-call timeout the gateway's model can meet (benchmark/capabilities/stack_service.py:
+# the 30 s constant is sized for a hosted model; Granite 2B on this CPU writes ~8 tokens/s)
+ENTRY="from memory_service.__main__ import run_api; run_api()"
+WORKER_ENTRY="from memory_service.__main__ import run_worker; run_worker()"
 if [ "${CAPEVAL_GATEWAY:-0}" = 1 ]; then
-  SERVICE_ENV+=(BIFROST_URL="$BIFROST_URL" BIFROST_VIRTUAL_KEY="$BIFROST_VIRTUAL_KEY")
+  LLM_TIMEOUT="${CAPEVAL_LLM_TIMEOUT_SECONDS:-600}"
+  [[ "$LLM_TIMEOUT" =~ ^[0-9]+$ ]] || refuse "CAPEVAL_LLM_TIMEOUT_SECONDS '$LLM_TIMEOUT' is not a number"
+  SERVICE_ENV+=(BIFROST_URL="$BIFROST_URL" BIFROST_VIRTUAL_KEY="$BIFROST_VIRTUAL_KEY"
+    CAPEVAL_LLM_TIMEOUT_SECONDS="$LLM_TIMEOUT")
+  [ -n "${CAPEVAL_WORKER_CONCURRENCY:-}" ] && SERVICE_ENV+=(MEMORY__TASKS__WORKER_CONCURRENCY="$CAPEVAL_WORKER_CONCURRENCY")
+  ENTRY="from benchmark.capabilities.stack_service import main; main('api')"
+  WORKER_ENTRY="from benchmark.capabilities.stack_service import main; main('worker')"
+  export CAPEVAL_LLM_TIMEOUT_SECONDS="$LLM_TIMEOUT"
 fi
 # migrations from WORK (no .env there), with the eval database named explicitly
 sed -e "s|^script_location = .*|script_location = $ROOT/migrations|" \
@@ -240,10 +251,10 @@ sed -e "s|^script_location = .*|script_location = $ROOT/migrations|" \
 (cd "$WORK" && env -i "${SERVICE_ENV[@]}" "$PY" -m memory_service.adapters.tasks.procrastinate_schema >> "$WORK/migrate.log" 2>&1) || true
 API_MARK="capeval-api-$API_PORT"
 WORKER_MARK="capeval-worker-$METRICS_PORT"
-(cd "$WORK" && exec env -i "${SERVICE_ENV[@]}" "$PY" -c "from memory_service.__main__ import run_api; run_api()  # $API_MARK" > "$WORK/api.log" 2>&1) &
+(cd "$WORK" && exec env -i "${SERVICE_ENV[@]}" "$PY" -c "$ENTRY  # $API_MARK" > "$WORK/api.log" 2>&1) &
 note api_pid $!
 note api_marker "$API_MARK"
-(cd "$WORK" && exec env -i "${SERVICE_ENV[@]}" "$PY" -c "from memory_service.__main__ import run_worker; run_worker()  # $WORKER_MARK" > "$WORK/worker.log" 2>&1) &
+(cd "$WORK" && exec env -i "${SERVICE_ENV[@]}" "$PY" -c "$WORKER_ENTRY  # $WORKER_MARK" > "$WORK/worker.log" 2>&1) &
 note worker_pid $!
 note worker_marker "$WORKER_MARK"
 wait_for "http://127.0.0.1:$API_PORT/health/ready" "$READY_SECONDS" "$(get api_pid)"

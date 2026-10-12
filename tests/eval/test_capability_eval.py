@@ -9,6 +9,7 @@ model, the harness - are ``make eval-capabilities`` targets, not tests.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import subprocess
 from collections import Counter
@@ -458,6 +459,37 @@ def test_a_run_counts_the_model_calls_its_uses_made() -> None:
     assert counts["assist_by_use"]["relation_extraction"] == {"used": 40.0, "fallback": 2.0}
     assert counts["requests"] == {"ok": 5.0, "circuit_open": 1.0}
     assert llm_counts("") == {"assist": {}, "assist_by_use": {}, "requests": {}}
+
+
+async def test_the_llm_stack_starts_the_service_with_the_eval_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the model call's timeout differs from the shipped service, and only when set."""
+    import types
+
+    from benchmark.capabilities import stack_service
+
+    from memory_service.config.constants import LLM
+
+    monkeypatch.delenv("CAPEVAL_LLM_TIMEOUT_SECONDS", raising=False)
+    assert stack_service.overrides() is None
+    monkeypatch.setenv("CAPEVAL_LLM_TIMEOUT_SECONDS", "600")
+    tuned = stack_service.overrides()
+    assert tuned.llm.timeout_seconds == 600.0
+    assert dataclasses.replace(tuned.llm, timeout_seconds=LLM.timeout_seconds) == LLM
+
+    seen: list[object] = []
+
+    async def build_container(
+        settings: object, version: str, *, overrides: object = None, **kw: object
+    ) -> str:
+        seen.append(overrides)
+        return "container"
+
+    module = types.SimpleNamespace(build_container=build_container)
+    stack_service._with_overrides(module, tuned)  # type: ignore[arg-type]
+    assert await module.build_container(None, "v", role="worker") == "container"
+    assert seen == [tuned]
 
 
 def test_noise_is_allowed_once(tmp_path: Path) -> None:

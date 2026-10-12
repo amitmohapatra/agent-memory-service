@@ -920,6 +920,11 @@ async def run(
         #: the model uses' calls over the whole run, per process (all zero in nollm): a run in
         #: llm mode whose uses mostly fell back measured the model-free path, not the model
         "llm_calls": llm_calls,
+        #: what the isolated stack set beside the shipped service (``stack_service.py``)
+        "stack": {
+            "llm_timeout_seconds": os.environ.get("CAPEVAL_LLM_TIMEOUT_SECONDS"),
+            "worker_concurrency": os.environ.get("CAPEVAL_WORKER_CONCURRENCY"),
+        },
         "reused_writes_of": str(settings.reuse) if settings.reuse else None,
         "cleanup": cleanup,
         #: the users and threads written, so a kept run can be purged later
