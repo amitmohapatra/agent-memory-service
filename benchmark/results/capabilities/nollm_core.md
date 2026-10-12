@@ -1,35 +1,35 @@
 # Capability eval — nollm (2026-10-11)
 
-Dataset `8f25f4752238`: 105 scenarios, 111 queries, 1110 phrasings per language. Selection: `{"languages": ["en", "de", "es", "ar", "hi", "mixed"], "split": "all", "capabilities": ["single_fact_recall", "multi_hop", "temporal_recency", "update_contradiction", "abstention", "forgetting_decay", "procedural_skill", "test_time_learning", "implicit_personalization", "explicit_personalization"], "domains": "all", "kinds": "all", "scenarios_per_capability": null, "scenarios_per_domain": null, "scenario_ids": null}`, sample `core`.
+Dataset `3a7401f20fb1`: 105 scenarios, 111 queries, 1110 phrasings per language. Selection: `{"languages": ["en", "de", "es", "ar", "hi", "mixed"], "split": "all", "capabilities": ["single_fact_recall", "multi_hop", "temporal_recency", "update_contradiction", "abstention", "forgetting_decay", "procedural_skill", "test_time_learning", "implicit_personalization", "explicit_personalization"], "domains": "all", "kinds": "all", "scenarios_per_capability": null, "scenarios_per_domain": null, "scenario_ids": null}`, sample `core`.
 
-**Primary (context/new_session) macro accuracy 0.48**, retail track 0.47, the eleven origin cases 0.46, partial credit 0.74. Context latency p50/p95 41.01/60.50 ms.
+**Primary (context/new_session) macro accuracy 0.48**, retail track 0.48, the eleven origin cases 0.46, partial credit 0.74. Context latency p50/p95 45.29/65.61 ms.
 
 | # | Capability | context/new_session | context/same_session | search/new_session | partial | retail | p95 ms |
 |---|---|---|---|---|---|---|---|
-| 1 | single_fact_recall | 0.99 | 0.99 | 1.00 | 0.99 | 1.00 | 61.34 |
-| 2 | multi_hop | 0.47 | 0.67 | 0.60 | 0.70 | 0.42 | 59.96 |
-| 3 | temporal_recency | 0.02 | 0.39 | 0.02 | 0.58 | 0.00 | 57.95 |
-| 4 | update_contradiction | 0.05 | 0.05 | 0.00 | 0.92 | 0.01 | 63.26 |
-| 5 | abstention | 0.32 | 0.15 | - | - | 0.38 | 60.60 |
-| 6 | forgetting_decay | 0.46 | 0.46 | 0.50 | 0.46 | 0.45 | 59.88 |
-| 7 | procedural_skill | 0.60 | 0.96 | 0.50 | 0.79 | 0.50 | 67.10 |
-| 8 | test_time_learning | 0.94 | 0.94 | 0.21 | 0.94 | 0.91 | 62.90 |
-| 9 | implicit_personalization | 0.67 | 0.67 | 1.00 | 0.67 | 0.78 | 56.52 |
-| 10 | explicit_personalization | 0.27 | 0.97 | 0.27 | 0.62 | 0.28 | 53.32 |
+| 1 | single_fact_recall | 0.99 | 0.99 | 1.00 | 0.99 | 1.00 | 71.06 |
+| 2 | multi_hop | 0.47 | 0.68 | 0.60 | 0.70 | 0.42 | 64.63 |
+| 3 | temporal_recency | 0.02 | 0.39 | 0.02 | 0.57 | 0.00 | 62.54 |
+| 4 | update_contradiction | 0.05 | 0.05 | 0.00 | 0.92 | 0.01 | 68.28 |
+| 5 | abstention | 0.31 | 0.15 | - | - | 0.38 | 65.57 |
+| 6 | forgetting_decay | 0.46 | 0.46 | 0.50 | 0.46 | 0.45 | 60.16 |
+| 7 | procedural_skill | 0.60 | 0.97 | 0.50 | 0.79 | 0.50 | 67.22 |
+| 8 | test_time_learning | 0.94 | 0.94 | 0.21 | 0.94 | 0.92 | 67.34 |
+| 9 | implicit_personalization | 0.67 | 0.67 | 1.00 | 0.67 | 0.79 | 63.75 |
+| 10 | explicit_personalization | 0.27 | 0.97 | 0.27 | 0.62 | 0.28 | 62.96 |
 
 Per language (primary, macro): ar 0.49, de 0.48, en 0.49, es 0.49, hi 0.45, mixed 0.50
 
-Per domain (primary, macro): field_service 0.35, finance_hr 0.52, it_support 0.34, personal 0.72, retail 0.47
+Per domain (primary, macro): field_service 0.36, finance_hr 0.52, it_support 0.35, personal 0.71, retail 0.48
 
 Per split (primary, macro): dev 0.51, heldout 0.45
 
-Abstention: precision 0.08, recall 0.23, false-refusal rate 0.30. Stale-value leak rate 0.37 (754 of 2016).
+Abstention: precision 0.08, recall 0.23, false-refusal rate 0.30. Stale-value leak rate 0.38 (758 of 2016).
 
-Ingestion: 2712 turns, 3760 jobs (0 failed), written in 228.7 s; settled 227.71 s after the last write. Worker queues at the start: all empty; enrichment still queued when the questions started: all empty.
+Ingestion: 2712 turns, 3760 jobs (0 failed), written in 220.7 s; settled 238.73 s after the last write. Worker queues at the start: all empty; enrichment still queued when the questions started: all empty.
 
 ## Top failure reasons
 
-**abstention** — 345/504 failed: no_abstain 345
+**abstention** — 346/504 failed: no_abstain 346
 - `abstain-field-hilltop-serial/q1/direct/en` (no_abstain): “What's the serial number of the pump at Hilltop?” — missing -, leaked -; got: memory: Hilltop station has one older PX-250 pump.; memory: Riverside station runs two PX-400 pumps, serial numbers R-1182 and R-1183.
 - `abstain-finance-cfo-salary/q1/direct/en` (no_abstain): “What is Helen Park's salary?” — missing -, leaked -; got: memory: Our CFO is Helen Park; she joined in January.; memory: Executive compensation is handled by the board's remuneration committee.
 
@@ -37,59 +37,59 @@ Ingestion: 2712 turns, 3760 jobs (0 failed), written in 228.7 s; settled 227.71 
 - `explicit-field-no-north-fridays/q1/direct/en` (missing_evidence): “Which jobs can I take this Friday?” — missing ['J-12'], leaked -; got: profile: - Never assign me jobs north of the river on Fridays — I pick up my kids at 3.; memory: Never assign me jobs north of the river on Fridays — I pick up my kids at 3.
 - `explicit-finance-eur-only/q1/direct/en` (false_abstain): “What was our Q2 revenue?” — missing ['4.2'], leaked -; got: profile: - Always report our figures in EUR, never in USD.
 
-**forgetting_decay** — 271/504 failed: false_abstain 143, missing_evidence 128
+**forgetting_decay** — 270/504 failed: false_abstain 141, missing_evidence 129
 - `forget-field-temp-generator/q1/direct/en` (missing_evidence): “What's the status of the power equipment currently at Site 4?” — missing ['UPS-4'], leaked -; got: memory: Mains power is restored at Site 4 and the temporary generator GEN-T1 has been removed.
 - `forget-it-decommissioned-db/q1/direct/en` (false_abstain): “Give me a health summary of our active database servers.” — missing ['db-01', 'db-03'], leaked -; got: memory: legacy-db-02 has been decommissioned and wiped; remove it from all reports.
 
-**implicit_personalization** — 165/504 failed: false_abstain 165
+**implicit_personalization** — 164/504 failed: false_abstain 164
 - `implicit-field-medical/q1/direct/en` (false_abstain): “Write the checklist for tomorrow's job.” — missing ['infection-control | IEC 62353'], leaked -; got: nothing
 - `implicit-finance-germany/q1/direct/en` (false_abstain): “Draft a payment reminder for an overdue invoice.” — missing ['EUR | HGB | German'], leaked -; got: nothing
 
-**multi_hop** — 266/504 failed: missing_evidence 163, false_abstain 103
+**multi_hop** — 268/504 failed: missing_evidence 169, false_abstain 99
 - `multihop-it-payroll-reboot/q1/direct/en` (missing_evidence): “Will payroll be down this weekend?” — missing ['02:00'], leaked -; got: memory: The payroll service runs on host app-07.
 - `multihop-retail-aerosol-cage/q1/direct/en` (missing_evidence): “Where should the ColorMax delivery be stored?” — missing ['ColorMax'], leaked -; got: memory: Safety rule: every aerosol product is classed as hazmat and has to be stored in Cage H2.
 
-**procedural_skill** — 203/504 failed: missing_evidence 131, false_abstain 72
+**procedural_skill** — 202/504 failed: missing_evidence 127, false_abstain 75
 - `procedure-field-service-report/q1/direct/en` (missing_evidence): “Write the service report for WO-4120.” — missing ['WO-4120'], leaked -; got: profile: - Every service report I ask for must end with a parts-used list and a customer signature line.; memory: Every service report I ask for must end with a parts-used list and a customer signature line.
 - `procedure-retail-hazmat-report/q1/direct/en` (missing_evidence): “Write up an incident report for the leaking bleach drum in aisle 3.” — missing ['UN1791'], leaked -; got: profile: - For any hazmat incident report, always start with the UN number and the SDS reference, then the location, then the action taken.; memory: For any hazmat incident report, always start with the UN number and the SDS reference, then the location, then the action taken.
 
-**single_fact_recall** — 4/504 failed: false_abstain 4
+**single_fact_recall** — 3/504 failed: false_abstain 3
 - `recall-finance-cost-centre/q1/implicit/hi` (false_abstain): “लिस्बन की रसीदें, जमा करने को तैयार।” — missing ['CC-4471'], leaked -; got: nothing
-- `recall-it-backup-console/q1/indirect/hi` (false_abstain): “कल रात का बैकअप जॉब फ़ेल हो गया और मुझे देखने के लिए अप्लायंस में लॉग इन करना है।” — missing ['10.20.4.15'], leaked -; got: nothing
+- `recall-personal-locker/q1/implicit/hi` (false_abstain): “फिर से लॉकर 317 नहीं खुल रहा।” — missing ['22-08-41'], leaked -; got: nothing
 
-**temporal_recency** — 496/504 failed: stale_leak 282, false_abstain 208, missing_evidence 6
+**temporal_recency** — 496/504 failed: stale_leak 281, false_abstain 208, missing_evidence 7
 - `temporal-field-compressor/q1/direct/en` (false_abstain): “Is the compressor at Site 12 working?” — missing ['replaced'], leaked -; got: nothing
 - `temporal-finance-leave/q1/direct/en` (stale_leak): “Is Maria Lopez available for the audit kickoff?” — missing -, leaked ['until further notice']; got: memory: Maria Lopez is back from parental leave as of Monday and taking her old desk again.; memory: Maria Lopez from accounts payable is on parental leave until further notice.
 
 **test_time_learning** — 31/504 failed: false_abstain 31
-- `correction-retail-blind-recount/q1/negated/en` (false_abstain): “I can't just adjust it, can I?” — missing ['blind recount'], leaked -; got: nothing
-- `correction-retail-short-shipment/q1/implicit/en` (false_abstain): “Six cases short.” — missing ['OS&D'], leaked -; got: nothing
+- `correction-finance-mileage/q1/indirect/en` (false_abstain): “I drove 120 miles to the client site last week.” — missing ['0.67'], leaked -; got: nothing
+- `correction-retail-blind-recount/q1/indirect/en` (false_abstain): “The batteries count came out way off.” — missing ['blind recount'], leaked -; got: nothing
 
-**update_contradiction** — 479/504 failed: stale_leak 438, false_abstain 21, missing_evidence 20
+**update_contradiction** — 479/504 failed: stale_leak 439, false_abstain 20, missing_evidence 20
 - `update-field-van-assignment/q1/direct/en` (stale_leak): “Who drives van #7?” — missing -, leaked ['Ana Silva']; got: profile: - Van #7 has been reassigned to Peter Brandt; Ana Silva drives van #9 from now on.; memory: Van #7 has been reassigned to Peter Brandt; Ana Silva drives van #9 from now on.
 - `update-finance-approval-limit/q1/direct/en` (stale_leak): “What's the team lead approval limit for expenses?” — missing -, leaked ['$500']; got: memory: Policy update: the team lead expense approval limit was raised to $1,000.; memory: Team leads can approve expenses up to $500.
 
 ## Failure reasons on context/same_session
 
-**abstention** — 429/504 failed: no_abstain 429
+**abstention** — 430/504 failed: no_abstain 430
 - `abstain-field-hilltop-serial/q1/direct/en` (no_abstain): “What's the serial number of the pump at Hilltop?” — missing -, leaked -; got: memory: Hilltop station has one older PX-250 pump.; memory: Riverside station runs two PX-400 pumps, serial numbers R-1182 and R-1183.
-**explicit_personalization** — 19/554 failed: missing_evidence 16, false_abstain 3
-- `explicit-retail-no-clearance/q1/implicit/en` (missing_evidence): “Toy order time.” — missing ['reorder suggestions'], leaked -; got: memory: Toy aisle low stock: TY-14 puzzle cube 3 left (clearance); RG-20 building blocks 4 left; RG-31 plush bear 2 left.
-**forgetting_decay** — 271/504 failed: false_abstain 143, missing_evidence 128
+**explicit_personalization** — 16/554 failed: missing_evidence 12, false_abstain 4
+- `explicit-retail-no-clearance/q1/direct/ar` (missing_evidence): “ماذا أعيد طلبه لممر الألعاب؟” — missing ['اقتراحات إعادة طلب'], leaked -; got: memory: ممر الألعاب منخفض المخزون: TY-14 مكعب الألغاز تبقّى 3 (تصفية)؛ RG-20 مكعبات بناء تبقّى 4؛ RG-31 دب محشو تبقّى 2.
+**forgetting_decay** — 270/504 failed: false_abstain 141, missing_evidence 129
 - `forget-field-temp-generator/q1/direct/en` (missing_evidence): “What's the status of the power equipment currently at Site 4?” — missing ['UPS-4'], leaked -; got: memory: Mains power is restored at Site 4 and the temporary generator GEN-T1 has been removed.
-**implicit_personalization** — 165/504 failed: false_abstain 165
+**implicit_personalization** — 164/504 failed: false_abstain 164
 - `implicit-field-medical/q1/direct/en` (false_abstain): “Write the checklist for tomorrow's job.” — missing ['infection-control | IEC 62353'], leaked -; got: nothing
-**multi_hop** — 166/504 failed: missing_evidence 145, false_abstain 21
+**multi_hop** — 163/504 failed: missing_evidence 143, false_abstain 20
 - `multihop-retail-po-supplier/q1/direct/en` (missing_evidence): “Who should I chase about PO-77812?” — missing ['PackRight'], leaked -; got: memory: I raised PO-77812 for 2,000 corrugated boxes; it's late.; memory: PO-77790 for shrink wrap arrived complete.
-**procedural_skill** — 21/504 failed: false_abstain 12, missing_evidence 9
+**procedural_skill** — 16/504 failed: missing_evidence 9, false_abstain 7
 - `procedure-personal-metric-recipes/q1/indirect/en` (false_abstain): “The kids want pancakes for breakfast tomorrow.” — missing ['metric'], leaked -; got: nothing
-**single_fact_recall** — 4/504 failed: false_abstain 4
+**single_fact_recall** — 3/504 failed: false_abstain 3
 - `recall-finance-cost-centre/q1/implicit/hi` (false_abstain): “लिस्बन की रसीदें, जमा करने को तैयार।” — missing ['CC-4471'], leaked -; got: nothing
-**temporal_recency** — 307/504 failed: stale_leak 282, false_abstain 19, missing_evidence 6
+**temporal_recency** — 306/504 failed: stale_leak 281, false_abstain 18, missing_evidence 7
 - `temporal-finance-leave/q1/direct/en` (stale_leak): “Is Maria Lopez available for the audit kickoff?” — missing -, leaked ['until further notice']; got: memory: Maria Lopez is back from parental leave as of Monday and taking her old desk again.; memory: Maria Lopez from accounts payable is on parental leave until further notice.
 **test_time_learning** — 31/504 failed: false_abstain 31
-- `correction-retail-blind-recount/q1/negated/en` (false_abstain): “I can't just adjust it, can I?” — missing ['blind recount'], leaked -; got: nothing
-**update_contradiction** — 479/504 failed: stale_leak 438, false_abstain 21, missing_evidence 20
+- `correction-finance-mileage/q1/indirect/en` (false_abstain): “I drove 120 miles to the client site last week.” — missing ['0.67'], leaked -; got: nothing
+**update_contradiction** — 479/504 failed: stale_leak 439, false_abstain 20, missing_evidence 20
 - `update-field-van-assignment/q1/direct/en` (stale_leak): “Who drives van #7?” — missing -, leaked ['Ana Silva']; got: profile: - Van #7 has been reassigned to Peter Brandt; Ana Silva drives van #9 from now on.; memory: Van #7 has been reassigned to Peter Brandt; Ana Silva drives van #9 from now on.
 
 ## Failure reasons on search/new_session
@@ -109,5 +109,5 @@ Ingestion: 2712 turns, 3760 jobs (0 failed), written in 228.7 s; settled 227.71 
 **update_contradiction** — 504/504 failed: stale_leak 504
 - `update-field-van-assignment/q1/direct/en` (stale_leak): “Who drives van #7?” — missing -, leaked ['Ana Silva']; got: memory: Van #7 has been reassigned to Peter Brandt; Ana Silva drives van #9 from now on.; message: USER: Van #7 has been reassigned to Peter Brandt; Ana Silva drives van #9 from now on.
 
-Stale-value leak rate by surface: context/new_session 0.37 (754/2016), context/same_session 0.37 (754/2016), search/new_session 0.59 (1194/2016)
+Stale-value leak rate by surface: context/new_session 0.38 (758/2016), context/same_session 0.38 (758/2016), search/new_session 0.59 (1194/2016)
 
