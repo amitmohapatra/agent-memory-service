@@ -1,0 +1,160 @@
+{
+ "name": "scale_it",
+ "description": "Three years of an IT team's weekly incident counts per service.",
+ "years": 3,
+ "entities": {
+  "service": [
+   {
+    "id": "SVC-MAIL",
+    "name": {
+     "en": "email",
+     "de": "E-Mail",
+     "es": "correo",
+     "ar": "البريد الإلكتروني",
+     "hi": "ईमेल"
+    }
+   },
+   {
+    "id": "SVC-VPN",
+    "name": {
+     "en": "VPN",
+     "de": "VPN",
+     "es": "VPN",
+     "ar": "VPN",
+     "hi": "VPN"
+    }
+   },
+   {
+    "id": "SVC-ERP",
+    "name": {
+     "en": "ERP",
+     "de": "ERP",
+     "es": "ERP",
+     "ar": "ERP",
+     "hi": "ERP"
+    }
+   },
+   {
+    "id": "SVC-WIKI",
+    "name": {
+     "en": "intranet wiki",
+     "de": "Intranet-Wiki",
+     "es": "wiki de la intranet",
+     "ar": "ويكي الشبكة الداخلية",
+     "hi": "इंट्रानेट विकी"
+    }
+   },
+   {
+    "id": "SVC-PAY",
+    "name": {
+     "en": "payroll",
+     "de": "Lohnabrechnung",
+     "es": "nóminas",
+     "ar": "الرواتب",
+     "hi": "पेरोल"
+    }
+   },
+   {
+    "id": "SVC-CRM",
+    "name": {
+     "en": "CRM",
+     "de": "CRM",
+     "es": "CRM",
+     "ar": "CRM",
+     "hi": "CRM"
+    }
+   },
+   {
+    "id": "SVC-WIFI",
+    "name": {
+     "en": "office Wi-Fi",
+     "de": "Büro-WLAN",
+     "es": "wifi de oficina",
+     "ar": "واي فاي المكتب",
+     "hi": "ऑफ़िस Wi-Fi"
+    }
+   },
+   {
+    "id": "SVC-PRNT",
+    "name": {
+     "en": "printing",
+     "de": "Drucken",
+     "es": "impresión",
+     "ar": "الطباعة",
+     "hi": "प्रिंटिंग"
+    }
+   },
+   {
+    "id": "SVC-SSO",
+    "name": {
+     "en": "single sign-on",
+     "de": "Single Sign-on",
+     "es": "inicio de sesión único",
+     "ar": "الدخول الموحد",
+     "hi": "सिंगल साइन-ऑन"
+    }
+   },
+   {
+    "id": "SVC-BKUP",
+    "name": {
+     "en": "backups",
+     "de": "Backups",
+     "es": "copias de seguridad",
+     "ar": "النسخ الاحتياطي",
+     "hi": "बैकअप"
+    }
+   }
+  ]
+ },
+ "records": {
+  "log": {
+   "every": "week",
+   "role": "EVENT",
+   "lines_from": "service",
+   "header": {
+    "en": "Weekly incident report {period}:",
+    "de": "Wöchentlicher Störungsbericht {period}:",
+    "es": "Informe semanal de incidencias {period}:",
+    "ar": "تقرير الحوادث الأسبوعي {period}:",
+    "hi": "साप्ताहिक इंसिडेंट रिपोर्ट {period}:"
+   },
+   "line": {
+    "en": "{service} ({service.name}): {p1} P1 incidents",
+    "de": "{service} ({service.name}): {p1} P1-Störungen",
+    "es": "{service} ({service.name}): {p1} incidencias P1",
+    "ar": "{service} ({service.name}): {p1} حوادث P1",
+    "hi": "{service} ({service.name}): {p1} P1 इंसिडेंट"
+   },
+   "fields": {
+    "p1": {
+     "min": 0,
+     "max": 2
+    }
+   },
+   "boost": [
+    {
+     "period": {
+      "year_offset": -1,
+      "quarter": 3
+     },
+     "keys": [
+      "SVC-VPN",
+      "SVC-SSO",
+      "SVC-ERP"
+     ],
+     "field": "p1",
+     "factor": 4
+    }
+   ]
+  }
+ },
+ "sizes": {
+  "standard": {},
+  "large": {
+   "years": 4,
+   "every": {
+    "log": "day"
+   }
+  }
+ }
+}

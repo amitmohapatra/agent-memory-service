@@ -1085,7 +1085,22 @@ def defined_aliases(text: str) -> list[tuple[str, str]]:
 # --------------------------------------------------------------------------- spellings
 
 
-_ID_SPLIT = re.compile(r"\b([^\W\d_]+)[\s\-]*(\d[\w.\-]*)")
+#: Combining marks a word in Devanagari, Arabic or accented Latin is spelled with (vowel
+#: signs, virama, harakat): ``\w`` leaves them out, so a word ending in one would not be found.
+_MARKS = (
+    "\u0300-\u036f\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed"
+    "\u0900-\u0903\u093a-\u094f\u0951-\u0957\u0962\u0963"
+)
+#: A word, then how an identifier is joined to it - a space, a hyphen, nothing, "#", "no.",
+#: "Nr.", "núm." or "nº" - then the identifier: a number or a code that starts with one
+#: ("4", "1001", "12b", "4471-a"). Every such pair in a subject is rewritten, not only the first.
+_ID_SPLIT = re.compile(
+    rf"(?<![\w{_MARKS}])((?:[^\W\d_]|[{_MARKS}])+)"
+    r"(?:\s*#\s*|\s+(?:no|nr|núm|num)\.\s*|\s*n[º°]\.?\s*|[\s\-]*)"
+    r"(\d[\w.\-]*)"
+)
+#: The joins tried, the most common first: "forklift 4", "forklift4", "forklift-4".
+_ID_JOINERS = (" ", "", "-", " #", " no. ")
 
 
 def _alias_variants(base: str, vocab: Vocabulary) -> list[str]:
@@ -1108,13 +1123,18 @@ def _form_pattern(form: str) -> re.Pattern[str]:
 def spellings(text: str, vocab: Vocabulary | None = None, *, limit: int = 12) -> list[str]:
     """Ways the same subject may have been stored, for an exact-match lookup: ``text`` as
     written first (an identity such as "user:Alice" only as written - ids are
-    case-sensitive), then lower-cased, the first identifier joined by nothing, a space, a
-    hyphen, "#" or "no." ("sku-1001", "sku 1001", "sku1001"), and every alias swapped for
-    its other forms ("hazmat storage", "hazardous material storage"); at most ``limit``.
-    A lookup aid only: the comparison itself is ``compare``."""
+    case-sensitive), then lower-cased, every alias swapped for its other forms
+    ("hazmat storage", "hazardous material storage"), then each of those with its
+    identifiers joined to their word by a space, nothing, a hyphen, "#" or "no."
+    ("forklift 4", "forklift4", "forklift-4" from any one of them), and last the joins as
+    written; at most ``limit``. A different identifier is never produced ("forklift 3" is
+    not a spelling of "forklift 4"). A lookup aid only: the comparison itself is
+    ``compare``."""
     vocab = vocab or vocabulary()
     written = " ".join(text.strip()[:MAX_SUBJECT_CHARS].split())
-    if not written or is_identity(written):
+    # an identity in any case is looked up only as written: "User:Alice" is neither
+    # "user:alice" nor "user:Alice", who are two people
+    if not written or is_identity(written.lower()):
         return [written] if written else []
     base = written.casefold()
     out = [written]
@@ -1125,12 +1145,11 @@ def spellings(text: str, vocab: Vocabulary | None = None, *, limit: int = 12) ->
             out.append(s)
 
     add(base)
-
-    for variant in _alias_variants(base, vocab):
-        add(variant)
-    for variant in list(out[1:]):
-        m = _ID_SPLIT.search(variant)
-        if m:
-            for joiner in (" ", "", "-", " #", " no. "):
-                add(variant[: m.start()] + m.group(1) + joiner + m.group(2) + variant[m.end() :])
+    forms = [base, *_alias_variants(base, vocab)]
+    for form in forms[1:]:
+        add(form)
+    # the lower-cased forms first (how the fact rule stores a subject), then as written
+    for form in (*forms, written):
+        for joiner in _ID_JOINERS:
+            add(_ID_SPLIT.sub(lambda m, j=joiner: m.group(1) + j + m.group(2), form))
     return out[:limit]

@@ -159,13 +159,14 @@ sequenceDiagram
   U->>API: {target_kind, target_id, verdict, correction?, source}
   API->>F: record(ctx, feedback)
   F->>PG: authorize the target (read it, or own it to retract or correct)
-  alt needs review: a vote on a memory, a run or a procedure
+  alt needs review: an end user's vote on a memory, a run or a procedure
     F->>PG: feedback row, review.state = pending, no job
+    F->>PG: the voter's earlier pending vote on the target: dismissed, replaced_by the new vote
     API-->>U: 201 {review: {state: pending}, projection: null}
-    A->>API: GET /v1/feedback?review=pending (the admin key)
-    A->>API: POST /v1/feedback/{id}/approve (or /dismiss)
+    A->>API: GET /v1/feedback?review=pending&group=target (the admin key)
+    A->>API: POST /v1/feedback/approve {target_kind, target_id} (or /dismiss, or one id)
     API->>PG: review recorded, and on approve the feedback.project job
-  else applied as it arrives: the judge, a run's own status, an owner's correction, a tool call, an admin
+  else applied as it arrives: the judge, a run's own status, an owner's correction with text, a tool call, an admin
     F->>PG: feedback row + feedback.project job, one transaction
     API-->>U: 201 {review: null, projection: null}
   end

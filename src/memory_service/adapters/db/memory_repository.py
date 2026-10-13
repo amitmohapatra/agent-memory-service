@@ -36,6 +36,7 @@ from memory_service.domain.memory import (
     Scope,
     TemporalState,
 )
+from memory_service.domain.subjects import is_identity
 
 
 def _asserted_source_filter() -> ColumnElement[bool]:
@@ -438,26 +439,43 @@ class SqlMemoryRepository:
         if normalized_hash:
             any_of.append(MemoryRow.normalized_hash == normalized_hash)
         if subjects:
-            any_of.append(MemoryRow.subject.in_(list(subjects)))
-        exact = []
-        if any_of:
-            exact = list(
-                (
-                    await self.s.scalars(
-                        select(MemoryRow)
-                        .where(*conds, or_(*any_of))
-                        .order_by(MemoryRow.updated_at.desc())
-                        .limit(limit)
+            # Three kinds of spelling. An identity as written ("user:Alice") is an id: it
+            # matches exactly. A named subject matches whatever its case on either side
+            # ("Forklift 4" stored, "forklift-4" asked), folded by PostgreSQL on both sides
+            # (Python's lower() and the database's differ: "ΟΔΟΣ", "İ"), through
+            # ix_memories_scope_subject_lower. A spelling shaped like an identity in another
+            # case ("User:Alice") is neither: it names no one and matches nothing - folding it
+            # would match "user:alice" and "user:Alice", two people.
+            ids = [s for s in subjects if is_identity(s)]
+            named = sorted({s for s in subjects if not is_identity(s.lower())})
+            if ids:
+                any_of.append(MemoryRow.subject.in_(ids))
+            if named:
+                any_of.append(
+                    func.lower(MemoryRow.subject).in_(
+                        [func.lower(literal(s, type_=Text)) for s in named]
                     )
-                ).all()
-            )
+                )
         # The most recent of each kind: a statement's turn is kept beside its reading (ADR
         # 0036), so one window over both held half as many readings as before, and a turn
         # still belongs in it - the memories at hand are what a tenant's own definitions
         # ("the cross-dock facility (CDF)") are learned from.
         turn = MemoryRow.system_metadata["category"].astext == "verbatim_turn"
+        kinds = (turn.is_(False) | turn.is_(None), turn.is_(True))
+        exact: list[MemoryRow] = []
+        # the exact matches of each kind too: every turn of a user is about "user:<id>", so
+        # one limit over both let a user's newest turns crowd out their older facts
+        for kind in kinds if any_of else ():
+            exact += (
+                await self.s.scalars(
+                    select(MemoryRow)
+                    .where(*conds, kind, or_(*any_of))
+                    .order_by(MemoryRow.updated_at.desc())
+                    .limit(limit)
+                )
+            ).all()
         recent: list[MemoryRow] = []
-        for kind in (turn.is_(False) | turn.is_(None), turn.is_(True)):
+        for kind in kinds:
             recent += (
                 await self.s.scalars(
                     select(MemoryRow)

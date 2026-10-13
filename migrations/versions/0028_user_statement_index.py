@@ -15,8 +15,8 @@ block, an INVALID index from a failed build dropped first.
 
 from alembic import op
 
-revision = "0027_user_statement_index"
-down_revision = "0026_procedure_agent"
+revision = "0028_user_statement_index"
+down_revision = "0027_votes_replaced_by_subject"
 branch_labels = None
 depends_on = None
 

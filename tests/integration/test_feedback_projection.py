@@ -50,11 +50,14 @@ async def _first_memory(container, uow_factory):
 
 async def _submit(container, uow_factory, ctx, *, approve: bool = True, **fields) -> Feedback:
     """Submit; a vote that waits for review is approved by a tenant admin first (``approve``),
-    so it lands as it did before review existed."""
+    so it lands as it did before review existed. A ``judge`` or ``system`` verdict is sent as
+    the harness sends it, with a credential that may act as the agent (ADR 0039: a claimed
+    source from anyone else is a person's vote)."""
     service = container.services["feedback"]
     record = Feedback(tenant_id=ctx.tenant_id, **fields)
+    vouched = record.source in (FeedbackSource.JUDGE, FeedbackSource.SYSTEM)
     async with uow_factory() as uow:
-        stored, created = await service.submit(uow, ctx, record)
+        stored, created = await service.submit(uow, ctx, record, run_vouched=vouched)
         await uow.commit()
     assert created
     if stored.pending and approve:
@@ -124,7 +127,10 @@ async def test_confirm_reinforces_reject_retracts_and_the_cache_is_invalidated(
         m.memory_id for m in await _memories(uow_factory, ALICE, container)
     }
 
-    # a verdict on a memory that is no longer current is recorded, not projected
+    # Alice's thumb flipped back up undoes her own retraction before it reinforces: one vote
+    # per voter per target holds across approvals (ADR 0039; this asserted "recorded, not
+    # projected" while each of her votes counted on its own). A vote on a memory retracted by
+    # someone else is still recorded, not projected: test_feedback_votes covers that.
     late = await _submit(
         container,
         uow_factory,
@@ -133,8 +139,12 @@ async def test_confirm_reinforces_reject_retracts_and_the_cache_is_invalidated(
         target_id=memory.memory_id,
         verdict=FeedbackVerdict.CONFIRM,
     )
-    assert late.projection is not None and late.projection.action is ProjectionAction.NONE
-    assert "retracted" in (late.projection.reason or "")
+    assert late.projection is not None
+    assert late.projection.action is ProjectionAction.MEMORY_REINFORCED
+    assert late.projection.reversed == rejected.feedback_id
+    async with uow_factory() as uow:
+        back = await uow.memories.get("acme", memory.memory_id)
+    assert back is not None and back.temporal.status is TemporalStatus.CURRENT
 
 
 @pytest.mark.parametrize("verdict", [FeedbackVerdict.CORRECT, FeedbackVerdict.EDIT])
@@ -231,11 +241,13 @@ async def test_feedback_visibility_follows_the_target_and_the_author(
 async def test_listing_pages_newest_first_through_the_keyset(container, uow_factory) -> None:
     service = container.services["feedback"]
     ids = []
+    # five people in one workspace: one person's five identical votes are one vote now
+    # (ADR 0039), so the pages are filled by five voters, whom Alice's workspace may see
     for n in range(5):
         record = await _submit(
             container,
             uow_factory,
-            ALICE,
+            ALICE.model_copy(update={"user_id": f"pager{n}"}),
             feedback_id=f"fb_page_{n}",
             target_kind=FeedbackTargetKind.RUN,
             target_id="run_paged",
@@ -448,8 +460,8 @@ async def test_a_dismissed_vote_is_kept_and_never_applied(container, uow_factory
 
 
 async def test_what_is_applied_as_it_arrives(container, uow_factory) -> None:
-    """The judge's own verdict, a run reporting its own status, an owner's edit of a memory
-    and what a tenant admin says need no review."""
+    """The judge's own verdict, a run reporting its own status, an owner's correction of a
+    memory carrying new text and what a tenant admin says need no review."""
     memory = await _first_memory(container, uow_factory)
     service = container.services["feedback"]
     run = ALICE.model_copy(update={"agent_id": "helper", "agent_run_id": "run_self"})
@@ -471,12 +483,26 @@ async def test_what_is_applied_as_it_arrives(container, uow_factory) -> None:
             {"trusted": True},
         ),
         (ROOT, {"target_kind": "run", "target_id": "run_admin", "verdict": "reject"}, {}),
-        (ALICE, {"target_kind": "memory", "target_id": memory.memory_id, "verdict": "reject"}, {}),
+        (
+            ALICE,
+            {
+                "target_kind": "memory",
+                "target_id": memory.memory_id,
+                "verdict": "correct",
+                "correction": "My timezone is Europe/Lisbon.",
+            },
+            {},
+        ),
     ]
     for ctx, fields, kwargs in cases:
         async with uow_factory() as uow:
             stored, _ = await service.submit(
-                uow, ctx, Feedback(tenant_id="acme", **fields), **kwargs
+                uow,
+                ctx,
+                Feedback(tenant_id="acme", **fields),
+                # the harness's key may act as the agent whose run reports its status
+                run_vouched=True,
+                **kwargs,
             )
             await uow.commit()
         assert stored.review is None, fields
@@ -492,5 +518,6 @@ async def test_what_is_applied_as_it_arrives(container, uow_factory) -> None:
                 verdict=FeedbackVerdict.REJECT,
                 source=FeedbackSource.SYSTEM,
             ),
+            run_vouched=True,
         )
     assert stored.pending

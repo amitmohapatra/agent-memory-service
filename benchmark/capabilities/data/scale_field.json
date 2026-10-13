@@ -1,0 +1,160 @@
+{
+ "name": "scale_field",
+ "description": "Three years of weekly failure counts per field asset.",
+ "years": 3,
+ "entities": {
+  "asset": [
+   {
+    "id": "AST-P101",
+    "name": {
+     "en": "pump P101",
+     "de": "Pumpe P101",
+     "es": "bomba P101",
+     "ar": "المضخة P101",
+     "hi": "पंप P101"
+    }
+   },
+   {
+    "id": "AST-P102",
+    "name": {
+     "en": "pump P102",
+     "de": "Pumpe P102",
+     "es": "bomba P102",
+     "ar": "المضخة P102",
+     "hi": "पंप P102"
+    }
+   },
+   {
+    "id": "AST-C201",
+    "name": {
+     "en": "compressor C201",
+     "de": "Kompressor C201",
+     "es": "compresor C201",
+     "ar": "الضاغط C201",
+     "hi": "कंप्रेसर C201"
+    }
+   },
+   {
+    "id": "AST-C202",
+    "name": {
+     "en": "compressor C202",
+     "de": "Kompressor C202",
+     "es": "compresor C202",
+     "ar": "الضاغط C202",
+     "hi": "कंप्रेसर C202"
+    }
+   },
+   {
+    "id": "AST-G301",
+    "name": {
+     "en": "generator G301",
+     "de": "Generator G301",
+     "es": "generador G301",
+     "ar": "المولد G301",
+     "hi": "जनरेटर G301"
+    }
+   },
+   {
+    "id": "AST-V401",
+    "name": {
+     "en": "valve bank V401",
+     "de": "Ventilblock V401",
+     "es": "banco de válvulas V401",
+     "ar": "مجموعة الصمامات V401",
+     "hi": "वाल्व बैंक V401"
+    }
+   },
+   {
+    "id": "AST-H501",
+    "name": {
+     "en": "HVAC unit H501",
+     "de": "Klimaanlage H501",
+     "es": "climatizador H501",
+     "ar": "وحدة التكييف H501",
+     "hi": "HVAC यूनिट H501"
+    }
+   },
+   {
+    "id": "AST-T601",
+    "name": {
+     "en": "transformer T601",
+     "de": "Transformator T601",
+     "es": "transformador T601",
+     "ar": "المحول T601",
+     "hi": "ट्रांसफ़ॉर्मर T601"
+    }
+   },
+   {
+    "id": "AST-B701",
+    "name": {
+     "en": "boiler B701",
+     "de": "Kessel B701",
+     "es": "caldera B701",
+     "ar": "الغلاية B701",
+     "hi": "बॉयलर B701"
+    }
+   },
+   {
+    "id": "AST-L801",
+    "name": {
+     "en": "lift station L801",
+     "de": "Hebewerk L801",
+     "es": "estación elevadora L801",
+     "ar": "محطة الرفع L801",
+     "hi": "लिफ़्ट स्टेशन L801"
+    }
+   }
+  ]
+ },
+ "records": {
+  "log": {
+   "every": "week",
+   "role": "EVENT",
+   "lines_from": "asset",
+   "header": {
+    "en": "Weekly work-order summary {period}:",
+    "de": "Wöchentliche Auftragsübersicht {period}:",
+    "es": "Resumen semanal de órdenes de trabajo {period}:",
+    "ar": "ملخص أوامر العمل الأسبوعي {period}:",
+    "hi": "साप्ताहिक वर्क-ऑर्डर सार {period}:"
+   },
+   "line": {
+    "en": "{asset} ({asset.name}): {failures} failures",
+    "de": "{asset} ({asset.name}): {failures} Ausfälle",
+    "es": "{asset} ({asset.name}): {failures} averías",
+    "ar": "{asset} ({asset.name}): {failures} أعطال",
+    "hi": "{asset} ({asset.name}): {failures} ख़राबियाँ"
+   },
+   "fields": {
+    "failures": {
+     "min": 0,
+     "max": 2
+    }
+   },
+   "boost": [
+    {
+     "period": {
+      "year_offset": -1,
+      "quarter": 3
+     },
+     "keys": [
+      "AST-C201",
+      "AST-H501",
+      "AST-L801"
+     ],
+     "field": "failures",
+     "factor": 4
+    }
+   ]
+  }
+ },
+ "sizes": {
+  "standard": {},
+  "large": {
+   "years": 4,
+   "every": {
+    "log": "day"
+   }
+  }
+ }
+}

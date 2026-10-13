@@ -255,3 +255,74 @@ async def test_keys_model_keys_and_the_policy_are_tenant_administration(
     )
     assert set_policy.models == {"grounding_judge": "gemini/gemini-3.8-flash"}
     assert json.loads(put_policy.calls.last.request.content)["models"] == policy["models"]
+
+
+@respx.mock
+async def test_the_review_queue_lists_by_vote_or_by_target_and_by_state(
+    client: MemoryClient,
+) -> None:
+    group = {
+        "target_kind": "run",
+        "target_id": "run_1",
+        "votes": 3,
+        "thumbs_up": 1,
+        "thumbs_down": 2,
+        "voters": 3,
+        "latest_at": "2026-10-11T07:00:00Z",
+    }
+    route = respx.get(f"{BASE}/v1/feedback").mock(
+        side_effect=lambda request: httpx.Response(
+            200,
+            json={"groups": [group], "next_cursor": "c2"}
+            if request.url.params.get("group") == "target"
+            else {
+                "feedback": [_feedback(review={"state": request.url.params["review"]})],
+                "next_cursor": None,
+            },
+        )
+    )
+    ctx = client.bind(tenant_id="acme")
+    grouped = await ctx.feedback.pending(group="target", limit=5)
+    [row] = grouped.items
+    assert (row.target_id, row.thumbs_up, row.thumbs_down, row.voters) == ("run_1", 1, 2, 3)
+    assert grouped.next_cursor == "c2"
+    sent = route.calls.last.request.url.params
+    assert (sent["review"], sent["group"], sent["limit"]) == ("pending", "target", "5")
+    for state in ("pending", "approved", "dismissed"):
+        page = await ctx.feedback.pending(review=state, cursor="c1")
+        assert page.items[0].review is not None and page.items[0].review.state == state
+        sent = route.calls.last.request.url.params
+        assert "group" not in sent and sent["cursor"] == "c1"
+
+
+@respx.mock
+async def test_bulk_review_sends_ids_or_a_target(client: MemoryClient) -> None:
+    answer = {
+        "state": "approved",
+        "decided": ["fb_1"],
+        "unchanged": [{"feedback_id": "fb_2", "state": "dismissed"}],
+        "more": False,
+    }
+    approve = respx.post(f"{BASE}/v1/feedback/approve").respond(200, json=answer)
+    dismiss = respx.post(f"{BASE}/v1/feedback/dismiss").respond(
+        200, json={**answer, "state": "dismissed", "unchanged": [], "more": True}
+    )
+    ctx = client.bind(tenant_id="acme")
+    done = await ctx.feedback.approve_many(["fb_1", "fb_2"], note="checked")
+    assert done.decided == ["fb_1"] and done.unchanged[0].state == "dismissed"
+    assert json.loads(approve.calls.last.request.content) == {
+        "feedback_ids": ["fb_1", "fb_2"],
+        "note": "checked",
+    }
+    more = await ctx.feedback.dismiss_many(target_kind="run", target_id="run_1")
+    assert more.more and more.state == "dismissed"
+    assert json.loads(dismiss.calls.last.request.content) == {
+        "target_kind": "run",
+        "target_id": "run_1",
+    }
+    for bad in ({}, {"feedback_ids": ["fb_1"], "target_kind": "run", "target_id": "r"}):
+        with pytest.raises(ValueError):
+            await ctx.feedback.approve_many(**bad)
+    with pytest.raises(TypeError):
+        await ctx.feedback.dismiss_many("fb_1")
+    assert approve.call_count == 1 and dismiss.call_count == 1

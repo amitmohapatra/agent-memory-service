@@ -2732,6 +2732,119 @@
         "title": "FactOut",
         "type": "object"
       },
+      "FeedbackBulkReviewRequest": {
+        "additionalProperties": false,
+        "description": "Which pending verdicts to decide: the ids, or every verdict pending on one target.",
+        "examples": [
+          {
+            "feedback_ids": [
+              "fb_01J8ZK3N7R2Q4X5V6W7Y8Z9A0B"
+            ],
+            "note": "duplicates"
+          },
+          {
+            "note": "the answer matched the contract",
+            "target_id": "run_01J8ZK3N7R2Q4X5V6W7Y8Z9A0B",
+            "target_kind": "run"
+          }
+        ],
+        "properties": {
+          "feedback_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 500,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The verdicts to decide (1 to 500). Send these or a target, not both.",
+            "title": "Feedback Ids"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "why, for the record",
+            "title": "Note"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The judged object's id.",
+            "title": "Target Id"
+          },
+          "target_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeedbackTargetKind"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With target_id: decide every verdict pending on that target (up to 500 a call; `more` says when to call again)."
+          }
+        },
+        "title": "FeedbackBulkReviewRequest",
+        "type": "object"
+      },
+      "FeedbackBulkReviewResponse": {
+        "properties": {
+          "decided": {
+            "description": "The verdicts this call decided, in order.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Decided",
+            "type": "array"
+          },
+          "more": {
+            "default": false,
+            "description": "True when the target holds more pending verdicts than one call decides.",
+            "title": "More",
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ReviewState",
+            "description": "What this call decided: approved or dismissed."
+          },
+          "unchanged": {
+            "description": "The verdicts named that were not pending, left exactly as they were (a repeated call decides nothing twice).",
+            "items": {
+              "$ref": "#/components/schemas/FeedbackUnchanged"
+            },
+            "title": "Unchanged",
+            "type": "array"
+          }
+        },
+        "required": [
+          "state",
+          "decided",
+          "unchanged"
+        ],
+        "title": "FeedbackBulkReviewResponse",
+        "type": "object"
+      },
       "FeedbackEvidenceRef": {
         "description": "What a reviewer pointed at: the contracts ``EvidenceRef`` shape, read as data (unknown\nkeys ignored, nothing required beyond the source). It is a pointer for people, not the\nmemory evidence model, which is why ``observed_at`` may be absent.",
         "properties": {
@@ -2828,6 +2941,35 @@
         "title": "FeedbackEvidenceRef",
         "type": "object"
       },
+      "FeedbackGroupListResponse": {
+        "properties": {
+          "groups": {
+            "description": "One row per target, the most recently voted target first.",
+            "items": {
+              "$ref": "#/components/schemas/FeedbackTargetGroupResponse"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "pass as `cursor` for the next page; null on the last",
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "groups"
+        ],
+        "title": "FeedbackGroupListResponse",
+        "type": "object"
+      },
       "FeedbackListResponse": {
         "properties": {
           "feedback": {
@@ -2902,6 +3044,18 @@
             ],
             "description": "Why it did what it did (always set for none).",
             "title": "Reason"
+          },
+          "reversed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The same voter's earlier applied vote on this target whose effect this one undid before applying its own (a flipped thumb counts once).",
+            "title": "Reversed"
           },
           "run_id": {
             "anyOf": [
@@ -3238,7 +3392,7 @@
                 "type": "null"
               }
             ],
-            "description": "null: applied as it arrived; else pending (changes nothing until a tenant admin approves it), approved or dismissed"
+            "description": "null: applied as it arrived; else pending (changes nothing until a tenant admin approves it), approved or dismissed (a dismissed vote whose voter voted again on the same target carries `replaced_by`)"
           },
           "reviewer": {
             "anyOf": [
@@ -3362,6 +3516,18 @@
             "description": "Why, as the reviewer wrote it.",
             "title": "Note"
           },
+          "replaced_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set on a vote dismissed because the same voter voted again on the same target: the newer vote, which is the one that waits. Null otherwise.",
+            "title": "Replaced By"
+          },
           "reviewed_at": {
             "anyOf": [
               {
@@ -3389,7 +3555,7 @@
           },
           "state": {
             "$ref": "#/components/schemas/ReviewState",
-            "description": "pending (waits for a tenant admin), approved (applied) or dismissed (kept for statistics, never applied)."
+            "description": "pending (waits for a tenant admin), approved (applied) or dismissed (kept for statistics, never applied - by a reviewer, or because the same voter voted again on the same target: see replaced_by)."
           }
         },
         "required": [
@@ -3433,6 +3599,57 @@
         "title": "FeedbackSource",
         "type": "string"
       },
+      "FeedbackTargetGroupResponse": {
+        "description": "One row of the grouped review queue: the votes on one target, counted.",
+        "properties": {
+          "latest_at": {
+            "description": "When the latest of them came (ISO 8601, UTC).",
+            "format": "date-time",
+            "title": "Latest At",
+            "type": "string"
+          },
+          "target_id": {
+            "description": "The judged object's id.",
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_kind": {
+            "$ref": "#/components/schemas/FeedbackTargetKind",
+            "description": "What the votes judge: run, memory, tool_call or procedure."
+          },
+          "thumbs_down": {
+            "description": "How many of them are reject, correct or edit.",
+            "title": "Thumbs Down",
+            "type": "integer"
+          },
+          "thumbs_up": {
+            "description": "How many of them are confirm or approve.",
+            "title": "Thumbs Up",
+            "type": "integer"
+          },
+          "voters": {
+            "description": "How many distinct voters cast them (a person once, whichever agent carried the vote; an agent with no person behind it counts as its own voter).",
+            "title": "Voters",
+            "type": "integer"
+          },
+          "votes": {
+            "description": "How many verdicts in this review state are on it.",
+            "title": "Votes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "target_kind",
+          "target_id",
+          "votes",
+          "thumbs_up",
+          "thumbs_down",
+          "voters",
+          "latest_at"
+        ],
+        "title": "FeedbackTargetGroupResponse",
+        "type": "object"
+      },
       "FeedbackTargetKind": {
         "enum": [
           "run",
@@ -3442,6 +3659,32 @@
         ],
         "title": "FeedbackTargetKind",
         "type": "string"
+      },
+      "FeedbackUnchanged": {
+        "properties": {
+          "feedback_id": {
+            "description": "A verdict that was already decided.",
+            "title": "Feedback Id",
+            "type": "string"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where its review stands (approved or dismissed); null for one applied as it arrived."
+          }
+        },
+        "required": [
+          "feedback_id",
+          "state"
+        ],
+        "title": "FeedbackUnchanged",
+        "type": "object"
       },
       "FeedbackVerdict": {
         "enum": [
@@ -13830,7 +14073,7 @@
     },
     "/v1/feedback": {
       "get": {
-        "description": "Two lists, one route. With `target_kind` and `target_id`: the feedback on that target the caller may see. With `review=pending`: the review queue, verdicts that change nothing until a tenant admin approves them. The tenant's administrator credential (the platform key names the tenant in X-Trellis-Tenant). Each verdict carries `author_record`: how its author's verdicts fared in review (pending, approved, dismissed).",
+        "description": "Two lists, one route. With `target_kind` and `target_id`: the feedback on that target the caller may see. With `review=pending`: the review queue, verdicts that change nothing until a tenant admin approves them (`review=approved`, `dismissed` lists those, for reporting). With `group=target` as well: one row per target (`groups`) with its thumbs up and down, distinct voters and the latest vote's time, the most recently voted target first. The tenant's administrator credential (the platform key names the tenant in X-Trellis-Tenant). Each verdict carries `author_record`: how its author's verdicts fared in review (pending, approved, dismissed).",
         "operationId": "feedback.list_feedback",
         "parameters": [
           {
@@ -13872,22 +14115,40 @@
             }
           },
           {
-            "description": "pending: list the review queue instead of one target's feedback (the tenant's administrator credential).",
+            "description": "pending: list the review queue instead of one target's feedback (the tenant's administrator credential); approved or dismissed: the verdicts in that state, for reporting.",
             "in": "query",
             "name": "review",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "const": "pending",
+                  "$ref": "#/components/schemas/ReviewState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "pending: list the review queue instead of one target's feedback (the tenant's administrator credential); approved or dismissed: the verdicts in that state, for reporting.",
+              "title": "Review"
+            }
+          },
+          {
+            "description": "target (with review): one row per target with its counts instead of one row per verdict.",
+            "in": "query",
+            "name": "group",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "target",
                   "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "pending: list the review queue instead of one target's feedback (the tenant's administrator credential).",
-              "title": "Review"
+              "description": "target (with review): one row per target with its counts instead of one row per verdict.",
+              "title": "Group"
             }
           },
           {
@@ -14127,7 +14388,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FeedbackListResponse"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FeedbackListResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FeedbackGroupListResponse"
+                    }
+                  ],
+                  "title": "Response Feedback.List Feedback"
                 }
               }
             },
@@ -14508,7 +14777,7 @@
         ]
       },
       "post": {
-        "description": "The body is the `trellis.contracts.Feedback` record. Identity fields come from the trusted headers; a body value that disagrees is refused. A memory target must be readable by the caller; reject, correct and edit also need the owner (or a tenant admin), the rule that governs forgetting. The record is stored and projected asynchronously: on a memory, confirm/approve reinforce it, reject retracts it, correct/edit write a corrected memory that supersedes it. A verdict that would change what was learned on a person's or an agent's word (a confirm of a memory, a verdict on a run or a procedure) is stored with `review.state=pending` and changes nothing until a tenant admin approves it; an owner's reject/correct/edit of a memory, a run reporting its own status, a tool-call decision and what a tenant admin says are applied as they arrive. A retry with the same `feedback_id` returns the stored record with status 200 (with `Idempotency-Key`, the original 201 is replayed).",
+        "description": "The body is the `trellis.contracts.Feedback` record. Identity fields come from the trusted headers; a body value that disagrees is refused. A memory target must be readable by the caller; a correct or edit that rewrites it also needs the owner (or the user an agent acts for, or a tenant admin in person), the rule that governs forgetting. The record is stored and projected asynchronously: on a memory, confirm/approve reinforce it, reject retracts it, correct/edit write a corrected memory that supersedes it. An end user's vote (a confirm or reject of a memory, a verdict on a run or a procedure) is stored with `review.state=pending` and changes nothing until a tenant admin approves it; the same voter's newer vote on the same target replaces their earlier pending one (dismissed, with `review.replaced_by`), so repeated clicks count once. An owner's correct/edit of a memory carrying new text, a run reporting its own status, a tool-call decision, the service's own /v1/verify verdict and what a tenant admin says are applied as they arrive. A retry with the same `feedback_id` returns the stored record with status 200 (with `Idempotency-Key`, the original 201 is replayed).",
         "operationId": "feedback.submit_feedback",
         "parameters": [
           {
@@ -15005,6 +15274,954 @@
           }
         },
         "summary": "Record a judgement on a run, memory, tool call or procedure",
+        "tags": [
+          "feedback"
+        ]
+      }
+    },
+    "/v1/feedback/approve": {
+      "post": {
+        "description": "The tenant's administrator credential. Send `feedback_ids` (1 to 500), or `target_kind` and `target_id` for every verdict pending on that target. Idempotent: a verdict that is no longer pending (approved or dismissed) is listed in `unchanged` and left as it is, so a repeated call applies nothing twice. An id the tenant does not have refuses the whole call (404) and decides nothing.",
+        "operationId": "feedback.approve_feedback_many",
+        "parameters": [
+          {
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Trellis-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Trellis-Tenant"
+            }
+          },
+          {
+            "description": "W3C Trace Context to continue (00-<trace>-<span>-<flags>).",
+            "in": "header",
+            "name": "traceparent",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client request id; generated when absent or not an id (a letter or digit, then letters, digits and ._:-, at most 200 characters).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests; echoed when it is an id (a letter or digit, then letters, digits and ._:-, at most 200 characters), else replaced.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The workspace (team) acted in; membership is checked.",
+            "in": "header",
+            "name": "X-Trellis-Workspace",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The end user acted for.",
+            "in": "header",
+            "name": "X-Trellis-User",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackBulkReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackBulkReviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "AUTHENTICATION",
+                  "detail": "Missing or invalid credentials",
+                  "details": {},
+                  "instance": "/v1/feedback/approve",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 401,
+                  "title": "Authentication required",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:authentication"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "SCOPE_DENIED",
+                  "detail": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+                  "details": {},
+                  "instance": "/v1/feedback/approve",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 403,
+                  "title": "Outside the caller's scope",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:scope-denied"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "NOT_FOUND",
+                  "detail": "Thread not found",
+                  "details": {},
+                  "instance": "/v1/feedback/approve",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 404,
+                  "title": "Not found",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:not-found"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Thread not found",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "PAYLOAD_TOO_LARGE",
+                  "detail": "Body exceeds 26214400 bytes",
+                  "details": {},
+                  "instance": "/v1/feedback/approve",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 413,
+                  "title": "Payload too large",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:payload-too-large"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body exceeds 26214400 bytes",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "VALIDATION",
+                  "detail": "Request validation failed",
+                  "details": {},
+                  "instance": "/v1/feedback/approve",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 422,
+                  "title": "Invalid request",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:validation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request validation failed",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "RATE_LIMIT",
+                  "detail": "Too many requests",
+                  "details": {},
+                  "instance": "/v1/feedback/approve",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 429,
+                  "title": "Too many requests",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:rate-limit"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "DEPENDENCY_UNAVAILABLE",
+                  "detail": "PostgreSQL unavailable",
+                  "details": {},
+                  "instance": "/v1/feedback/approve",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 503,
+                  "title": "A dependency is unavailable",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:dependency-unavailable"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          }
+        },
+        "summary": "Approve pending verdicts in bulk: each is applied as if it had just arrived",
+        "tags": [
+          "feedback"
+        ]
+      }
+    },
+    "/v1/feedback/dismiss": {
+      "post": {
+        "description": "The tenant's administrator credential. Send `feedback_ids` (1 to 500), or `target_kind` and `target_id` for every verdict pending on that target. Idempotent: a verdict that is no longer pending (approved or dismissed) is listed in `unchanged` and left as it is, so a repeated call applies nothing twice. An id the tenant does not have refuses the whole call (404) and decides nothing.",
+        "operationId": "feedback.dismiss_feedback_many",
+        "parameters": [
+          {
+            "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
+            "in": "header",
+            "name": "X-Trellis-Tenant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The tenant to administer. Required for the platform key; a development key administers the development tenant without it; an admin key names its own tenant and this must agree with it.",
+              "title": "X-Trellis-Tenant"
+            }
+          },
+          {
+            "description": "W3C Trace Context to continue (00-<trace>-<span>-<flags>).",
+            "in": "header",
+            "name": "traceparent",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client request id; generated when absent or not an id (a letter or digit, then letters, digits and ._:-, at most 200 characters).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests; echoed when it is an id (a letter or digit, then letters, digits and ._:-, at most 200 characters), else replaced.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The workspace (team) acted in; membership is checked.",
+            "in": "header",
+            "name": "X-Trellis-Workspace",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The end user acted for.",
+            "in": "header",
+            "name": "X-Trellis-User",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackBulkReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackBulkReviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "AUTHENTICATION",
+                  "detail": "Missing or invalid credentials",
+                  "details": {},
+                  "instance": "/v1/feedback/dismiss",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 401,
+                  "title": "Authentication required",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:authentication"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "SCOPE_DENIED",
+                  "detail": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+                  "details": {},
+                  "instance": "/v1/feedback/dismiss",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 403,
+                  "title": "Outside the caller's scope",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:scope-denied"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "NOT_FOUND",
+                  "detail": "Thread not found",
+                  "details": {},
+                  "instance": "/v1/feedback/dismiss",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 404,
+                  "title": "Not found",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:not-found"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Thread not found",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "PAYLOAD_TOO_LARGE",
+                  "detail": "Body exceeds 26214400 bytes",
+                  "details": {},
+                  "instance": "/v1/feedback/dismiss",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 413,
+                  "title": "Payload too large",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:payload-too-large"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body exceeds 26214400 bytes",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "VALIDATION",
+                  "detail": "Request validation failed",
+                  "details": {},
+                  "instance": "/v1/feedback/dismiss",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 422,
+                  "title": "Invalid request",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:validation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request validation failed",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "RATE_LIMIT",
+                  "detail": "Too many requests",
+                  "details": {},
+                  "instance": "/v1/feedback/dismiss",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 429,
+                  "title": "Too many requests",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:rate-limit"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "DEPENDENCY_UNAVAILABLE",
+                  "detail": "PostgreSQL unavailable",
+                  "details": {},
+                  "instance": "/v1/feedback/dismiss",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 503,
+                  "title": "A dependency is unavailable",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:dependency-unavailable"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          }
+        },
+        "summary": "Dismiss pending verdicts in bulk: kept for statistics, never applied",
         "tags": [
           "feedback"
         ]

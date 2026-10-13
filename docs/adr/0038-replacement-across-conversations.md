@@ -102,7 +102,7 @@ inside one conversation and only for a turn whose reading has the same words.
    (`memory_replacement_skipped_total`); what was decided is counted by grade
    (`memory_replacements_total`).
 
-No new setting, no new memory type, no new table. Migration 0027 adds the two indexes online.
+No new setting, no new memory type, no new table. Migration 0028 adds the two indexes online.
 
 ## Consequences
 

@@ -1,0 +1,1259 @@
+{
+ "capability": "scale",
+ "number": 7,
+ "title": "Performance at scale (months, ~1M tokens)",
+ "definition": "Answer aggregate questions over years of accumulated records without slowing down, timing out or inventing figures. The standard tenant is three years of weekly records; --scale large files them daily (about a million tokens per language, opt-in).",
+ "scenarios": [
+  {
+   "id": "scale-retail-three-years",
+   "domain": "retail",
+   "sessions": [],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Identify the top three SKUs with the highest shrinkage rate in Q3 of last year.",
+        "de": "Ermittle die drei Artikel mit der höchsten Schwundquote im dritten Quartal des letzten Jahres.",
+        "es": "Identifica los tres SKU con la mayor tasa de merma en el tercer trimestre del año pasado.",
+        "ar": "حدّد أعلى ثلاثة أصناف SKU من حيث نسبة الفاقد في الربع الثالث من العام الماضي.",
+        "hi": "पिछले साल की तीसरी तिमाही में सबसे ज़्यादा श्रिंकेज दर वाले तीन SKU बताओ।",
+        "mixed": "Last year ke Q3 mein sabse zyada shrinkage rate wale top three SKUs batao."
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Loss prevention wants to know where we bled the most inventory last summer quarter.",
+        "de": "Die Verlustprävention will wissen, wo wir im letzten Sommerquartal am meisten Bestand verloren haben.",
+        "es": "Prevención de pérdidas quiere saber dónde perdimos más inventario el trimestre de verano pasado.",
+        "ar": "يريد فريق منع الخسائر معرفة أين خسرنا أكبر قدر من المخزون في ربع الصيف الماضي.",
+        "hi": "लॉस प्रिवेंशन जानना चाहता है कि पिछली गर्मियों की तिमाही में हमारा सबसे ज़्यादा माल कहाँ गया।",
+        "mixed": "الـ loss prevention بدهم يعرفوا أكثر 3 SKUs فيها shrinkage بالـ Q3 السنة الماضية."
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which three products had the worst shrink percentage from July to September last year?",
+        "de": "Welche drei Produkte hatten von Juli bis September letzten Jahres den schlechtesten Schwundanteil?",
+        "es": "¿Qué tres productos tuvieron el peor porcentaje de merma de julio a septiembre del año pasado?",
+        "ar": "ما المنتجات الثلاثة ذات أسوأ نسبة فاقد من يوليو إلى سبتمبر من العام الماضي؟",
+        "hi": "पिछले साल जुलाई से सितंबर तक किन तीन उत्पादों का श्रिंक प्रतिशत सबसे ख़राब था?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "top 3 skus hihgest shrink rate q3 last yr",
+        "de": "top 3 artikl höchste schwundqoute q3 letztes jar",
+        "es": "top 3 sku mayor merma t3 del año pasdo",
+        "ar": "اعلى 3 اصناف فاقد الربع الثالث السنه الماضيه",
+        "hi": "पिछले साल Q3 में सबसे ज्यादा श्रिंक वाले टॉप 3 SKU"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm preparing the annual loss-prevention review and the regional director specifically asked which three SKUs had the highest shrinkage rate — shrink as a share of what we counted — during the third quarter of last year, so we can decide where to add security tags.",
+        "de": "Ich bereite die jährliche Verlustpräventions-Überprüfung vor, und der Regionaldirektor hat ausdrücklich gefragt, welche drei Artikel im dritten Quartal des letzten Jahres die höchste Schwundquote hatten – Schwund im Verhältnis zur gezählten Menge –, damit wir entscheiden, wo wir Sicherungsetiketten anbringen.",
+        "es": "Estoy preparando la revisión anual de prevención de pérdidas y el director regional pidió expresamente qué tres SKU tuvieron la mayor tasa de merma, la merma respecto a lo contado, en el tercer trimestre del año pasado, para decidir dónde poner etiquetas de seguridad.",
+        "ar": "أعدّ المراجعة السنوية لمنع الخسائر، وقد سأل المدير الإقليمي تحديدًا عن الأصناف الثلاثة ذات أعلى نسبة فاقد — الفاقد كنسبة مما عُدّ — خلال الربع الثالث من العام الماضي، لنقرر أين نضع بطاقات الحماية.",
+        "hi": "मैं सालाना लॉस-प्रिवेंशन समीक्षा तैयार कर रहा हूँ और रीजनल डायरेक्टर ने ख़ास तौर पर पूछा है कि पिछले साल की तीसरी तिमाही में किन तीन SKU की श्रिंकेज दर — गिनी गई मात्रा के मुक़ाबले श्रिंक — सबसे ज़्यादा थी, ताकि तय करें कि सिक्योरिटी टैग कहाँ लगाएँ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Where should the new security tags go, based on last year's Q3 losses?",
+        "de": "Wo sollen die neuen Sicherungsetiketten hin, ausgehend von den Verlusten im Q3 letzten Jahres?",
+        "es": "¿Dónde ponemos las nuevas etiquetas de seguridad según las pérdidas del T3 del año pasado?",
+        "ar": "أين نضع بطاقات الحماية الجديدة بناءً على خسائر الربع الثالث من العام الماضي؟",
+        "hi": "पिछले साल की Q3 के नुक़सान के आधार पर नए सिक्योरिटी टैग कहाँ लगें?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not the overall all-time worst — which three SKUs had the highest shrink rate in Q3 last year?",
+        "de": "Nicht die schlechtesten aller Zeiten – welche drei Artikel hatten im Q3 letzten Jahres die höchste Schwundquote?",
+        "es": "No los peores de siempre: ¿qué tres SKU tuvieron la mayor merma en el T3 del año pasado?",
+        "ar": "ليس الأسوأ على الإطلاق — أي ثلاثة أصناف كانت لها أعلى نسبة فاقد في الربع الثالث من العام الماضي؟",
+        "hi": "अब तक के सबसे ख़राब नहीं — पिछले साल Q3 में किन तीन SKU का श्रिंक रेट सबसे ज़्यादा था?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Looking back over all the shrink reports we've logged, which three SKUs stood out in Q3 last year?",
+        "de": "Wenn du auf alle erfassten Schwundberichte zurückblickst: Welche drei Artikel stachen im Q3 letzten Jahres heraus?",
+        "es": "Repasando todos los informes de merma registrados, ¿qué tres SKU destacaron en el T3 del año pasado?",
+        "ar": "بالعودة إلى كل تقارير الفاقد المسجلة، أي ثلاثة أصناف برزت في الربع الثالث من العام الماضي؟",
+        "hi": "अब तक दर्ज सभी श्रिंक रिपोर्ट देखकर, पिछले साल Q3 में कौन से तीन SKU सबसे अलग दिखे?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Q3 last year shrink rate top 3 SKUs",
+        "de": "Q3 Vorjahr Schwundquote Top 3",
+        "es": "T3 año pasado merma top 3",
+        "ar": "الربع 3 العام الماضي الفاقد أعلى 3",
+        "hi": "पिछले साल Q3 श्रिंक रेट टॉप 3",
+        "mixed": "Top 3 SKUs con el highest shrink rate en Q3 del año pasado."
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Rank the SKUs by shrinkage rate for Q3 last year and give me the top three.",
+        "de": "Ordne die Artikel nach Schwundquote für Q3 letzten Jahres und nenn mir die ersten drei.",
+        "es": "Ordena los SKU por tasa de merma del T3 del año pasado y dame los tres primeros.",
+        "ar": "رتّب الأصناف حسب نسبة الفاقد للربع الثالث من العام الماضي وأعطني أعلى ثلاثة.",
+        "hi": "पिछले साल Q3 के श्रिंकेज रेट के हिसाब से SKU की रैंकिंग करो और टॉप तीन बताओ।",
+        "mixed": "Nenn mir die top three SKUs mit der höchsten shrinkage rate in Q3 letztes Jahr."
+       }
+      }
+     ],
+     "expect": {
+      "aggregate": {
+       "record": "shrink",
+       "period": {
+        "year_offset": -1,
+        "quarter": 3
+       },
+       "value": {
+        "ratio": [
+         "shrink",
+         "counted"
+        ]
+       },
+       "top": 3,
+       "group_by": "sku"
+      }
+     }
+    },
+    {
+     "id": "q2",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Which supplier did we pay the most last year?",
+        "de": "An welchen Lieferanten haben wir letztes Jahr am meisten gezahlt?",
+        "es": "¿A qué proveedor le pagamos más el año pasado?",
+        "ar": "أي مورّد دفعنا له أكثر من غيره العام الماضي؟",
+        "hi": "पिछले साल हमने किस सप्लायर को सबसे ज़्यादा भुगतान किया?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Procurement wants to renegotiate with whoever we spent the most with last year.",
+        "de": "Der Einkauf will mit dem Lieferanten nachverhandeln, bei dem wir letztes Jahr am meisten ausgegeben haben.",
+        "es": "Compras quiere renegociar con el proveedor en el que más gastamos el año pasado.",
+        "ar": "يريد قسم المشتريات إعادة التفاوض مع من أنفقنا عليه أكثر العام الماضي.",
+        "hi": "प्रोक्योरमेंट उस सप्लायर से फिर बात करना चाहता है जिस पर हमने पिछले साल सबसे ज़्यादा ख़र्च किया।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Who was our biggest supplier by invoiced amount last year?",
+        "de": "Wer war letztes Jahr nach Rechnungsbetrag unser größter Lieferant?",
+        "es": "¿Quién fue nuestro mayor proveedor por importe facturado el año pasado?",
+        "ar": "من كان أكبر مورّد لنا من حيث قيمة الفواتير العام الماضي؟",
+        "hi": "पिछले साल बिल राशि के हिसाब से हमारा सबसे बड़ा सप्लायर कौन था?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "bigest suplier by spend last yr",
+        "de": "gröster lieferant nach ausgabn letztes jar",
+        "es": "mayor provedor por gasto el año pasdo",
+        "ar": "اكبر مورد بالانفاق السنه الماضيه",
+        "hi": "पिछले साल ख़र्च के हिसाब से सबसे बडा सप्लायर"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "For next month's supplier review I want to open with the vendor we spent the most money with over the whole of last calendar year, based on the monthly invoice totals we've logged — who was it?",
+        "de": "Für das Lieferantengespräch nächsten Monat will ich mit dem Lieferanten beginnen, bei dem wir im gesamten letzten Kalenderjahr am meisten ausgegeben haben, laut den erfassten Monatsrechnungen – wer war das?",
+        "es": "Para la revisión de proveedores del mes que viene quiero empezar por el proveedor con el que más gastamos en todo el año natural pasado, según los totales de facturas mensuales registrados. ¿Quién fue?",
+        "ar": "لمراجعة الموردين الشهر المقبل أريد البدء بالمورّد الذي أنفقنا عليه أكثر خلال السنة الميلادية الماضية كاملة، وفق إجماليات الفواتير الشهرية المسجلة — من كان؟",
+        "hi": "अगले महीने की सप्लायर समीक्षा में मैं उस वेंडर से शुरुआत करना चाहता हूँ जिस पर पिछले पूरे कैलेंडर साल में सबसे ज़्यादा पैसा गया, दर्ज मासिक बिलों के आधार पर — वह कौन था?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Supplier review: who comes first?",
+        "de": "Lieferantengespräch: Wer kommt zuerst?",
+        "es": "Revisión de proveedores: ¿quién va primero?",
+        "ar": "مراجعة الموردين: من يأتي أولًا؟",
+        "hi": "सप्लायर समीक्षा: पहले कौन?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not this year — which supplier did we spend the most with last year?",
+        "de": "Nicht dieses Jahr – bei welchem Lieferanten haben wir letztes Jahr am meisten ausgegeben?",
+        "es": "Este año no: ¿con qué proveedor gastamos más el año pasado?",
+        "ar": "ليس هذا العام — مع أي مورّد أنفقنا أكثر العام الماضي؟",
+        "hi": "इस साल नहीं — पिछले साल किस सप्लायर पर सबसे ज़्यादा ख़र्च हुआ?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "From all the invoices logged, who topped last year's supplier spend?",
+        "de": "Wer lag nach allen erfassten Rechnungen bei den Lieferantenausgaben letztes Jahr vorn?",
+        "es": "Según todas las facturas registradas, ¿quién encabezó el gasto en proveedores del año pasado?",
+        "ar": "من بين كل الفواتير المسجلة، من تصدّر إنفاق الموردين العام الماضي؟",
+        "hi": "दर्ज सभी बिलों में पिछले साल सप्लायर ख़र्च में सबसे ऊपर कौन था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "top supplier spend last year",
+        "de": "Top-Lieferant Ausgaben Vorjahr",
+        "es": "proveedor con más gasto año pasado",
+        "ar": "أعلى مورّد إنفاقًا العام الماضي",
+        "hi": "पिछले साल टॉप सप्लायर ख़र्च"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me which supplier had the highest invoice total last year.",
+        "de": "Sag mir, welcher Lieferant letztes Jahr die höchste Rechnungssumme hatte.",
+        "es": "Dime qué proveedor tuvo el mayor total facturado el año pasado.",
+        "ar": "أخبرني أي مورّد كان لديه أعلى إجمالي فواتير العام الماضي.",
+        "hi": "बताओ पिछले साल किस सप्लायर का कुल बिल सबसे ज़्यादा था।"
+       }
+      }
+     ],
+     "expect": {
+      "aggregate": {
+       "record": "invoice",
+       "period": {
+        "year_offset": -1
+       },
+       "value": {
+        "sum": "amount"
+       },
+       "top": 1,
+       "group_by": "supplier"
+      }
+     }
+    },
+    {
+     "id": "q3",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "How many units of SKU-20917 did we receive in March last year?",
+        "de": "Wie viele Stück von SKU-20917 haben wir im März letzten Jahres erhalten?",
+        "es": "¿Cuántas unidades del SKU-20917 recibimos en marzo del año pasado?",
+        "ar": "كم وحدة من SKU-20917 استلمنا في مارس من العام الماضي؟",
+        "hi": "पिछले साल मार्च में हमें SKU-20917 की कितनी यूनिट मिलीं?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The supplier claims they shipped us a lot of razor refills in March last year; I want to check what actually came in.",
+        "de": "Der Lieferant behauptet, er habe uns im März letzten Jahres viele Rasierklingen geliefert; ich will prüfen, was wirklich ankam.",
+        "es": "El proveedor dice que nos mandó muchos recambios de cuchillas en marzo del año pasado; quiero comprobar lo que llegó de verdad.",
+        "ar": "يدّعي المورّد أنه شحن لنا كمية كبيرة من الشفرات البديلة في مارس من العام الماضي؛ أريد التحقق مما وصل فعلًا.",
+        "hi": "सप्लायर का दावा है कि उसने पिछले साल मार्च में बहुत से रेज़र रिफ़िल भेजे; मैं देखना चाहता हूँ कि असल में कितने आए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What was the total received quantity for SKU-20917 during March of last year?",
+        "de": "Wie hoch war die gesamte Eingangsmenge von SKU-20917 im März letzten Jahres?",
+        "es": "¿Cuál fue la cantidad total recibida del SKU-20917 en marzo del año pasado?",
+        "ar": "ما إجمالي الكمية المستلمة من SKU-20917 خلال مارس من العام الماضي؟",
+        "hi": "पिछले साल मार्च में SKU-20917 की कुल प्राप्त मात्रा कितनी थी?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "units recieved SKU-20917 march last yr",
+        "de": "eingang SKU-20917 märz letztes jar",
+        "es": "unidades resividas SKU-20917 marzo año pasado",
+        "ar": "الوحدات المستلمه SKU-20917 مارس السنه الماضيه",
+        "hi": "पिछले साल मार्च SKU-20917 प्राप्त यूनिट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "We're in a dispute with the razor refill supplier about a short shipment, and their account manager says everything for March of last year was delivered, so I need our own receiving total for SKU-20917 across that month to compare against their numbers.",
+        "de": "Wir streiten mit dem Lieferanten der Rasierklingen über eine Fehlmenge, und der Kundenbetreuer sagt, für März letzten Jahres sei alles geliefert worden, also brauche ich unsere eigene Eingangssumme für SKU-20917 in diesem Monat zum Abgleich.",
+        "es": "Tenemos una disputa con el proveedor de recambios de cuchillas por un envío incompleto y su comercial dice que todo lo de marzo del año pasado se entregó, así que necesito nuestro total recibido del SKU-20917 en ese mes para compararlo.",
+        "ar": "لدينا خلاف مع مورّد الشفرات البديلة حول شحنة ناقصة، ويقول مدير حسابه إن كل شيء لشهر مارس من العام الماضي سُلّم، لذا أحتاج إجمالي استلامنا من SKU-20917 في ذلك الشهر للمقارنة.",
+        "hi": "रेज़र रिफ़िल सप्लायर से कम माल को लेकर विवाद है, और उनका अकाउंट मैनेजर कहता है कि पिछले साल मार्च का सब डिलीवर हो गया था, इसलिए तुलना के लिए मुझे उस महीने SKU-20917 का हमारा अपना कुल प्राप्त आँकड़ा चाहिए।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "March last year, razor refills received?",
+        "de": "März letztes Jahr, Rasierklingen eingegangen?",
+        "es": "Marzo del año pasado, ¿recambios de cuchillas recibidos?",
+        "ar": "مارس العام الماضي، الشفرات المستلمة؟",
+        "hi": "पिछले साल मार्च, रेज़र रिफ़िल कितने आए?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not what was shipped out — how many SKU-20917 did we receive in March last year?",
+        "de": "Nicht was versandt wurde – wie viele SKU-20917 haben wir im März letzten Jahres erhalten?",
+        "es": "No lo enviado: ¿cuántas SKU-20917 recibimos en marzo del año pasado?",
+        "ar": "ليس ما شُحن — كم وحدة SKU-20917 استلمنا في مارس العام الماضي؟",
+        "hi": "जो भेजा गया वह नहीं — पिछले साल मार्च में SKU-20917 कितनी मिलीं?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "From the receiving logs we kept, what came in for SKU-20917 in March last year?",
+        "de": "Was kam laut unseren Wareneingangsprotokollen im März letzten Jahres für SKU-20917 herein?",
+        "es": "Según los registros de recepción, ¿qué entró del SKU-20917 en marzo del año pasado?",
+        "ar": "وفق سجلات الاستلام لدينا، ماذا وصل من SKU-20917 في مارس العام الماضي؟",
+        "hi": "हमारे रिसीविंग लॉग के हिसाब से पिछले साल मार्च में SKU-20917 कितना आया?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "SKU-20917 received March last year",
+        "de": "SKU-20917 Eingang März Vorjahr",
+        "es": "SKU-20917 recibido marzo año pasado",
+        "ar": "SKU-20917 المستلم مارس العام الماضي",
+        "hi": "SKU-20917 प्राप्त पिछले साल मार्च"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Total the March receipts for SKU-20917 from last year.",
+        "de": "Summiere die März-Eingänge von SKU-20917 aus dem letzten Jahr.",
+        "es": "Suma las recepciones de marzo del SKU-20917 del año pasado.",
+        "ar": "اجمع استلامات مارس من SKU-20917 للعام الماضي.",
+        "hi": "पिछले साल मार्च की SKU-20917 प्राप्तियाँ जोड़ो।"
+       }
+      }
+     ],
+     "expect": {
+      "aggregate": {
+       "record": "receiving",
+       "period": {
+        "year_offset": -1,
+        "month": 3
+       },
+       "value": {
+        "sum": "received"
+       },
+       "top": 1,
+       "where": {
+        "sku": "SKU-20917"
+       }
+      }
+     }
+    },
+    {
+     "id": "q4",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What were our top three SKUs by units shipped in December last year?",
+        "de": "Welches waren unsere drei Artikel mit den meisten versandten Stück im Dezember letzten Jahres?",
+        "es": "¿Cuáles fueron nuestros tres SKU con más unidades enviadas en diciembre del año pasado?",
+        "ar": "ما أعلى ثلاثة أصناف لدينا من حيث الوحدات المشحونة في ديسمبر من العام الماضي؟",
+        "hi": "पिछले साल दिसंबर में भेजी गई यूनिट के हिसाब से हमारे टॉप तीन SKU कौन से थे?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I want to stock up for the holidays based on what moved fastest last December.",
+        "de": "Ich will mich für die Feiertage danach eindecken, was letzten Dezember am schnellsten weg war.",
+        "es": "Quiero abastecerme para las fiestas según lo que más salió el diciembre pasado.",
+        "ar": "أريد تخزين البضائع للأعياد بناءً على ما بيع أسرع في ديسمبر الماضي.",
+        "hi": "मैं छुट्टियों के लिए उसी हिसाब से स्टॉक भरना चाहता हूँ जो पिछले दिसंबर सबसे तेज़ बिका।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which products shipped the most from DC-1 last December?",
+        "de": "Welche Produkte wurden letzten Dezember am meisten aus DC-1 versandt?",
+        "es": "¿Qué productos salieron más de DC-1 el diciembre pasado?",
+        "ar": "ما المنتجات الأكثر شحنًا من DC-1 في ديسمبر الماضي؟",
+        "hi": "पिछले दिसंबर DC-1 से सबसे ज़्यादा कौन से उत्पाद भेजे गए?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "top 3 shiped skus decmber last yr",
+        "de": "top 3 versandte artikl dezembr letztes jar",
+        "es": "top 3 sku enviadas disiembre año pasado",
+        "ar": "اعلى 3 اصناف مشحونه ديسمبر الماضي",
+        "hi": "पिछले साल दिसमबर सबसे ज्यादा भेजे गए 3 SKU"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Holiday planning starts this week and I'd like to anchor the forecast on what actually flew out of the distribution centre last December — give me the three SKUs with the most units shipped to stores that month.",
+        "de": "Die Feiertagsplanung beginnt diese Woche, und ich will die Prognose daran ausrichten, was letzten Dezember tatsächlich aus dem Verteilzentrum ging – nenn mir die drei Artikel mit den meisten an die Filialen versandten Stück in dem Monat.",
+        "es": "La planificación de fiestas empieza esta semana y quiero basar la previsión en lo que realmente salió del centro de distribución el diciembre pasado: dame los tres SKU con más unidades enviadas a tiendas ese mes.",
+        "ar": "يبدأ التخطيط لموسم الأعياد هذا الأسبوع، وأود بناء التوقعات على ما خرج فعلًا من مركز التوزيع في ديسمبر الماضي — أعطني الأصناف الثلاثة الأكثر وحدات مشحونة إلى المتاجر ذلك الشهر.",
+        "hi": "त्योहारी प्लानिंग इस हफ़्ते शुरू है और मैं पूर्वानुमान उस पर टिकाना चाहता हूँ जो पिछले दिसंबर में डिस्ट्रीब्यूशन सेंटर से सच में निकला — उस महीने स्टोरों को सबसे ज़्यादा यूनिट भेजे गए तीन SKU बताओ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Holiday forecast anchor SKUs?",
+        "de": "Anker-Artikel für die Feiertagsprognose?",
+        "es": "¿SKU ancla para la previsión de fiestas?",
+        "ar": "أصناف أساسية لتوقعات الأعياد؟",
+        "hi": "त्योहारी पूर्वानुमान के मुख्य SKU?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not received — shipped. Top three SKUs for December last year?",
+        "de": "Nicht eingegangen – versandt. Die drei besten Artikel für Dezember letzten Jahres?",
+        "es": "No recibido, enviado. ¿Los tres SKU principales de diciembre del año pasado?",
+        "ar": "ليس المستلم — بل المشحون. أعلى ثلاثة أصناف لديسمبر العام الماضي؟",
+        "hi": "प्राप्त नहीं — भेजे गए। पिछले साल दिसंबर के टॉप तीन SKU?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "From the shipping manifests on file, what were last December's top three SKUs?",
+        "de": "Was waren laut den vorliegenden Versandlisten die drei Top-Artikel im letzten Dezember?",
+        "es": "Según los manifiestos de envío guardados, ¿cuáles fueron los tres SKU principales del diciembre pasado?",
+        "ar": "وفق بيانات الشحن المحفوظة، ما أعلى ثلاثة أصناف في ديسمبر الماضي؟",
+        "hi": "रिकॉर्ड में मौजूद शिपिंग मैनिफ़ेस्ट से, पिछले दिसंबर के टॉप तीन SKU कौन थे?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "December last year top shipped SKUs",
+        "de": "Dezember Vorjahr meistversandte Artikel",
+        "es": "diciembre año pasado SKU más enviados",
+        "ar": "ديسمبر الماضي الأصناف الأكثر شحنًا",
+        "hi": "पिछले साल दिसंबर सबसे ज़्यादा भेजे SKU"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Rank last December's shipments by SKU and give me the top three.",
+        "de": "Ordne die Versandmengen vom letzten Dezember nach Artikel und nenn die ersten drei.",
+        "es": "Ordena los envíos del diciembre pasado por SKU y dame los tres primeros.",
+        "ar": "رتّب شحنات ديسمبر الماضي حسب الصنف وأعطني أعلى ثلاثة.",
+        "hi": "पिछले दिसंबर के शिपमेंट SKU के हिसाब से रैंक करो और टॉप तीन दो।"
+       }
+      }
+     ],
+     "expect": {
+      "aggregate": {
+       "record": "manifest",
+       "period": {
+        "year_offset": -1,
+        "month": 12
+       },
+       "value": {
+        "sum": "shipped"
+       },
+       "top": 3,
+       "group_by": "sku"
+      }
+     }
+    },
+    {
+     "id": "q5",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Which SKU had the most shrink units in Q1 this year?",
+        "de": "Welcher Artikel hatte im ersten Quartal dieses Jahres die meisten Schwundstücke?",
+        "es": "¿Qué SKU tuvo más unidades de merma en el primer trimestre de este año?",
+        "ar": "أي صنف كان لديه أكبر عدد من وحدات الفاقد في الربع الأول من هذا العام؟",
+        "hi": "इस साल की पहली तिमाही में किस SKU में सबसे ज़्यादा श्रिंक यूनिट थीं?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Something went missing a lot at the start of this year — which item?",
+        "de": "Anfang dieses Jahres ist von irgendetwas viel verschwunden – welcher Artikel?",
+        "es": "A principios de este año desapareció mucho de algo; ¿qué artículo?",
+        "ar": "اختفى الكثير من شيء ما في بداية هذا العام — أي صنف؟",
+        "hi": "इस साल की शुरुआत में किसी चीज़ का बहुत माल ग़ायब हुआ — कौन सा आइटम?"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What product lost the most units to shrink between January and March this year?",
+        "de": "Welches Produkt hat zwischen Januar und März dieses Jahres die meisten Stück durch Schwund verloren?",
+        "es": "¿Qué producto perdió más unidades por merma entre enero y marzo de este año?",
+        "ar": "ما المنتج الذي فقد أكبر عدد من الوحدات بسبب الفاقد بين يناير ومارس هذا العام؟",
+        "hi": "इस साल जनवरी से मार्च के बीच किस उत्पाद की सबसे ज़्यादा यूनिट श्रिंक में गईं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "most shrink unts q1 this yr",
+        "de": "meisten schwund stück q1 dises jahr",
+        "es": "mas merma unidades t1 este aÑo",
+        "ar": "اكثر فاقد الربع الاول هالسنه",
+        "hi": "इस साल Q1 सबसे ज्यादा श्रिंक"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Our new camera system went live in April, and before we judge whether it helped I want to know which single SKU had the highest number of shrink units across the first quarter of this year, from the weekly reports.",
+        "de": "Unser neues Kamerasystem ging im April in Betrieb, und bevor wir beurteilen, ob es geholfen hat, will ich laut den Wochenberichten wissen, welcher einzelne Artikel im ersten Quartal dieses Jahres die meisten Schwundstücke hatte.",
+        "es": "Nuestro nuevo sistema de cámaras arrancó en abril y, antes de valorar si ha ayudado, quiero saber qué SKU concreto tuvo más unidades de merma en el primer trimestre de este año según los informes semanales.",
+        "ar": "بدأ نظام الكاميرات الجديد العمل في أبريل، وقبل أن نحكم إن كان مفيدًا أريد معرفة الصنف الواحد صاحب أكبر عدد من وحدات الفاقد خلال الربع الأول من هذا العام، من التقارير الأسبوعية.",
+        "hi": "हमारा नया कैमरा सिस्टम अप्रैल में चालू हुआ, और यह आँकने से पहले कि उससे फ़ायदा हुआ या नहीं, मैं साप्ताहिक रिपोर्टों से जानना चाहता हूँ कि इस साल की पहली तिमाही में किस एक SKU की श्रिंक यूनिट सबसे ज़्यादा थीं।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Q1 shrink leader?",
+        "de": "Spitzenreiter beim Schwund im Q1?",
+        "es": "¿Líder de merma del T1?",
+        "ar": "صاحب أعلى فاقد في الربع الأول؟",
+        "hi": "Q1 में श्रिंक में सबसे आगे?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not last year — this year's first quarter. Which SKU had the most shrink?",
+        "de": "Nicht letztes Jahr – das erste Quartal dieses Jahres. Welcher Artikel hatte den meisten Schwund?",
+        "es": "No el año pasado, el primer trimestre de este año. ¿Qué SKU tuvo más merma?",
+        "ar": "ليس العام الماضي — الربع الأول من هذا العام. أي صنف كان لديه أكبر فاقد؟",
+        "hi": "पिछला साल नहीं — इस साल की पहली तिमाही। किस SKU का श्रिंक सबसे ज़्यादा था?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Going back through this year's weekly shrink reports, which SKU was worst in Q1?",
+        "de": "Wenn du die Wochenberichte dieses Jahres durchgehst: Welcher Artikel war im Q1 am schlechtesten?",
+        "es": "Revisando los informes semanales de merma de este año, ¿qué SKU fue el peor en el T1?",
+        "ar": "بالرجوع إلى تقارير الفاقد الأسبوعية لهذا العام، أي صنف كان الأسوأ في الربع الأول؟",
+        "hi": "इस साल की साप्ताहिक श्रिंक रिपोर्टें देखकर, Q1 में सबसे ख़राब SKU कौन सा था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Q1 this year most shrink SKU",
+        "de": "Q1 dieses Jahr meister Schwund",
+        "es": "T1 este año SKU más merma",
+        "ar": "الربع الأول هذا العام أكثر صنف فاقدًا",
+        "hi": "इस साल Q1 सबसे ज़्यादा श्रिंक SKU"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Find the SKU with the highest shrink units in Q1 of this year.",
+        "de": "Finde den Artikel mit den meisten Schwundstücken im Q1 dieses Jahres.",
+        "es": "Encuentra el SKU con más unidades de merma en el T1 de este año.",
+        "ar": "اعثر على الصنف صاحب أعلى وحدات فاقد في الربع الأول من هذا العام.",
+        "hi": "इस साल Q1 में सबसे ज़्यादा श्रिंक यूनिट वाला SKU ढूँढो।"
+       }
+      }
+     ],
+     "expect": {
+      "aggregate": {
+       "record": "shrink",
+       "period": {
+        "year_offset": 0,
+        "quarter": 1
+       },
+       "value": {
+        "sum": "shrink"
+       },
+       "top": 1,
+       "group_by": "sku"
+      }
+     }
+    },
+    {
+     "id": "q6",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "How much did Northwind Packaging invoice us in Q2 last year?",
+        "de": "Wie viel hat uns Northwind Packaging im zweiten Quartal letzten Jahres in Rechnung gestellt?",
+        "es": "¿Cuánto nos facturó Northwind Packaging en el segundo trimestre del año pasado?",
+        "ar": "كم فوترتنا Northwind Packaging في الربع الثاني من العام الماضي؟",
+        "hi": "पिछले साल दूसरी तिमाही में Northwind Packaging ने हमें कितना बिल किया?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Audit wants our Northwind Packaging spend for last year's spring quarter.",
+        "de": "Die Revision will unsere Ausgaben bei Northwind Packaging für das Frühjahrsquartal letzten Jahres.",
+        "es": "Auditoría quiere nuestro gasto con Northwind Packaging del trimestre de primavera del año pasado.",
+        "ar": "يريد التدقيق إنفاقنا مع Northwind Packaging لربع الربيع من العام الماضي.",
+        "hi": "ऑडिट को पिछले साल की वसंत तिमाही का हमारा Northwind Packaging ख़र्च चाहिए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What was the total of SUP-02's invoices from April to June last year?",
+        "de": "Wie hoch war die Summe der Rechnungen von SUP-02 von April bis Juni letzten Jahres?",
+        "es": "¿Cuál fue el total de las facturas de SUP-02 de abril a junio del año pasado?",
+        "ar": "ما إجمالي فواتير SUP-02 من أبريل إلى يونيو من العام الماضي؟",
+        "hi": "पिछले साल अप्रैल से जून तक SUP-02 के बिलों का कुल कितना था?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "northwind invoce total q2 last yr",
+        "de": "northwind rechnug summe q2 letztes jar",
+        "es": "total facturas northwind t2 año pasdo",
+        "ar": "اجمالي فواتير نورثويند الربع الثاني الماضي",
+        "hi": "पिछले साल Q2 नॉर्थविंड बिल कुल"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The external auditors are sampling supplier spend and picked Northwind Packaging for the second quarter of last year, so I need the sum of the monthly invoice totals we logged for them across April, May and June.",
+        "de": "Die externen Prüfer ziehen Stichproben bei den Lieferantenausgaben und haben Northwind Packaging für das zweite Quartal letzten Jahres gewählt, also brauche ich die Summe der erfassten Monatsrechnungen für April, Mai und Juni.",
+        "es": "Los auditores externos están muestreando el gasto en proveedores y eligieron Northwind Packaging para el segundo trimestre del año pasado, así que necesito la suma de las facturas mensuales registradas de abril, mayo y junio.",
+        "ar": "يأخذ المدققون الخارجيون عينات من إنفاق الموردين واختاروا Northwind Packaging للربع الثاني من العام الماضي، لذا أحتاج مجموع إجماليات الفواتير الشهرية المسجلة لهم في أبريل ومايو ويونيو.",
+        "hi": "बाहरी ऑडिटर सप्लायर ख़र्च का सैंपल ले रहे हैं और उन्होंने पिछले साल की दूसरी तिमाही के लिए Northwind Packaging चुना है, इसलिए मुझे अप्रैल, मई और जून में उनके दर्ज मासिक बिलों का जोड़ चाहिए।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Northwind Q2 spend for the auditors.",
+        "de": "Northwind-Ausgaben Q2 für die Prüfer.",
+        "es": "Gasto de Northwind en el T2 para los auditores.",
+        "ar": "إنفاق Northwind للربع الثاني للمدققين.",
+        "hi": "ऑडिटर के लिए Northwind का Q2 ख़र्च।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not the whole year — just Q2 last year. What did Northwind Packaging bill us?",
+        "de": "Nicht das ganze Jahr – nur Q2 letzten Jahres. Was hat Northwind Packaging uns berechnet?",
+        "es": "No el año entero, solo el T2 del año pasado. ¿Cuánto nos facturó Northwind Packaging?",
+        "ar": "ليس السنة كلها — الربع الثاني من العام الماضي فقط. كم فوترتنا Northwind Packaging؟",
+        "hi": "पूरा साल नहीं — सिर्फ़ पिछले साल Q2। Northwind Packaging ने कितना बिल किया?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Going back through the logged invoices, what's Northwind's Q2 total from last year?",
+        "de": "Wenn du die erfassten Rechnungen durchgehst: Was ist die Q2-Summe von Northwind aus dem letzten Jahr?",
+        "es": "Revisando las facturas registradas, ¿cuál es el total del T2 de Northwind del año pasado?",
+        "ar": "بالرجوع إلى الفواتير المسجلة، ما إجمالي Northwind للربع الثاني من العام الماضي؟",
+        "hi": "दर्ज बिल देखकर, पिछले साल Northwind का Q2 कुल कितना है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Northwind Q2 last year invoices",
+        "de": "Northwind Q2 Vorjahr Rechnungen",
+        "es": "Northwind T2 año pasado facturas",
+        "ar": "فواتير Northwind الربع الثاني العام الماضي",
+        "hi": "Northwind पिछले साल Q2 बिल"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Add up Northwind Packaging's invoices for Q2 last year.",
+        "de": "Addiere die Rechnungen von Northwind Packaging für Q2 letzten Jahres.",
+        "es": "Suma las facturas de Northwind Packaging del T2 del año pasado.",
+        "ar": "اجمع فواتير Northwind Packaging للربع الثاني من العام الماضي.",
+        "hi": "पिछले साल Q2 के Northwind Packaging बिल जोड़ो।"
+       }
+      }
+     ],
+     "expect": {
+      "aggregate": {
+       "record": "invoice",
+       "period": {
+        "year_offset": -1,
+        "quarter": 2
+       },
+       "value": {
+        "sum": "amount"
+       },
+       "top": 1,
+       "where": {
+        "supplier": "SUP-02"
+       }
+      }
+     }
+    }
+   ],
+   "origin": "inventorysmart-7",
+   "corpus": {
+    "spec": "scale_retail"
+   }
+  },
+  {
+   "id": "scale-personal-spending",
+   "domain": "personal",
+   "sessions": [],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What were my top three spending categories in Q3 last year?",
+        "de": "Was waren meine drei größten Ausgabenkategorien im dritten Quartal letzten Jahres?",
+        "es": "¿Cuáles fueron mis tres principales categorías de gasto en el tercer trimestre del año pasado?",
+        "ar": "ما أعلى ثلاث فئات إنفاق لدي في الربع الثالث من العام الماضي؟",
+        "hi": "पिछले साल तीसरी तिमाही में मेरी ख़र्च की टॉप तीन श्रेणियाँ कौन सी थीं?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I feel like I overspent last summer — on what?",
+        "de": "Ich habe das Gefühl, letzten Sommer zu viel ausgegeben zu haben – wofür?",
+        "es": "Creo que gasté de más el verano pasado; ¿en qué?",
+        "ar": "أشعر أنني أنفقت كثيرًا الصيف الماضي — على ماذا؟",
+        "hi": "लगता है पिछली गर्मियों में ज़्यादा ख़र्च किया — किस पर?"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Where did most of my money go from July to September last year?",
+        "de": "Wohin ging von Juli bis September letzten Jahres das meiste Geld?",
+        "es": "¿En qué se me fue la mayor parte del dinero de julio a septiembre del año pasado?",
+        "ar": "أين ذهب معظم مالي من يوليو إلى سبتمبر من العام الماضي؟",
+        "hi": "पिछले साल जुलाई से सितंबर तक मेरा ज़्यादातर पैसा कहाँ गया?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "top 3 spendng categries q3 last yr",
+        "de": "top 3 ausgabn kategorien q3 letztes jar",
+        "es": "top 3 categorias de gasto t3 año pasdo",
+        "ar": "اعلى 3 فئات انفاق الربع الثالث الماضي",
+        "hi": "पिछले साल Q3 टॉप 3 खर्च केटेगरी"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm setting next year's budget and I want to start with an honest look at where my money actually went in the third quarter of last year — which three categories from my weekly spending log were the biggest?",
+        "de": "Ich stelle das Budget fürs nächste Jahr auf und will mit einem ehrlichen Blick darauf beginnen, wohin mein Geld im dritten Quartal letzten Jahres wirklich ging – welche drei Kategorien aus meinem wöchentlichen Ausgabenprotokoll waren die größten?",
+        "es": "Estoy haciendo el presupuesto del año que viene y quiero empezar mirando con sinceridad en qué se me fue el dinero en el tercer trimestre del año pasado: ¿qué tres categorías de mi registro semanal de gastos fueron las mayores?",
+        "ar": "أضع ميزانية العام المقبل وأريد البدء بنظرة صادقة إلى أين ذهب مالي فعلًا في الربع الثالث من العام الماضي — ما أكبر ثلاث فئات في سجل إنفاقي الأسبوعي؟",
+        "hi": "मैं अगले साल का बजट बना रहा हूँ और शुरुआत ईमानदारी से यह देखकर करना चाहता हूँ कि पिछले साल की तीसरी तिमाही में मेरा पैसा असल में कहाँ गया — मेरे साप्ताहिक ख़र्च लॉग की कौन सी तीन श्रेणियाँ सबसे बड़ी थीं?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Budget review: last summer's big categories?",
+        "de": "Budgetrückblick: die großen Kategorien letzten Sommer?",
+        "es": "Revisión del presupuesto: ¿grandes categorías del verano pasado?",
+        "ar": "مراجعة الميزانية: الفئات الكبرى الصيف الماضي؟",
+        "hi": "बजट समीक्षा: पिछली गर्मियों की बड़ी श्रेणियाँ?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not this year — last year's Q3. What did I spend the most on?",
+        "de": "Nicht dieses Jahr – Q3 letzten Jahres. Wofür habe ich am meisten ausgegeben?",
+        "es": "Este año no, el T3 del año pasado. ¿En qué gasté más?",
+        "ar": "ليس هذا العام — الربع الثالث من العام الماضي. على ماذا أنفقت أكثر؟",
+        "hi": "इस साल नहीं — पिछले साल Q3। मैंने किस पर सबसे ज़्यादा ख़र्च किया?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Looking back at all my spending logs, what were last year's Q3 top categories?",
+        "de": "Wenn du auf alle meine Ausgabenprotokolle zurückblickst: Was waren die Top-Kategorien im Q3 letzten Jahres?",
+        "es": "Repasando todos mis registros de gasto, ¿cuáles fueron las categorías principales del T3 del año pasado?",
+        "ar": "بالعودة إلى كل سجلات إنفاقي، ما الفئات الأعلى في الربع الثالث من العام الماضي؟",
+        "hi": "मेरे सारे ख़र्च लॉग देखकर, पिछले साल Q3 की टॉप श्रेणियाँ कौन सी थीं?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Q3 last year top spending",
+        "de": "Q3 Vorjahr größte Ausgaben",
+        "es": "T3 año pasado mayores gastos",
+        "ar": "الربع 3 العام الماضي أعلى إنفاق",
+        "hi": "पिछले साल Q3 सबसे ज़्यादा ख़र्च"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Rank my spending categories for Q3 last year and give me the top three.",
+        "de": "Ordne meine Ausgabenkategorien für Q3 letzten Jahres und nenn mir die ersten drei.",
+        "es": "Ordena mis categorías de gasto del T3 del año pasado y dame las tres primeras.",
+        "ar": "رتّب فئات إنفاقي للربع الثالث من العام الماضي وأعطني أعلى ثلاث.",
+        "hi": "पिछले साल Q3 की मेरी ख़र्च श्रेणियाँ रैंक करो और टॉप तीन बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "aggregate": {
+       "record": "log",
+       "period": {
+        "year_offset": -1,
+        "quarter": 3
+       },
+       "value": {
+        "sum": "amount"
+       },
+       "top": 3,
+       "group_by": "category"
+      }
+     }
+    }
+   ],
+   "corpus": {
+    "spec": "scale_personal"
+   }
+  },
+  {
+   "id": "scale-it-incidents",
+   "domain": "it_support",
+   "sessions": [],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Which three services had the most P1 incidents in Q3 last year?",
+        "de": "Welche drei Dienste hatten im dritten Quartal letzten Jahres die meisten P1-Störungen?",
+        "es": "¿Qué tres servicios tuvieron más incidencias P1 en el tercer trimestre del año pasado?",
+        "ar": "ما الخدمات الثلاث التي شهدت أكثر حوادث P1 في الربع الثالث من العام الماضي؟",
+        "hi": "पिछले साल तीसरी तिमाही में किन तीन सर्विस में सबसे ज़्यादा P1 इंसिडेंट हुए?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Leadership wants to know which systems hurt us most last summer.",
+        "de": "Die Leitung will wissen, welche Systeme uns letzten Sommer am meisten geschadet haben.",
+        "es": "La dirección quiere saber qué sistemas nos hicieron más daño el verano pasado.",
+        "ar": "تريد الإدارة معرفة الأنظمة التي أضرت بنا أكثر الصيف الماضي.",
+        "hi": "लीडरशिप जानना चाहती है कि पिछली गर्मियों में किन सिस्टम ने सबसे ज़्यादा परेशान किया।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What were the worst services by critical incidents from July to September last year?",
+        "de": "Welche Dienste waren von Juli bis September letzten Jahres bei kritischen Störungen am schlechtesten?",
+        "es": "¿Qué servicios fueron los peores en incidencias críticas de julio a septiembre del año pasado?",
+        "ar": "ما أسوأ الخدمات من حيث الحوادث الحرجة من يوليو إلى سبتمبر من العام الماضي؟",
+        "hi": "पिछले साल जुलाई से सितंबर तक गंभीर इंसिडेंट में सबसे ख़राब सर्विस कौन सी थीं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "top 3 servics most p1 q3 last yr",
+        "de": "top 3 dienste meiste p1 q3 letztes jar",
+        "es": "top 3 servisios mas p1 t3 año pasado",
+        "ar": "اعلى 3 خدمات حوادث p1 الربع الثالث الماضي",
+        "hi": "पिछले साल Q3 सबसे ज्यादा P1 वाली 3 सर्विस"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm building the case for next year's reliability budget and want to show which three services generated the most priority-one incidents during the third quarter of last year, using our weekly incident reports.",
+        "de": "Ich begründe das Zuverlässigkeitsbudget fürs nächste Jahr und will anhand unserer wöchentlichen Störungsberichte zeigen, welche drei Dienste im dritten Quartal letzten Jahres die meisten Störungen der Priorität 1 verursacht haben.",
+        "es": "Estoy justificando el presupuesto de fiabilidad del año que viene y quiero mostrar, con nuestros informes semanales, qué tres servicios generaron más incidencias de prioridad uno en el tercer trimestre del año pasado.",
+        "ar": "أبني مبررات ميزانية الموثوقية للعام المقبل وأريد أن أبيّن، من تقارير الحوادث الأسبوعية، الخدمات الثلاث التي تسببت في أكثر حوادث الأولوية الأولى خلال الربع الثالث من العام الماضي.",
+        "hi": "मैं अगले साल के रिलायबिलिटी बजट का केस बना रहा हूँ और साप्ताहिक इंसिडेंट रिपोर्टों से दिखाना चाहता हूँ कि पिछले साल की तीसरी तिमाही में किन तीन सर्विस से सबसे ज़्यादा प्रायोरिटी-वन इंसिडेंट हुए।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Reliability budget: worst services last Q3?",
+        "de": "Zuverlässigkeitsbudget: schlechteste Dienste im letzten Q3?",
+        "es": "Presupuesto de fiabilidad: ¿peores servicios del último T3?",
+        "ar": "ميزانية الموثوقية: أسوأ الخدمات في الربع الثالث الماضي؟",
+        "hi": "रिलायबिलिटी बजट: पिछली Q3 की सबसे ख़राब सर्विस?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not P2s — which services had the most P1s in Q3 last year?",
+        "de": "Keine P2 – welche Dienste hatten im Q3 letzten Jahres die meisten P1?",
+        "es": "No las P2: ¿qué servicios tuvieron más P1 en el T3 del año pasado?",
+        "ar": "ليست P2 — أي الخدمات كان لديها أكثر P1 في الربع الثالث من العام الماضي؟",
+        "hi": "P2 नहीं — पिछले साल Q3 में किन सर्विस के सबसे ज़्यादा P1 थे?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "From all the weekly incident reports, which services led P1s in Q3 last year?",
+        "de": "Welche Dienste lagen laut allen Wochenberichten im Q3 letzten Jahres bei P1 vorn?",
+        "es": "Según todos los informes semanales, ¿qué servicios encabezaron las P1 en el T3 del año pasado?",
+        "ar": "من كل تقارير الحوادث الأسبوعية، أي الخدمات تصدّرت حوادث P1 في الربع الثالث من العام الماضي؟",
+        "hi": "सभी साप्ताहिक रिपोर्टों से, पिछले साल Q3 में P1 में कौन सी सर्विस आगे थीं?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Q3 last year P1 top services",
+        "de": "Q3 Vorjahr P1 Top-Dienste",
+        "es": "T3 año pasado P1 servicios top",
+        "ar": "الربع 3 الماضي P1 أعلى خدمات",
+        "hi": "पिछले साल Q3 P1 टॉप सर्विस"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Rank services by P1 incidents for Q3 last year and give me the top three.",
+        "de": "Ordne die Dienste nach P1-Störungen für Q3 letzten Jahres und nenn die ersten drei.",
+        "es": "Ordena los servicios por incidencias P1 del T3 del año pasado y dame los tres primeros.",
+        "ar": "رتّب الخدمات حسب حوادث P1 للربع الثالث من العام الماضي وأعطني أعلى ثلاث.",
+        "hi": "पिछले साल Q3 के P1 इंसिडेंट से सर्विस रैंक करो और टॉप तीन दो।"
+       }
+      }
+     ],
+     "expect": {
+      "aggregate": {
+       "record": "log",
+       "period": {
+        "year_offset": -1,
+        "quarter": 3
+       },
+       "value": {
+        "sum": "p1"
+       },
+       "top": 3,
+       "group_by": "service"
+      }
+     }
+    }
+   ],
+   "corpus": {
+    "spec": "scale_it"
+   }
+  },
+  {
+   "id": "scale-finance-travel",
+   "domain": "finance_hr",
+   "sessions": [],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Which three departments spent the most on travel in Q3 last year?",
+        "de": "Welche drei Abteilungen haben im dritten Quartal letzten Jahres am meisten für Reisen ausgegeben?",
+        "es": "¿Qué tres departamentos gastaron más en viajes en el tercer trimestre del año pasado?",
+        "ar": "ما الأقسام الثلاثة الأكثر إنفاقًا على السفر في الربع الثالث من العام الماضي؟",
+        "hi": "पिछले साल तीसरी तिमाही में किन तीन विभागों ने यात्रा पर सबसे ज़्यादा ख़र्च किया?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The CFO wants to cut travel where it ran highest last summer.",
+        "de": "Die Finanzchefin will die Reisekosten dort kürzen, wo sie letzten Sommer am höchsten waren.",
+        "es": "La directora financiera quiere recortar viajes donde más se gastó el verano pasado.",
+        "ar": "تريد المديرة المالية خفض السفر حيث كان الإنفاق أعلى الصيف الماضي.",
+        "hi": "CFO पिछली गर्मियों में जहाँ यात्रा ख़र्च सबसे ज़्यादा था वहाँ कटौती करना चाहती हैं।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Who had the highest travel expense claims from July to September last year?",
+        "de": "Wer hatte von Juli bis September letzten Jahres die höchsten Reisekostenabrechnungen?",
+        "es": "¿Quién tuvo los gastos de viaje más altos de julio a septiembre del año pasado?",
+        "ar": "من كانت لديه أعلى مطالبات نفقات سفر من يوليو إلى سبتمبر من العام الماضي؟",
+        "hi": "पिछले साल जुलाई से सितंबर तक सबसे ज़्यादा यात्रा ख़र्च दावे किसके थे?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "top 3 depts travl spend q3 last yr",
+        "de": "top 3 abteilungn reisekostn q3 letztes jar",
+        "es": "top 3 departamentos gasto viaje t3 año pasdo",
+        "ar": "اعلى 3 اقسام انفاق سفر الربع الثالث الماضي",
+        "hi": "पिछले साल Q3 यात्रा खर्च टॉप 3 विभाग"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm drafting next year's travel policy and the finance committee asked which three departments had the highest travel expense claims during the third quarter of last year, based on the weekly claims we processed.",
+        "de": "Ich entwerfe die Reiserichtlinie fürs nächste Jahr, und der Finanzausschuss hat gefragt, welche drei Abteilungen im dritten Quartal letzten Jahres die höchsten Reisekostenabrechnungen hatten, basierend auf den wöchentlich bearbeiteten Abrechnungen.",
+        "es": "Estoy redactando la política de viajes del año que viene y el comité financiero preguntó qué tres departamentos tuvieron los gastos de viaje más altos en el tercer trimestre del año pasado, según las liquidaciones semanales.",
+        "ar": "أصوغ سياسة السفر للعام المقبل، وسألت اللجنة المالية عن الأقسام الثلاثة ذات أعلى مطالبات نفقات سفر خلال الربع الثالث من العام الماضي، بناءً على المطالبات الأسبوعية التي عالجناها.",
+        "hi": "मैं अगले साल की यात्रा नीति का मसौदा बना रहा हूँ और वित्त समिति ने पूछा है कि पिछले साल की तीसरी तिमाही में किन तीन विभागों के यात्रा ख़र्च दावे सबसे ज़्यादा थे, हमारे साप्ताहिक दावों के आधार पर।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Travel policy: biggest spenders last Q3?",
+        "de": "Reiserichtlinie: größte Ausgaben im letzten Q3?",
+        "es": "Política de viajes: ¿quién gastó más el último T3?",
+        "ar": "سياسة السفر: الأكثر إنفاقًا في الربع الثالث الماضي؟",
+        "hi": "यात्रा नीति: पिछली Q3 में सबसे ज़्यादा ख़र्च करने वाले?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not overall expenses — travel only. Top three departments in Q3 last year?",
+        "de": "Nicht alle Ausgaben – nur Reisen. Die drei Spitzenabteilungen im Q3 letzten Jahres?",
+        "es": "No gastos totales, solo viajes. ¿Los tres departamentos principales en el T3 del año pasado?",
+        "ar": "ليس كل النفقات — السفر فقط. أعلى ثلاثة أقسام في الربع الثالث من العام الماضي؟",
+        "hi": "कुल ख़र्च नहीं — सिर्फ़ यात्रा। पिछले साल Q3 के टॉप तीन विभाग?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "From the claims we logged, which departments led travel spend in Q3 last year?",
+        "de": "Welche Abteilungen lagen laut den erfassten Abrechnungen im Q3 letzten Jahres bei den Reisekosten vorn?",
+        "es": "Según las liquidaciones registradas, ¿qué departamentos encabezaron el gasto en viajes en el T3 del año pasado?",
+        "ar": "من المطالبات المسجلة، أي الأقسام تصدّرت إنفاق السفر في الربع الثالث من العام الماضي؟",
+        "hi": "दर्ज दावों से, पिछले साल Q3 में यात्रा ख़र्च में कौन से विभाग आगे थे?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Q3 last year travel by department",
+        "de": "Q3 Vorjahr Reisekosten je Abteilung",
+        "es": "T3 año pasado viajes por departamento",
+        "ar": "الربع 3 الماضي السفر حسب القسم",
+        "hi": "पिछले साल Q3 विभागवार यात्रा"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Rank departments by travel spend for Q3 last year and give me the top three.",
+        "de": "Ordne die Abteilungen nach Reisekosten für Q3 letzten Jahres und nenn die ersten drei.",
+        "es": "Ordena los departamentos por gasto en viajes del T3 del año pasado y dame los tres primeros.",
+        "ar": "رتّب الأقسام حسب إنفاق السفر للربع الثالث من العام الماضي وأعطني أعلى ثلاثة.",
+        "hi": "पिछले साल Q3 के यात्रा ख़र्च से विभाग रैंक करो और टॉप तीन दो।"
+       }
+      }
+     ],
+     "expect": {
+      "aggregate": {
+       "record": "log",
+       "period": {
+        "year_offset": -1,
+        "quarter": 3
+       },
+       "value": {
+        "sum": "travel"
+       },
+       "top": 3,
+       "group_by": "dept"
+      }
+     }
+    }
+   ],
+   "corpus": {
+    "spec": "scale_finance"
+   }
+  },
+  {
+   "id": "scale-field-failures",
+   "domain": "field_service",
+   "sessions": [],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Which three assets had the most failures in Q3 last year?",
+        "de": "Welche drei Anlagen hatten im dritten Quartal letzten Jahres die meisten Ausfälle?",
+        "es": "¿Qué tres equipos tuvieron más averías en el tercer trimestre del año pasado?",
+        "ar": "ما الأصول الثلاثة الأكثر أعطالًا في الربع الثالث من العام الماضي؟",
+        "hi": "पिछले साल तीसरी तिमाही में किन तीन एसेट में सबसे ज़्यादा ख़राबियाँ हुईं?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I want to prioritise replacements based on what broke most last summer.",
+        "de": "Ich will Ersatzbeschaffungen danach priorisieren, was letzten Sommer am häufigsten kaputt war.",
+        "es": "Quiero priorizar las sustituciones según lo que más se averió el verano pasado.",
+        "ar": "أريد ترتيب أولويات الاستبدال بناءً على ما تعطّل أكثر الصيف الماضي.",
+        "hi": "मैं बदलने की प्राथमिकता इस पर तय करना चाहता हूँ कि पिछली गर्मियों में क्या सबसे ज़्यादा ख़राब हुआ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What equipment failed most often from July to September last year?",
+        "de": "Welche Geräte sind von Juli bis September letzten Jahres am häufigsten ausgefallen?",
+        "es": "¿Qué equipos fallaron más a menudo de julio a septiembre del año pasado?",
+        "ar": "ما المعدات الأكثر تعطلًا من يوليو إلى سبتمبر من العام الماضي؟",
+        "hi": "पिछले साल जुलाई से सितंबर तक कौन से उपकरण सबसे ज़्यादा ख़राब हुए?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "top 3 asets most failurs q3 last yr",
+        "de": "top 3 anlagn meiste ausfäle q3 letztes jar",
+        "es": "top 3 equipos mas averias t3 año pasdo",
+        "ar": "اعلى 3 اصول اعطال الربع الثالث الماضي",
+        "hi": "पिछले साल Q3 सबसे ज्यादा खराबी वाले 3 एसेट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm putting together the capital replacement plan and want to justify it with the three assets that racked up the most failures during the third quarter of last year, based on our weekly work-order summaries.",
+        "de": "Ich erstelle den Investitionsplan für Ersatzbeschaffungen und will ihn mit den drei Anlagen begründen, die laut unseren wöchentlichen Auftragsübersichten im dritten Quartal letzten Jahres die meisten Ausfälle hatten.",
+        "es": "Estoy preparando el plan de sustitución de equipos y quiero justificarlo con los tres equipos que acumularon más averías en el tercer trimestre del año pasado, según nuestros resúmenes semanales de órdenes de trabajo.",
+        "ar": "أعدّ خطة الاستبدال الرأسمالية وأريد تبريرها بالأصول الثلاثة التي تراكمت عليها أكثر الأعطال خلال الربع الثالث من العام الماضي، بناءً على ملخصات أوامر العمل الأسبوعية.",
+        "hi": "मैं कैपिटल रिप्लेसमेंट प्लान बना रहा हूँ और उसे उन तीन एसेट से सही ठहराना चाहता हूँ जिनमें पिछले साल की तीसरी तिमाही में सबसे ज़्यादा ख़राबियाँ हुईं, हमारे साप्ताहिक वर्क-ऑर्डर सार के आधार पर।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Replacement plan: worst assets last Q3?",
+        "de": "Ersatzplan: schlechteste Anlagen im letzten Q3?",
+        "es": "Plan de sustitución: ¿peores equipos del último T3?",
+        "ar": "خطة الاستبدال: أسوأ الأصول في الربع الثالث الماضي؟",
+        "hi": "रिप्लेसमेंट प्लान: पिछली Q3 के सबसे ख़राब एसेट?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not all-time — which assets failed most in Q3 last year?",
+        "de": "Nicht insgesamt – welche Anlagen sind im Q3 letzten Jahres am meisten ausgefallen?",
+        "es": "No de siempre: ¿qué equipos fallaron más en el T3 del año pasado?",
+        "ar": "ليس على الإطلاق — أي الأصول تعطلت أكثر في الربع الثالث من العام الماضي؟",
+        "hi": "अब तक के नहीं — पिछले साल Q3 में कौन से एसेट सबसे ज़्यादा ख़राब हुए?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "From the work-order summaries on file, which assets led failures in Q3 last year?",
+        "de": "Welche Anlagen lagen laut den vorliegenden Auftragsübersichten im Q3 letzten Jahres bei den Ausfällen vorn?",
+        "es": "Según los resúmenes de órdenes de trabajo guardados, ¿qué equipos encabezaron las averías en el T3 del año pasado?",
+        "ar": "من ملخصات أوامر العمل المحفوظة، أي الأصول تصدّرت الأعطال في الربع الثالث من العام الماضي؟",
+        "hi": "रिकॉर्ड के वर्क-ऑर्डर सार से, पिछले साल Q3 में ख़राबियों में कौन से एसेट आगे थे?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Q3 last year asset failures top 3",
+        "de": "Q3 Vorjahr Ausfälle Top 3",
+        "es": "T3 año pasado averías top 3",
+        "ar": "الربع 3 الماضي أعطال أعلى 3",
+        "hi": "पिछले साल Q3 एसेट ख़राबी टॉप 3"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Rank assets by failures for Q3 last year and give me the top three.",
+        "de": "Ordne die Anlagen nach Ausfällen für Q3 letzten Jahres und nenn die ersten drei.",
+        "es": "Ordena los equipos por averías del T3 del año pasado y dame los tres primeros.",
+        "ar": "رتّب الأصول حسب الأعطال للربع الثالث من العام الماضي وأعطني أعلى ثلاثة.",
+        "hi": "पिछले साल Q3 की ख़राबियों से एसेट रैंक करो और टॉप तीन दो।"
+       }
+      }
+     ],
+     "expect": {
+      "aggregate": {
+       "record": "log",
+       "period": {
+        "year_offset": -1,
+        "quarter": 3
+       },
+       "value": {
+        "sum": "failures"
+       },
+       "top": 3,
+       "group_by": "asset"
+      }
+     }
+    }
+   ],
+   "corpus": {
+    "spec": "scale_field"
+   }
+  }
+ ]
+}

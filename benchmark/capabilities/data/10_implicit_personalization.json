@@ -1,0 +1,2012 @@
+{
+ "capability": "implicit_personalization",
+ "number": 10,
+ "title": "Implicit personalization",
+ "definition": "Tailor a response from what past interactions reveal about the user, without being told: the trait evidence must reach the context of a request it should shape.",
+ "scenarios": [
+  {
+   "id": "implicit-retail-perishables",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -40,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Walk-in cooler 2 drifted to 42°F overnight — can you log it and remind me to check the compressor?",
+        "de": "Kühlzelle 2 ist über Nacht auf 42°F gestiegen – kannst du das protokollieren und mich an den Kompressor erinnern?",
+        "es": "La cámara 2 subió a 42°F esta noche; ¿lo registras y me recuerdas revisar el compresor?",
+        "ar": "ارتفعت حرارة غرفة التبريد 2 إلى 42°F ليلًا — هل تسجّل ذلك وتذكّرني بفحص الضاغط؟",
+        "hi": "वॉक-इन कूलर 2 रात में 42°F तक पहुँच गया — इसे दर्ज करो और मुझे कंप्रेसर जाँचने की याद दिलाना।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -28,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Which of our dairy lots expire this week? I need to plan markdowns on the yogurt and milk.",
+        "de": "Welche Molkerei-Chargen laufen diese Woche ab? Ich muss Abschriften für Joghurt und Milch planen.",
+        "es": "¿Qué lotes de lácteos caducan esta semana? Tengo que planificar rebajas del yogur y la leche.",
+        "ar": "ما دفعات الألبان التي تنتهي صلاحيتها هذا الأسبوع؟ أحتاج لتخطيط تخفيضات الزبادي والحليب.",
+        "hi": "हमारे कौन से डेयरी लॉट इस हफ़्ते एक्सपायर हो रहे हैं? दही और दूध के मार्कडाउन प्लान करने हैं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s3",
+     "day": -15,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Pull up the FDA temperature log requirements for fresh produce before the inspection.",
+        "de": "Such die FDA-Vorgaben für Temperaturprotokolle bei frischem Obst und Gemüse vor der Inspektion heraus.",
+        "es": "Busca los requisitos de la FDA para el registro de temperaturas de frutas y verduras frescas antes de la inspección.",
+        "ar": "استخرج متطلبات FDA لسجل حرارة المنتجات الطازجة قبل التفتيش.",
+        "hi": "निरीक्षण से पहले ताज़ा फल-सब्ज़ियों के लिए FDA तापमान लॉग की आवश्यकताएँ निकालो।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s4",
+     "day": -6,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The lettuce from Valley Farms only lasted four days this time; log it as a quality issue.",
+        "de": "Der Salat von Valley Farms hat diesmal nur vier Tage gehalten; erfasse das als Qualitätsproblem.",
+        "es": "La lechuga de Valley Farms solo duró cuatro días esta vez; regístralo como incidencia de calidad.",
+        "ar": "الخس من Valley Farms صمد أربعة أيام فقط هذه المرة؛ سجّل ذلك كمشكلة جودة.",
+        "hi": "इस बार Valley Farms का लेट्यूस सिर्फ़ चार दिन चला; इसे गुणवत्ता समस्या के रूप में दर्ज करो।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Set up a reorder alert for our new stock of organic strawberries.",
+        "de": "Richte eine Nachbestellwarnung für unseren neuen Bestand an Bio-Erdbeeren ein.",
+        "es": "Configura una alerta de pedido para nuestro nuevo stock de fresas ecológicas.",
+        "ar": "أنشئ تنبيه إعادة طلب لمخزوننا الجديد من الفراولة العضوية.",
+        "hi": "हमारी ऑर्गेनिक स्ट्रॉबेरी के नए स्टॉक के लिए रीऑर्डर अलर्ट सेट करो।",
+        "mixed": "Organic strawberries ke naye stock ke liye reorder alert set karo."
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "We just started carrying organic strawberries.",
+        "de": "Wir führen seit Kurzem Bio-Erdbeeren.",
+        "es": "Acabamos de empezar a vender fresas ecológicas.",
+        "ar": "بدأنا للتو بيع الفراولة العضوية.",
+        "hi": "हमने अभी ऑर्गेनिक स्ट्रॉबेरी रखना शुरू किया है।",
+        "mixed": "Acabamos de recibir organic strawberries, ¿me haces el reorder alert?"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Create a replenishment trigger for the organic strawberries.",
+        "de": "Erstelle einen Nachschub-Auslöser für die Bio-Erdbeeren.",
+        "es": "Crea un disparador de reposición para las fresas ecológicas.",
+        "ar": "أنشئ محفز تزويد للفراولة العضوية.",
+        "hi": "ऑर्गेनिक स्ट्रॉबेरी के लिए रीप्लेनिशमेंट ट्रिगर बनाओ।"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "reordr alert organc strawberies",
+        "de": "nachbestel alarm bio erdbern",
+        "es": "alerta de pedio fresas ecologicaz",
+        "ar": "تنبيه اعاده طلب فراوله عضويه",
+        "hi": "ऑरगेनिक स्ट्राबेरी रिऑडर अलर्ट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Our first shipment of organic strawberries came in this morning, and I don't want to end up either empty on the weekend or throwing half of it away, so please set up a sensible reorder alert for them.",
+        "de": "Unsere erste Lieferung Bio-Erdbeeren kam heute früh, und ich will am Wochenende weder leer dastehen noch die Hälfte wegwerfen, also richte bitte eine sinnvolle Nachbestellwarnung ein.",
+        "es": "Esta mañana llegó nuestro primer envío de fresas ecológicas y no quiero quedarme sin ellas el fin de semana ni tirar la mitad, así que configura una alerta de pedido sensata.",
+        "ar": "وصلت أول شحنة من الفراولة العضوية هذا الصباح، ولا أريد أن ينفد المخزون في عطلة الأسبوع أو أن أرمي نصفها، فأنشئ تنبيه إعادة طلب معقولًا من فضلك.",
+        "hi": "ऑर्गेनिक स्ट्रॉबेरी की हमारी पहली खेप आज सुबह आई, और मैं न वीकेंड पर ख़ाली होना चाहता हूँ न आधी फेंकना, तो कृपया उनके लिए समझदारी भरा रीऑर्डर अलर्ट सेट करो।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Strawberries need an alert.",
+        "de": "Die Erdbeeren brauchen eine Warnung.",
+        "es": "Las fresas necesitan una alerta.",
+        "ar": "الفراولة تحتاج إلى تنبيه.",
+        "hi": "स्ट्रॉबेरी के लिए अलर्ट चाहिए।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Don't just use the default settings — set up the strawberry reorder alert.",
+        "de": "Nimm nicht einfach die Standardeinstellungen – richte die Erdbeer-Nachbestellwarnung ein.",
+        "es": "No uses la configuración por defecto sin más: configura la alerta de las fresas.",
+        "ar": "لا تستخدم الإعدادات الافتراضية فقط — أنشئ تنبيه إعادة طلب الفراولة.",
+        "hi": "सिर्फ़ डिफ़ॉल्ट सेटिंग मत लगाना — स्ट्रॉबेरी का रीऑर्डर अलर्ट सेट करो।"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Knowing how I run things, set up the reorder alert for the organic strawberries.",
+        "de": "Du weißt, wie ich arbeite – richte die Nachbestellwarnung für die Bio-Erdbeeren ein.",
+        "es": "Sabiendo cómo trabajo, configura la alerta de pedido de las fresas ecológicas.",
+        "ar": "بما أنك تعرف طريقة عملي، أنشئ تنبيه إعادة الطلب للفراولة العضوية.",
+        "hi": "मैं कैसे काम करता हूँ यह जानते हुए, ऑर्गेनिक स्ट्रॉबेरी का रीऑर्डर अलर्ट सेट करो।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "organic strawberries reorder alert",
+        "de": "Bio-Erdbeeren Nachbestellwarnung",
+        "es": "fresas ecológicas alerta pedido",
+        "ar": "الفراولة العضوية تنبيه طلب",
+        "hi": "ऑर्गेनिक स्ट्रॉबेरी रीऑर्डर अलर्ट",
+        "mixed": "Reorder alert für die organic strawberries, bitte."
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Configure the reorder alert for organic strawberries.",
+        "de": "Konfiguriere die Nachbestellwarnung für Bio-Erdbeeren.",
+        "es": "Configura la alerta de pedido de las fresas ecológicas.",
+        "ar": "اضبط تنبيه إعادة الطلب للفراولة العضوية.",
+        "hi": "ऑर्गेनिक स्ट्रॉबेरी का रीऑर्डर अलर्ट कॉन्फ़िगर करो।",
+        "mixed": "اعمل reorder alert للـ organic strawberries الجديدة."
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       [
+        "FDA",
+        "42°F",
+        {
+         "en": "expire",
+         "de": "laufen",
+         "es": "caducan",
+         "ar": "تنتهي صلاحيتها",
+         "hi": "एक्सपायर"
+        },
+        {
+         "en": "four days",
+         "de": "vier Tage",
+         "es": "cuatro días",
+         "ar": "أربعة أيام",
+         "hi": "चार दिन"
+        }
+       ]
+      ],
+      "answer": {
+       "contains": [
+        [
+         {
+          "en": "cold",
+          "de": "Kühl",
+          "es": "frío",
+          "ar": "تبريد",
+          "hi": "कोल्ड"
+         },
+         {
+          "en": "shelf life",
+          "de": "Haltbarkeit",
+          "es": "vida útil",
+          "ar": "صلاحية",
+          "hi": "शेल्फ़ लाइफ़"
+         },
+         {
+          "re": "\\b[2-7][- ]?(day|days|tage|días|dias|أيام|दिन)"
+         }
+        ]
+       ]
+      }
+     }
+    }
+   ],
+   "origin": "inventorysmart-10"
+  },
+  {
+   "id": "implicit-retail-loss-prevention",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -35,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "How many EAS tag alarms did we have at the front doors last week?",
+        "de": "Wie viele EAS-Alarme hatten wir letzte Woche an den Eingangstüren?",
+        "es": "¿Cuántas alarmas de antihurto EAS saltaron en las puertas la semana pasada?",
+        "ar": "كم إنذارًا من بطاقات EAS انطلق عند الأبواب الأمامية الأسبوع الماضي؟",
+        "hi": "पिछले हफ़्ते मुख्य दरवाज़ों पर कितने EAS टैग अलार्म बजे?"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -20,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Pull the theft incident reports for the electronics aisle this quarter.",
+        "de": "Hol die Diebstahlberichte für den Elektronikgang in diesem Quartal.",
+        "es": "Saca los informes de robos del pasillo de electrónica de este trimestre.",
+        "ar": "استخرج تقارير حوادث السرقة لممر الإلكترونيات هذا الربع.",
+        "hi": "इस तिमाही के इलेक्ट्रॉनिक्स गलियारे की चोरी की रिपोर्टें निकालो।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s3",
+     "day": -8,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Our camera blind spot near aisle 14 needs to be fixed before the holidays.",
+        "de": "Der tote Winkel unserer Kameras bei Gang 14 muss vor den Feiertagen behoben werden.",
+        "es": "Hay que corregir el punto ciego de las cámaras cerca del pasillo 14 antes de las fiestas.",
+        "ar": "يجب إصلاح النقطة العمياء لكاميراتنا قرب الممر 14 قبل الأعياد.",
+        "hi": "त्योहारों से पहले गलियारा 14 के पास कैमरे का ब्लाइंड स्पॉट ठीक करना है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Plan the layout for the new electronics display.",
+        "de": "Plane den Aufbau des neuen Elektronik-Displays.",
+        "es": "Planifica la distribución de la nueva exposición de electrónica.",
+        "ar": "خطط تصميم عرض الإلكترونيات الجديد.",
+        "hi": "नए इलेक्ट्रॉनिक्स डिस्प्ले का लेआउट प्लान करो।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "We're getting a new end cap for headphones and smartwatches.",
+        "de": "Wir bekommen ein neues Kopfregal für Kopfhörer und Smartwatches.",
+        "es": "Vamos a tener una nueva cabecera para auriculares y relojes inteligentes.",
+        "ar": "سنحصل على رف عرض جديد للسماعات والساعات الذكية.",
+        "hi": "हेडफ़ोन और स्मार्टवॉच के लिए नया एंड-कैप आ रहा है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How should we set up the new headphone and smartwatch display?",
+        "de": "Wie sollen wir das neue Display für Kopfhörer und Smartwatches aufbauen?",
+        "es": "¿Cómo montamos la nueva exposición de auriculares y relojes?",
+        "ar": "كيف نجهّز عرض السماعات والساعات الذكية الجديد؟",
+        "hi": "हेडफ़ोन और स्मार्टवॉच का नया डिस्प्ले कैसे लगाएँ?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "layot for new electronis display",
+        "de": "aufbau neues elektronk display",
+        "es": "distribusion exposicion electronica nueva",
+        "ar": "تصميم عرض الالكترونيات الجديد",
+        "hi": "नया इलेक्ट्रोनिक्स डिस्प्ले लेआउट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Merchandising sent a new fixture for the electronics department — headphones, smartwatches, chargers — and I have to decide where it goes and how to stock it before Friday's delivery; give me a layout plan.",
+        "de": "Das Merchandising hat eine neue Einrichtung für die Elektronikabteilung geschickt – Kopfhörer, Smartwatches, Ladegeräte – und ich muss vor der Lieferung am Freitag entscheiden, wo sie hinkommt und wie sie bestückt wird; gib mir einen Aufbauplan.",
+        "es": "Merchandising ha enviado un mueble nuevo para electrónica (auriculares, relojes, cargadores) y tengo que decidir dónde va y cómo llenarlo antes de la entrega del viernes; dame un plan de distribución.",
+        "ar": "أرسل قسم العرض وحدة جديدة لقسم الإلكترونيات — سماعات وساعات ذكية وشواحن — وعلي أن أقرر مكانها وكيف أملؤها قبل توريد الجمعة؛ أعطني خطة تصميم.",
+        "hi": "मर्चेंडाइज़िंग ने इलेक्ट्रॉनिक्स विभाग के लिए नया फ़िक्स्चर भेजा है — हेडफ़ोन, स्मार्टवॉच, चार्जर — और शुक्रवार की डिलीवरी से पहले तय करना है कि वह कहाँ लगे और कैसे भरा जाए; मुझे लेआउट प्लान दो।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "New electronics fixture arrived.",
+        "de": "Neue Elektronik-Einrichtung ist da.",
+        "es": "Ha llegado el mueble nuevo de electrónica.",
+        "ar": "وصلت وحدة الإلكترونيات الجديدة.",
+        "hi": "नया इलेक्ट्रॉनिक्स फ़िक्स्चर आ गया।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not a generic layout — plan our electronics display.",
+        "de": "Keinen Standardaufbau – plane unser Elektronik-Display.",
+        "es": "Nada genérico: planifica nuestra exposición de electrónica.",
+        "ar": "ليس تصميمًا عامًا — خطط عرض الإلكترونيات لدينا.",
+        "hi": "आम लेआउट नहीं — हमारा इलेक्ट्रॉनिक्स डिस्प्ले प्लान करो।"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Given what you know about our store, how should the electronics display be laid out?",
+        "de": "Mit dem, was du über unseren Laden weißt: Wie soll das Elektronik-Display aufgebaut sein?",
+        "es": "Con lo que sabes de nuestra tienda, ¿cómo debería ser la exposición de electrónica?",
+        "ar": "بناءً على ما تعرفه عن متجرنا، كيف يجب تصميم عرض الإلكترونيات؟",
+        "hi": "हमारे स्टोर के बारे में जो जानते हो उसके हिसाब से इलेक्ट्रॉनिक्स डिस्प्ले कैसा हो?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "electronics display layout",
+        "de": "Elektronik-Display Aufbau",
+        "es": "distribución exposición electrónica",
+        "ar": "تصميم عرض الإلكترونيات",
+        "hi": "इलेक्ट्रॉनिक्स डिस्प्ले लेआउट"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Design the electronics display layout.",
+        "de": "Entwirf den Aufbau des Elektronik-Displays.",
+        "es": "Diseña la distribución de la exposición de electrónica.",
+        "ar": "صمّم تخطيط عرض الإلكترونيات.",
+        "hi": "इलेक्ट्रॉनिक्स डिस्प्ले का लेआउट डिज़ाइन करो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       [
+        "EAS",
+        {
+         "en": "theft",
+         "de": "Diebstahl",
+         "es": "robos",
+         "ar": "السرقة",
+         "hi": "चोरी"
+        },
+        {
+         "en": "blind spot",
+         "de": "tote Winkel",
+         "es": "punto ciego",
+         "ar": "النقطة العمياء",
+         "hi": "ब्लाइंड स्पॉट"
+        }
+       ]
+      ],
+      "answer": {
+       "contains": [
+        [
+         "EAS",
+         {
+          "en": "lock",
+          "de": "verschl",
+          "es": "bajo llave",
+          "ar": "قفل",
+          "hi": "लॉक"
+         },
+         {
+          "en": "camera",
+          "de": "Kamera",
+          "es": "cámara",
+          "ar": "كاميرا",
+          "hi": "कैमरा"
+         }
+        ]
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "implicit-retail-small-backroom",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -45,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Our backroom is tiny — I can only fit about four pallets back there.",
+        "de": "Unser Lager ist winzig – da passen nur etwa vier Paletten hin.",
+        "es": "Nuestra trastienda es diminuta: solo caben unos cuatro palés.",
+        "ar": "مخزننا الخلفي صغير جدًا — لا يتسع إلا لنحو أربع منصات.",
+        "hi": "हमारा बैकरूम बहुत छोटा है — वहाँ मुश्किल से चार पैलेट आते हैं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -25,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "We only get one truck a week out here, on Mondays.",
+        "de": "Wir bekommen hier draußen nur einen Lkw pro Woche, montags.",
+        "es": "Aquí solo nos llega un camión a la semana, los lunes.",
+        "ar": "لا تصلنا هنا سوى شاحنة واحدة أسبوعيًا، يوم الاثنين.",
+        "hi": "यहाँ हमें हफ़्ते में सिर्फ़ एक ट्रक मिलता है, सोमवार को।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s3",
+     "day": -10,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Last month the overstock of water ended up blocking the fire exit, never again.",
+        "de": "Letzten Monat hat der Überbestand an Wasser den Notausgang blockiert – nie wieder.",
+        "es": "El mes pasado el exceso de agua acabó bloqueando la salida de emergencia; nunca más.",
+        "ar": "الشهر الماضي سدّ فائض المياه مخرج الطوارئ، لن يتكرر ذلك.",
+        "hi": "पिछले महीने पानी का ज़्यादा स्टॉक आग वाले निकास के रास्ते में आ गया, फिर कभी नहीं।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "How much paper towel should I order for the holiday promo?",
+        "de": "Wie viele Küchenrollen soll ich für die Feiertagsaktion bestellen?",
+        "es": "¿Cuánto papel de cocina pido para la promoción de las fiestas?",
+        "ar": "كم من المناشف الورقية يجب أن أطلب لعرض الأعياد؟",
+        "hi": "त्योहारी प्रोमो के लिए कितना पेपर टॉवल ऑर्डर करूँ?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Paper towels are on a big promo next month.",
+        "de": "Küchenrollen sind nächsten Monat stark in der Aktion.",
+        "es": "El papel de cocina tiene una gran promoción el mes que viene.",
+        "ar": "المناشف الورقية عليها عرض كبير الشهر المقبل.",
+        "hi": "अगले महीने पेपर टॉवल पर बड़ा प्रोमो है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What's a good order quantity for the paper towel promotion?",
+        "de": "Welche Bestellmenge ist für die Küchenrollen-Aktion sinnvoll?",
+        "es": "¿Qué cantidad conviene pedir para la promoción de papel de cocina?",
+        "ar": "ما كمية الطلب المناسبة لعرض المناشف الورقية؟",
+        "hi": "पेपर टॉवल प्रमोशन के लिए कितनी मात्रा ठीक है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "how much papr towl for promo",
+        "de": "wie viel küchenroln für aktion",
+        "es": "cuanto papel de cosina para la promo",
+        "ar": "كم مناشف ورقيه للعرض",
+        "hi": "प्रोमो के लिये कितना पेपर टावल"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Corporate is running a two-for-one on paper towels across the holiday weeks and suggested stores order heavy; I need to decide on a quantity for us that actually makes sense.",
+        "de": "Die Zentrale macht über die Feiertagswochen ein Zwei-für-eins bei Küchenrollen und empfiehlt den Filialen, viel zu bestellen; ich muss eine Menge festlegen, die für uns wirklich Sinn ergibt.",
+        "es": "La central hace un dos por uno en papel de cocina durante las semanas de fiestas y recomienda que las tiendas pidan mucho; tengo que decidir una cantidad que tenga sentido para nosotros.",
+        "ar": "تطلق الإدارة عرض اثنين بسعر واحد على المناشف الورقية خلال أسابيع الأعياد وتنصح المتاجر بطلب كميات كبيرة؛ أحتاج تحديد كمية منطقية لنا فعلًا.",
+        "hi": "कॉरपोरेट त्योहारी हफ़्तों में पेपर टॉवल पर दो-के-बदले-एक चला रहा है और स्टोर्स को ज़्यादा ऑर्डर करने की सलाह दे रहा है; मुझे हमारे लिए सच में समझदार मात्रा तय करनी है।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Paper towel order for the promo?",
+        "de": "Küchenrollen-Bestellung für die Aktion?",
+        "es": "¿Pedido de papel de cocina para la promo?",
+        "ar": "طلب المناشف الورقية للعرض؟",
+        "hi": "प्रोमो के लिए पेपर टॉवल ऑर्डर?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Don't just follow corporate's 'order heavy' advice — how much paper towel should we get?",
+        "de": "Folge nicht einfach dem Rat der Zentrale, viel zu bestellen – wie viele Küchenrollen sollen wir nehmen?",
+        "es": "No sigas sin más el consejo de la central de pedir mucho: ¿cuánto papel de cocina pedimos?",
+        "ar": "لا تتبع نصيحة الإدارة بطلب كميات كبيرة فقط — كم من المناشف الورقية نطلب؟",
+        "hi": "कॉरपोरेट की 'ज़्यादा ऑर्डर करो' वाली सलाह यूँ ही मत मानना — हम कितना पेपर टॉवल लें?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Knowing our store, how much paper towel for the holiday promo?",
+        "de": "Du kennst unseren Laden – wie viele Küchenrollen für die Feiertagsaktion?",
+        "es": "Conociendo nuestra tienda, ¿cuánto papel de cocina para la promo de fiestas?",
+        "ar": "بمعرفتك لمتجرنا، كم مناشف ورقية لعرض الأعياد؟",
+        "hi": "हमारे स्टोर को जानते हुए, त्योहारी प्रोमो के लिए कितना पेपर टॉवल?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "paper towel promo quantity",
+        "de": "Küchenrollen Aktion Menge",
+        "es": "papel de cocina promo cantidad",
+        "ar": "مناشف ورقية عرض كمية",
+        "hi": "पेपर टॉवल प्रोमो मात्रा"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Recommend a paper towel order for the promo.",
+        "de": "Empfiehl eine Küchenrollen-Bestellung für die Aktion.",
+        "es": "Recomienda un pedido de papel de cocina para la promo.",
+        "ar": "اقترح طلبًا من المناشف الورقية للعرض.",
+        "hi": "प्रोमो के लिए पेपर टॉवल ऑर्डर सुझाओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       [
+        {
+         "en": "four pallets",
+         "de": "vier Paletten",
+         "es": "cuatro palés",
+         "ar": "أربع منصات",
+         "hi": "चार पैलेट"
+        },
+        {
+         "en": "one truck a week",
+         "de": "einen Lkw pro Woche",
+         "es": "un camión a la semana",
+         "ar": "شاحنة واحدة أسبوعيًا",
+         "hi": "एक ट्रक मिलता"
+        },
+        {
+         "en": "fire exit",
+         "de": "Notausgang",
+         "es": "salida de emergencia",
+         "ar": "مخرج الطوارئ",
+         "hi": "निकास"
+        }
+       ]
+      ],
+      "answer": {
+       "contains": [
+        [
+         {
+          "en": "backroom",
+          "de": "Lager",
+          "es": "trastienda",
+          "ar": "المخزن",
+          "hi": "बैकरूम"
+         },
+         {
+          "en": "pallet",
+          "de": "Palette",
+          "es": "palé",
+          "ar": "منصات",
+          "hi": "पैलेट"
+         },
+         {
+          "en": "truck",
+          "de": "Lkw",
+          "es": "camión",
+          "ar": "شاحنة",
+          "hi": "ट्रक"
+         }
+        ]
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "implicit-retail-sustainability",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -50,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Can you check whether the new cereal packaging is recyclable?",
+        "de": "Kannst du prüfen, ob die neue Müslipackung recycelbar ist?",
+        "es": "¿Puedes comprobar si el nuevo envase de cereales es reciclable?",
+        "ar": "هل يمكنك التحقق مما إذا كانت عبوة الحبوب الجديدة قابلة لإعادة التدوير؟",
+        "hi": "क्या तुम जाँच सकते हो कि नई सीरियल पैकेजिंग रीसाइकिल हो सकती है?"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -30,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "I'd rather source eggs from a farm within 100 miles, even if it costs a bit more.",
+        "de": "Ich würde Eier lieber von einem Hof im Umkreis von 100 Meilen beziehen, auch wenn es etwas mehr kostet.",
+        "es": "Prefiero comprar huevos a una granja a menos de 100 millas, aunque cueste un poco más.",
+        "ar": "أفضّل شراء البيض من مزرعة في نطاق 100 ميل حتى لو كلف أكثر قليلًا.",
+        "hi": "मैं अंडे 100 मील के अंदर किसी फ़ार्म से लेना पसंद करूँगा, चाहे थोड़ा महँगा हो।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s3",
+     "day": -12,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Pull our carbon footprint numbers for last quarter's deliveries.",
+        "de": "Hol unsere CO2-Bilanz für die Lieferungen im letzten Quartal (carbon footprint).",
+        "es": "Saca nuestras cifras de huella de carbono de las entregas del trimestre pasado.",
+        "ar": "استخرج أرقام البصمة الكربونية لتوريدات الربع الماضي.",
+        "hi": "पिछली तिमाही की डिलीवरी के हमारे कार्बन फ़ुटप्रिंट आँकड़े निकालो।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Find me a new supplier for shopping bags.",
+        "de": "Such mir einen neuen Lieferanten für Einkaufstüten.",
+        "es": "Búscame un nuevo proveedor de bolsas de la compra.",
+        "ar": "ابحث لي عن مورّد جديد لأكياس التسوق.",
+        "hi": "शॉपिंग बैग के लिए नया सप्लायर ढूँढो।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Our shopping bag contract runs out next month.",
+        "de": "Unser Vertrag für Einkaufstüten läuft nächsten Monat aus.",
+        "es": "Nuestro contrato de bolsas de la compra vence el mes que viene.",
+        "ar": "عقد أكياس التسوق لدينا ينتهي الشهر المقبل.",
+        "hi": "हमारा शॉपिंग बैग का अनुबंध अगले महीने ख़त्म हो रहा है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Who should we buy checkout bags from next?",
+        "de": "Bei wem sollen wir künftig Kassentüten kaufen?",
+        "es": "¿A quién le compramos las bolsas de caja a partir de ahora?",
+        "ar": "من أين نشتري أكياس الدفع من الآن فصاعدًا؟",
+        "hi": "आगे से चेकआउट बैग किससे ख़रीदें?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "new suplier for shoping bags",
+        "de": "neuer lieferant einkaufstütn",
+        "es": "nuevo provedor de bolsas",
+        "ar": "مورد جديد لاكياس التسوق",
+        "hi": "शॉपिंग बेग का नया सप्लायर"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The current bag supplier is ending our contract next month and I need a shortlist of replacements to bring to Thursday's buying meeting — what should I be looking at?",
+        "de": "Der aktuelle Tütenlieferant beendet nächsten Monat unseren Vertrag, und ich brauche eine Auswahl an Alternativen für das Einkaufsmeeting am Donnerstag – worauf sollte ich achten?",
+        "es": "El proveedor actual de bolsas termina nuestro contrato el mes que viene y necesito una lista corta de alternativas para la reunión de compras del jueves. ¿Qué debería mirar?",
+        "ar": "ينهي مورّد الأكياس الحالي عقدنا الشهر المقبل، وأحتاج قائمة مختصرة بالبدائل لاجتماع الشراء يوم الخميس — ما الذي يجب أن أبحث عنه؟",
+        "hi": "मौजूदा बैग सप्लायर अगले महीने हमारा अनुबंध ख़त्म कर रहा है और गुरुवार की ख़रीद मीटिंग के लिए विकल्पों की छोटी सूची चाहिए — मुझे क्या देखना चाहिए?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Bag supplier shortlist.",
+        "de": "Auswahlliste Tütenlieferanten.",
+        "es": "Lista corta de proveedores de bolsas.",
+        "ar": "قائمة مختصرة لموردي الأكياس.",
+        "hi": "बैग सप्लायर की छोटी सूची।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not just the cheapest — who should supply our shopping bags?",
+        "de": "Nicht nur der billigste – wer soll unsere Einkaufstüten liefern?",
+        "es": "No solo el más barato: ¿quién debería suministrar nuestras bolsas?",
+        "ar": "ليس الأرخص فقط — من يجب أن يورّد أكياس التسوق؟",
+        "hi": "सिर्फ़ सबसे सस्ता नहीं — हमारे शॉपिंग बैग कौन सप्लाई करे?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Given my priorities, which shopping bag supplier should we pick?",
+        "de": "Bei meinen Prioritäten: Welchen Tütenlieferanten sollen wir wählen?",
+        "es": "Con mis prioridades, ¿qué proveedor de bolsas elegimos?",
+        "ar": "بالنظر إلى أولوياتي، أي مورّد أكياس نختار؟",
+        "hi": "मेरी प्राथमिकताओं के हिसाब से कौन सा बैग सप्लायर चुनें?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "shopping bag supplier",
+        "de": "Lieferant Einkaufstüten",
+        "es": "proveedor bolsas",
+        "ar": "مورّد أكياس",
+        "hi": "शॉपिंग बैग सप्लायर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Recommend a shopping bag supplier.",
+        "de": "Empfiehl einen Lieferanten für Einkaufstüten.",
+        "es": "Recomienda un proveedor de bolsas.",
+        "ar": "اقترح مورّدًا لأكياس التسوق.",
+        "hi": "शॉपिंग बैग सप्लायर सुझाओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       [
+        {
+         "en": "recyclable",
+         "de": "recycelbar",
+         "es": "reciclable",
+         "ar": "إعادة التدوير",
+         "hi": "रीसाइकिल"
+        },
+        {
+         "en": "within 100 miles",
+         "de": "100 Meilen",
+         "es": "100 millas",
+         "ar": "100 ميل",
+         "hi": "100 मील"
+        },
+        {
+         "en": "carbon",
+         "de": "CO2",
+         "es": "carbono",
+         "ar": "الكربونية",
+         "hi": "कार्बन"
+        }
+       ]
+      ],
+      "answer": {
+       "contains": [
+        [
+         {
+          "en": "recycl",
+          "de": "recycel",
+          "es": "recicl",
+          "ar": "تدوير",
+          "hi": "रीसाइकिल"
+         },
+         {
+          "en": "compost",
+          "de": "kompost",
+          "es": "compost",
+          "ar": "سماد",
+          "hi": "कम्पोस्ट"
+         },
+         {
+          "en": "local",
+          "de": "regional",
+          "es": "local",
+          "ar": "محلي",
+          "hi": "स्थानीय"
+         }
+        ]
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "implicit-retail-night-shift",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -33,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "My crew starts at 10pm and we're done by 6am — that's when the floor's quiet enough to restock.",
+        "de": "Meine Schicht beginnt um 22 Uhr und wir sind um 6 Uhr fertig – dann ist es im Laden ruhig genug zum Auffüllen.",
+        "es": "Mi equipo entra a las 22:00 y terminamos a las 6:00; es cuando la tienda está tranquila para reponer.",
+        "ar": "يبدأ فريقي الساعة 10 مساءً وننتهي في 6 صباحًا — حين يكون المتجر هادئًا بما يكفي لإعادة التعبئة.",
+        "hi": "मेरी टीम रात 10 बजे शुरू करती है और सुबह 6 बजे तक ख़त्म — तभी फ़्लोर इतना शांत होता है कि सामान भर सकें।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -14,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Log that the night crew finished the freezer reset at 3am.",
+        "de": "Notiere, dass die Nachtschicht den Tiefkühlumbau um 3 Uhr morgens abgeschlossen hat.",
+        "es": "Apunta que el turno de noche terminó el cambio de los congeladores a las 3 de la madrugada.",
+        "ar": "سجّل أن طاقم الليل أنهى ترتيب المجمدات الساعة 3 فجرًا.",
+        "hi": "दर्ज करो कि नाइट क्रू ने फ़्रीज़र रीसेट रात 3 बजे पूरा किया।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "When should I schedule the forklift safety refresher for my team?",
+        "de": "Wann soll ich die Stapler-Sicherheitsauffrischung für mein Team ansetzen?",
+        "es": "¿Cuándo programo el repaso de seguridad de carretillas para mi equipo?",
+        "ar": "متى أجدول دورة تجديد السلامة للرافعات لفريقي؟",
+        "hi": "अपनी टीम के लिए फ़ोर्कलिफ़्ट सुरक्षा रिफ़्रेशर कब रखूँ?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "My team is due for its annual forklift safety training.",
+        "de": "Mein Team ist mit der jährlichen Staplerschulung dran.",
+        "es": "A mi equipo le toca la formación anual de seguridad de carretillas.",
+        "ar": "حان موعد التدريب السنوي لسلامة الرافعات لفريقي.",
+        "hi": "मेरी टीम की सालाना फ़ोर्कलिफ़्ट सुरक्षा ट्रेनिंग होनी है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What's a good time slot for my crew's safety training?",
+        "de": "Welches Zeitfenster passt für die Sicherheitsschulung meiner Leute?",
+        "es": "¿Qué franja horaria conviene para la formación de seguridad de mi equipo?",
+        "ar": "ما الوقت المناسب لتدريب السلامة لطاقمي؟",
+        "hi": "मेरी टीम की सुरक्षा ट्रेनिंग के लिए अच्छा समय क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "when to schedul forklift traning",
+        "de": "wann staplerschulng ansetzen",
+        "es": "cuando pongo la formasion de carretiyas",
+        "ar": "متى ارتب تدريب الرافعه",
+        "hi": "फोर्कलिफ्ट ट्रेनिंग कब रखु"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The safety trainer can come any day next week for two hours and asked me to pick a slot that works for my people, so they're all there and nobody has to come in on a day off — when should we do it?",
+        "de": "Der Sicherheitstrainer kann nächste Woche an jedem Tag für zwei Stunden kommen und hat mich gebeten, ein Zeitfenster zu wählen, das für meine Leute passt, damit alle da sind und niemand an einem freien Tag kommen muss – wann sollen wir es machen?",
+        "es": "El formador de seguridad puede venir cualquier día de la semana que viene durante dos horas y me pidió elegir una franja que le vaya bien a mi gente, para que estén todos y nadie tenga que venir en su día libre. ¿Cuándo lo hacemos?",
+        "ar": "يستطيع مدرب السلامة الحضور أي يوم الأسبوع المقبل لمدة ساعتين، وطلب مني اختيار وقت يناسب فريقي ليحضر الجميع دون أن يأتي أحد في يوم عطلته — متى نعقده؟",
+        "hi": "सेफ़्टी ट्रेनर अगले हफ़्ते किसी भी दिन दो घंटे के लिए आ सकते हैं और उन्होंने कहा है कि ऐसा समय चुनूँ जो मेरे लोगों के लिए ठीक हो, ताकि सब मौजूद रहें और किसी को छुट्टी के दिन न आना पड़े — कब रखें?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Trainer wants a time slot.",
+        "de": "Der Trainer will ein Zeitfenster.",
+        "es": "El formador quiere una franja.",
+        "ar": "المدرب يريد موعدًا.",
+        "hi": "ट्रेनर को समय चाहिए।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Don't just say 9 to 5 — when should my team do the refresher?",
+        "de": "Sag nicht einfach 9 bis 17 Uhr – wann soll mein Team die Auffrischung machen?",
+        "es": "No me digas de 9 a 5 sin más: ¿cuándo debería hacer mi equipo el repaso?",
+        "ar": "لا تقل من 9 إلى 5 فقط — متى يجب أن يحضر فريقي الدورة؟",
+        "hi": "बस 9 से 5 मत कहना — मेरी टीम रिफ़्रेशर कब करे?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Knowing how my team works, when's best for the forklift refresher?",
+        "de": "Du weißt, wie mein Team arbeitet – wann passt die Staplerauffrischung am besten?",
+        "es": "Sabiendo cómo trabaja mi equipo, ¿cuándo es mejor el repaso de carretillas?",
+        "ar": "بمعرفتك لطريقة عمل فريقي، متى أفضل وقت لدورة الرافعات؟",
+        "hi": "मेरी टीम कैसे काम करती है यह जानते हुए, फ़ोर्कलिफ़्ट रिफ़्रेशर कब बेहतर है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "forklift refresher schedule",
+        "de": "Staplerauffrischung Termin",
+        "es": "repaso carretillas horario",
+        "ar": "موعد دورة الرافعات",
+        "hi": "फ़ोर्कलिफ़्ट रिफ़्रेशर समय"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Suggest a time for the forklift safety refresher.",
+        "de": "Schlag eine Zeit für die Stapler-Sicherheitsauffrischung vor.",
+        "es": "Sugiere una hora para el repaso de seguridad de carretillas.",
+        "ar": "اقترح موعدًا لدورة تجديد سلامة الرافعات.",
+        "hi": "फ़ोर्कलिफ़्ट सुरक्षा रिफ़्रेशर के लिए समय सुझाओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       [
+        {
+         "en": "10pm",
+         "de": "22 Uhr",
+         "es": "22:00",
+         "ar": "10 مساءً",
+         "hi": "रात 10"
+        },
+        {
+         "en": "night crew",
+         "de": "Nachtschicht",
+         "es": "turno de noche",
+         "ar": "طاقم الليل",
+         "hi": "नाइट क्रू"
+        }
+       ]
+      ],
+      "answer": {
+       "contains": [
+        [
+         {
+          "en": "night",
+          "de": "Nacht",
+          "es": "noche",
+          "ar": "ليل",
+          "hi": "रात"
+         },
+         {
+          "re": "\\b(22|23|10\\s?pm|11\\s?pm|0?[1-5]\\s?am)\\b"
+         }
+        ]
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "implicit-retail-hot-climate",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -60,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "It hit 115°F in Phoenix again today and the parking lot was empty by noon.",
+        "de": "Heute waren es in Phoenix wieder 115°F, und der Parkplatz war ab Mittag leer.",
+        "es": "Hoy volvimos a llegar a 115°F en Phoenix y el aparcamiento estaba vacío a mediodía.",
+        "ar": "وصلت الحرارة في Phoenix اليوم مجددًا إلى 115°F وكان موقف السيارات فارغًا عند الظهر.",
+        "hi": "आज Phoenix में फिर 115°F हो गया और दोपहर तक पार्किंग ख़ाली थी।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -40,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The chocolate on aisle 6 melted in the delivery truck again.",
+        "de": "Die Schokolade für Gang 6 ist im Lieferwagen schon wieder geschmolzen.",
+        "es": "El chocolate del pasillo 6 se volvió a derretir en el camión de reparto.",
+        "ar": "ذابت الشوكولاتة الخاصة بالممر 6 في شاحنة التوصيل مرة أخرى.",
+        "hi": "गलियारा 6 की चॉकलेट डिलीवरी ट्रक में फिर पिघल गई।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s3",
+     "day": -20,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Customers kept asking for cooling towels and electrolyte drinks last week.",
+        "de": "Letzte Woche haben Kunden ständig nach Kühlhandtüchern und Elektrolytgetränken gefragt.",
+        "es": "La semana pasada los clientes no paraban de pedir toallas refrescantes y bebidas con electrolitos.",
+        "ar": "ظل الزبائن يطلبون مناشف التبريد ومشروبات الإلكتروليت الأسبوع الماضي.",
+        "hi": "पिछले हफ़्ते ग्राहक बार-बार कूलिंग टॉवल और इलेक्ट्रोलाइट ड्रिंक माँगते रहे।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What should we stock up on for next summer?",
+        "de": "Womit sollen wir uns für den nächsten Sommer eindecken?",
+        "es": "¿De qué nos abastecemos para el próximo verano?",
+        "ar": "ماذا نخزّن للصيف القادم؟",
+        "hi": "अगली गर्मियों के लिए हमें क्या स्टॉक करना चाहिए?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm starting the summer seasonal plan.",
+        "de": "Ich fange mit der Sommer-Saisonplanung an.",
+        "es": "Estoy empezando el plan de temporada de verano.",
+        "ar": "أبدأ خطة موسم الصيف.",
+        "hi": "मैं गर्मियों का सीज़नल प्लान शुरू कर रहा हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which seasonal items make sense for our summer?",
+        "de": "Welche Saisonartikel sind für unseren Sommer sinnvoll?",
+        "es": "¿Qué artículos de temporada tienen sentido para nuestro verano?",
+        "ar": "ما الأصناف الموسمية المناسبة لصيفنا؟",
+        "hi": "हमारी गर्मियों के लिए कौन से सीज़नल आइटम ठीक रहेंगे?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "wat to stok for sumer",
+        "de": "was für den somer einlagern",
+        "es": "que almasenamos para verano",
+        "ar": "شو نخزن للصيف",
+        "hi": "गर्मी के लिये क्या स्टोक करे"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Buying deadlines for next summer's seasonal range are in two weeks, and I want a list of categories and items we should lean into, based on what actually happens at our store in the summer.",
+        "de": "Die Einkaufsfristen für das Sommersortiment sind in zwei Wochen, und ich will eine Liste von Kategorien und Artikeln, auf die wir setzen sollten – ausgehend davon, was bei uns im Sommer tatsächlich passiert.",
+        "es": "Los plazos de compra de la gama de verano son en dos semanas y quiero una lista de categorías y artículos en los que apostar, según lo que pasa de verdad en nuestra tienda en verano.",
+        "ar": "مواعيد شراء تشكيلة الصيف المقبل بعد أسبوعين، وأريد قائمة بالفئات والأصناف التي يجب التركيز عليها بناءً على ما يحدث فعلًا في متجرنا صيفًا.",
+        "hi": "अगली गर्मियों की सीज़नल रेंज की ख़रीद की समय-सीमा दो हफ़्ते में है, और मुझे उन श्रेणियों और आइटम की सूची चाहिए जिन पर ज़ोर दें, इस आधार पर कि गर्मियों में हमारे स्टोर में असल में क्या होता है।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Summer buying list?",
+        "de": "Einkaufsliste Sommer?",
+        "es": "¿Lista de compras de verano?",
+        "ar": "قائمة مشتريات الصيف؟",
+        "hi": "गर्मियों की ख़रीद सूची?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not the generic corporate list — what should we stock for summer?",
+        "de": "Nicht die allgemeine Liste der Zentrale – womit sollen wir uns für den Sommer eindecken?",
+        "es": "No la lista genérica de la central: ¿de qué nos abastecemos para el verano?",
+        "ar": "ليست القائمة العامة للإدارة — ماذا نخزّن للصيف؟",
+        "hi": "कॉरपोरेट की आम सूची नहीं — गर्मियों के लिए क्या स्टॉक करें?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Based on what you know about our summers, what should we stock?",
+        "de": "Ausgehend von dem, was du über unsere Sommer weißt: Was sollen wir einlagern?",
+        "es": "Por lo que sabes de nuestros veranos, ¿qué deberíamos tener en stock?",
+        "ar": "بناءً على ما تعرفه عن صيفنا، ماذا نخزّن؟",
+        "hi": "हमारी गर्मियों के बारे में जो जानते हो उसके आधार पर क्या स्टॉक करें?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "summer seasonal stock",
+        "de": "Sommer Saisonware",
+        "es": "stock de temporada verano",
+        "ar": "مخزون موسم الصيف",
+        "hi": "गर्मियों का सीज़नल स्टॉक"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Suggest our summer stock list.",
+        "de": "Schlag unsere Sommer-Bestandsliste vor.",
+        "es": "Sugiere nuestra lista de stock de verano.",
+        "ar": "اقترح قائمة مخزون الصيف.",
+        "hi": "हमारी गर्मियों की स्टॉक सूची सुझाओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       [
+        "115°F",
+        {
+         "en": "melted",
+         "de": "geschmolzen",
+         "es": "derretir",
+         "ar": "ذابت",
+         "hi": "पिघल"
+        },
+        {
+         "en": "electrolyte",
+         "de": "Elektrolyt",
+         "es": "electrolitos",
+         "ar": "الإلكتروليت",
+         "hi": "इलेक्ट्रोलाइट"
+        }
+       ]
+      ],
+      "answer": {
+       "contains": [
+        [
+         {
+          "en": "electrolyte",
+          "de": "Elektrolyt",
+          "es": "electrolit",
+          "ar": "إلكتروليت",
+          "hi": "इलेक्ट्रोलाइट"
+         },
+         {
+          "en": "cooling",
+          "de": "Kühl",
+          "es": "refresc",
+          "ar": "تبريد",
+          "hi": "कूलिंग"
+         },
+         {
+          "en": "heat",
+          "de": "Hitze",
+          "es": "calor",
+          "ar": "حرارة",
+          "hi": "गर्मी"
+         }
+        ]
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "implicit-personal-founder",
+   "domain": "personal",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -40,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "We just closed our seed round, so I'm finally hiring the first five engineers.",
+        "de": "Wir haben gerade unsere Seed-Runde abgeschlossen, also stelle ich endlich die ersten fünf Entwickler ein.",
+        "es": "Acabamos de cerrar la ronda semilla, así que por fin contrato a los cinco primeros ingenieros.",
+        "ar": "أغلقنا للتو جولة التمويل الأولية، لذا أوظف أخيرًا أول خمسة مهندسين.",
+        "hi": "हमने अभी अपना सीड राउंड पूरा किया है, तो आख़िरकार पहले पाँच इंजीनियर रख रहा हूँ।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -20,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "I signed the lease for our first office in SoMa; we move in in two weeks.",
+        "de": "Ich habe den Mietvertrag für unser erstes Büro in SoMa unterschrieben; in zwei Wochen ziehen wir ein.",
+        "es": "He firmado el alquiler de nuestra primera oficina en SoMa; nos mudamos en dos semanas.",
+        "ar": "وقّعت عقد إيجار أول مكتب لنا في SoMa؛ سننتقل خلال أسبوعين.",
+        "hi": "मैंने SoMa में हमारे पहले ऑफ़िस की लीज़ साइन कर दी; दो हफ़्ते में शिफ़्ट हो रहे हैं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s3",
+     "day": -7,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "My calendar is back-to-back with investor calls all week; I barely have time to eat.",
+        "de": "Mein Kalender ist die ganze Woche voll mit Investorengesprächen; ich habe kaum Zeit zum Essen.",
+        "es": "Tengo la agenda llena de llamadas con inversores toda la semana; casi no tengo tiempo ni para comer.",
+        "ar": "جدولي مزدحم بمكالمات المستثمرين طوال الأسبوع؛ بالكاد أجد وقتًا للأكل.",
+        "hi": "पूरे हफ़्ते मेरा कैलेंडर इन्वेस्टर कॉल से भरा है; खाने का भी मुश्किल से समय मिलता है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Recommend monitors for the team.",
+        "de": "Empfiehl Monitore für das Team.",
+        "es": "Recomiéndame monitores para el equipo.",
+        "ar": "اقترح شاشات للفريق.",
+        "hi": "टीम के लिए मॉनिटर सुझाओ।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The new engineers need screens on their desks.",
+        "de": "Die neuen Entwickler brauchen Bildschirme auf ihren Schreibtischen.",
+        "es": "Los nuevos ingenieros necesitan pantallas en sus mesas.",
+        "ar": "يحتاج المهندسون الجدد إلى شاشات على مكاتبهم.",
+        "hi": "नए इंजीनियरों को डेस्क पर स्क्रीन चाहिए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which displays should I buy for the office?",
+        "de": "Welche Bildschirme soll ich fürs Büro kaufen?",
+        "es": "¿Qué pantallas compro para la oficina?",
+        "ar": "ما الشاشات التي يجب أن أشتريها للمكتب؟",
+        "hi": "ऑफ़िस के लिए कौन से डिस्प्ले ख़रीदूँ?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "recomend monitrs for team",
+        "de": "monitre fürs team empfehln",
+        "es": "recomienda monitres para el equipo",
+        "ar": "اقترح شاشات للفريق بسرعه",
+        "hi": "टीम के लिये मॉनिटर बताओ"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I need to get monitors for everyone on the engineering team before they start, and honestly I don't have time to research this myself, so tell me what to buy and how to get it sorted.",
+        "de": "Ich muss vor dem Start Monitore für alle im Entwicklerteam besorgen und habe ehrlich gesagt keine Zeit, selbst zu recherchieren – sag mir, was ich kaufen soll und wie ich das erledigt bekomme.",
+        "es": "Tengo que conseguir monitores para todo el equipo de ingeniería antes de que empiecen y, sinceramente, no tengo tiempo para investigarlo; dime qué compro y cómo lo resuelvo.",
+        "ar": "أحتاج إلى شراء شاشات لكل فريق الهندسة قبل أن يبدؤوا، وبصراحة لا وقت لدي للبحث بنفسي، فأخبرني ماذا أشتري وكيف أنجز ذلك.",
+        "hi": "इंजीनियरिंग टीम के आने से पहले सबके लिए मॉनिटर लेने हैं, और सच कहूँ तो ख़ुद रिसर्च का समय नहीं, तो बताओ क्या ख़रीदूँ और कैसे निपटाऊँ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Monitors — what do I get?",
+        "de": "Monitore – was nehme ich?",
+        "es": "Monitores: ¿qué compro?",
+        "ar": "شاشات — ماذا أشتري؟",
+        "hi": "मॉनिटर — क्या लूँ?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not the cheapest option — which monitors should the team get?",
+        "de": "Nicht die billigste Option – welche Monitore soll das Team bekommen?",
+        "es": "No la opción más barata: ¿qué monitores le compro al equipo?",
+        "ar": "ليس الخيار الأرخص — أي شاشات يجب أن يحصل عليها الفريق؟",
+        "hi": "सबसे सस्ता विकल्प नहीं — टीम के लिए कौन से मॉनिटर?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Given everything going on with me, what monitors should I buy?",
+        "de": "Bei allem, was bei mir gerade los ist: Welche Monitore soll ich kaufen?",
+        "es": "Con todo lo que tengo encima, ¿qué monitores compro?",
+        "ar": "مع كل ما يحدث معي، ما الشاشات التي يجب أن أشتريها؟",
+        "hi": "मेरे साथ जो सब चल रहा है उसे देखते हुए कौन से मॉनिटर ख़रीदूँ?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "team monitors",
+        "de": "Monitore Team",
+        "es": "monitores equipo",
+        "ar": "شاشات الفريق",
+        "hi": "टीम मॉनिटर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Pick monitors for my team.",
+        "de": "Such Monitore für mein Team aus.",
+        "es": "Elige monitores para mi equipo.",
+        "ar": "اختر شاشات لفريقي.",
+        "hi": "मेरी टीम के लिए मॉनिटर चुनो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       [
+        {
+         "en": "seed round",
+         "de": "Seed-Runde",
+         "es": "ronda semilla",
+         "ar": "جولة التمويل",
+         "hi": "सीड राउंड"
+        },
+        "SoMa",
+        {
+         "en": "investor calls",
+         "de": "Investorengesprächen",
+         "es": "inversores",
+         "ar": "المستثمرين",
+         "hi": "इन्वेस्टर"
+        }
+       ]
+      ],
+      "answer": {
+       "contains": [
+        [
+         {
+          "en": "fast",
+          "de": "schnell",
+          "es": "rápid",
+          "ar": "سريع",
+          "hi": "जल्दी"
+         },
+         {
+          "en": "4K",
+          "de": "4K",
+          "es": "4K",
+          "ar": "4K",
+          "hi": "4K"
+         },
+         {
+          "en": "premium",
+          "de": "Premium",
+          "es": "gama alta",
+          "ar": "ممتاز",
+          "hi": "प्रीमियम"
+         }
+        ]
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "implicit-it-mac-team",
+   "domain": "it_support",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -45,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Homebrew broke after the latest update on my MacBook — any idea why?",
+        "de": "Homebrew ist nach dem letzten Update auf meinem MacBook kaputt – eine Idee, warum?",
+        "es": "Homebrew se rompió tras la última actualización de mi MacBook, ¿sabes por qué?",
+        "ar": "تعطّل Homebrew بعد آخر تحديث على جهاز MacBook الخاص بي — هل تعرف السبب؟",
+        "hi": "मेरे MacBook पर लेटेस्ट अपडेट के बाद Homebrew ख़राब हो गया — कोई अंदाज़ा क्यों?"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -22,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Our whole team is on M3 MacBooks now; we got rid of the last Windows laptop.",
+        "de": "Unser ganzes Team nutzt jetzt M3-MacBooks; den letzten Windows-Laptop haben wir abgeschafft.",
+        "es": "Todo el equipo usa ya MacBooks M3; nos deshicimos del último portátil con Windows.",
+        "ar": "فريقنا كله يستخدم الآن أجهزة MacBook M3؛ تخلصنا من آخر حاسوب Windows.",
+        "hi": "हमारी पूरी टीम अब M3 MacBook पर है; आख़िरी Windows लैपटॉप हटा दिया।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "How do I install the VPN client?",
+        "de": "Wie installiere ich den VPN-Client?",
+        "es": "¿Cómo instalo el cliente VPN?",
+        "ar": "كيف أثبّت برنامج VPN؟",
+        "hi": "VPN क्लाइंट कैसे इंस्टॉल करूँ?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "A new hire needs VPN access on day one.",
+        "de": "Eine neue Kollegin braucht am ersten Tag VPN-Zugang.",
+        "es": "Una nueva incorporación necesita VPN el primer día.",
+        "ar": "موظفة جديدة تحتاج الوصول إلى VPN في يومها الأول.",
+        "hi": "नई कर्मचारी को पहले दिन ही VPN एक्सेस चाहिए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What are the steps to get the VPN set up?",
+        "de": "Welche Schritte braucht es, um das VPN einzurichten?",
+        "es": "¿Cuáles son los pasos para configurar la VPN?",
+        "ar": "ما خطوات إعداد VPN؟",
+        "hi": "VPN सेट अप करने के चरण क्या हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "instal vpn clinet how",
+        "de": "vpn klient instaliern wie",
+        "es": "como instalo el cliete vpn",
+        "ar": "كيف انزل برنامج في بي ان",
+        "hi": "वीपीएन क्लायंट कैसे इनस्टॉल"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Our new designer starts Monday and will be working remotely the first week, so I need clear instructions to get the VPN client installed and connected on her laptop before then.",
+        "de": "Unsere neue Designerin fängt Montag an und arbeitet die erste Woche remote, also brauche ich eine klare Anleitung, um den VPN-Client vorher auf ihrem Laptop zu installieren und zu verbinden.",
+        "es": "Nuestra nueva diseñadora empieza el lunes y la primera semana trabajará en remoto, así que necesito instrucciones claras para instalar y conectar el cliente VPN en su portátil antes.",
+        "ar": "تبدأ مصممتنا الجديدة يوم الاثنين وستعمل عن بُعد في أسبوعها الأول، لذا أحتاج تعليمات واضحة لتثبيت برنامج VPN وتوصيله على حاسوبها قبل ذلك.",
+        "hi": "हमारी नई डिज़ाइनर सोमवार से शुरू कर रही हैं और पहले हफ़्ते रिमोट काम करेंगी, तो उससे पहले उनके लैपटॉप पर VPN क्लाइंट इंस्टॉल और कनेक्ट करने के साफ़ निर्देश चाहिए।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "VPN setup for the new hire.",
+        "de": "VPN-Einrichtung für die Neue.",
+        "es": "Configuración de VPN para la nueva.",
+        "ar": "إعداد VPN للموظفة الجديدة.",
+        "hi": "नई कर्मचारी के लिए VPN सेटअप।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Skip the Windows steps — how do I install the VPN client?",
+        "de": "Lass die Windows-Schritte weg – wie installiere ich den VPN-Client?",
+        "es": "Sáltate los pasos de Windows: ¿cómo instalo el cliente VPN?",
+        "ar": "تجاوز خطوات Windows — كيف أثبّت برنامج VPN؟",
+        "hi": "Windows वाले चरण छोड़ो — VPN क्लाइंट कैसे इंस्टॉल करूँ?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "You know our setup — what's the VPN install process?",
+        "de": "Du kennst unsere Ausstattung – wie läuft die VPN-Installation?",
+        "es": "Conoces nuestro equipo: ¿cómo se instala la VPN?",
+        "ar": "تعرف إعدادنا — ما عملية تثبيت VPN؟",
+        "hi": "तुम हमारा सेटअप जानते हो — VPN इंस्टॉल की प्रक्रिया क्या है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "VPN install",
+        "de": "VPN-Installation",
+        "es": "instalar VPN",
+        "ar": "تثبيت VPN",
+        "hi": "VPN इंस्टॉल"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Walk me through installing the VPN client.",
+        "de": "Führ mich durch die Installation des VPN-Clients.",
+        "es": "Guíame en la instalación del cliente VPN.",
+        "ar": "أرشدني خلال تثبيت برنامج VPN.",
+        "hi": "VPN क्लाइंट इंस्टॉल करने में मेरी मदद करो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       [
+        "MacBook",
+        "Homebrew"
+       ]
+      ],
+      "answer": {
+       "contains": [
+        [
+         "macOS",
+         "Mac",
+         "brew",
+         ".dmg",
+         ".pkg"
+        ]
+       ],
+       "absent": [
+        ".exe"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "implicit-finance-germany",
+   "domain": "finance_hr",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -55,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Can you check the VAT treatment for our invoices to Austrian customers under German rules?",
+        "de": "Kannst du die Umsatzsteuerbehandlung unserer Rechnungen an österreichische Kunden nach deutschem Recht prüfen?",
+        "es": "¿Puedes revisar el tratamiento del IVA de nuestras facturas a clientes austriacos según la normativa alemana?",
+        "ar": "هل يمكنك التحقق من معاملة ضريبة القيمة المضافة لفواتيرنا لعملاء نمساويين وفق القواعد الألمانية؟",
+        "hi": "क्या तुम जर्मन नियमों के तहत ऑस्ट्रियाई ग्राहकों के हमारे बिलों पर VAT का व्यवहार जाँच सकते हो?"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -30,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Our books are in EUR and we close under HGB at our Munich office.",
+        "de": "Unsere Bücher laufen in EUR, und wir schließen in unserem Münchner Büro nach HGB ab.",
+        "es": "Nuestra contabilidad es en EUR y cerramos según el HGB en la oficina de Múnich.",
+        "ar": "دفاترنا باليورو EUR ونغلق وفق HGB في مكتبنا في ميونخ.",
+        "hi": "हमारी किताबें EUR में हैं और हम म्यूनिख ऑफ़िस में HGB के तहत क्लोज़ करते हैं।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Draft a payment reminder for an overdue invoice.",
+        "de": "Entwirf eine Zahlungserinnerung für eine überfällige Rechnung.",
+        "es": "Redacta un recordatorio de pago para una factura vencida.",
+        "ar": "اكتب تذكيرًا بالدفع لفاتورة متأخرة.",
+        "hi": "बकाया बिल के लिए भुगतान अनुस्मारक का मसौदा बनाओ।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "A customer is three weeks late paying us.",
+        "de": "Ein Kunde ist mit der Zahlung drei Wochen im Verzug.",
+        "es": "Un cliente lleva tres semanas de retraso en el pago.",
+        "ar": "زبون متأخر في الدفع ثلاثة أسابيع.",
+        "hi": "एक ग्राहक तीन हफ़्ते से भुगतान में देर कर रहा है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Write a dunning letter for an unpaid invoice.",
+        "de": "Schreib ein Mahnschreiben für eine unbezahlte Rechnung.",
+        "es": "Escribe una carta de reclamación por una factura impagada.",
+        "ar": "اكتب خطاب مطالبة لفاتورة غير مدفوعة.",
+        "hi": "बिना भुगतान वाले बिल के लिए वसूली पत्र लिखो।"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "paymnt remindr overdue invoce",
+        "de": "zahlungserinerung überfällige rechnug",
+        "es": "recordatorio de pago factura vensida",
+        "ar": "تذكير دفع فاتوره متاخره",
+        "hi": "बकाया बिल का पेमेंट रिमाइंडर"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "One of our wholesale customers hasn't paid invoice 2026-0417 for 12,400 and it's now three weeks past due; I'd like a firm but polite first reminder I can send today.",
+        "de": "Einer unserer Großhandelskunden hat die Rechnung 2026-0417 über 12.400 nicht bezahlt, sie ist jetzt drei Wochen überfällig; ich hätte gern eine bestimmte, aber höfliche erste Mahnung, die ich heute verschicken kann.",
+        "es": "Uno de nuestros clientes mayoristas no ha pagado la factura 2026-0417 de 12.400 y ya lleva tres semanas vencida; quiero un primer recordatorio firme pero educado que pueda enviar hoy.",
+        "ar": "أحد عملاء الجملة لم يدفع الفاتورة 2026-0417 بقيمة 12,400 وقد تأخرت الآن ثلاثة أسابيع؛ أريد تذكيرًا أول حازمًا ومهذبًا أرسله اليوم.",
+        "hi": "हमारे एक थोक ग्राहक ने 12,400 का बिल 2026-0417 नहीं चुकाया और अब तीन हफ़्ते देर हो चुकी है; मुझे एक सख़्त पर विनम्र पहला अनुस्मारक चाहिए जो आज भेज सकूँ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Overdue invoice reminder.",
+        "de": "Erinnerung überfällige Rechnung.",
+        "es": "Recordatorio de factura vencida.",
+        "ar": "تذكير فاتورة متأخرة.",
+        "hi": "बकाया बिल अनुस्मारक।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not a US-style letter — draft the overdue payment reminder.",
+        "de": "Kein Brief nach US-Muster – entwirf die Zahlungserinnerung.",
+        "es": "Nada de carta al estilo estadounidense: redacta el recordatorio de pago.",
+        "ar": "ليس خطابًا بالأسلوب الأمريكي — اكتب تذكير الدفع المتأخر.",
+        "hi": "अमेरिकी अंदाज़ का पत्र नहीं — बकाया भुगतान अनुस्मारक लिखो।"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Given how we operate, write the reminder for the late invoice.",
+        "de": "So wie wir arbeiten: Schreib die Erinnerung für die überfällige Rechnung.",
+        "es": "Según cómo trabajamos, escribe el recordatorio de la factura atrasada.",
+        "ar": "وفق طريقة عملنا، اكتب تذكير الفاتورة المتأخرة.",
+        "hi": "हम जैसे काम करते हैं उसके हिसाब से देर वाले बिल का अनुस्मारक लिखो।"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "payment reminder",
+        "de": "Zahlungserinnerung",
+        "es": "recordatorio de pago",
+        "ar": "تذكير بالدفع",
+        "hi": "भुगतान अनुस्मारक"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Write the first payment reminder.",
+        "de": "Schreib die erste Zahlungserinnerung.",
+        "es": "Escribe el primer recordatorio de pago.",
+        "ar": "اكتب أول تذكير بالدفع.",
+        "hi": "पहला भुगतान अनुस्मारक लिखो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       [
+        "EUR",
+        "HGB",
+        {
+         "en": "German",
+         "de": "deutschem",
+         "es": "alemana",
+         "ar": "الألمانية",
+         "hi": "जर्मन"
+        }
+       ]
+      ],
+      "answer": {
+       "contains": [
+        [
+         "EUR",
+         "€"
+        ]
+       ],
+       "absent": [
+        "$"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "implicit-field-medical",
+   "domain": "field_service",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -36,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Finished the ventilator service at St. Mary's ICU; had to gown up and follow their infection-control protocol.",
+        "de": "Den Beatmungsgeräte-Service auf der Intensivstation von St. Mary's abgeschlossen; musste Schutzkittel tragen und ihr Hygieneprotokoll befolgen.",
+        "es": "Terminé la revisión del respirador en la UCI de St. Mary's; tuve que ponerme bata y seguir su protocolo de control de infecciones.",
+        "ar": "أنهيت صيانة جهاز التنفس في العناية المركزة بمستشفى St. Mary's؛ اضطررت لارتداء الرداء الواقي واتباع بروتوكول مكافحة العدوى لديهم.",
+        "hi": "St. Mary's ICU में वेंटिलेटर सर्विस पूरी की; गाउन पहनना पड़ा और उनका संक्रमण-नियंत्रण प्रोटोकॉल मानना पड़ा।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -15,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The infusion pumps at Lakeview Clinic need their annual electrical safety test logged per IEC 62353.",
+        "de": "Für die Infusionspumpen der Lakeview Clinic muss die jährliche elektrische Sicherheitsprüfung nach IEC 62353 dokumentiert werden.",
+        "es": "Las bombas de infusión de Lakeview Clinic necesitan registrar la prueba anual de seguridad eléctrica según IEC 62353.",
+        "ar": "تحتاج مضخات التسريب في Lakeview Clinic إلى تسجيل اختبار السلامة الكهربائية السنوي وفق IEC 62353.",
+        "hi": "Lakeview Clinic के इन्फ़्यूज़न पंपों का सालाना विद्युत सुरक्षा परीक्षण IEC 62353 के अनुसार दर्ज करना है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Write the checklist for tomorrow's job.",
+        "de": "Schreib die Checkliste für den Einsatz morgen.",
+        "es": "Escribe la lista de comprobación del trabajo de mañana.",
+        "ar": "اكتب قائمة التحقق لعمل الغد.",
+        "hi": "कल के काम की चेकलिस्ट लिखो।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Tomorrow I'm servicing patient monitors at Riverside Hospital.",
+        "de": "Morgen warte ich Patientenmonitore im Riverside Hospital.",
+        "es": "Mañana reviso monitores de pacientes en el Riverside Hospital.",
+        "ar": "غدًا أصون أجهزة مراقبة المرضى في Riverside Hospital.",
+        "hi": "कल मैं Riverside Hospital में पेशेंट मॉनिटर की सर्विस कर रहा हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What should be on my prep list for the patient monitor service?",
+        "de": "Was gehört auf meine Vorbereitungsliste für den Service der Patientenmonitore?",
+        "es": "¿Qué debe ir en mi lista de preparación para revisar los monitores de pacientes?",
+        "ar": "ما الذي يجب أن يكون في قائمة تحضيري لصيانة أجهزة مراقبة المرضى؟",
+        "hi": "पेशेंट मॉनिटर सर्विस की तैयारी सूची में क्या होना चाहिए?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "cheklist for tomorows job",
+        "de": "checkliste für morgn einsatz",
+        "es": "lista de comprobasion trabajo de mañana",
+        "ar": "قائمه تحقق لشغل بكره",
+        "hi": "कल के काम की चेकलिसट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I've got a full day tomorrow servicing the patient monitors in the cardiac ward at Riverside Hospital, starting at 7, and I want a proper checklist so I don't forget anything once I'm on the ward.",
+        "de": "Ich habe morgen ab 7 Uhr einen vollen Tag mit dem Service der Patientenmonitore auf der Kardiologie im Riverside Hospital und will eine ordentliche Checkliste, damit ich auf der Station nichts vergesse.",
+        "es": "Mañana tengo el día completo revisando los monitores de pacientes de cardiología del Riverside Hospital desde las 7 y quiero una buena lista para no olvidar nada una vez en planta.",
+        "ar": "لدي غدًا يوم كامل لصيانة أجهزة مراقبة المرضى في قسم القلب بمستشفى Riverside Hospital بدءًا من السابعة، وأريد قائمة تحقق مناسبة حتى لا أنسى شيئًا داخل القسم.",
+        "hi": "कल सुबह 7 बजे से पूरा दिन Riverside Hospital के कार्डियक वार्ड में पेशेंट मॉनिटर की सर्विस है, और मुझे ढंग की चेकलिस्ट चाहिए ताकि वार्ड में पहुँचकर कुछ न भूलूँ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Checklist for the hospital job.",
+        "de": "Checkliste für den Krankenhauseinsatz.",
+        "es": "Lista para el trabajo del hospital.",
+        "ar": "قائمة تحقق لعمل المستشفى.",
+        "hi": "अस्पताल वाले काम की चेकलिस्ट।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not a generic tool list — what's my checklist for tomorrow?",
+        "de": "Keine allgemeine Werkzeugliste – wie sieht meine Checkliste für morgen aus?",
+        "es": "No una lista genérica de herramientas: ¿cuál es mi lista para mañana?",
+        "ar": "ليست قائمة أدوات عامة — ما قائمة تحققي لغد؟",
+        "hi": "आम औज़ारों की सूची नहीं — कल के लिए मेरी चेकलिस्ट क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Given the kind of work I do, what goes on tomorrow's checklist?",
+        "de": "Bei der Art Arbeit, die ich mache: Was gehört auf die Checkliste für morgen?",
+        "es": "Por el tipo de trabajo que hago, ¿qué va en la lista de mañana?",
+        "ar": "بالنظر إلى نوع عملي، ماذا يدخل في قائمة الغد؟",
+        "hi": "मेरे काम की प्रकृति देखते हुए कल की चेकलिस्ट में क्या होगा?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "tomorrow job checklist",
+        "de": "Checkliste Einsatz morgen",
+        "es": "lista trabajo mañana",
+        "ar": "قائمة عمل الغد",
+        "hi": "कल का जॉब चेकलिस्ट"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Prepare my checklist for tomorrow.",
+        "de": "Bereite meine Checkliste für morgen vor.",
+        "es": "Prepárame la lista para mañana.",
+        "ar": "جهّز قائمة تحققي للغد.",
+        "hi": "कल के लिए मेरी चेकलिस्ट तैयार करो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       [
+        {
+         "en": "infection-control",
+         "de": "Hygieneprotokoll",
+         "es": "control de infecciones",
+         "ar": "مكافحة العدوى",
+         "hi": "संक्रमण-नियंत्रण"
+        },
+        "IEC 62353"
+       ]
+      ],
+      "answer": {
+       "contains": [
+        [
+         {
+          "en": "infection",
+          "de": "Hygiene",
+          "es": "infecci",
+          "ar": "العدوى",
+          "hi": "संक्रमण"
+         },
+         "62353",
+         {
+          "en": "disinfect",
+          "de": "desinfi",
+          "es": "desinfect",
+          "ar": "تعقيم",
+          "hi": "कीटाणु"
+         }
+        ]
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

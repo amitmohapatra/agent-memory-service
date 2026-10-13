@@ -987,6 +987,8 @@ class FeedbackProjection(BaseModel):
     memory_ids: list[str] = Field(default_factory=list)
     run_id: str | None = None
     superseded_by: str | None = None
+    #: the same voter's earlier applied vote whose effect this one undid (a flipped thumb)
+    reversed: str | None = None
     reason: str | None = None
     projected_at: datetime
 
@@ -1002,6 +1004,8 @@ class FeedbackReview(BaseModel):
     reviewed_by: str | None = None
     reviewed_at: datetime | None = None
     note: str | None = None
+    #: on a vote dismissed because the same voter voted again on the target: the newer vote
+    replaced_by: str | None = None
 
 
 class Feedback(BaseModel):
@@ -1032,3 +1036,40 @@ class Feedback(BaseModel):
     review: FeedbackReview | None = None
     #: in the review queue only: how the author's verdicts fared (pending/approved/dismissed)
     author_record: dict[str, int] | None = None
+
+
+class FeedbackTargetGroup(BaseModel):
+    """One row of the grouped review queue (``feedback.pending(group="target")``): the votes
+    on one target, counted."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    target_kind: FeedbackTargetKind
+    target_id: str
+    votes: int
+    thumbs_up: int
+    thumbs_down: int
+    #: distinct voters: a person once, whichever agent carried the vote
+    voters: int
+    latest_at: datetime
+
+
+class FeedbackUnchanged(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    feedback_id: str
+    #: approved or dismissed; None for a verdict applied as it arrived
+    state: ReviewState | None = None
+
+
+class FeedbackBulkReview(BaseModel):
+    """What ``approve_many`` / ``dismiss_many`` did: the verdicts decided now, and those
+    named that were already decided (left as they were)."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    state: ReviewState
+    decided: list[str] = Field(default_factory=list)
+    unchanged: list[FeedbackUnchanged] = Field(default_factory=list)
+    #: the target holds more pending verdicts than one call decides: call again
+    more: bool = False

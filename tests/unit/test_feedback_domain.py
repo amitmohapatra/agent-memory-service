@@ -168,3 +168,45 @@ def test_the_contracts_record_is_accepted_as_is() -> None:
     # unknown members of a future evidence reference are ignored, not refused
     widened = {**contracts_record, "evidence_refs": [{"source_id": "x", "future": 1}]}
     assert FeedbackRequest.model_validate(widened).evidence_refs[0].source_type == "memory"
+
+
+def test_a_replaced_vote_reads_in_every_supported_sdk() -> None:
+    """A vote replaced by its voter's newer one is ``dismissed`` with ``replaced_by``: no
+    review state the oldest supported SDK (0.4.0, docs/versioning.md) lacks. Its review
+    model, as it shipped, takes three states and ignores fields it does not know."""
+    from datetime import UTC, datetime
+    from typing import Literal
+
+    from pydantic import BaseModel, ConfigDict
+
+    from memory_service.api.schemas.feedback import FeedbackResponse
+    from memory_service.domain.feedback import (
+        REPLACED_REASON,
+        FeedbackReview,
+        ReviewState,
+    )
+    from trellis.memory.models import Feedback as SdkFeedback
+
+    class Review040(BaseModel):  # trellis-memory 0.4.0, models.FeedbackReview
+        model_config = ConfigDict(frozen=True, extra="allow")
+        state: Literal["pending", "approved", "dismissed"]
+        reviewed_by: str | None = None
+        reviewed_at: datetime | None = None
+        note: str | None = None
+
+    replaced = _feedback(verdict=FeedbackVerdict.CONFIRM).model_copy(
+        update={
+            "review": FeedbackReview(
+                state=ReviewState.DISMISSED,
+                reviewed_at=datetime(2026, 10, 11, tzinfo=UTC),
+                note=REPLACED_REASON,
+                replaced_by="fb_newer",
+            )
+        }
+    )
+    wire = FeedbackResponse.of(replaced).model_dump(mode="json")
+    old = Review040.model_validate(wire["review"])
+    assert old.state == "dismissed" and old.note == REPLACED_REASON
+    new = SdkFeedback.model_validate(wire)
+    assert new.review is not None and new.review.replaced_by == "fb_newer"
+    assert {s.value for s in ReviewState} == {"pending", "approved", "dismissed"}
