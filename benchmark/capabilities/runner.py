@@ -150,6 +150,9 @@ class Settings:
     keep: bool = False
     #: how long to wait for graph enrichment and summaries once everything is indexed
     enrich_seconds: float = ENRICH_SECONDS
+    #: how long the readiness wait may take in all (``_modes.json`` ``settle_seconds``: the
+    #: llm set indexes through a CPU model, which takes hours when its calls are answered)
+    settle_seconds: float = SETTLE_SECONDS
     out: Path | None = None
     #: the date every session is anchored to (``Session.day`` is relative to it); None is the
     #: UTC date the run starts. Recorded as ``meta.run_date``.
@@ -501,6 +504,7 @@ async def settle(
     since: float,
     probe_seconds: float = PROBE_SECONDS,
     enrich_seconds: float = ENRICH_SECONDS,
+    settle_seconds: float = SETTLE_SECONDS,
 ) -> dict[str, Any]:
     """The service's own signals that what was written is processed and indexed.
 
@@ -511,7 +515,7 @@ async def settle(
     read path: every scenario's last statement is findable in its own thread."""
     t0 = _now()
     signals: dict[str, Any] = {"outbox": None, "probes_found": 0}
-    deadline = t0 + SETTLE_SECONDS
+    deadline = t0 + settle_seconds
     while _now() < deadline:
         backlog = await service.outbox_backlog()
         signals["outbox"] = backlog
@@ -850,7 +854,12 @@ async def run(
             f"wrote {sum(w.turns for w in written)} turns in {write_seconds:.0f}s", file=sys.stderr
         )
         signals = await settle(
-            service, written, last_write, settings.probe_seconds, settings.enrich_seconds
+            service,
+            written,
+            last_write,
+            settings.probe_seconds,
+            settings.enrich_seconds,
+            settings.settle_seconds,
         )
         print(f"settled: {signals}", file=sys.stderr)
 
@@ -1004,6 +1013,7 @@ def parse(argv: Sequence[str] | None = None) -> tuple[Settings, argparse.Namespa
         "--keep", action="store_true", help="leave the writes in the tenant (for a later --reuse)"
     )
     p.add_argument("--enrich-seconds", type=float, default=ENRICH_SECONDS)
+    p.add_argument("--settle-seconds", type=float, default=SETTLE_SECONDS)
     p.add_argument(
         "--run-date",
         default=os.environ.get("CAPEVAL_RUN_DATE"),
@@ -1045,6 +1055,7 @@ def parse(argv: Sequence[str] | None = None) -> tuple[Settings, argparse.Namespa
         reuse=Path(a.reuse) if a.reuse else None,
         keep=a.keep,
         enrich_seconds=float(sample.get("enrich_seconds", a.enrich_seconds)),
+        settle_seconds=float(sample.get("settle_seconds", a.settle_seconds)),
         out=Path(a.out) if a.out else None,
         run_date=date.fromisoformat(a.run_date) if a.run_date else None,
     )
