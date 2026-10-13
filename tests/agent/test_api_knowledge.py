@@ -3,7 +3,8 @@
 A profile block with a standing question is kept answering it from what its scope may read;
 feedback is a verdict on something the platform did - a memory it reinforces or retracts, a
 run whose outcome follows the highest-ranked source that judged it. A vote changes nothing
-until the tenant's administrator approves it (ADR 0028).
+until the tenant's administrator approves it (ADR 0028), and counts once per voter and
+target (ADR 0039).
 """
 
 from __future__ import annotations
@@ -185,6 +186,105 @@ async def test_votes_wait_in_a_queue_only_the_tenant_administrator_reviews(app, 
     # what the tenant's administrator says needs no review
     own = await admin.feedback("run", "run_admin", "confirm")
     assert own.review is None
+
+
+@pytest.mark.covers("feedback.approve_feedback_many", "feedback.dismiss_feedback_many")
+@pytest.mark.covers_error(
+    "feedback.approve_feedback_many", "feedback.dismiss_feedback_many", "feedback.list_feedback"
+)
+async def test_thumbs_count_once_per_user_and_are_reviewed_by_target_in_bulk(app, running) -> None:
+    """ADR 0039: a person's thumbs on a run or a memory waits, their newer vote replaces their
+    earlier one, and the administrator works the queue grouped by target, in bulk."""
+    harness = await _harness(app)
+    admin = _reviewer(harness)
+    u1, u2 = harness.bind(user_id="u1"), harness.bind(user_id="u2")
+    await u1.remember(FACT, visibility="USER")
+    memory = next(m for m in (await u1.advanced.memories.page()).items if FACT in m.content)
+
+    # u1 clicks thumbs-up twice, then changes their mind; u2 votes once; an agent carrying
+    # u2's vote is still u2
+    first = await u1.feedback("run", "run_bulk", "confirm")
+    await u1.feedback("run", "run_bulk", "confirm")
+    flipped = await u1.feedback("run", "run_bulk", "reject")
+    other = await u2.agent("buyer").feedback("run", "run_bulk", "confirm")
+    # the owner's thumbs-down on their own memory waits too
+    down = await u1.feedback("memory", memory.memory_id, "reject")
+    assert down.review is not None and down.review.state == "pending"
+    replaced = (await u1.feedback.get(first.feedback_id)).review
+    assert replaced is not None and replaced.state == "dismissed"
+    assert replaced.replaced_by not in (None, first.feedback_id)
+
+    groups = (await admin.feedback.pending(group="target")).items
+    assert [(g.target_kind, g.target_id) for g in groups] == [
+        ("memory", memory.memory_id),
+        ("run", "run_bulk"),
+    ]
+    run = groups[1]
+    assert (run.votes, run.thumbs_up, run.thumbs_down, run.voters) == (2, 1, 1, 2)
+    assert run.latest_at == other.created_at
+    paged = await admin.feedback.pending(group="target", limit=1)
+    assert len(paged.items) == 1 and paged.has_more
+    rest = await admin.feedback.pending(group="target", cursor=paged.next_cursor)
+    assert [g.target_id for g in rest.items] == ["run_bulk"] and not rest.has_more
+
+    # the thumbs-down on the memory changed nothing while it waited
+    assert any(m.memory_id == memory.memory_id for m in (await u1.advanced.memories.page()).items)
+
+    # approve everything pending on the run; a second call decides nothing again
+    approved = await admin.feedback.approve_many(target_kind="run", target_id="run_bulk")
+    assert set(approved.decided) == {flipped.feedback_id, other.feedback_id}
+    assert approved.state == "approved" and not approved.more
+    again = await admin.feedback.approve_many([flipped.feedback_id, first.feedback_id])
+    assert again.decided == []
+    assert {(u.feedback_id, u.state) for u in again.unchanged} == {
+        (flipped.feedback_id, "approved"),
+        (first.feedback_id, "dismissed"),
+    }
+    # dismiss the thumbs-down: kept for reporting, never applied, then approving it is a 409
+    dismissed = await admin.feedback.dismiss_many([down.feedback_id], note="memory is right")
+    assert dismissed.decided == [down.feedback_id] and dismissed.state == "dismissed"
+    with pytest.raises(MemoryError) as decided_once:
+        await admin.feedback.approve(down.feedback_id)
+    assert decided_once.value.status == 409
+    # kept for reporting: the admin's dismissal, and the clicks u1 replaced (which say so)
+    reported = (await admin.feedback.pending(review="dismissed")).items
+    by_admin = [f.feedback_id for f in reported if f.review and f.review.replaced_by is None]
+    assert by_admin == [down.feedback_id]
+    assert first.feedback_id in {
+        f.feedback_id for f in reported if f.review and f.review.replaced_by
+    }
+    assert any(m.memory_id == memory.memory_id for m in (await u1.advanced.memories.page()).items)
+    assert (await admin.feedback.pending(group="target")).items == []
+
+    # what the bulk routes refuse: a voter's own key, an id this tenant does not have, and a
+    # body naming both ids and a target (or neither)
+    for call in (
+        u1.feedback.approve_many([flipped.feedback_id]),
+        u1.feedback.dismiss_many(target_kind="run", target_id="run_bulk"),
+        u1.feedback.pending(group="target"),
+    ):
+        with pytest.raises(MemoryError) as refused:
+            await call
+        assert refused.value.status == 403
+    globex = await _harness(app, "globex")
+    theirs = await globex.bind(user_id="g1").feedback("run", "run_bulk", "reject")
+    pending_mine = await u2.feedback("run", "run_bulk", "reject")
+    for call in (
+        admin.feedback.approve_many([pending_mine.feedback_id, theirs.feedback_id]),
+        admin.feedback.dismiss_many([theirs.feedback_id]),
+    ):
+        with pytest.raises(MemoryError) as unknown:
+            await call
+        assert unknown.value.status == 404
+    assert (await u2.feedback.get(pending_mine.feedback_id)).review.state == "pending"  # type: ignore[union-attr]
+    both = {"feedback_ids": [pending_mine.feedback_id], "target_kind": "run", "target_id": "r"}
+    for path, body in (("approve", both), ("dismiss", {})):
+        with pytest.raises(MemoryError) as invalid:
+            await admin._request("POST", f"/v1/feedback/{path}", json=body)
+        assert invalid.value.status == 422
+    with pytest.raises(MemoryError) as ungrouped:
+        await admin._request("GET", "/v1/feedback", params={"group": "target"})
+    assert ungrouped.value.status == 422
 
 
 @pytest.mark.covers_error(

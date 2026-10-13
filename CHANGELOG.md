@@ -8,6 +8,15 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- Feedback review by target (ADR 0039, amends 0028): `GET /v1/feedback?review=pending&group=target`
+  lists the queue one row per target with `votes`, `thumbs_up`, `thumbs_down`, distinct
+  `voters` and `latest_at`; `POST /v1/feedback/approve` and `POST /v1/feedback/dismiss` decide
+  in bulk by `feedback_ids` (1 to 500) or by target (every vote pending on it), with the admin
+  key, idempotently (a vote no longer pending is returned in `unchanged`, never applied twice;
+  an id the tenant does not have refuses the whole call with 404). `review=` also takes
+  `approved` and `dismissed`, for reporting. SDK: `ctx.feedback.pending(group="target",
+  review=...)`, `approve_many`, `dismiss_many`, `FeedbackTargetGroup`, `FeedbackBulkReview`.
+  No migration.
 - The capability eval suite (`benchmark/capabilities/`): eleven memory capabilities -
   single-fact recall, multi-hop, recency, update, abstention, forgetting, scale, procedures,
   corrections, implicit and explicit personalization - as 105 scenarios over five domains,
@@ -74,6 +83,22 @@ each entry says which one moved. Decisions behind each change are in the
   class), merge F1 0.84 (exact subject strings before: 0.13).
 
 ### Fixed
+- Same-subject lookup: an older statement past the window of recent rows consolidation reads
+  was missed when its subject was spelled with different punctuation ("forklift-4" stored,
+  "forklift 4" said): the spelling variants were derived only when the subject was not
+  already lower-case, which the fact rule's subjects always are. Every word-and-identifier
+  pair is now joined every way (a space, nothing, a hyphen, "#", "no."; "Nr.", "núm." and "nº"
+  are read as joins too), for the lower-cased and the as-written forms, in any script
+  (Devanagari and Arabic vowel signs included); another identifier is never produced, and
+  "Forklift 3" and "Forklift 4" still never merge (ADR 0035). Both sides are compared
+  case-folded (`lower(subject)`, index `ix_memories_scope_subject_lower`, migration 0027), so
+  "Forklift 4" stored through the API is found by "forklift-4" said in a turn. Both sides are
+  folded by PostgreSQL (Python's lower() and the database's differ, e.g. "ΟΔΟΣ"); an identity
+  ("user:Alice") still matches only as written, and one in another case ("User:Alice") matches
+  neither "user:alice" nor "user:Alice". The exact matches are read per kind like the
+  recent window: a user's newest turns, all about "user:<id>", crowded their older facts out
+  of one shared limit, so a person fact past the window was never replaced - the test that
+  claimed it never left the window, and now does.
 - "When I ask for a stock audit, always use a table" opened like a question, so nothing was
   stored; a "when"/"if" followed by a subject now opens a condition, and the rule is kept with
   its trigger. A standing rule is recognised wherever its "never"/"always" sits ("For weekly
@@ -129,6 +154,25 @@ each entry says which one moved. Decisions behind each change are in the
   own node is the required companion.
 
 ### Changed
+- An end user's thumbs-down on a memory now waits for the administrator like any other vote,
+  the owner's included (it retracted the memory on the spot before), and any reader of the
+  memory may cast one (it was owner-only; a rewrite still is); an owner's `correct`/`edit`
+  carrying new text is still applied at once, as are a run's own status, tool-call decisions,
+  `/v1/verify` and the administrator's own word, and `DELETE /v1/memories/{id}`. One vote per
+  voter per target: a voter's newer vote replaces their earlier pending one, which is kept with
+  `review.state = "dismissed"`, `review.note = "replaced by a newer vote from the same user"`
+  and `review.replaced_by` naming the newer vote, never applied, so repeated clicks count once
+  (ADR 0039). No new review state: SDK 0.4.0 reads every record (it ignores `replaced_by`), and
+  `author_record` and the grouped counts leave replaced clicks out. The rule holds across
+  approvals: the same thumb as the voter's approved vote is stored dismissed with
+  `replaced_by` naming the vote that counts, and an approved flip first undoes the vote that
+  was actually applied (`projection.reversed`; an approved vote not yet applied is closed
+  instead). Whether a record is a vote is decided by who sent it (`feedback.is_vote`), never
+  by the `source` it claims.
+  A `system` verdict on the caller's own run applies at once only when the credential may
+  act as that agent (a bearer token naming a person waits), and an agent acting for a tenant
+  admin edits only its own user's memories. Migration
+  `0027_votes_replaced_by_subject` adds `feedback.review_replaced_by` (and the subject index under Fixed).
 - The conflict adjudicator (`conflict_adjudication`) is asked about the closest stored memory
   on the same - or possibly the same - subject, instead of the closest sharing half its words:
   a fact restated in other words now reaches it, and a fact about another subject that merely

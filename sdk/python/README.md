@@ -193,7 +193,9 @@ async with MemoryClient(base_url, api_key=key) as client:
             await admin_ctx.feedback.approve(vote.feedback_id, note="checked")
 ```
 
-`feedback.pending()` reads `GET /v1/feedback?review=pending`. Every list pages the same way
+`feedback.pending()` reads `GET /v1/feedback?review=pending`; `feedback.pending(group="target")`
+is the same queue one row per target (thumbs up and down, voters, latest vote), and
+`feedback.approve_many(...)` / `dismiss_many(...)` decide by ids or by target, idempotently. Every list pages the same way
 (`cursor` + `limit`, ADR 0030): `t.workspaces.members_page(id)`, `t.reads_page(since=...)`
 (`since` was `after`), `admin.tenants_page()` (no `after`); `tools.catalog()` follows the cursor
 itself. `revoke()` / `revoke_model_key()` read the status back after the service's `204`.

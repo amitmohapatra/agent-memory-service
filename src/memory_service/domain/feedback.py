@@ -13,14 +13,16 @@ A run's outcome is a projection of its feedback: the harness sends RUN feedback 
 and a person overrides both. ``OUTCOME_PRECEDENCE`` orders them; a verdict never replaces an
 outcome a higher-ranked source already gave.
 
-A vote is not applied on its word (ADR 0028). A thumbs-up or -down can be wrong, or cast to
-move a memory, so a verdict that would change what the platform learned - a memory's
-standing, a run's outcome, a procedure - waits in review (``ReviewState.PENDING``) until a
-tenant admin approves it; a dismissed one stays stored for statistics and changes nothing.
-Applied as they arrive: the grounding judge's own verdict, a run reporting its own final
-status, an owner's retraction or correction of their memory (an edit, not a vote), a
-decision on a tool call (what is learned from it is only ever a suggestion, applied once
-accepted), and anything a tenant admin says.
+A vote is not applied on its word (ADR 0028, amended by ADR 0039). A thumbs-up or -down can
+be wrong, or cast to move a memory, so a verdict that would change what the platform learned
+- a memory's standing, a run's outcome, a procedure - waits in review
+(``ReviewState.PENDING``) until a tenant admin approves it; a dismissed one stays stored for
+statistics and changes nothing. A person counts once per target: a newer vote replaces their
+earlier pending one (dismissed with ``replaced_by``), so repeated clicks are one vote. Applied as
+they arrive: the grounding judge's own verdict, a run reporting its own final status, an
+owner's correction of their memory carrying new text (an edit, not a vote), a decision on a
+tool call (what is learned from it is only ever a suggestion, applied once accepted), and
+anything a tenant admin says. A thumbs-down on a memory is a vote like any other.
 """
 
 from __future__ import annotations
@@ -86,12 +88,23 @@ class ReviewState(StrEnum):
     DISMISSED = "dismissed"
 
 
+#: The sources a person's verdict carries. Only what records predating ADR 0039's ``vote``
+#: flag are classified by: a client may claim any source, so a new record is a vote by who
+#: sent it (``modules.feedback.votes.classify``), not by the source it names.
+HUMAN_SOURCES: Final = frozenset({FeedbackSource.HUMAN, FeedbackSource.INTERRUPT})
+
+#: Why a vote was dismissed when the same voter voted again on the same target. It is not a
+#: new review state: clients that know three states keep parsing every record.
+REPLACED_REASON: Final = "replaced by a newer vote from the same user"
+
+
 class FeedbackReview(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     state: ReviewState = Field(
         description="pending (waits for a tenant admin), approved (applied) or dismissed "
-        "(kept for statistics, never applied)."
+        "(kept for statistics, never applied - by a reviewer, or because the same voter "
+        "voted again on the same target: see replaced_by)."
     )
     reviewed_by: str | None = Field(default=None, description="the admin who decided")
     reviewed_at: datetime | None = Field(
@@ -99,6 +112,11 @@ class FeedbackReview(BaseModel):
     )
     note: str | None = Field(
         default=None, max_length=COMMENT_MAX_CHARS, description="Why, as the reviewer wrote it."
+    )
+    replaced_by: str | None = Field(
+        default=None,
+        description="Set on a vote dismissed because the same voter voted again on the same "
+        "target: the newer vote, which is the one that waits. Null otherwise.",
     )
 
 
@@ -121,6 +139,8 @@ class ProjectionAction(StrEnum):
 CORRECTING_VERDICTS: Final = frozenset({FeedbackVerdict.CORRECT, FeedbackVerdict.EDIT})
 #: Verdicts that agree with the target as it stands.
 AFFIRMING_VERDICTS: Final = frozenset({FeedbackVerdict.CONFIRM, FeedbackVerdict.APPROVE})
+#: A thumbs-up, in the grouped review queue; every other verdict counts as a thumbs-down.
+THUMBS_UP_VERDICTS: Final = AFFIRMING_VERDICTS
 #: The approval counter a verdict on a tool call adds to.
 APPROVAL_COUNTER: Final = {
     FeedbackVerdict.APPROVE: "approvals",
@@ -129,6 +149,20 @@ APPROVAL_COUNTER: Final = {
     FeedbackVerdict.EDIT: "edits",
     FeedbackVerdict.CORRECT: "edits",
 }
+
+
+class FeedbackTargetGroup(BaseModel):
+    """The votes in one review state on one target, counted: one row of the grouped queue."""
+
+    model_config = ConfigDict(frozen=True)
+
+    target_kind: FeedbackTargetKind
+    target_id: str
+    votes: int
+    thumbs_up: int
+    thumbs_down: int
+    voters: int
+    latest_at: datetime
 
 
 class FeedbackEvidenceRef(BaseModel):
@@ -181,6 +215,11 @@ class FeedbackProjection(BaseModel):
     superseded_by: str | None = Field(
         default=None, description="the corrected memory, for MEMORY_SUPERSEDED"
     )
+    reversed: str | None = Field(
+        default=None,
+        description="The same voter's earlier applied vote on this target whose effect this "
+        "one undid before applying its own (a flipped thumb counts once).",
+    )
     reason: str | None = Field(
         default=None, max_length=500, description="Why it did what it did (always set for none)."
     )
@@ -220,6 +259,11 @@ class Feedback(BaseModel):
     projection: FeedbackProjection | None = None
     review: FeedbackReview | None = Field(
         default=None, description="null: applied as it arrived; else where its review stands"
+    )
+    vote: bool | None = Field(
+        default=None,
+        description="Whether it is a person's vote, decided when it was stored by who sent it "
+        "(never by the source it claims); null on records older than ADR 0039.",
     )
 
     @property

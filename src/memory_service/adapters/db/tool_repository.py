@@ -656,3 +656,15 @@ class SqlProcedureRepository:
             .values(status="rejected", updated_at=datetime.now(UTC))
         )
         return bool(getattr(result, "rowcount", 0))
+
+    async def restore(self, tenant_id: str, procedure_id: str) -> bool:
+        result = await self.s.execute(
+            update(ProcedureRow)
+            .where(
+                ProcedureRow.tenant_id == tenant_id,
+                ProcedureRow.procedure_id == procedure_id,
+                ProcedureRow.status == "rejected",
+            )
+            .values(status="active", updated_at=datetime.now(UTC))
+        )
+        return bool(getattr(result, "rowcount", 0))

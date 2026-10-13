@@ -161,6 +161,11 @@ class ProcedureRepository(Protocol):
         again until its steps change."""
         ...
 
+    async def restore(self, tenant_id: str, procedure_id: str) -> bool:
+        """A rejected procedure offered again (``active``): the person whose rejection it
+        was changed their vote. False when it is not rejected (any more)."""
+        ...
+
     async def learned(
         self, tenant_id: str, *, agent_id: str | None = None, limit: int
     ) -> list[StoredProcedure]:
