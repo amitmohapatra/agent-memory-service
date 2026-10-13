@@ -70,12 +70,17 @@ inside one conversation and only for a turn whose reading has the same words.
 4. **The tenant's model, when its policy allows `conflict_adjudication`,** settles at most
    three related pairs per message that the head leaves in its unsure band (a contradiction of
    at least 0.5, below the marking thresholds), as consolidation's adjudicator does; an
-   `update` or `contradict` verdict marks an earlier value, never a supersession. It is not
-   asked about pairs the head reads as no contradiction, nor about pairs only the encoder
-   relates below 0.5: with Granite 3.3 2B through the gateway, asking about those marked four
-   statements on the llm_core set and every one was wrong (a bridge between two facts, "staff
-   of the Lyon office follow the French calendar", marked by "Ines Moreau joined the Lyon
-   office"). Without the model none of this runs, and nothing else depends on it.
+   `update` or `contradict` verdict marks an earlier value, never a supersession. It is also
+   asked, whatever the head read, about a stated change (a `CORRECTION`, `LIFECYCLE` or
+   `STATUS` cue) whose first named thing is one the older statement names ("Maria Lopez is
+   back from leave" / "Maria Lopez is on leave"): the head reads such pairs at 0.02-0.2 in
+   Arabic and Hindi, and on the dev split these are four replacements and no other pair. It
+   is not asked about other pairs the head reads as no contradiction, nor about pairs only the
+   encoder relates below 0.5: with Granite 3.3 2B through the gateway, asking about those
+   marked four statements on the llm_core set and every one was wrong (a bridge between two
+   facts, "staff of the Lyon office follow the French calendar", marked by "Ines Moreau joined
+   the Lyon office" - which leads with Ines Moreau, whom the older statement does not name).
+   Without the model none of this runs, and nothing else depends on it.
 5. **Every form of the statement goes with it:** its twins (`MemoryRepository.twins`) and, for
    a turn, what the rules read from it (a fact or an event of the same message inside the
    turn's words). A reading of one sentence never takes its whole turn with it.
@@ -111,14 +116,17 @@ No new setting, no new memory type, no new table. Migration 0028 adds the two in
   users after the run id, and the id moves cosines near the relevance floor): the cells, their
   noise and the held-out split are in the follow-up "measured" commit and the eval results.
   The thresholds and cue classes were chosen on the eval's dev split only.
-* Still not replaced, by design: a state change the head reads as no contradiction ("is
-  back from sabbatical", "finished the book", a handover) in a language where it scores below
-  0.4 - Arabic, Hindi and German cases on the dev split - and anything only the encoder
-  relates below 0.5 with no slot read from both: "I live in Leeds" / "I moved to Bristol" is
-  replaced in English (the rules read `lives_in`) and with the tenant's extraction, not in the
-  other four languages without a model. The tenant's model (Granite 3.3 2B) was measured on the dev split's 188
-  cross-conversation pairs: it called 97 of 143 unrelated pairs an update or contradiction,
-  so it is never asked about pairs the head has not already found related and contradictory.
+* Still not replaced without a model, by design: a state change the head reads as no
+  contradiction ("is back from sabbatical", "finished the book", a handover) in a language
+  where it scores below 0.4 - Arabic, Hindi and German cases on the dev split; with the
+  tenant's model it is asked (decision 4). Anything only the encoder relates below 0.5 with no
+  slot read from both is not compared. Where the speaker lives is read from the words in all
+  five languages ("Ich wohne in Leeds" / "Ich bin nach Bristol gezogen", "vivo en" / "me mudé
+  a", "أعيش في" / "انتقلت إلى", "... में रहता हूँ"), a first-person verb of living or moving
+  then the place: the one slot with two places relates the statements, the head decides
+  (English through the rules' `lives_in`). The tenant's model (Granite 3.3 2B) was measured on
+  the dev split's 188 cross-conversation pairs: it called 97 of 143 unrelated pairs an update
+  or contradiction, so it is never asked about pairs that are not related.
 * A record carried by a request (`EVENT`) keeps ADR 0036's audience (the conversation): a new
   conversation does not see it, so its replacement is not seen there either. Changing that is
   an audience decision, not a replacement one.

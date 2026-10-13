@@ -1095,7 +1095,8 @@
         "übergibt",
         "übergab",
         "übernimmt",
-        "übernahm"
+        "übernahm",
+        "zu Ende"
       ],
       "correction_weak": [
         "eigentlich",
@@ -1500,7 +1501,7 @@
         "abri(ó|mos|eron)",
         "cerr(ó|amos|aron)",
         "lanz(ó|amos|aron)",
-        "termin(ó|amos|aron)",
+        "termin(é|ó|amos|aron)",
         "empez(ó|amos)",
         "comenz(ó|amos)",
         "contrat(ó|amos)",
@@ -1922,7 +1923,8 @@
         "سلمت",
         "تسلم",
         "تولى",
-        "تولت"
+        "تولت",
+        "أنهيت"
       ],
       "correction_weak": [
         "بدلا من",

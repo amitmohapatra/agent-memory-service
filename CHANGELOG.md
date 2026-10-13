@@ -31,6 +31,14 @@ each entry says which one moved. Decisions behind each change are in the
   that finds an earlier value brings its replacement, before it, past the relevance floor. A
   sentence shown whole in its turn is not shown again beside it. New in the API and the SDK:
   `ContextBundle.history`, `ContextMemory.superseded` (ADR 0038).
+- Replacement in the languages the NLI head reads weakly (ADR 0038): where the speaker lives,
+  or that they moved, is read from the words in German, Spanish, Arabic and Hindi as English's
+  rules read it, so "Ich wohne in Leeds" and "Ich bin nach Bristol gezogen" relate without a
+  model; with the tenant's `conflict_adjudication`, a stated change whose first named thing the
+  older statement names is put to the model whatever the head read ("Maria Lopez is back from
+  leave" scores 0.02 against "is on leave" in Arabic). The lexicon reads first-person "finished"
+  in Spanish ("terminé") and Arabic ("أنهيت") and German "zu Ende", and a Hindi cue matches with
+  or without the nukta ("ख़त्म" / "खत्म").
 - Feedback review by target (ADR 0039, amends 0028): `GET /v1/feedback?review=pending&group=target`
   lists the queue one row per target with `votes`, `thumbs_up`, `thumbs_down`, distinct
   `voters` and `latest_at`; `POST /v1/feedback/approve` and `POST /v1/feedback/dismiss` decide

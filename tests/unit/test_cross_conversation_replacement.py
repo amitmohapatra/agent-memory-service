@@ -49,6 +49,7 @@ from memory_service.modules.memory.replacement import (
     relate,
     slot_changed,
     slots_of,
+    spoken_slots,
     statement_of,
 )
 from memory_service.modules.memory.statements import Lexicon
@@ -469,16 +470,62 @@ async def test_the_model_settles_the_heads_unsure_band(verdict: str | None, repl
         assert stored.temporal.status is TemporalStatus.CURRENT
 
 
-async def test_no_contradiction_is_never_put_to_the_model() -> None:
-    """Same named thing, the head reads no contradiction ("is back from leave", a multi-hop
-    bridge): not asked."""
+@pytest.mark.parametrize(
+    ("old", "new", "asked"),
+    [
+        # a stated change about the thing both name: asked, whatever the head read
+        (
+            "Ana Petrova is on sabbatical until further notice.",
+            "Ana Petrova is back from sabbatical as of Monday.",
+            True,
+        ),
+        (
+            "Forklift #4 is in the repair shop until Friday.",
+            "Forklift #4 is back in service.",
+            True,
+        ),
+        # the change is about someone else, tied by a shared place: never asked
+        (
+            "Staff of the Lyon office follow the French holiday calendar.",
+            "Ines Moreau joined the Lyon office this month.",
+            False,
+        ),
+        # no change stated, no contradiction read: never asked
+        (
+            "Ana Petrova leads the Leeds depot.",
+            "Ana Petrova likes the new rota.",
+            False,
+        ),
+    ],
+)
+async def test_a_stated_change_about_the_shared_thing_is_put_to_the_model(
+    old: str, new: str, asked: bool
+) -> None:
+    """The head reads "is back from sabbatical" against "is on sabbatical" as no
+    contradiction (in Arabic and Hindi it reads most such pairs that way): the model is asked
+    when the new statement states a change and the first thing it names is one the old
+    statement names; a bridge between two facts ("joined the Lyon office") is not."""
+    old_m = _memory(old, at=T0, source="msg_a")
+    new_m = _memory(new, at=T1, source="msg_b")
+    assist = FakeAssist("update")
+    uow = _uow([old_m, new_m])
+    out = await CrossConversationReplacement(ScriptedNLI({}), assist=assist).run(  # type: ignore[arg-type]
+        uow, CTX, [new_m], now=T1
+    )
+    assert assist.calls == (1 if asked else 0)
+    assert bool(out.changed) is asked
+    if asked:
+        stored = uow.memories.rows[old_m.memory_id]
+        assert earlier_value(stored.system_metadata), "the model's word is an earlier value only"
+
+
+async def test_a_stated_change_is_not_put_to_the_model_without_one() -> None:
     old = _memory("Ana Petrova is on sabbatical until further notice.", at=T0, source="msg_a")
     new = _memory("Ana Petrova is back from sabbatical as of Monday.", at=T1, source="msg_b")
-    assist = FakeAssist("update")
-    out = await CrossConversationReplacement(ScriptedNLI({}), assist=assist).run(  # type: ignore[arg-type]
+    out = await CrossConversationReplacement(ScriptedNLI({})).run(
         _uow([old, new]), CTX, [new], now=T1
     )
-    assert assist.calls == 0 and out.changed == []
+    assert out.changed == [], "without the tenant's model the head's word stands"
 
 
 async def test_the_model_is_asked_about_three_pairs_at_most() -> None:
@@ -583,6 +630,52 @@ async def test_a_slot_of_another_subject_relates_nothing() -> None:
         _uow([old, new_turn, new_fact]), CTX, [new_turn, new_fact], now=T1
     )
     assert out.changed == []
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("Ich wohne in Leeds, nahe am Park.", "Ich bin letzten Monat nach Bristol gezogen."),
+        ("Vivo en Leeds, cerca del parque.", "El mes pasado me mudé a Bristol."),
+        ("أعيش في Leeds، قرب الحديقة.", "انتقلت إلى Bristol الشهر الماضي."),
+        ("मैं Leeds में, पार्क के पास रहता हूँ।", "अब मैं Bristol में एक फ़्लैट में रहता हूँ।"),
+    ],
+)
+def test_where_the_speaker_lives_is_read_in_every_pack_language(old: str, new: str) -> None:
+    """Without a model nothing reads these: no shared name, the encoder below 0.5. The
+    speaker's own residence, two places: one slot changed."""
+    assert slot_changed(spoken_slots(new), spoken_slots(old))
+    assert not slot_changed(spoken_slots(old), spoken_slots(old))
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Mein Bruder wohnt in Leeds.",  # not the speaker
+        "انتقلت Maria إلى Lyon.",  # she moved
+        "Ich lebe vegan.",
+        "Vivo con mi hermana.",
+        "We moved the pallets to Dock 4.",
+    ],
+)
+def test_only_the_speakers_own_residence_is_a_slot(text: str) -> None:
+    assert spoken_slots(text) == {}
+
+
+async def test_a_move_relates_two_statements_with_nothing_else_in_common() -> None:
+    old = _memory("Ich wohne in Leeds, nahe am Park.", at=T0, source="msg_a", lang="de")
+    new = _memory("Ich bin letzten Monat nach Bristol gezogen.", at=T1, source="msg_b", lang="de")
+    nli = ScriptedNLI({("Bristol", "Leeds"): 0.95})
+    uow = _uow([old, new])
+    out = await CrossConversationReplacement(nli).run(uow, CTX, [new], now=T1)
+    assert [m.memory_id for m in out.changed] == [old.memory_id]
+    assert uow.memories.rows[old.memory_id].temporal.status is TemporalStatus.SUPERSEDED
+
+
+def test_a_hindi_cue_matches_with_or_without_the_nukta() -> None:
+    lexicon = Lexicon.default()
+    for sentence in ("कल रात मैंने किताब ख़त्म की।", "कल रात मैंने किताब खत्म की।"):
+        assert lexicon.label(sentence).maybe is StatementKind.LIFECYCLE
 
 
 # --------------------------------------------------------------------------- misread rules

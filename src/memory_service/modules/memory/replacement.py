@@ -597,6 +597,56 @@ def slots_of(memories: Iterable[CanonicalMemory]) -> Slots:
     return {k: frozenset(v) for k, v in out.items()}
 
 
+#: Words that open the place after a residence verb without being it (articles).
+_PLACE_SKIP = (
+    r"(?:(?:der|dem|den|die|das|einer|einem|einen|eine|ein|el|la|los|las|un|una|unos|unas)\s+)?"
+)
+#: The place: a run of capitalised Latin words ("New York"), or one word of any script.
+_PLACE = r"(?P<place>(?-i:[A-Z])[\w\-]*(?:\s+(?-i:[A-Z])[\w\-]*)*|[^\s,.;:!?،؛()\"“”।]+)"
+#: Where the speaker says they live, or that they moved to, in the pack languages other than
+#: English, whose rules already read it (``native._LIVES_IN``, ``_MOVED_TO``): a first-person
+#: verb of living or moving, then the place. Nothing else reads these sentences without a
+#: model: "Ich wohne in Leeds." / "Ich bin nach Bristol gezogen." share no name and sit below
+#: the encoder's 0.5. Read only to relate two statements (one slot, two places); the NLI head
+#: still decides whether the later one replaces the earlier.
+_RESIDENCE = tuple(
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        # de: "ich wohne (jetzt) in X", "ich lebe in X", "ich bin (letzten Monat) nach X gezogen"
+        rf"\bich\s+(?:wohne|lebe)\s+(?:\S+\s+){{0,2}}?(?:in|im)\s+{_PLACE_SKIP}{_PLACE}",
+        rf"\bich\s+bin\s+(?:\S+\s+){{0,4}}?nach\s+{_PLACE}\s+(?:\S+\s+){{0,2}}?(?:um)?gezogen",
+        rf"\bich\s+(?:ziehe|zog)\s+(?:\S+\s+){{0,3}}?nach\s+{_PLACE}",
+        # es: "vivo (ahora) en X", "me mudé (el mes pasado) a X", "me he mudado a X"
+        rf"\b(?:vivo|resido)\s+(?:\S+\s+){{0,2}}?en\s+{_PLACE_SKIP}{_PLACE}",
+        rf"\bme\s+(?:he\s+)?(?:mudé|mude|mudado|trasladé|trasladado|fui\s+a\s+vivir)\s+"
+        rf"(?:\S+\s+){{0,3}}?a\s+{_PLACE_SKIP}{_PLACE}",
+        # ar: "أعيش في X", "أسكن (الآن) في X", "انتقلت إلى X" (nothing Latin between: not "she")
+        rf"(?<![ء-ي])و?(?:أعيش|أسكن|أقيم)\s+(?:[^\sA-Za-z]+\s+){{0,2}}?في\s+{_PLACE}",
+        rf"(?<![ء-ي])و?(?:انتقلت|رحلت)\s+(?:[^\sA-Za-z]+\s+){{0,2}}?"
+        rf"(?:إلى|الى|للعيش\s+في|للسكن\s+في)\s+{_PLACE}",
+        # hi: "X में (...) रहता हूँ" (the first person is in "हूँ"), "मैं X शिफ्ट हो गया"
+        rf"{_PLACE}\s+में[,]?\s+(?:\S+\s+){{0,4}}?(?:रहता|रहती)\s+(?:हूँ|हूं)",
+        rf"(?:मैं|मै)\s+(?:\S+\s+){{0,2}}?{_PLACE}\s+(?:शिफ़्ट|शिफ्ट)\s+(?:हो\s+)?(?:गया|गई)",
+    )
+)
+#: The speaker's own slot, read from the words (``spoken_slots``); never a stored subject.
+SPEAKER = "~speaker"
+
+
+@lru_cache(maxsize=4096)
+def spoken_slots(text: str) -> Slots:
+    """``{("~speaker", "lives_in"): {place}}`` when ``text`` says where its speaker lives or
+    moved to (``_RESIDENCE``), else nothing."""
+    text = unicodedata.normalize("NFKC", text[:MAX_CHARS])
+    places = {
+        _norm(m.group("place"))
+        for pattern in _RESIDENCE
+        for m in pattern.finditer(text)
+        if _norm(m.group("place"))
+    }
+    return {(SPEAKER, "lives_in"): frozenset(places)} if places else {}
+
+
 def slot_changed(new: Slots, old: Slots) -> bool:
     """A slot both name, with no value in common."""
     return any(key in old and not (values & old[key]) for key, values in new.items())
@@ -711,8 +761,9 @@ class CrossConversationReplacement:
             )
             (decided if decision.grade is not None else undecided).append((pair, decision))
         if self._adjudicating:
+            change = any(k in CHANGE_KINDS for k in kinds)
             asked = sorted(
-                (x for x in undecided if worth_asking(x[0])),
+                (x for x in undecided if worth_asking(x[0], change)),
                 key=lambda x: x[0].contradiction,
                 reverse=True,
             )[:MAX_ADJUDICATIONS]
@@ -769,9 +820,12 @@ class CrossConversationReplacement:
                 relation = relate(
                     mine, anchors(old.content, old.lang or None), unit.content, old.content
                 )
-                if new_slots and any(
-                    slot_changed(new_slots, old_slots.get(src, {})) for src in _sources(old)
-                ):
+                if (
+                    new_slots
+                    and any(
+                        slot_changed(new_slots, old_slots.get(src, {})) for src in _sources(old)
+                    )
+                ) or slot_changed(spoken_slots(unit.content), spoken_slots(old.content)):
                     # one subject's single-valued slot, another value: the same thing
                     relation = Relation(
                         shared_name=relation.shared_name,
@@ -928,9 +982,52 @@ def _slots_by_source(memories: Sequence[CanonicalMemory]) -> dict[tuple[str, str
     return {src: slots_of(ms) for src, ms in by_source.items()}
 
 
-def worth_asking(pair: _Pair) -> bool:
-    """A related pair the head left in its unsure band: what the tenant's model is asked."""
-    return related(pair.relation, pair.cosine) and pair.contradiction >= ADJUDICATE_FROM
+def worth_asking(pair: _Pair, change: bool = False) -> bool:
+    """What the tenant's model is asked: a related pair the head left in its unsure band, or a
+    stated change (``change``: a CORRECTION, LIFECYCLE or STATUS cue) whose first named thing
+    is one the earlier statement names too ("Maria Lopez is back from leave" / "Maria Lopez is
+    on leave"), whatever the head read: in Arabic and Hindi it reads such pairs at 0.02-0.2."""
+    if not related(pair.relation, pair.cosine):
+        return False
+    if pair.contradiction >= ADJUDICATE_FROM:
+        return True
+    return change and pair.relation.anchored and leads_with_shared(pair.unit, pair.old)
+
+
+def leads_with_shared(new: CanonicalMemory, old: CanonicalMemory) -> bool:
+    """The first name or identifier ``new`` names is one ``old`` names: the thing whose state
+    changed is the one both are about, not another thing a shared place or team ties them to
+    ("Lena Vogel joined the Berlin office" / "staff of the Berlin office follow the German
+    calendar" lead with Lena Vogel, whom the older statement does not name)."""
+    mine = anchors(new.content, new.lang or None)
+    theirs = anchors(old.content, old.lang or None)
+    shared_names = _common_names(mine.names, theirs.names)
+    shared_values = {v for _, v in mine.ids} & {v for _, v in theirs.ids}
+    first = _first_anchor(new.content, mine)
+    return first is not None and (first in shared_names or first in shared_values)
+
+
+def _first_anchor(text: str, found: Anchors) -> str | None:
+    """The name (lower-cased) or identifier value ``text`` names first."""
+    words = [
+        re.sub(r"[^\w]", "", m.group(0)).casefold()
+        for m in _WORD.finditer(unicodedata.normalize("NFKC", text[:MAX_CHARS]))
+    ]
+    values = {v for _, v in found.ids}
+    starts = {name.split()[0]: name for name in sorted(found.names, key=len, reverse=True)}
+    for n, word in enumerate(words):
+        if not word:
+            continue
+        if word in starts:
+            name = starts[word]
+            if " ".join(words[n : n + len(name.split())]) == re.sub(r"[^\w ]", "", name):
+                return name
+        if word in values:
+            return word
+        digits = re.sub(r"\D", "", word)
+        if digits and digits in values and not word.isdigit():
+            return digits
+    return None
 
 
 def _rank(decision: Decision) -> tuple[int, float]:
