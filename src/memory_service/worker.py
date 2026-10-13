@@ -9,12 +9,11 @@ to run with Procrastinate's signal handling switched off, so SIGTERM killed it m
 the job sat in ``doing`` until the stalled-job reconciler noticed thirty seconds later.
 
 It runs four pools (``application.container.worker_pools_for``, sized by
-``ports.tasks.worker_pools``): chat's own (half of ``tasks.worker_concurrency``), indexing's,
-the graph queue's and the shared one, every pool's computing slots together about one per
-CPU, with only the graph pool's slots on top when they wait on a model. So jobs that wait on a
-slow model never hold the slots that make a write findable, a long parse never holds every
-slot a remember could use, and a graph backlog never holds the slots of parsing, feedback,
-learning and summaries.
+``ports.tasks.worker_pools``): chat's (half of ``tasks.worker_concurrency``), indexing's, the
+graph queue's and the shared one, every pool's computing slots together about one per CPU,
+with only the graph pool's slots on top when they wait on a model. Chat and indexing share
+their slots by priority, chat first; a long parse or a graph backlog never holds one of them,
+and with a model, chat jobs waiting on it never hold indexing's.
 
 A database out of reach (no connection free in the queue pool, the LISTEN connection lost) is
 ridden out for ``TASKS.worker_db_outage_seconds``, each retry logged and counted
