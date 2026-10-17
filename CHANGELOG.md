@@ -39,6 +39,9 @@ each entry says which one moved. Decisions behind each change are in the
   leave" scores 0.02 against "is on leave" in Arabic). The lexicon reads first-person "finished"
   in Spanish ("terminé") and Arabic ("أنهيت") and German "zu Ende", and a Hindi cue matches with
   or without the nukta ("ख़त्म" / "खत्म").
+  Without a model, a stated change that leads with a name or identifier the older statement
+  carries, and that the encoder puts at 0.5 or closer to it, marks it as an earlier value
+  whatever the head read (never a supersession).
 - Feedback review by target (ADR 0039, amends 0028): `GET /v1/feedback?review=pending&group=target`
   lists the queue one row per target with `votes`, `thumbs_up`, `thumbs_down`, distinct
   `voters` and `latest_at`; `POST /v1/feedback/approve` and `POST /v1/feedback/dismiss` decide

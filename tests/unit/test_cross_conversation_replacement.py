@@ -519,6 +519,49 @@ async def test_a_stated_change_about_the_shared_thing_is_put_to_the_model(
         assert earlier_value(stored.system_metadata), "the model's word is an earlier value only"
 
 
+@pytest.mark.parametrize(
+    ("old", "new", "cosine", "marked"),
+    [
+        # the head reads these at 0.02 in Arabic and Hindi: the stated change about the thing
+        # the older statement is about, close by the encoder, marks it
+        (
+            "Ana Petrova is on sabbatical until further notice.",
+            "Ana Petrova is back from sabbatical as of Monday.",
+            0.6,
+            True,
+        ),
+        # the same pair the encoder puts apart: about another aspect of Ana, left alone
+        (
+            "Ana Petrova is on sabbatical until further notice.",
+            "Ana Petrova is back from sabbatical as of Monday.",
+            0.4,
+            False,
+        ),
+        # a bridge: leads with someone the older statement does not name
+        (
+            "Staff of the Lyon office follow the French holiday calendar.",
+            "Ines Moreau joined the Lyon office this month.",
+            0.9,
+            False,
+        ),
+    ],
+)
+async def test_a_stated_change_about_the_same_thing_marks_an_earlier_value(
+    old: str, new: str, cosine: float, marked: bool
+) -> None:
+    old_m = _memory(old, at=T0, source="msg_a")
+    new_m = _memory(new, at=T1, source="msg_b")
+    uow = _uow([old_m, new_m])
+    out = await CrossConversationReplacement(ScriptedNLI({}), FixedEncoder(cosine)).run(
+        uow, CTX, [new_m], now=T1
+    )
+    assert bool(out.changed) is marked
+    if marked:
+        stored = uow.memories.rows[old_m.memory_id]
+        assert earlier_value(stored.system_metadata), "an earlier value, never superseded"
+        assert stored.temporal.status is TemporalStatus.CURRENT
+
+
 async def test_a_stated_change_is_not_put_to_the_model_without_one() -> None:
     old = _memory("Ana Petrova is on sabbatical until further notice.", at=T0, source="msg_a")
     new = _memory("Ana Petrova is back from sabbatical as of Monday.", at=T1, source="msg_b")

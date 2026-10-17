@@ -67,6 +67,15 @@ inside one conversation and only for a turn whose reading has the same words.
    statements, so it was removed.
    Held out: 32 of 35 replacements found; none of the 388 non-replacement pairs (dev and
    held-out) marked.
+   **A stated change about the thing the older statement is about** marks an earlier value
+   whatever the head read: the two share a name or an identifier, the new statement says
+   something changed and leads with that shared name or identifier ("Maria Lopez is back from
+   leave" / "Maria Lopez is on leave until further notice"), and the encoder puts them at
+   `RELATED_COSINE` (0.5) or closer. The head reads such pairs at 0.02-0.1 in Arabic and
+   Hindi. On the dev split's 468 pairs this marks four more replacements and nothing else; on
+   the held-out split it marks nothing the thresholds do not. A bridge ("Lena Vogel joined the
+   Berlin office" / "staff of the Berlin office follow the German calendar") leads with a name
+   the older statement lacks and is not marked.
 4. **The tenant's model, when its policy allows `conflict_adjudication`,** settles at most
    three related pairs per message that the head leaves in its unsure band (a contradiction of
    at least 0.5, below the marking thresholds), as consolidation's adjudicator does; an

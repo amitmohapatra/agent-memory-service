@@ -760,8 +760,10 @@ class CrossConversationReplacement:
                 thresholds=self.thresholds,
             )
             (decided if decision.grade is not None else undecided).append((pair, decision))
+        change = any(k in CHANGE_KINDS for k in kinds)
+        if change and undecided:
+            undecided = await self._stated_changes(undecided, decided)
         if self._adjudicating:
-            change = any(k in CHANGE_KINDS for k in kinds)
             asked = sorted(
                 (x for x in undecided if worth_asking(x[0], change)),
                 key=lambda x: x[0].contradiction,
@@ -843,18 +845,45 @@ class CrossConversationReplacement:
                     pending.append(pair)  # a misread rule is compared only when anchored
         return pairs + await self._close_enough(pending)
 
+    async def _stated_changes(
+        self,
+        undecided: list[tuple[_Pair, Decision]],
+        decided: list[tuple[_Pair, Decision]],
+    ) -> list[tuple[_Pair, Decision]]:
+        """A stated change about the thing the older statement is about (``stated_change``)
+        that the encoder also puts at ``RELATED_COSINE`` or closer marks an earlier value,
+        whatever the head read: in Arabic and Hindi the head reads "Maria Lopez is back from
+        leave" against "Maria Lopez is on leave until further notice" at 0.02. Never a
+        supersession. Returns what is still undecided."""
+        candidates = [pair for pair, _ in undecided if stated_change(pair)]
+        if not candidates or self.embedding is None:
+            return undecided
+        await self._cosines(candidates)
+        asked = {id(pair) for pair in candidates}
+        still: list[tuple[_Pair, Decision]] = []
+        for pair, native in undecided:
+            cos = pair.cosine
+            if id(pair) in asked and cos is not None and cos >= RELATED_COSINE:
+                reason = f"a stated change about the same thing (cosine {cos:.2f})"
+                decided.append((pair, Decision(Grade.EARLIER, pair.contradiction, reason)))
+            else:
+                still.append((pair, native))
+        return still
+
+    async def _cosines(self, pairs: Sequence[_Pair]) -> None:
+        """The encoder's cosine of each pair, one batch."""
+        assert self.embedding is not None
+        texts = sorted({p.unit.content for p in pairs} | {p.old.content for p in pairs})
+        vectors = dict(zip(texts, await self.embedding.embed_documents(texts), strict=True))
+        for pair in pairs:
+            pair.cosine = _cosine(vectors[pair.unit.content], vectors[pair.old.content])
+
     async def _close_enough(self, pending: Sequence[_Pair]) -> list[_Pair]:
         """The unanchored pairs the encoder puts close enough to compare."""
         if not pending or self.embedding is None:
             return []
-        texts = sorted({p.unit.content for p in pending} | {p.old.content for p in pending})
-        vectors = dict(zip(texts, await self.embedding.embed_documents(texts), strict=True))
-        out = []
-        for pair in pending:
-            pair.cosine = _cosine(vectors[pair.unit.content], vectors[pair.old.content])
-            if pair.cosine >= RELATED_COSINE:
-                out.append(pair)
-        return out
+        await self._cosines(pending)
+        return [p for p in pending if p.cosine is not None and p.cosine >= RELATED_COSINE]
 
     @property
     def _adjudicating(self) -> bool:
@@ -991,7 +1020,17 @@ def worth_asking(pair: _Pair, change: bool = False) -> bool:
         return False
     if pair.contradiction >= ADJUDICATE_FROM:
         return True
-    return change and pair.relation.anchored and leads_with_shared(pair.unit, pair.old)
+    return change and stated_change(pair)
+
+
+def stated_change(pair: _Pair) -> bool:
+    """The pair is tied by a name or an identifier and the newer statement leads with one the
+    older names (``leads_with_shared``): with a change cue, a change of that thing."""
+    return (
+        pair.relation.anchored
+        and not pair.relation.apart
+        and leads_with_shared(pair.unit, pair.old)
+    )
 
 
 def leads_with_shared(new: CanonicalMemory, old: CanonicalMemory) -> bool:
