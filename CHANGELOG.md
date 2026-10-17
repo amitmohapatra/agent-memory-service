@@ -42,6 +42,8 @@ each entry says which one moved. Decisions behind each change are in the
   Without a model, a stated change that leads with a name or identifier the older statement
   carries, and that the encoder puts at 0.5 or closer to it, marks it as an earlier value
   whatever the head read (never a supersession).
+  In German, a single capitalised word both statements use bare (no determiner, no number
+  beside it) is a shared name ("Ich lese gerade Dune" / "Ich habe Dune zu Ende gelesen").
 - Feedback review by target (ADR 0039, amends 0028): `GET /v1/feedback?review=pending&group=target`
   lists the queue one row per target with `votes`, `thumbs_up`, `thumbs_down`, distinct
   `voters` and `latest_at`; `POST /v1/feedback/approve` and `POST /v1/feedback/dismiss` decide

@@ -76,6 +76,13 @@ inside one conversation and only for a turn whose reading has the same words.
    the held-out split it marks nothing the thresholds do not. A bridge ("Lena Vogel joined the
    Berlin office" / "staff of the Berlin office follow the German calendar") leads with a name
    the older statement lacks and is not marked.
+   German capitalises every noun, so one capitalised word is no name there on its own; a word
+   both statements use bare (no determiner before it, no number beside it, not opening a
+   sentence, not part of a longer capitalised run) names one thing ("Ich lese gerade Dune" /
+   "Ich habe Dune zu Ende gelesen"). On the dev split this ties one more replacement and no
+   other pair. The held-out check marked one more replacement and one wrong pair (a unit
+   after a number, "um 3 Uhr" / "um 22 Uhr"); the number guard was added after that check,
+   so the held-out split no longer tests this rule cleanly.
 4. **The tenant's model, when its policy allows `conflict_adjudication`,** settles at most
    three related pairs per message that the head leaves in its unsure band (a contradiction of
    at least 0.5, below the marking thresholds), as consolidation's adjudicator does; an

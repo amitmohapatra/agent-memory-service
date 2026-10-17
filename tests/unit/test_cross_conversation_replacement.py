@@ -93,6 +93,23 @@ def test_latin_names_inside_another_script_are_names() -> None:
     assert ("ट्रॉली", "4") in trolley.ids
 
 
+@pytest.mark.parametrize(
+    ("new", "old", "shared"),
+    [
+        # a title both use bare: the same thing
+        ("Ich habe Dune gestern Abend zu Ende gelesen.", "Ich lese gerade Dune.", True),
+        # a noun after a determiner, a label before a number, a unit after one: never
+        ("Die Halle ist voll.", "Wir räumen die Halle morgen.", False),
+        ("Retouren gehen über Tor 9.", "Tor 14 ist reserviert.", False),
+        ("Die Nachtschicht endet um 3 Uhr.", "Meine Schicht beginnt um 22 Uhr.", False),
+    ],
+)
+def test_a_german_word_both_use_bare_is_a_name(new: str, old: str, shared: bool) -> None:
+    """German capitalises every noun, so one capitalised word is no name on its own; used bare
+    (no determiner, no number beside it) in both statements, it names one thing."""
+    assert relate(anchors(new, "de"), anchors(old, "de")).shared_name is shared
+
+
 def test_german_nouns_are_not_names_but_names_are() -> None:
     a = anchors("Bei Stromausfällen im Lager Owen Pike unter Durchwahl 318 anrufen.", "de")
     b = anchors("Owen Pike ist nicht mehr bei uns. Zuständig ist jetzt Rhea Sood.", "de")

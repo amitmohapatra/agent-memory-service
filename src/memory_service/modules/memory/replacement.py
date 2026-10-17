@@ -158,6 +158,11 @@ class Anchors:
 
     names: frozenset[str] = frozenset()
     ids: frozenset[tuple[str, str]] = frozenset()
+    #: in a language that capitalises its nouns, single capitalised words used bare (no
+    #: determiner, not opening a sentence, not a label or a unit by a number): a name when
+    #: the other statement uses the same word bare too ("Ich lese gerade Dune" / "Ich habe
+    #: Dune zu Ende gelesen"), never on its own
+    bare: frozenset[str] = frozenset()
 
     @property
     def labels(self) -> dict[str, set[str]]:
@@ -204,7 +209,118 @@ def anchors(text: str, lang: str | None = None) -> Anchors:
         foreign=detect_script(text) is not Script.LATIN,
         nouns=(lang or "")[:2].lower() in _NOUN_CAPITALISING,
     )
-    return Anchors(frozenset(reading.names()), frozenset(_identifiers(text)))
+    return Anchors(
+        frozenset(reading.names()),
+        frozenset(_identifiers(text)),
+        frozenset(_bare_words(text)) if reading.nouns and not reading.foreign else frozenset(),
+    )
+
+
+#: German determiners and preposition-article contractions: a capitalised word after one is a
+#: noun.
+_DETERMINERS = frozenset(
+    [
+        "der",
+        "die",
+        "das",
+        "den",
+        "dem",
+        "des",
+        "ein",
+        "eine",
+        "einen",
+        "einem",
+        "einer",
+        "eines",
+        "kein",
+        "keine",
+        "keinen",
+        "keinem",
+        "keiner",
+        "mein",
+        "meine",
+        "meinen",
+        "meinem",
+        "meiner",
+        "dein",
+        "deine",
+        "deinen",
+        "deinem",
+        "deiner",
+        "unser",
+        "unsere",
+        "unseren",
+        "unserem",
+        "unserer",
+        "euer",
+        "eure",
+        "euren",
+        "eurem",
+        "eurer",
+        "ihr",
+        "ihre",
+        "ihren",
+        "ihrem",
+        "ihrer",
+        "sein",
+        "seine",
+        "seinen",
+        "seinem",
+        "seiner",
+        "jede",
+        "jeder",
+        "jeden",
+        "jedem",
+        "jedes",
+        "diese",
+        "dieser",
+        "diesen",
+        "diesem",
+        "dieses",
+        "alle",
+        "allen",
+        "im",
+        "am",
+        "zum",
+        "zur",
+        "beim",
+        "vom",
+        "ins",
+        "ans",
+        "aufs",
+    ]
+)
+_BARE_WORD = re.compile(r"[^\W\d_][\w\-]*")
+
+
+def _bare_words(text: str) -> set[str]:
+    """Single capitalised words used bare (see ``Anchors.bare``)."""
+    words = list(_BARE_WORD.finditer(text))
+    return {m.group(0).lower() for i, m in enumerate(words) if i > 0 and _is_bare(text, words, i)}
+
+
+def _is_bare(text: str, words: list[re.Match[str]], i: int) -> bool:
+    word, m, previous = words[i].group(0), words[i], words[i - 1]
+    if "-" in word or not (word[:1].isupper() and word[1:].islower()):
+        return False
+    if _SENTENCE_END.search(text[: m.start()]) or re.search(
+        r"\d", text[previous.end() : m.start()]
+    ):
+        return False  # opens a sentence; a unit after a number ("um 3 Uhr")
+    if previous.group(0).lower() in _DETERMINERS or not previous.group(0).islower():
+        return False  # a noun after a determiner
+    if _LABEL_NEXT.match(text, m.end()) or _in_run(text, words, i):
+        return False  # a label before a number ("Tor 9"); part of "Region South"
+    return word.lower() not in _calendar() and word.lower() not in _function_words()
+
+
+def _in_run(text: str, words: list[re.Match[str]], i: int) -> bool:
+    after = words[i + 1] if i + 1 < len(words) else None
+    return (
+        after is not None
+        and after.group(0)[:1].isupper()
+        and not _RUN_BREAK.search(text[words[i].end() : after.start()])
+    )
 
 
 class _NameReader:
@@ -411,7 +527,7 @@ def relate(new: Anchors, old: Anchors, new_text: str = "", old_text: str = "") -
     shared_values = {v for _, v in new.ids} & {v for _, v in old.ids}
     clashing = _clashing(new, old)
     label_words = {w for label in clashing for w in label.lstrip("#").split()}
-    common = _common_names(new.names, old.names)
+    common = _common_names(new.names, old.names) | (new.bare & old.bare)
     rescuing = {n for n in common if not (set(n.split()) & label_words)}
     named = bool(common) and (not clashing or bool(rescuing))
     anchored = named or bool(shared_values)
@@ -1040,9 +1156,9 @@ def leads_with_shared(new: CanonicalMemory, old: CanonicalMemory) -> bool:
     calendar" lead with Lena Vogel, whom the older statement does not name)."""
     mine = anchors(new.content, new.lang or None)
     theirs = anchors(old.content, old.lang or None)
-    shared_names = _common_names(mine.names, theirs.names)
+    shared_names = _common_names(mine.names, theirs.names) | (mine.bare & theirs.bare)
     shared_values = {v for _, v in mine.ids} & {v for _, v in theirs.ids}
-    first = _first_anchor(new.content, mine)
+    first = _first_anchor(new.content, Anchors(mine.names | mine.bare, mine.ids))
     return first is not None and (first in shared_names or first in shared_values)
 
 
