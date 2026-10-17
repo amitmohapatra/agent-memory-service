@@ -83,10 +83,19 @@ retail lives only in the data.
 
 `benchmark/capabilities/runner.py` drives the running service through the SDK, nothing else:
 
-1. **Isolation.** One tenant per mode (`capeval-nollm`, `capeval-llm`, `capeval-harness`),
-   created with the admin credential when missing, the mode's model policy set on it, a
-   service key issued for the run and revoked after it. Each scenario and language is a fresh
-   user, so nothing one run writes is read by another, or by anything else on the stack.
+1. **Determinism and isolation.** What a run writes depends on the dataset, the selection
+   and the run date alone. Each scenario and language is one user whose id is a stable,
+   opaque hash of the two (`identity`); its threads are named from that user and the
+   scenario's session or question names. Nothing is drawn per run: the service indexes a
+   memory's subject with its text, and a random user id moved every cosine by 0.04-0.05,
+   enough to flip 10-28 cells near the relevance floor between two runs of the same code.
+   The run date (`--run-date`, `CAPEVAL_RUN_DATE`; default the UTC date the run starts) is
+   recorded as `meta.run_date`, the naming scheme as `meta.identities`. Because the names
+   repeat, isolation comes from the store: the isolated stack is a new database, Qdrant and
+   Redis db per run, and a run refuses an eval tenant (`capeval-<mode>`, or `--tenant`) that
+   already exists (`--reuse` aside). On a shared stack the Makefile names a new tenant per
+   run (`CAPEVAL_TENANT`). The mode's model policy is set on the tenant, and a service key is
+   issued for the run and revoked after it.
 2. **Writing.** Sessions in time order; each session is written only after the previous one's
    processing jobs finished, as a conversation days apart would be.
 3. **Readiness - the service's own signals, never a sleep.** Every write's processing job
@@ -199,7 +208,22 @@ of its own (`benchmark/capabilities/isolated_stack.sh`). The stack is:
 - a Redis database number;
 - a blob directory;
 - `memory-api` and `memory-worker` from this checkout, on their own ports, with no model
-  gateway.
+  gateway (`CAPEVAL_GATEWAY=1` adds one, for `MODE=llm`).
+
+In llm mode the service is started through `benchmark/capabilities/stack_service.py`: its own
+entry points with one frozen-tuning override (`Overrides.llm`), the model call's timeout,
+`CAPEVAL_LLM_TIMEOUT_SECONDS` (default 600; recorded as `meta.stack`). The shipped 30 s
+(`constants.LLM`, two retries, a breaker that opens after five consecutive failures) is sized
+for a hosted model. The eval's gateway serves Granite 3.3 2B on the measuring host's CPU at
+about 8 tokens a second alone and 4 per request with four requests at once: a 160-token summary
+takes 19-29 s alone and 47-64 s beside three others. At 30 s nearly every long call timed out
+three times and fell back, and the breaker then failed the rest fast: main's llm_core baseline
+logged over 1,000 `llm.assist.fallback`. On the English llm_core subset (122 turns) the same
+stack with the shipped timeout used the model 85 times and fell back 58 times (19 exhausted, 39
+circuit open); with 600 s it used it 190 times and fell back 0 times (wall 956 s → 1,078 s).
+Key, model name, llama-server slots and prompt length were all checked and were not the cause.
+`meta.llm_calls` records each process's calls by use and outcome, so a run that measured the
+model-free path says so.
 
 Before it creates anything, the script refuses to start if any of these holds:
 
@@ -460,25 +484,18 @@ These are the gaps listed above, now visible: stale leaks for **B4 / P4**, abste
 items it returns carry history marking, as memories and facts already do. That work is
 tracked for **P4**.
 
-The core baseline is recorded on `420bbf3` from two runs on the isolated store
-(`nollm_core.json` and `nollm_core_repeat.json`, both regenerable):
+The core baseline is re-recorded on main `70198fa` with the deterministic runner, from two
+runs on the isolated store on one run date, 2026-10-13 (`nollm_core.json` and
+`nollm_core_repeat.json`, regenerable):
 
-- macro 0.4787 and 0.4789;
-- wall time 1,066 s and 1,117 s;
-- context p95 60.5 and 65.6 ms, at 0.89 and 0.95 load per core.
+- macro 0.4813 and 0.4813;
+- wall time 1,127 s and 1,106 s;
+- context p95 62.7 and 63.0 ms (search p95 41.9 and 42.1 ms), at 0.81 and 0.74 load per core.
 
-The two runs differed in 41 of 174 cells, by at most 0.04. That is more than the 14 seen
-before B1, and it is the service's own variance. With the earlier one-run 420bbf3 record as
-a third observation, 52 cells are recorded as noisy.
-
-For the eight capabilities whose questions did not change, the threshold is the higher of
-that earlier record and the new lower value (27 cells were raised). `procedural_skill` and
-`explicit_personalization` start afresh. Five of their queries (`explicit-field-no-north-
-fridays`, `explicit-retail-no-clearance`, `explicit-retail-competitor-supplier`,
-`procedure-retail-hazmat-report`, `procedure-retail-promo-brief`) had a "rule" anchor that the
-event turn alone satisfied (for example "north of the river" appears in the job list). They
-now require words that only the stated rule carries ("kids", "competitor", "end date"...).
-That makes them stricter: 0.48 → 0.475 and 0.739 → 0.737 mean cell accuracy on the core set.
+The two runs agree on all 174 cells, so no cell is noisy and none has a tolerance. The earlier
+thresholds were not carried: they were measured with other user ids, so other index text, and
+the ratchet had kept each cell's best of several random draws. Against them, 30 cells are
+higher and 17 lower, by at most 0.04. Every cell's threshold is now its measured value.
 
 **The full baselines are not reproducible.** The full `nollm`, `llm` and `harness` runs of
 2026-10-08 were measured on `a06c2c9` plus uncommitted work, and on an earlier dataset hash.
@@ -504,28 +521,33 @@ small. The latency is recorded but not gated: the read path calls the model on t
 host, so the quiet-machine rule cannot hold. It is still the llm-mode regression in the
 known gaps, `query_expansion` waiting out its budget. The disk was left as found.
 
-### Where the run-to-run noise may come from
+### Run-to-run noise: the user ids (fixed)
 
-Not fixed yet; these are hypotheses to test. The two core runs differ in 41 of 174 cells,
-nearly all in same-session context. The flips are a context that came back with nothing
-(INSUFFICIENT, 0 items) in one run and with the one item in the other.
+The 41 cells two core runs of one commit disagreed on came from the runner, not the service.
+The users were named `ce{run_id}-{i}-{lang}` with a random run id, and the service indexes a
+memory's subject with its text (`memory_index_text`: `[date] <subject>: <type>: <content>`).
+With the frozen multilingual encoder (relevance floor 0.2), twelve random ids moved one
+memory's cosine to its question by 0.023-0.054; the English encoder by 0.006-0.010. Paired runs
+of two commits that pinned the run id and date agreed on every one of 14,766 records; two
+unpinned runs of one commit differed in 129 verdicts.
 
-- **Worker job order.** Extraction, supersession and consolidation jobs run concurrently.
-  Which statement is processed first decides which memory supersedes which, and whether a
-  near-duplicate is merged.
-- **Consolidation and summary timing.** A thread summary or a reflection that lands before
-  or after a related memory is indexed changes what the same-session context assembles.
-- **Ties in ranking.** Equal fused scores are broken by row or point order. HNSW insertion
-  in Qdrant is concurrent, so approximate neighbours can differ between two builds of the
-  same data.
-- **The evidence gate at its boundary.** A candidate scoring right at the sufficiency
-  threshold is kept in one run and dropped in the other: INSUFFICIENT with 0 items against
-  COMPLETE or INSUFFICIENT with 1.
-- **Time.** Recency weighting is computed from the moment of asking, which differs between
-  runs by minutes.
+The runner now names users and threads from scenario and language and pins the run date
+(`--run-date`, recorded). Two isolated core runs of one commit on one run date agree on every
+verdict, every score field and every cell; only the order of equally scored graph facts in
+some failure previews differs (24 of 14,766 records), which nothing scores.
 
-The per-cell ranges are in the gate (`noisy`). Each cell's tolerance is its own observed
-range, from 0.01 to 0.04, never a global allowance; cells whose runs agreed get none.
+The run date is not a constant, on purpose. Sessions are dated relative to it and the service
+reads them against its own clock: named periods in a question ("last month") and the
+forgetting half-life use the moment of asking. A fixed date would drift a day further from that
+clock every day. The date does enter the index text: a one-day shift moves a cosine by at most
+0.004 (0.017 for one Arabic case), about a tenth of the id's effect. A gate run on another day
+than its baseline is noted by `gate check`; pin `--run-date` to compare two commits on one day.
+
+Weighed separately, and not changed here: in production the indexed subject is the caller's
+user id, which is usually opaque. It costs a few hundredths of cosine at random per user, so
+whether a memory near the floor is packed depends on how the user's id happens to tokenise,
+and the graph's facts carry it too ("user:ce952f851b8651 mentions ..."). It is worth a
+follow-up: index the subject only when it is a name.
 
 ## What it does not measure
 
