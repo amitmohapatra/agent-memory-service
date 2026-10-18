@@ -267,6 +267,51 @@ def test_the_worker_is_built_as_worker_py_builds_it(
     assert (api.queue_workers, api.jobs) == (0, 0), "the API runs no jobs"
 
 
+async def test_worker_main_runs_the_pools_its_container_was_sized_for(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``worker.main`` itself, not a copy of it: the container it builds is the worker's
+    (``role="worker"``), sized for exactly the pools it then runs, and those pools follow
+    the deployment's settings - ``MEMORY__TASKS__INDEXING_CONCURRENCY`` included, which was
+    a hard-coded constant. Only the stores are left out (a container with nothing wired)."""
+    from memory_service import worker
+    from memory_service.application.container import Container, process_shape, worker_pools_for
+    from memory_service.ports.tasks import Queue
+
+    monkeypatch.setenv("MEMORY__TASKS__WORKER_CONCURRENCY", "8")
+    monkeypatch.setenv("MEMORY__TASKS__INDEXING_CONCURRENCY", "1")
+    settings = Settings(_env_file=None, bifrost_url=None)
+    assert (settings.tasks.worker_concurrency, settings.tasks.indexing_concurrency) == (8, 1)
+    built: dict[str, Any] = {}
+
+    class Tasks:
+        async def run_pools(self, pools: list[tuple[list[Queue], int]], **options: Any) -> None:
+            built["pools"], built["options"] = pools, options
+
+    async def build_container(settings: Settings, version: str, *, role: Any) -> Container:
+        built["role"] = role
+        container = Container(settings=settings, version=version, **process_shape(settings, role))
+        container.tasks = Tasks()
+        built["container"] = container
+        return container
+
+    monkeypatch.setattr(worker, "get_settings", lambda: settings)
+    monkeypatch.setattr(worker, "configure_logging", lambda *a, **k: None)
+    monkeypatch.setattr(worker, "build_container", build_container)
+    monkeypatch.setattr(settings.tasks, "metrics_port", None)
+    await worker.main()
+
+    pools, container = built["pools"], built["container"]
+    assert built["role"] == "worker"
+    assert pools == worker_pools_for(settings)
+    [(_, indexing)] = [(q, n) for q, n in pools if q[0] is Queue.EMBEDDING]
+    assert indexing == 1, "the indexing pool follows MEMORY__TASKS__INDEXING_CONCURRENCY"
+    assert container.jobs == sum(slots for _, slots in pools) == 8
+    assert container.queue_workers == len(pools)
+    assert built["options"]["install_signal_handlers"] is True
+    assert container.closing, "the worker closes its container on the way out"
+
+
 @pytest.mark.parametrize("environment", ["staging", "prod"])
 def test_a_budget_below_the_workers_floor_fails_where_deployed(environment: str) -> None:
     """A deployed worker refuses a budget below what its pools need rather than open more
