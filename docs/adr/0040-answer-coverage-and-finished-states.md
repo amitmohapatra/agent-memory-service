@@ -39,7 +39,15 @@ ADR 0038 left a state change the head reads as no contradiction unreplaced witho
    Only these value kinds: the ones the eval's dev split asks for. Money, serial numbers,
    expiry dates and a relative's name were considered and left out - the held-out split asks
    for them, and a rule written for them would be tuned on the held-out half.
-2. **A finished state after an ongoing one** (`replacement.finished_after_ongoing`,
+2. **Related evidence is evidence.** The overlap rule calls a bundle INSUFFICIENT when no
+   evidence shares a word with the question; a paraphrase, an indirect question or another
+   language shares none with its answer. A memory-only bundle (no document chunks, whose
+   companion checks the overlap rule skipped) that carries a current memory at a relevance of
+   `RetrievalSettings.related_evidence_relevance` (0.3) or more is COMPLETE instead, with a
+   note. Chosen on the dev split's recorded bundles: false refusals 0.297 -> 0.204 in a new
+   conversation, 0.208 -> 0.135 in the same one, for 1.6 points of abstention; 0.25 refused
+   less still but sits next to the context's relevance floor (0.2).
+3. **A finished state after an ongoing one** (`replacement.finished_after_ongoing`,
    `moved_on`). Two of a user's statements tied by a shared name or identifier (not by a slot
    alone, nor by the encoder), the newer saying a state has ended or been reached ("finished",
    "is back", "resolved", "zu Ende", "terminé", "ha vuelto", "أنهيت", "عادت", "ख़त्म", "लौट")

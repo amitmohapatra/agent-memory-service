@@ -11,7 +11,9 @@ each entry says which one moved. Decisions behind each change are in the
 - A question asking for a phone number, an e-mail address or a code or password that no
   evidence about what it names states - "the alarm code for Store 33" when only Store 31's is
   known - or for a month the evidence never names, is INSUFFICIENT; the evidence stays in the
-  bundle, a note says what is missing (`RetrievalSettings.coverage_check`). A user's "I
+  bundle, a note says what is missing (`RetrievalSettings.coverage_check`). A memory-only
+  bundle that shares no word with the question but carries a memory at a relevance of 0.3 or
+  more is no longer INSUFFICIENT (`related_evidence_relevance`). A user's "I
   finished Dune" replaces their "I'm reading Dune at the moment" as an earlier value in all
   five languages, whatever the NLI head reads (ADR 0040).
 - A value a user replaces in a later conversation is no longer served as current. Since a

@@ -37,6 +37,7 @@ from memory_service.domain.memory import unverified_representation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.context.coverage import unanswered
+from memory_service.modules.context.evidence import NO_SHARED_TERM
 from memory_service.modules.context.handles import BundleRecords, record_of
 from memory_service.modules.context.sections import (
     ContextSections,
@@ -789,6 +790,36 @@ class ContextBuilder:
             and "exact" not in (c.retrievers or [])
         )
 
+    def _related_evidence(
+        self,
+        report: EvidenceReport,
+        memories: Sequence[ContextItem],
+        knowledge: Sequence[ContextItem],
+    ) -> EvidenceReport:
+        """A memory-only bundle that shares no word with the question but carries a current
+        memory the encoder puts close to it is evidence, not nothing (ADR 0040)."""
+        floor = self.retrieval_cfg.related_evidence_relevance
+        if (
+            floor <= 0
+            or report.status is not EvidenceStatus.INSUFFICIENT
+            or knowledge
+            or not memories
+            or NO_SHARED_TERM not in report.notes
+        ):
+            return report
+        best = max(m.relevance for m in memories)
+        if best < floor:
+            return report
+        return report.model_copy(
+            update={
+                "status": EvidenceStatus.COMPLETE,
+                "notes": [
+                    *(n for n in report.notes if n != NO_SHARED_TERM),
+                    f"no word in common with the question; a memory is related at {best:.2f}",
+                ],
+            }
+        )
+
     def _assemble(
         self,
         query: str,
@@ -960,6 +991,7 @@ class ContextBuilder:
                         "notes": [*report.notes, "companion evidence exceeded the token budget"],
                     }
                 )
+        report = self._related_evidence(report, memories, knowledge)
         if (
             self.retrieval_cfg.abstain_when_insufficient
             and self.retrieval_cfg.coverage_check

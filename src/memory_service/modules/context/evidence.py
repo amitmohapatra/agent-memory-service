@@ -48,6 +48,8 @@ _WORD = re.compile(r"[^\W\d_][\w\-]*", re.UNICODE)
 #: bigrams. Ranges: hiragana/katakana, CJK ideographs (incl. extension A and compatibility),
 #: and hangul syllables.
 _CJK = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af]+")
+#: The overlap rule's note (``overlaps``): the builder reads it (ADR 0040).
+NO_SHARED_TERM = "no retrieved evidence shares a content term with the query"
 _REQUIRED_EDGES = (
     ContextGraphEdge.DEFINED_BY,
     ContextGraphEdge.FOOTNOTE,
@@ -311,7 +313,7 @@ class VerificationStage:
                 routed.query, evidence, terms=terms
             ):
                 report["status"] = EvidenceStatus.INSUFFICIENT.value
-                report["notes"].append("no retrieved evidence shares a content term with the query")
+                report["notes"].append(NO_SHARED_TERM)
                 diagnostics["evidence"] = report
                 return candidates
             seeds = [c for c in candidates if c.kind == "chunk" and c.expansion_edge is None][

@@ -825,6 +825,13 @@ class RetrievalSettings(BaseModel):
     #: states, or names a month the evidence never does (``modules/context/coverage.py``,
     #: ADR 0040). The evidence stays in the bundle.
     coverage_check: bool = True
+    #: A memory-only bundle the overlap rule calls INSUFFICIENT (no evidence shares a word
+    #: with the question) is not, when a current memory in it is at least this similar to the
+    #: question: a paraphrase, an indirect question or another language shares no word with
+    #: its answer. Chosen on the capability eval's dev split (ADR 0040): false refusals 0.30 ->
+    #: 0.20 in a new conversation, 0.21 -> 0.13 in the same one, abstention -1.6 points.
+    #: 0 keeps the overlap rule's word.
+    related_evidence_relevance: float = Field(default=0.3, ge=0.0, le=1.0)
 
     @model_validator(mode="before")
     @classmethod

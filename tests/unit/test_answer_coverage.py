@@ -8,7 +8,12 @@ from __future__ import annotations
 
 import pytest
 
+from memory_service.config.constants import RetrievalSettings
+from memory_service.domain.context_bundle import ContextItem, EvidenceReport
+from memory_service.domain.enums import EvidenceStatus, Representation
+from memory_service.modules.context.builder import ContextBuilder
 from memory_service.modules.context.coverage import Asked, asked, months_named, unanswered
+from memory_service.modules.context.evidence import NO_SHARED_TERM
 
 pytestmark = pytest.mark.unit
 
@@ -117,3 +122,49 @@ def test_a_month_the_evidence_never_names() -> None:
 def test_a_question_that_asks_for_no_such_value_is_not_judged() -> None:
     assert unanswered("How do I override a price at the register?", ["Use code PO-9."]) is None
     assert unanswered("What's the code?", []) is None
+
+
+def _builder(floor: float) -> ContextBuilder:
+    builder = object.__new__(ContextBuilder)
+    builder.retrieval_cfg = RetrievalSettings(related_evidence_relevance=floor)
+    return builder
+
+
+def _item(relevance: float) -> ContextItem:
+    return ContextItem.model_construct(
+        item_id="m1",
+        representation=Representation.MEMORY,
+        text="Store 33 opens at 7 am.",
+        relevance=relevance,
+    )
+
+
+NO_WORD = EvidenceReport(status=EvidenceStatus.INSUFFICIENT, notes=[NO_SHARED_TERM])
+
+
+def test_a_related_memory_is_evidence_though_it_shares_no_word() -> None:
+    report = _builder(0.3)._related_evidence(NO_WORD, [_item(0.45)], [])
+    assert report.status is EvidenceStatus.COMPLETE
+    assert NO_SHARED_TERM not in report.notes
+
+
+@pytest.mark.parametrize(
+    ("floor", "relevance", "knowledge", "report"),
+    [
+        (0.3, 0.25, False, NO_WORD),  # not close enough
+        (0.0, 0.9, False, NO_WORD),  # switched off
+        (0.3, 0.9, True, NO_WORD),  # a document bundle keeps its companion checks
+        (
+            0.3,
+            0.9,
+            False,
+            EvidenceReport(status=EvidenceStatus.INSUFFICIENT),
+        ),  # empty, not unrelated
+    ],
+)
+def test_otherwise_the_overlap_rule_stands(
+    floor: float, relevance: float, knowledge: bool, report: EvidenceReport
+) -> None:
+    items = [_item(relevance)]
+    out = _builder(floor)._related_evidence(report, items, items if knowledge else [])
+    assert out.status is EvidenceStatus.INSUFFICIENT
