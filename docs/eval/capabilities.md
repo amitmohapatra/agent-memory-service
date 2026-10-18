@@ -261,8 +261,13 @@ interrupted. The script deletes the Qdrant collections through the API, stops th
 removes its path, drops the database, flushes the Redis database and removes the blob
 directory. It records the disk before the stack starts and after it is gone; a gate run
 leaves nothing. Machine paths and ports are environment variables (`QDRANT_BIN`,
-`OPENFGA_BIN`, `CAPEVAL_DB`, `CAPEVAL_API_PORT`, ...). It waits for 5 GB of free memory
-before starting the two processes that load the encoders.
+`OPENFGA_BIN`, `CAPEVAL_DB`, `CAPEVAL_API_PORT`, ...). It waits (`CAPEVAL_MEM_WAITS` x 10 s)
+for 5 GB of free memory (`CAPEVAL_MIN_MEM_MB`) before starting the two processes that load the
+encoders. Free means the smaller of the host's `MemAvailable` and the room left in every memory
+cgroup above the script (limit - usage + inactive page cache, v1 or v2): in a container the
+cgroup is the limit the OOM killer enforces, and it can be gigabytes below the host's figure.
+Measured here: the host reported 6.2 GB available while the 14 GB cgroup had under 2 GB, and
+the encoders' start was killed.
 
 The `llm` and `harness` modes need the model gateway, so they still run against a shared
 stack. There a run's own purge, below, is what cleans up.

@@ -647,6 +647,32 @@ def test_the_isolated_stack_refuses_logs_inside_another_runs_work(tmp_path: Path
         lock.unlink(missing_ok=True)
 
 
+def test_the_isolated_stack_waits_for_room_in_its_memory_cgroup(tmp_path: Path) -> None:
+    """The host had 6 GB available while the container's 14 GB cgroup had 2 GB left: the
+    encoders were started on the host's number and the cgroup's OOM killer took the API (and
+    the model server beside it). The room is the smaller of the two."""
+    root = tmp_path / "cgroup"
+    mib = 1 << 20
+    for line in Path("/proc/self/cgroup").read_text().splitlines():
+        hid, controllers, rel = line.split(":", 2)
+        if controllers == "memory" or hid == "0":
+            d = root / ("memory" if controllers == "memory" else "") / rel.lstrip("/")
+            d.mkdir(parents=True, exist_ok=True)
+            # v1 and v2 names side by side: the script reads whichever the level has
+            (d / "memory.limit_in_bytes").write_text(f"{14_000 * mib}\n")
+            (d / "memory.usage_in_bytes").write_text(f"{13_900 * mib}\n")
+            (d / "memory.stat").write_text(f"total_inactive_file {20 * mib}\n")
+    done = _stack(
+        tmp_path,
+        CAPEVAL_CGROUP_ROOT=str(root),
+        CAPEVAL_MIN_MEM_MB="1000",
+        CAPEVAL_MEM_WAITS="0",
+        CAPEVAL_REDIS_DB="14",  # not the default 15, which a real run may be using
+    )
+    assert done.returncode == 2 and "only 120 MB of memory available" in done.stderr, done.stderr
+    assert not (tmp_path / "ran").exists()
+
+
 def test_the_isolated_stack_refuses_a_port_that_already_answers(tmp_path: Path) -> None:
     import http.server
     import threading
