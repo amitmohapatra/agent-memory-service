@@ -43,10 +43,14 @@ ADR 0038 left a state change the head reads as no contradiction unreplaced witho
    evidence shares a word with the question; a paraphrase, an indirect question or another
    language shares none with its answer. A memory-only bundle (no document chunks, whose
    companion checks the overlap rule skipped) that carries a current memory at a relevance of
-   `RetrievalSettings.related_evidence_relevance` (0.3) or more is COMPLETE instead, with a
-   note. Chosen on the dev split's recorded bundles: false refusals 0.297 -> 0.204 in a new
-   conversation, 0.208 -> 0.135 in the same one, for 1.6 points of abstention; 0.25 refused
-   less still but sits next to the context's relevance floor (0.2).
+   `RetrievalSettings.related_evidence_relevance` (0.4) or more is COMPLETE instead, with a
+   note. First set at 0.3 on the dev split's recorded bundles (false refusals 0.297 -> 0.204
+   new conversation, 0.208 -> 0.135 same, for 1.6 points of abstention); the paired LLM run
+   then showed held-out unanswerable questions passing at 0.30-0.35 ("What's my sister's
+   name?" against "My brother Tom lives in Denver", "Wie heißt meine Schwester?"), so it was
+   raised to 0.4 (dev: 0.297 -> 0.270, 0.208 -> 0.184, 1.2 points of abstention). That
+   choice was informed by a held-out observation: for this threshold the held-out split is
+   no longer clean.
 3. **A finished state after an ongoing one** (`replacement.finished_after_ongoing`,
    `moved_on`). Two of a user's statements tied by a shared name or identifier (not by a slot
    alone, nor by the encoder), the newer saying a state has ended or been reached ("finished",
