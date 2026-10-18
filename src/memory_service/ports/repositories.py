@@ -374,11 +374,18 @@ class MemoryRepository(Protocol):
         ...
 
     async def statements_of(
-        self, tenant_id: str, owner_principal: str, *, before: datetime, limit: int
+        self,
+        tenant_id: str,
+        owner_principal: str,
+        *,
+        before: datetime,
+        limit: int,
+        after: datetime | None = None,
     ) -> list[CanonicalMemory]:
-        """The owner's live CURRENT ``USER``-visible memories said at or before ``before``,
-        newest first, in any conversation: what a new statement of theirs may replace (ADR
-        0038). An indexed range (tenant, owner, observed_at)."""
+        """The owner's live CURRENT ``USER``-visible memories said at or before ``before``
+        (and, given ``after``, strictly after it), newest first, in any conversation: what a
+        new statement of theirs may replace, or what they said after it (ADR 0038, ADR 0040).
+        An indexed range (tenant, owner, observed_at)."""
         ...
 
     async def replaced_by_any(

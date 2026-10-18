@@ -384,7 +384,13 @@ class SqlMemoryRepository:
         ]
 
     async def statements_of(
-        self, tenant_id: str, owner_principal: str, *, before: datetime, limit: int
+        self,
+        tenant_id: str,
+        owner_principal: str,
+        *,
+        before: datetime,
+        limit: int,
+        after: datetime | None = None,
     ) -> list[CanonicalMemory]:
         rows = (
             await self.s.scalars(
@@ -396,6 +402,7 @@ class SqlMemoryRepository:
                     MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
                     MemoryRow.visibility == Visibility.USER.value,
                     MemoryRow.observed_at <= before,
+                    *([MemoryRow.observed_at > after] if after is not None else []),
                 )
                 .order_by(MemoryRow.observed_at.desc())
                 .limit(limit)

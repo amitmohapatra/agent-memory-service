@@ -59,6 +59,17 @@ ADR 0038 left a state change the head reads as no contradiction unreplaced witho
    "bis auf Weiteres", "ahora mismo", "estoy leyendo", "حاليًا", "حتى إشعار آخر", "इन दिनों",
    "पढ़ रहा हूँ"): the older is an earlier value, whatever the head read. Never a supersession.
 
+4. **Event time decides which statement is newer, never the order of storing.** A new
+   statement is also compared with what the user said *after* it, in messages already stored
+   (`replacement._replaced_by_later`, at most 8 messages, `statements_of(after=...)`): with
+   a model, messages are read in parallel and one can take a minute where the next takes
+   seconds, so a later message can be stored first. It then found nothing to replace, and
+   the older statement, stored after it, compared itself only with what was said before it:
+   both stayed current. Read from the LLM-mode runs, where "Forklift #4 has been repaired"
+   left "Forklift #4 is out of service" current in 11 of 15 phrasings while the no-LLM runs,
+   which store messages in order, replaced it; the same code decides, in the other
+   direction. Without later statements (messages stored in order) nothing changes.
+
 ## Consequences
 
 * Measured offline on the dev split's recorded bundles (core set, no-LLM, both placements):

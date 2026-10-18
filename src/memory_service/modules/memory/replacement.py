@@ -52,7 +52,7 @@ import re
 import unicodedata
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from functools import lru_cache
 from typing import Any
@@ -114,6 +114,11 @@ CHANGE_KINDS = frozenset({StatementKind.CORRECTION, StatementKind.LIFECYCLE, Sta
 #: first). A bound on the write path's work, not a window on what can be replaced: what a
 #: user says about a thing is usually among their recent statements.
 MAX_EARLIER = 64
+#: How many of the messages a user said after a statement - stored before it, out of order -
+#: it is compared with (ADR 0040): a bound on the write path's work.
+MAX_LATER_MESSAGES = 8
+#: The upper end of the range of later statements.
+_END_OF_TIME = datetime.max.replace(tzinfo=UTC)
 #: Longest text read for names and identifiers (a pasted corpus is not a statement).
 MAX_CHARS = 2000
 
@@ -768,6 +773,13 @@ def slot_changed(new: Slots, old: Slots) -> bool:
     return any(key in old and not (values & old[key]) for key, values in new.items())
 
 
+def _units(statements: Sequence[CanonicalMemory]) -> list[CanonicalMemory]:
+    """What replaces: the turn as said (each piece of a long one), or what the rules read
+    when the turn itself was not kept."""
+    turns = [m for m in statements if m.system_metadata.get("category") == "verbatim_turn"]
+    return turns or list(statements)
+
+
 def _sources(memory: CanonicalMemory) -> set[tuple[str, str]]:
     return {(str(ev.source_type), ev.source_id) for ev in memory.evidence}
 
@@ -833,7 +845,7 @@ class CrossConversationReplacement:
             return Outcome()
         # the statement as said is what replaces: the turn (each piece of a long one), or what
         # the rules read when the turn itself was not kept
-        units = [m for m in new if m.system_metadata.get("category") == "verbatim_turn"] or new
+        units = _units(new)
         earlier = await self._earlier(uow, ctx, new)
         pairs = (
             await self._related(
@@ -842,11 +854,59 @@ class CrossConversationReplacement:
             if earlier
             else []
         )
-        if not pairs:
+        outcome = Outcome()
+        if pairs:
+            await self._contradiction(pairs)
+            best = await self._decide(pairs, self._kinds(new, units), ctx)
+            outcome = await self._apply(uow, ctx, best, earlier, now=now)
+        later = await self._replaced_by_later(uow, ctx, new, now=now)
+        outcome.changed += [m for m in later.changed if m.memory_id not in outcome.decisions]
+        outcome.decisions.update(later.decisions)
+        return outcome
+
+    async def _replaced_by_later(
+        self,
+        uow: UnitOfWork,
+        ctx: MemoryExecutionContext,
+        new: Sequence[CanonicalMemory],
+        *,
+        now: datetime,
+    ) -> Outcome:
+        """What the user said after these statements, in a message stored before them,
+        compared with them as it would have been had it come in order (ADR 0040). Messages
+        are read in parallel - with a model, one can take a minute and the next a few seconds
+        - so a later message can be stored first; it then found nothing to replace, and the
+        older statement, stored after it, compared itself only with what was said before it.
+        Event time decides which statement is the newer one, never the order of storing."""
+        oldest = min(m.temporal.observed_at for m in new)
+        mine = set().union(*(_sources(m) for m in new))
+        rows = await uow.memories.statements_of(
+            ctx.tenant_id,
+            ctx.principal_id,
+            before=_END_OF_TIME,
+            after=oldest,
+            limit=self.max_earlier,
+        )
+        by_message: dict[frozenset[tuple[str, str]], list[CanonicalMemory]] = {}
+        for m in rows:
+            if statement_of(m, ctx.principal_id) and not (_sources(m) & mine):
+                by_message.setdefault(frozenset(_sources(m)), []).append(m)
+        best: dict[str, tuple[CanonicalMemory, Decision]] = {}
+        for said in list(by_message.values())[:MAX_LATER_MESSAGES]:
+            units = _units(said)
+            pairs = await self._related(units, new, slots_of(said))
+            if not pairs:
+                continue
+            await self._contradiction(pairs)
+            for old_id, (unit, decision) in (
+                await self._decide(pairs, self._kinds(said, units), ctx)
+            ).items():
+                held = best.get(old_id)
+                if held is None or _rank(decision) > _rank(held[1]):
+                    best[old_id] = (unit, decision)
+        if not best:
             return Outcome()
-        await self._contradiction(pairs)
-        best = await self._decide(pairs, self._kinds(new, units), ctx)
-        return await self._apply(uow, ctx, best, earlier, now=now)
+        return await self._apply(uow, ctx, best, new, now=now)
 
     async def _earlier(
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, new: Sequence[CanonicalMemory]

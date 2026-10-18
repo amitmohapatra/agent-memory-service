@@ -255,7 +255,13 @@ class _Memories:
         self.updated: list[CanonicalMemory] = []
 
     async def statements_of(
-        self, tenant_id: str, owner: str, *, before: datetime, limit: int
+        self,
+        tenant_id: str,
+        owner: str,
+        *,
+        before: datetime,
+        limit: int,
+        after: datetime | None = None,
     ) -> list[CanonicalMemory]:
         rows = [
             m
@@ -263,6 +269,7 @@ class _Memories:
             if m.owner_principal == owner
             and m.temporal.status is TemporalStatus.CURRENT
             and m.temporal.observed_at <= before
+            and (after is None or m.temporal.observed_at > after)
         ]
         return sorted(rows, key=lambda m: m.temporal.observed_at, reverse=True)[:limit]
 
@@ -332,7 +339,11 @@ async def test_what_is_about_something_else_or_said_later_is_untouched() -> None
     uow = _uow([other, later, newer])
     nli = ScriptedNLI({("Corrimax", ""): 0.99})
     outcome = await CrossConversationReplacement(nli).run(uow, CTX, [newer], now=T1)
-    assert outcome.changed == []  # no shared name with the bakery; the other is newer
+    # no shared name with the bakery; the statement said after this one is the newer, and
+    # it is this one that it replaces (event time decides, not the order of storing)
+    assert [m.memory_id for m in outcome.changed] == [newer.memory_id]
+    assert replaced_by(uow.memories.rows[newer.memory_id].system_metadata) == later.memory_id
+    assert uow.memories.rows[later.memory_id].temporal.status is TemporalStatus.CURRENT
 
 
 async def test_without_a_trained_head_nothing_is_compared() -> None:
@@ -1049,5 +1060,28 @@ async def test_a_finished_state_needs_an_ongoing_one_about_the_same_thing(
     new_m = _memory(new, at=T1, source="msg_b")
     out = await CrossConversationReplacement(ScriptedNLI({})).run(
         _uow([old_m, new_m]), CTX, [new_m], now=T1
+    )
+    assert out.changed == []
+
+
+async def test_a_later_statement_stored_first_replaces_the_older_one_stored_after_it() -> None:
+    """With a model, messages are read in parallel: the later one can be stored first. Event
+    time decides which statement is the newer, never the order of storing."""
+    newer = _memory("Ana Petrova is back from sabbatical as of Monday.", at=T1, source="msg_b")
+    older = _memory("Ana Petrova is on sabbatical until further notice.", at=T0, source="msg_a")
+    uow = _uow([newer, older])
+    out = await CrossConversationReplacement(ScriptedNLI({})).run(uow, CTX, [older], now=T1)
+    assert [m.memory_id for m in out.changed] == [older.memory_id]
+    stored = uow.memories.rows[older.memory_id]
+    assert earlier_value(stored.system_metadata)
+    assert replaced_by(stored.system_metadata) == newer.memory_id
+    assert stored.temporal.status is TemporalStatus.CURRENT
+
+
+async def test_a_later_statement_about_something_else_leaves_the_older_one() -> None:
+    newer = _memory("I finished Neuromancer last night.", at=T1, source="msg_b")
+    older = _memory("I'm reading Dune at the moment.", at=T0, source="msg_a")
+    out = await CrossConversationReplacement(ScriptedNLI({})).run(
+        _uow([newer, older]), CTX, [older], now=T1
     )
     assert out.changed == []

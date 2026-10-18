@@ -15,7 +15,9 @@ each entry says which one moved. Decisions behind each change are in the
   bundle that shares no word with the question but carries a memory at a relevance of
   0.4 or more is no longer INSUFFICIENT (`related_evidence_relevance`). A user's "I
   finished Dune" replaces their "I'm reading Dune at the moment" as an earlier value in all
-  five languages, whatever the NLI head reads (ADR 0040).
+  five languages, whatever the NLI head reads. A message stored out of order (a model reads
+  messages in parallel) is compared with what the user said after it too: event time
+  decides which statement is newer (ADR 0040).
 - A value a user replaces in a later conversation is no longer served as current. Since a
   user's words follow the user (ADR 0036) the old and the new statement were both current in
   every conversation, and the same-session update and recency cells fell to 0.04 and 0.33. A
