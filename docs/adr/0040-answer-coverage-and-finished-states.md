@@ -65,6 +65,16 @@ ADR 0038 left a state change the head reads as no contradiction unreplaced witho
 * Finished-after-ongoing on ADR 0038's pair set: dev 39 -> 43 of 45 replacements found,
   none of the 213 dev and 170 held-out non-replacement pairs marked; nothing changes on the
   held-out split.
+* Measured, no-LLM core set, isolated store, two runs paired with main 70198fa's recorded runs
+  (run ids 6d2d5e35 and 4af3172c, run date 2026-10-11), fcf969b: macro 0.480 (main) -> 0.643;
+  no cell below main. Abstention, new conversation 0.31 -> 0.53, same 0.15 -> 0.41 (dev 0.77 /
+  0.72 before the relevance rule of decision 2, held-out about 0.25: the held-out split asks
+  for amounts, serial numbers, expiry dates and a relative's name, which this rule does not
+  read). False refusals on answerable questions 0.353 -> 0.269 (new), 0.246 -> 0.173 (same).
+  Same-conversation recency 0.93-0.99 in every language, at or above the pre-ADR-0036 tree's.
+  Still below that tree: same-conversation update in German, Spanish and Hindi (0.83-0.89
+  against 0.86-0.96), all of it one held-out scenario ("We migrated the helpdesk from Zendesk
+  to Freshservice"), which no dev pair motivates a rule for.
 * Still abstained on by nothing: a question that names nothing and asks for a value kind not
   read here ("Router login, quick."), and an unknown person in a German question.
 * A question that asks for a value no evidence states is now INSUFFICIENT even in a
