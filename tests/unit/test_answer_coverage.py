@@ -168,3 +168,15 @@ def test_otherwise_the_overlap_rule_stands(
     items = [_item(relevance)]
     out = _builder(floor)._related_evidence(report, items, items if knowledge else [])
     assert out.status is EvidenceStatus.INSUFFICIENT
+
+
+def test_a_german_name_run_with_a_marked_word_is_a_name() -> None:
+    evidence = [
+        "Die OSHA-Inspektion von Lager 3 ist für den 24. angesetzt.",
+        "Unsere eigene Sicherheitsbeauftragte ist Rita Gomez, Durchwahl 300.",
+    ]
+    question = "Wie lautet die Handynummer des OSHA-Sicherheitsinspektors John Doe?"
+    assert unanswered(question, evidence) == "no evidence states the phone number asked for"
+    # a run of nouns no word of which is marked stays no name
+    spill = "Ein Kanister Abflussreiniger ist umgekippt, welche Durchwahl hat der Zuständige?"
+    assert unanswered(spill, ["Zuständig ist jetzt Kenji Ito, Durchwahl 233."]) is None

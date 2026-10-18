@@ -267,13 +267,18 @@ def _about(names: frozenset[str], ids: frozenset[str], lang: str, text: str) -> 
     return not names or any(name in _flat(text) for name in names)
 
 
-def _known(names: frozenset[str], evidence: Sequence[str]) -> frozenset[str]:
+def _known(names: frozenset[str], question: str, evidence: Sequence[str]) -> frozenset[str]:
     """A run of capitalised German words is as often nouns ("Kanister Abflussreiniger") as a
-    name: it is one when it is marked or the evidence uses it."""
+    name: it is one when a word of it is marked as the question writes it ("OSHA", "QX-410";
+    the names are lower-cased) or the evidence uses it."""
+    marked = {
+        part.lower()
+        for word in re.findall(r"[\w-]+", question)
+        for part in word.split("-")
+        if _marked(part)
+    }
     flat = [_flat(t) for t in evidence]
-    return frozenset(
-        n for n in names if any(_marked(w) for w in n.split()) or any(n in f for f in flat)
-    )
+    return frozenset(n for n in names if marked & set(n.split()) or any(n in f for f in flat))
 
 
 def _value_gap(question: str, evidence: Sequence[str], lang: str) -> str | None:
@@ -283,7 +288,7 @@ def _value_gap(question: str, evidence: Sequence[str], lang: str) -> str | None:
         return None
     names, ids = question_anchors(question, lang)
     if lang in _NOUN_CAPITALISING:
-        names = _known(names, evidence)
+        names = _known(names, question, evidence)
     for kind in sorted(kinds):
         if not any(_holds(kind, t) and _about(names, ids, lang, t) for t in evidence):
             return f"no evidence states the {kind.value} asked for"
