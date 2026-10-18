@@ -244,7 +244,12 @@ circuit open), every one after the moment the model server died. The kernel's me
 killed the gateway's llama-server (3.6 GB resident) as the indexing wait ended: the host's one
 14 GB cgroup held it, the eval's memory-api and -worker (2.3 GB each, the encoders), and another
 memory service. The model server is part of the measuring host, not of this checkout: its
-footprint is set where it is started.
+footprint is set where it is started. `-c 8192 --cache-ram 0` (the longest prompt plus answer
+measured was 1,063 tokens, so four slots share 8,192 with room) instead of 16,384 and a 512 MB
+prompt cache take its anonymous memory from 3.6 GB to 2.1 GB (plus 1.5 GB of mapped model file).
+Even so, the llm stack (model server about 3.6 GB resident, API and worker about 2.3 GB each)
+does not fit beside a second memory service in a 13.7-14.3 GB cgroup: the isolated stack's
+memory wait now refuses to start it there rather than let the OOM killer end it hours later.
 
 Before it creates anything, the script refuses to start if any of these holds:
 
@@ -561,7 +566,10 @@ unpinned runs of one commit differed in 129 verdicts.
 The runner now names users and threads from scenario and language and pins the run date
 (`--run-date`, recorded). Two isolated core runs of one commit on one run date agree on every
 verdict, every score field and every cell; only the order of equally scored graph facts in
-some failure previews differs (24 of 14,766 records), which nothing scores.
+some failure previews differs (24 of 14,766 records), which nothing scores. The baseline
+re-recorded on 2026-10-18 holds it again: three isolated core runs on run date 2026-10-18 (one
+on 8cf9dbb, two on fe995bb, whose service code is main's) agree on all 14,766 verdicts and
+scored fields and all 174 cells (macro 0.4806 each; 18-36 previews reordered).
 
 The run date is not a constant, on purpose. Sessions are dated relative to it and the service
 reads them against its own clock: named periods in a question ("last month") and the
@@ -569,6 +577,9 @@ forgetting half-life use the moment of asking. A fixed date would drift a day fu
 clock every day. The date does enter the index text: a one-day shift moves a cosine by at most
 0.004 (0.017 for one Arabic case), about a tenth of the id's effect. A gate run on another day
 than its baseline is noted by `gate check`; pin `--run-date` to compare two commits on one day.
+Measured: the same code on run dates 2026-10-13 and 2026-10-18 (each on its own day) differs in
+42 of 14,766 verdicts and 28 of 174 cells, each by at most 0.02 (macro 0.4813 and 0.4806); this
+is why a re-recorded baseline starts its thresholds afresh rather than ratcheting across dates.
 
 Weighed separately, and not changed here: in production the indexed subject is the caller's
 user id, which is usually opaque. It costs a few hundredths of cosine at random per user, so
