@@ -65,9 +65,10 @@ def worker_pools(
     * indexing: up to ``indexing`` slots and at most a quarter. With a model (``llm``) they
       are indexing's alone, so a write turns findable while chat jobs wait minutes on the
       model; without one chat jobs are short and take them first, as on one pool.
-    * graph: enrichment is a job of its own. Without a model it is CPU work on the event
-      loop, and gets one slot; with one it waits on the model, and gets ``concurrency // 2``
-      slots (at least 2) on top of the CPUs.
+    * graph: with a model, enrichment is a job of its own that waits on the model, and gets
+      ``concurrency // 2`` slots (at least 2) on top of the CPUs. Without one the index job
+      enriches (``modules.jobs.registry``), and the one slot only drains jobs queued while a
+      model was configured.
     * shared: every other queue, after chat and indexing, on what is left, at least one.
 
     So chat and indexing share their slots by priority as they did in one pool, where chat

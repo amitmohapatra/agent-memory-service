@@ -283,7 +283,7 @@ async def test_archive_staging_archives_the_thread_when_an_archiver_is_wired() -
 
 async def test_a_document_is_parsed_indexed_marked_ready_then_enriched_by_its_own_job() -> None:
     ingestion, indexer, graph = _Service(), _Service(), _Service()
-    queue, uow, _ = _wire({"ingestion": ingestion, "indexer": indexer, "graph": graph})
+    queue, uow, _ = _wire({"ingestion": ingestion, "indexer": indexer, "graph": graph}, llm=True)
     payload = {"tenant_id": "acme", "document_id": "doc_1"}
     await queue.handlers["document.parse"](payload)
     await queue.handlers["document.index"]({**payload, "document_version_id": "dcv_1"})
@@ -335,7 +335,7 @@ async def test_indexing_memories_makes_them_findable_then_moves_their_revisions(
     indexer, graph = _Service(), _Service()
     model = SimpleNamespace(available=True)  # a model is reachable: enrichment asks it
     queue, uow, _ = _wire(
-        {"indexer": indexer, "graph": graph, "llm_assist": model}, uow=_Uow([fact, pref])
+        {"indexer": indexer, "graph": graph, "llm_assist": model}, uow=_Uow([fact, pref]), llm=True
     )
 
     await queue.handlers[TASK_MEMORY_INDEX]({"tenant_id": "acme", "memory_ids": ["mem_1", "mem_2"]})
@@ -357,6 +357,28 @@ async def test_indexing_memories_makes_them_findable_then_moves_their_revisions(
     assert uow.commits == 2
     await queue.handlers[TASK_GRAPH_ENRICH_MEMORIES](enrich)
     assert graph.calls == [("enrich_memories", ("acme", ["mem_1", "mem_2"]), {})]
+
+
+async def test_without_a_model_the_index_job_enriches_what_it_indexed() -> None:
+    """No model: enrichment is tens of milliseconds of rules and lookups, less than a job of
+    its own costs, so the index job runs it once the write is findable and queues nothing on
+    the graph queue. As separate jobs the capability eval's writes settled 30 s later."""
+    fact = _memory("mem_1", MemoryType.SEMANTIC, user_id="u1")
+    indexer, graph, ingestion = _Service(), _Service(), _Service()
+    queue, uow, _ = _wire(
+        {"indexer": indexer, "graph": graph, "ingestion": ingestion}, uow=_Uow([fact])
+    )
+
+    await queue.handlers[TASK_MEMORY_INDEX]({"tenant_id": "acme", "memory_ids": ["mem_1"]})
+    assert indexer.calls == [("index_memories", ("acme", ["mem_1"]), {})]
+    assert graph.calls == [("enrich_memories", ("acme", ["mem_1"]), {})]
+    assert ("acme", RevisionKind.USER, "u1") in uow.bumped, "findable before it is enriched"
+
+    payload = {"tenant_id": "acme", "document_id": "doc_1", "document_version_id": "dcv_1"}
+    await queue.handlers["document.index"](payload)
+    assert ingestion.calls == [("mark_indexed", ("acme", "doc_1", "dcv_1"), {})]
+    assert graph.calls[-1] == ("enrich_document", ("acme", "doc_1"), {})
+    assert not [j for j in uow.jobs if j.queue is Queue.GRAPH], "no graph job without a model"
 
 
 async def test_a_deleted_memory_in_the_batch_moves_the_tenant_revision() -> None:

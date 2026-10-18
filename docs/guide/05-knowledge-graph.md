@@ -115,13 +115,16 @@ until they do, `INVALIDATED` is a status the read filters honour and nothing wri
 
 ## How it is built
 
-Enrichment is a job of its own, queued by the job that indexes the source once the source is
-findable — `graph.enrich_memories` after `memory.index`, `graph.enrich_document` after
-`document.index` (`modules/jobs/registry.py`) — never on the request that wrote the data. It
-runs on the `graph` queue, below indexing, in a worker pool of its own - one slot without a
-model, where it is CPU work, and with one half of `tasks.worker_concurrency` (at least 2), on
-top of the slots that compute: it asks the model, and on a slow one, run inside the index jobs,
-it held every worker slot while writes waited minutes to become findable. It is not run one at
+Enrichment runs once the source is findable, after the job that indexes it, never on the
+request that wrote the data (`modules/jobs/registry.py`). With a model it is a job of its own -
+`graph.enrich_memories` after `memory.index`, `graph.enrich_document` after `document.index` -
+on the `graph` queue, below indexing, in a worker pool of its own of half of
+`tasks.worker_concurrency` (at least 2), on top of the slots that compute: it asks the model,
+and on a slow one, run inside the index jobs, it held every worker slot while writes waited
+minutes to become findable. Without a model it is tens of milliseconds of rules and lookups,
+less than a job of its own costs, and the index job runs it: as separate jobs the capability
+eval's 2496 enrichments took 210 s of the worker's event loop against about 70 s inline, and
+its writes settled 30 s later than with enrichment inline. It is not run one at
 a time per tenant: so serialised, the capability eval's LLM run still had 552 enrichment jobs
 queued when its questions began, an hour after its first write, and those questions met a
 graph without the facts their answers join on.

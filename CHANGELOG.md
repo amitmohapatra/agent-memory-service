@@ -139,11 +139,13 @@ each entry says which one moved. Decisions behind each change are in the
   enrichment ran inside `memory.index` and `document.index`, and with an LLM enabled each such
   job held a worker slot for the model's calls (up to minutes on a small CPU model): with every
   slot taken, indexing, parsing and the other jobs waited up to six minutes, and a memory
-  remembered just before a question was not in its context. Enrichment is now a job of its own,
-  `graph.enrich_memories` / `graph.enrich_document`, queued once the source is indexed, on the
-  `graph` queue below indexing, in a pool of its own - never inside the index job - and never
-  one at a time per tenant (so serialised, the capability eval's LLM run still had 552
-  enrichment jobs queued when its questions began, and they met a graph without their facts)
+  remembered just before a question was not in its context. With a model, enrichment is now a
+  job of its own, `graph.enrich_memories` / `graph.enrich_document`, queued once the source is
+  indexed, on the `graph` queue below indexing, in a pool of its own - never inside the index
+  job - and never one at a time per tenant (so serialised, the capability eval's LLM run still
+  had 552 enrichment jobs queued when its questions began, and they met a graph without their
+  facts). Without a model the index job still enriches, once the source is findable: there it
+  is tens of milliseconds, and as separate jobs the capability eval's writes settled 30 s later
   ([operations](docs/guide/11-operations.md#workers-and-periodic-jobs)).
 - Same-subject lookup: an older statement past the window of recent rows consolidation reads
   was missed when its subject was spelled with different punctuation ("forklift-4" stored,

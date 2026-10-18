@@ -55,8 +55,8 @@ sequenceDiagram
   Note over W,PG: dedupe is lexical and dense. A newer fact supersedes, a repeat reinforces.
   W->>PG: memories with evidence refs and validity, plus a memory.index job, one transaction
   W->>Q: memory.index: embed, upsert into the memory collection
-  W->>PG: bump the audience's revisions (findable now), queue graph.enrich_memories
-  W->>PG: graph.enrich_memories: entities, relations, bump the audience's revisions
+  W->>PG: bump the audience's revisions (findable now)
+  W->>PG: graph enrichment (graph.enrich_memories, its own job with a model): entities, relations, bump the audience's revisions
 ```
 
 `role: "EVENT"` is stored as an internal message and learned from as an event. A message in a

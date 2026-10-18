@@ -219,7 +219,7 @@ flowchart LR
   pulls["agent-tool pulls"] --> pf["prefetch, every 5 min<br/>what the push pre-includes"]
   cat["catalog upsert"] --> ti["tools.index<br/>the tools search collection"]
   obs["observation (any language)"] --> mp["memory.process<br/>English rules; other languages:<br/>contextual_extraction (tenant model)"]
-  md["memory / document"] --> ge["graph.enrich_memories / graph.enrich_document<br/>(jobs of their own on the graph queue, queued once indexed):<br/>native entities and edges;<br/>relation_extraction (tenant model)"]
+  md["memory / document"] --> ge["graph.enrich_memories / graph.enrich_document<br/>(once indexed: jobs of their own on the graph queue with a model, in the index job without one):<br/>native entities and edges;<br/>relation_extraction (tenant model)"]
 ```
 
 Where each model use runs, its tier and its fallback: [guide chapter 8, the twelve uses](guide/08-models.md#the-twelve-uses).

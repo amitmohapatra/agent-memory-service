@@ -167,7 +167,7 @@ its GIL and its event loop, and each model serves one call at a time.
 |---|---|---|---|
 | chat | `chat-fast`, `embedding` | half the CPUs, at least 1 (1 / 1 / 2 / 4) | a remember's job, which a write waits for; no parse, archive, summary or graph job can take these slots, and indexing runs there only when no chat job waits |
 | indexing | `embedding`; without a model `chat-fast` first | up to `tasks.indexing_concurrency` (2), at most a quarter (1 / 1 / 1 / 2) | with a model, chat jobs wait on it and these slots stay indexing's, so a write turns findable; without one, chat jobs are short and go first, as in one pool |
-| graph | `graph` | 1 without a model; with one, half the CPUs and at least 2, on top (2 / 2 / 2 / 4) | enrichment is CPU work on the event loop without a model, and waits on it with one |
+| graph | `graph` | with a model, half the CPUs and at least 2, on top (2 / 2 / 2 / 4); 1 without one | enrichment waits on the model; without one the index job enriches, and the slot only drains jobs queued while a model was configured |
 | shared | `chat-fast`, `embedding`, then every other queue | what is left, at least 1 (1 / 1 / 1 / 1; with a model 1 / 1 / 1 / 2) | parsing, archiving, feedback, learning, summaries |
 
 So chat and indexing share their slots by priority, chat first, as they did in one pool:
@@ -185,11 +185,11 @@ the queue pool.
 | Job | Queue | Triggered by | Retries | Does |
 |---|---|---|---|---|
 | `memory.process_observation` | `chat-fast` | each message | 5 | the memory pipeline (chapter 10) |
-| `memory.index` | `embedding` | every memory change | 5 | index or remove, bump revisions, queue a profile refresh and the graph enrichment |
-| `graph.enrich_memories` | `graph` | `memory.index` | 5 | the memories' entities and relations |
+| `memory.index` | `embedding` | every memory change | 5 | index or remove, bump revisions, queue a profile refresh; the graph enrichment, queued with a model and run here without one |
+| `graph.enrich_memories` | `graph` | `memory.index`, with a model | 5 | the memories' entities and relations |
 | `document.parse` | `document-parse` | upload | 3 | parse, hierarchy, chunks, Document Context Graph |
-| `document.index` | `embedding` | parse | 5 | index chunks and summaries, mark the document `READY`, queue the graph enrichment; when it gives up, the document is `FAILED` ("index failed: ...") for `memory-reindex` to finish |
-| `graph.enrich_document` | `graph` | `document.index` | 5 | the document's entities and relations |
+| `document.index` | `embedding` | parse | 5 | index chunks and summaries, mark the document `READY`, then the graph enrichment (queued with a model, run here without one); when it gives up, the document is `FAILED` ("index failed: ...") for `memory-reindex` to finish |
+| `graph.enrich_document` | `graph` | `document.index`, with a model | 5 | the document's entities and relations |
 | `archive.stage_message` | `archive` | each message, 60 s coalesced per thread | 10 | compress, upload, verify, manifest (ADR 0006) |
 | `feedback.project` | `reconcile` | an applied verdict | 3 | apply it (chapter 6) |
 | `summary.refresh` | `summary` | every 20 messages | 3 | the thread's durable summary, then its searchable episode |
