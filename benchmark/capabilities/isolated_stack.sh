@@ -167,10 +167,11 @@ fi
 log "disk before: $(disk)"
 # Memory this script's processes may still take, in MB: the host's MemAvailable, or less when a
 # memory cgroup (v1 or v2, this one or an ancestor) caps them below the host - a container's
-# cgroup is often smaller than the machine, and its OOM killer acts on the cgroup's limit
-# (headroom: limit - usage + inactive page cache, which the kernel reclaims first).
+# cgroup is often smaller than the machine, and its OOM killer acts on the cgroup's limit. A
+# level's room is its limit less what reclaim cannot give back: anonymous memory, shmem and
+# mapped files (the page cache beyond that is reclaimed before anything is killed).
 mem_avail_mb() {
-  local best root rel dir lim use inact h
+  local best root rel dir lim held h
   best=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)
   root=${CAPEVAL_CGROUP_ROOT:-/sys/fs/cgroup}
   for rel in $(awk -F: '$2=="memory"{print "memory" $3} $1=="0"{print $3}' /proc/self/cgroup); do
@@ -178,11 +179,12 @@ mem_avail_mb() {
     while [[ $dir == "$root"/* ]]; do
       dir=${dir%/}
       lim=$(cat "$dir/memory.limit_in_bytes" "$dir/memory.max" 2>/dev/null | head -1)
-      use=$(cat "$dir/memory.usage_in_bytes" "$dir/memory.current" 2>/dev/null | head -1)
-      inact=$(awk '$1=="total_inactive_file"||$1=="inactive_file"{print $2; exit}' "$dir/memory.stat" 2>/dev/null)
+      # v1 (hierarchical totals) or v2 names
+      held=$(awk '$1~/^(total_rss|total_shmem|total_mapped_file|anon|shmem|file_mapped)$/{n+=$2; f=1}
+        END{if (f) print n}' "$dir/memory.stat" 2>/dev/null)
       # "max" (v2) and the near-2^63 v1 default mean no limit at this level
-      if [[ $lim =~ ^[0-9]+$ && $use =~ ^[0-9]+$ ]] && [ "${#lim}" -lt 19 ]; then
-        h=$(( (lim - use + ${inact:-0}) / 1048576 ))
+      if [[ $lim =~ ^[0-9]+$ && $held =~ ^[0-9]+$ ]] && [ "${#lim}" -lt 19 ]; then
+        h=$(( (lim - held) / 1048576 ))
         [ "$h" -lt "$best" ] && best=$h
       fi
       dir=$(dirname "$dir")

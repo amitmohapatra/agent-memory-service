@@ -667,8 +667,12 @@ def test_the_isolated_stack_waits_for_room_in_its_memory_cgroup(tmp_path: Path) 
             d.mkdir(parents=True, exist_ok=True)
             # v1 and v2 names side by side: the script reads whichever the level has
             (d / "memory.limit_in_bytes").write_text(f"{14_000 * mib}\n")
-            (d / "memory.usage_in_bytes").write_text(f"{13_900 * mib}\n")
-            (d / "memory.stat").write_text(f"total_inactive_file {20 * mib}\n")
+            # held: anon + shmem + mapped files; the rest of the page cache is reclaimable
+            (d / "memory.stat").write_text(
+                f"total_cache {3_000 * mib}\ntotal_rss {11_880 * mib}\n"
+                f"total_shmem {500 * mib}\ntotal_mapped_file {1_500 * mib}\n"
+                f"total_inactive_file {900 * mib}\n"
+            )
     done = _stack(
         tmp_path,
         CAPEVAL_CGROUP_ROOT=str(root),
