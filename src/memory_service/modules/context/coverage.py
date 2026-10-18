@@ -267,27 +267,44 @@ def _about(names: frozenset[str], ids: frozenset[str], lang: str, text: str) -> 
     return not names or any(name in _flat(text) for name in names)
 
 
+def _known(names: frozenset[str], evidence: Sequence[str]) -> frozenset[str]:
+    """A run of capitalised German words is as often nouns ("Kanister Abflussreiniger") as a
+    name: it is one when it is marked or the evidence uses it."""
+    flat = [_flat(t) for t in evidence]
+    return frozenset(
+        n for n in names if any(_marked(w) for w in n.split()) or any(n in f for f in flat)
+    )
+
+
+def _value_gap(question: str, evidence: Sequence[str], lang: str) -> str | None:
+    """The kind of value asked for that no evidence about what the question names states."""
+    kinds = asked(question)
+    if not kinds:
+        return None
+    names, ids = question_anchors(question, lang)
+    if lang in _NOUN_CAPITALISING:
+        names = _known(names, evidence)
+    for kind in sorted(kinds):
+        if not any(_holds(kind, t) and _about(names, ids, lang, t) for t in evidence):
+            return f"no evidence states the {kind.value} asked for"
+    return None
+
+
+def _month_gap(question: str, evidence: Sequence[str]) -> str | None:
+    """A month asked about that the evidence, naming others, never names."""
+    wanted = months_named(question)
+    if not wanted:
+        return None
+    named = [months_named(text) for text in evidence]
+    if any(named) and not any(m & wanted for m in named):
+        return "the evidence names other months than the one asked about"
+    return None
+
+
 def unanswered(question: str, evidence: Sequence[str]) -> str | None:
     """Why ``evidence`` does not answer ``question``, or None when it may."""
     if not evidence:
         return None
-    lang = detect_language(question)
-    kinds = asked(question)
-    if kinds:
-        names, ids = question_anchors(question, lang)
-        if lang in _NOUN_CAPITALISING:
-            # a run of capitalised German words is as often nouns ("Kanister
-            # Abflussreiniger") as a name: it is one when it is marked or the evidence uses it
-            flat = [_flat(t) for t in evidence]
-            names = frozenset(
-                n for n in names if any(_marked(w) for w in n.split()) or any(n in f for f in flat)
-            )
-        for kind in sorted(kinds):
-            if not any(_holds(kind, t) and _about(names, ids, lang, t) for t in evidence):
-                return f"no evidence states the {kind.value} asked for"
-    wanted = months_named(question)
-    if wanted:
-        named = [months_named(text) for text in evidence]
-        if any(named) and not any(m & wanted for m in named):
-            return "the evidence names other months than the one asked about"
-    return None
+    return _value_gap(question, evidence, detect_language(question)) or _month_gap(
+        question, evidence
+    )
