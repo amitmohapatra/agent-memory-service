@@ -16,6 +16,7 @@ from memory_service.api.deps import (
     ScopeBody,
     ServicePrincipalDep,
     build_context,
+    credential_vouches_for_agent,
     ensure_role,
     existing_administered_tenant,
     is_tenant_administrator,
@@ -27,19 +28,25 @@ from memory_service.api.idempotent import resource_at, run_idempotent
 from memory_service.api.pagination import CursorQuery, decode_cursor, link_next, next_link, page
 from memory_service.api.params import FeedbackIdPath, limit_query
 from memory_service.api.schemas.feedback import (
+    FeedbackBulkReviewRequest,
+    FeedbackBulkReviewResponse,
+    FeedbackGroupListResponse,
     FeedbackListResponse,
     FeedbackRequest,
     FeedbackResponse,
     FeedbackReviewRequest,
+    FeedbackTargetGroupResponse,
+    FeedbackUnchanged,
 )
 from memory_service.domain.errors import ValidationFailed
-from memory_service.domain.feedback import FeedbackTargetKind
+from memory_service.domain.feedback import FeedbackTargetKind, ReviewState
 from memory_service.domain.tenancy import KeyRole
 from memory_service.modules.feedback.service import FeedbackService
 
 router = APIRouter(tags=["feedback"])
 _ERRORS = error_responses(401, 403, 404, 422, 503)
 _CURSOR_FIELDS = {"created_at": datetime, "feedback_id": str}
+_GROUP_CURSOR_FIELDS = {"latest_at": datetime, "target_kind": str, "target_id": str}
 
 
 def _service(container) -> FeedbackService:  # type: ignore[no-untyped-def]
@@ -61,16 +68,21 @@ def _service(container) -> FeedbackService:  # type: ignore[no-untyped-def]
     description=(
         "The body is the `trellis.contracts.Feedback` record. Identity fields come from the "
         "trusted headers; a body value that disagrees is refused. A memory target must be "
-        "readable by the caller; reject, correct and edit also need the owner (or a tenant "
-        "admin), the rule that governs forgetting. The record is stored and projected "
+        "readable by the caller; a correct or edit that rewrites it also needs the owner (or "
+        "the user an agent acts for, or a tenant admin in person), the rule that governs "
+        "forgetting. "
+        "The record is stored and projected "
         "asynchronously: on a "
         "memory, confirm/approve reinforce it, reject retracts it, correct/edit write a "
-        "corrected memory that supersedes it. A verdict that would change what was learned "
-        "on a person's or an agent's word (a confirm of a memory, a verdict on a run or a "
-        "procedure) is stored with `review.state=pending` and changes nothing until a tenant "
-        "admin approves it; an owner's reject/correct/edit of a memory, a run reporting its "
-        "own status, a tool-call decision and what a tenant admin says are applied as they "
-        "arrive. A retry with the same `feedback_id` returns "
+        "corrected memory that supersedes it. An end user's vote (a confirm or reject of a "
+        "memory, a verdict on a run or a procedure) is stored with `review.state=pending` "
+        "and changes nothing until a tenant admin approves it; the same voter's newer vote "
+        "on the same target replaces their earlier pending one (dismissed, with "
+        "`review.replaced_by`), "
+        "so repeated clicks count once. An owner's correct/edit of a memory carrying new "
+        "text, a run reporting its own status, a tool-call decision, the service's own "
+        "/v1/verify verdict and what a tenant admin says are applied as they arrive. A "
+        "retry with the same `feedback_id` returns "
         "the stored record with status 200 (with `Idempotency-Key`, the original 201 is "
         "replayed)."
     ),
@@ -94,7 +106,11 @@ async def submit_feedback(
     async def write(uow):  # type: ignore[no-untyped-def]
         # the tenant's administrator credential is the reviewer's own: no queue for it
         stored, created = await _service(container).submit(
-            uow, ctx, feedback, trusted=is_tenant_administrator(principal)
+            uow,
+            ctx,
+            feedback,
+            trusted=is_tenant_administrator(principal),
+            run_vouched=credential_vouches_for_agent(request, ctx.agent_id),
         )
         return 201 if created else 200, FeedbackResponse.of(stored).model_dump(mode="json"), None
 
@@ -120,13 +136,16 @@ _PENDING_DESCRIPTION = (
 
 @router.get(
     "/feedback",
-    response_model=FeedbackListResponse,
+    response_model=FeedbackListResponse | FeedbackGroupListResponse,
     responses=_ERRORS,
     summary="List the feedback on one target, or the review queue, newest first (cursor paged)",
     description=(
         "Two lists, one route. With `target_kind` and `target_id`: the feedback on that "
         "target the caller may see. With `review=pending`: the review queue, verdicts that "
-        "change nothing until a tenant admin approves them. " + _PENDING_DESCRIPTION
+        "change nothing until a tenant admin approves them (`review=approved`, `dismissed` "
+        "lists those, for reporting). With `group=target` as well: one row "
+        "per target (`groups`) with its thumbs up and down, distinct voters and the latest "
+        "vote's time, the most recently voted target first. " + _PENDING_DESCRIPTION
     ),
 )
 async def list_feedback(
@@ -152,21 +171,33 @@ async def list_feedback(
         ),
     ] = None,
     review: Annotated[
-        Literal["pending"] | None,
+        ReviewState | None,
         Query(
             description="pending: list the review queue instead of one target's feedback "
-            "(the tenant's administrator credential)."
+            "(the tenant's administrator credential); approved or dismissed: the "
+            "verdicts in that state, for reporting."
+        ),
+    ] = None,
+    group: Annotated[
+        Literal["target"] | None,
+        Query(
+            description="target (with review): one row per target with its counts instead "
+            "of one row per verdict."
         ),
     ] = None,
     cursor: CursorQuery = None,
     limit: Annotated[int, limit_query(500, "feedback records")] = 100,
-) -> FeedbackListResponse:
+) -> FeedbackListResponse | FeedbackGroupListResponse:
+    if group is not None and review is None:
+        raise ValidationFailed("group=target groups a review list; send review with it")
     if review is not None:
         if target_kind is not None or target_id is not None:
-            raise ValidationFailed("review=pending lists the queue; send no target with it")
+            raise ValidationFailed("review lists the queue; send no target with it")
         ensure_role(principal, KeyRole.ADMIN, KeyRole.PLATFORM)
         tenant_id = await existing_administered_tenant(request, principal, container)
-        return await _pending(request, response, container, tenant_id, cursor, limit)
+        if group is not None:
+            return await _grouped(request, response, container, tenant_id, review, cursor, limit)
+        return await _pending(request, response, container, tenant_id, cursor, limit, review)
     if target_kind is None or target_id is None:
         raise ValidationFailed("send target_kind and target_id, or review=pending")
     ctx = build_context(request, container, lineage)
@@ -222,11 +253,14 @@ async def _pending(
     tenant_id: str,
     cursor: str | None,
     limit: int,
+    state: ReviewState = ReviewState.PENDING,
 ) -> FeedbackListResponse:
     position = decode_cursor(cursor, fields=_CURSOR_FIELDS)
     before = (position["created_at"], position["feedback_id"]) if position else None
     async with container.services["uow_factory"]() as uow:
-        queued = await _service(container).pending(uow, tenant_id, before=before, limit=limit + 1)
+        queued = await _service(container).pending(
+            uow, tenant_id, state=state, before=before, limit=limit + 1
+        )
     items, next_cursor = page(
         queued,
         limit=limit,
@@ -239,6 +273,40 @@ async def _pending(
         link_next(request, response, next_cursor)
     return FeedbackListResponse(
         feedback=[FeedbackResponse.of(f, record) for f, record in items], next_cursor=next_cursor
+    )
+
+
+async def _grouped(
+    request: Request,
+    response: Response,
+    container: Any,
+    tenant_id: str,
+    state: ReviewState,
+    cursor: str | None,
+    limit: int,
+) -> FeedbackGroupListResponse:
+    position = decode_cursor(cursor, fields=_GROUP_CURSOR_FIELDS)
+    before = (
+        (position["latest_at"], position["target_kind"], position["target_id"])
+        if position
+        else None
+    )
+    async with container.services["uow_factory"]() as uow:
+        groups = await _service(container).pending_by_target(
+            uow, tenant_id, state=state, before=before, limit=limit + 1
+        )
+    items, next_cursor = page(
+        groups,
+        limit=limit,
+        position=lambda g: {
+            "latest_at": g.latest_at.isoformat(),
+            "target_kind": g.target_kind.value,
+            "target_id": g.target_id,
+        },
+    )
+    link_next(request, response, next_cursor)
+    return FeedbackGroupListResponse(
+        groups=[FeedbackTargetGroupResponse.of(g) for g in items], next_cursor=next_cursor
     )
 
 
@@ -338,3 +406,95 @@ async def dismiss_feedback(
     body: ReviewBody = None,
 ) -> Response:
     return await _review(request, container, tenant_id, feedback_id, body, approve=False)
+
+
+async def _review_many(
+    request: Request,
+    container: Any,
+    tenant_id: str,
+    body: FeedbackBulkReviewRequest,
+    *,
+    approve: bool,
+) -> Response:
+    """Idempotent by construction (a verdict already decided is left as it is); with
+    ``Idempotency-Key`` a retry also gets the original answer back."""
+    principal = request.state.service_principal
+
+    async def handler(uow):  # type: ignore[no-untyped-def]
+        target = (
+            (body.target_kind, body.target_id)
+            if body.target_kind is not None and body.target_id is not None
+            else None
+        )
+        decided, unchanged, more = await _service(container).review_many(
+            uow,
+            tenant_id,
+            feedback_ids=body.feedback_ids,
+            target=target,
+            approve=approve,
+            reviewed_by=f"key:{principal.service_id}",
+            note=body.note,
+        )
+        answer = FeedbackBulkReviewResponse(
+            state=ReviewState.APPROVED if approve else ReviewState.DISMISSED,
+            decided=[f.feedback_id for f in decided],
+            unchanged=[
+                FeedbackUnchanged(
+                    feedback_id=f.feedback_id, state=f.review.state if f.review else None
+                )
+                for f in unchanged
+            ],
+            more=more,
+        )
+        return 200, answer.model_dump(mode="json"), None
+
+    return await run_idempotent(
+        request,
+        container,
+        request_context(request, tenant_id),
+        key=request.state.idempotency_key,
+        payload={"approve": approve, **body.model_dump(mode="json", exclude_none=True)},
+        handler=handler,
+    )
+
+
+_BULK_ERRORS = error_responses(401, 403, 404, 422, 503)
+_BULK_DESCRIPTION = (
+    "The tenant's administrator credential. Send `feedback_ids` (1 to 500), or `target_kind` "
+    "and `target_id` for every verdict pending on that target. Idempotent: a verdict that is "
+    "no longer pending (approved or dismissed) is listed in `unchanged` and left as "
+    "it is, so a repeated call applies nothing twice. An id the tenant does not have refuses "
+    "the whole call (404) and decides nothing."
+)
+
+
+@router.post(
+    "/feedback/approve",
+    response_model=FeedbackBulkReviewResponse,
+    responses=_BULK_ERRORS,
+    summary="Approve pending verdicts in bulk: each is applied as if it had just arrived",
+    description=_BULK_DESCRIPTION,
+)
+async def approve_feedback_many(
+    request: Request,
+    body: FeedbackBulkReviewRequest,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+) -> Response:
+    return await _review_many(request, container, tenant_id, body, approve=True)
+
+
+@router.post(
+    "/feedback/dismiss",
+    response_model=FeedbackBulkReviewResponse,
+    responses=_BULK_ERRORS,
+    summary="Dismiss pending verdicts in bulk: kept for statistics, never applied",
+    description=_BULK_DESCRIPTION,
+)
+async def dismiss_feedback_many(
+    request: Request,
+    body: FeedbackBulkReviewRequest,
+    container: ContainerDep,
+    tenant_id: AdministeredTenantDep,
+) -> Response:
+    return await _review_many(request, container, tenant_id, body, approve=False)

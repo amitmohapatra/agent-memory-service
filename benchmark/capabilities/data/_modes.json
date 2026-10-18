@@ -1,0 +1,153 @@
+{
+  "description": "The eval tenant's model policy per mode, and the named deterministic samples a slow mode runs. A sample narrows only by stable keys (the documented origin scenarios first, then scenario-id hash order), so the same sample is the same questions on every run.",
+  "modes": {
+    "nollm": {
+      "policy": {
+        "uses": [],
+        "read_assist": false
+      },
+      "note": "No model anywhere: extraction, consolidation and every read are deterministic."
+    },
+    "llm": {
+      "policy": {
+        "uses": [
+          "chunk_context",
+          "conflict_adjudication",
+          "contextual_extraction",
+          "entity_resolution",
+          "grounding_judge",
+          "memory_connections",
+          "procedure_abstraction",
+          "query_expansion",
+          "reflection",
+          "relation_extraction",
+          "summaries"
+        ],
+        "read_assist": true,
+        "model_env": "CAPEVAL_LLM_MODEL"
+      },
+      "note": "The tenant's model policy as the live stack runs it: every use but the opt-in memory_restatement, reads assisted, one gateway model."
+    },
+    "harness": {
+      "policy": {
+        "uses": [],
+        "read_assist": false
+      },
+      "note": "Memory deterministic (as nollm); the wrapped agent's model answers through the gateway."
+    }
+  },
+  "samples": {
+    "llm": {
+      "languages": [
+        "en"
+      ],
+      "scenarios_per_domain": 1,
+      "kinds": [
+        "direct",
+        "paraphrase",
+        "implicit"
+      ],
+      "note": "Per capability the InventorySmart origin scenario plus the first scenario of every other domain (hash order); three phrasing kinds; English. Scale (capability 7) is left out: extracting its ~1,100-message tenant with a CPU model takes hours - it is measured in nollm and harness mode.",
+      "capabilities": [
+        "single_fact_recall",
+        "multi_hop",
+        "temporal_recency",
+        "update_contradiction",
+        "abstention",
+        "forgetting_decay",
+        "procedural_skill",
+        "test_time_learning",
+        "implicit_personalization",
+        "explicit_personalization"
+      ]
+    },
+    "harness": {
+      "languages": [
+        "en"
+      ],
+      "scenarios_per_domain": 1,
+      "kinds": [
+        "direct"
+      ],
+      "note": "Per capability the InventorySmart origin scenario plus the first scenario of every other domain; the direct phrasing; English."
+    },
+    "smoke": {
+      "languages": [
+        "en"
+      ],
+      "scenarios_per_capability": 1,
+      "kinds": [
+        "direct"
+      ],
+      "note": "One scenario per capability, one phrasing: a minute, to see the pipeline work."
+    },
+    "core": {
+      "capabilities": [
+        "single_fact_recall",
+        "multi_hop",
+        "temporal_recency",
+        "update_contradiction",
+        "abstention",
+        "forgetting_decay",
+        "procedural_skill",
+        "test_time_learning",
+        "implicit_personalization",
+        "explicit_personalization"
+      ],
+      "enrich_seconds": 900,
+      "note": "The PR gate (make eval-capabilities-isolated MODE=nollm SET=core): every capability but scale, every language and the code-switched phrasings, every phrasing kind, every surface; its own baseline (nollm/core). On the isolated store the worker's queues hold only the run's own work, so it asks once all of it - summaries and graph enrichment included - has drained (bounded at 15 minutes; about 4 minutes in practice)."
+    },
+    "scale": {
+      "capabilities": [
+        "scale"
+      ],
+      "enrich_seconds": 0,
+      "subset_of": "nollm",
+      "note": "Capability 7 alone, every language: run in the PR of a change that targets it, and in the nightly full run. Held to the full nollm baseline's scale cells; its latency is not compared."
+    },
+    "llm_core": {
+      "capabilities": [
+        "single_fact_recall",
+        "multi_hop",
+        "temporal_recency",
+        "update_contradiction",
+        "abstention",
+        "forgetting_decay",
+        "procedural_skill",
+        "test_time_learning",
+        "implicit_personalization",
+        "explicit_personalization"
+      ],
+      "scenarios": [
+        "recall-retail-hazmat-code",
+        "recall-finance-cost-centre",
+        "multihop-retail-holiday-trees",
+        "multihop-finance-holiday-calendar",
+        "temporal-retail-forklift",
+        "temporal-it-vpn-incident",
+        "update-retail-pallet-supplier",
+        "update-finance-approval-limit",
+        "abstain-retail-inspector-phone",
+        "abstain-personal-sister",
+        "forget-retail-temp-fridge",
+        "forget-finance-old-vendor",
+        "procedure-retail-audit-table",
+        "procedure-it-mfa-skill",
+        "correction-retail-shrinkage-command",
+        "correction-it-account-unlock",
+        "implicit-retail-perishables",
+        "implicit-field-medical",
+        "explicit-retail-zero-stock",
+        "explicit-personal-no-cilantro"
+      ],
+      "kinds": [
+        "direct",
+        "paraphrase",
+        "implicit"
+      ],
+      "enrich_seconds": 900,
+      "note": "The llm-mode PR gate (make eval-capabilities-isolated MODE=llm SET=llm_core): a fixed stratified subset of core small enough to index through a CPU model in about an hour (697 turns, 326 phrasings per surface). Per capability (scale aside): the InventorySmart origin scenario and, of the scenarios in another domain, the one with the fewest turns (ties: id-hash order) - all five domains appear; every language and the code-switched phrasings; three phrasing kinds (direct, paraphrase, implicit). The list is fixed here, so the set does not move when scenarios are added. Its latency is recorded, not gated: the read path calls the CPU model on the same 4-core host, so the load during the questions (about 1.4 per core) is the model's own and the quiet-machine rule cannot hold.",
+      "latency_gated": false
+    }
+  }
+}

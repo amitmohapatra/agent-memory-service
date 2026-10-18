@@ -1,0 +1,2015 @@
+{
+ "capability": "forgetting_decay",
+ "number": 6,
+ "title": "Forgetting / decay & pruning",
+ "definition": "Keep dense, obsolete records about something closed or removed out of the active context: answer about what is current, unless the history is asked for.",
+ "scenarios": [
+  {
+   "id": "forget-retail-temp-fridge",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "logs",
+     "day": -40,
+     "at": "06:00",
+     "turns": [],
+     "repeat": {
+      "count": 50,
+      "every_hours": 12,
+      "role": "EVENT",
+      "text": {
+       "en": "Temperature check {n}: temporary refrigeration unit TRU-7 reads {t}°F at {time} on {date}.",
+       "de": "Temperaturkontrolle {n}: Das temporäre Kühlaggregat TRU-7 zeigt am {date} um {time} {t}°F.",
+       "es": "Control de temperatura {n}: la unidad de refrigeración temporal TRU-7 marca {t}°F a las {time} del {date}.",
+       "ar": "فحص الحرارة {n}: وحدة التبريد المؤقتة TRU-7 تسجّل {t}°F الساعة {time} بتاريخ {date}.",
+       "hi": "तापमान जाँच {n}: अस्थायी रेफ़्रिजरेशन यूनिट TRU-7 {date} को {time} बजे {t}°F दिखा रही है।"
+      },
+      "values": {
+       "t": {
+        "min": 35,
+        "max": 41,
+        "step": 0.5
+       }
+      }
+     }
+    },
+    {
+     "id": "perm",
+     "day": -3,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Walk-in cooler WC-1 holding steady at 36°F; door seals checked.",
+        "de": "Kühlzelle WC-1 hält stabil 36°F; Türdichtungen geprüft.",
+        "es": "La cámara WC-1 se mantiene estable a 36°F; juntas de la puerta revisadas.",
+        "ar": "غرفة التبريد WC-1 مستقرة عند 36°F؛ تم فحص مانعات تسرب الباب.",
+        "hi": "वॉक-इन कूलर WC-1 36°F पर स्थिर है; दरवाज़े की सील जाँची गई।"
+       }
+      },
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Freezer FZ-2 at -5°F; defrost cycle normal.",
+        "de": "Tiefkühler FZ-2 bei -5°F; Abtauzyklus normal.",
+        "es": "Congelador FZ-2 a -5°F; ciclo de descongelación normal.",
+        "ar": "المجمّد FZ-2 عند -5°F؛ دورة إزالة الصقيع طبيعية.",
+        "hi": "फ़्रीज़र FZ-2 -5°F पर; डीफ़्रॉस्ट चक्र सामान्य।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "close",
+     "day": -2,
+     "at": "17:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The temporary refrigeration unit TRU-7 has been dismantled and the project is closed.",
+        "de": "Das temporäre Kühlaggregat TRU-7 wurde abgebaut und das Projekt ist abgeschlossen.",
+        "es": "La unidad de refrigeración temporal TRU-7 se ha desmontado y el proyecto está cerrado.",
+        "ar": "تم تفكيك وحدة التبريد المؤقتة TRU-7 وأُغلق المشروع.",
+        "hi": "अस्थायी रेफ़्रिजरेशन यूनिट TRU-7 हटा दिया गया है और प्रोजेक्ट बंद है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Generate a health report of our current active cold-storage units.",
+        "de": "Erstelle einen Statusbericht über unsere derzeit aktiven Kühllager-Einheiten.",
+        "es": "Genera un informe de estado de nuestras unidades de frío activas actualmente.",
+        "ar": "أنشئ تقريرًا عن حالة وحدات التخزين المبرّد النشطة حاليًا لدينا.",
+        "hi": "हमारी मौजूदा सक्रिय कोल्ड-स्टोरेज यूनिटों की हेल्थ रिपोर्ट बनाओ।",
+        "mixed": "Hamare current active cold-storage units ki health report banao."
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The food safety auditor wants to see how our refrigeration is doing.",
+        "de": "Der Lebensmittelprüfer will sehen, wie es um unsere Kühlung steht.",
+        "es": "El auditor de seguridad alimentaria quiere ver cómo va nuestra refrigeración.",
+        "ar": "مدقق سلامة الغذاء يريد الاطلاع على حالة التبريد لدينا.",
+        "hi": "फ़ूड सेफ़्टी ऑडिटर देखना चाहते हैं कि हमारा रेफ़्रिजरेशन कैसा चल रहा है।",
+        "mixed": "الـ food safety auditor بدو يشوف وضع الـ refrigeration عنا."
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Summarise the condition of every cold-storage unit we're running today.",
+        "de": "Fasse den Zustand jeder Kühleinheit zusammen, die wir heute betreiben.",
+        "es": "Resume el estado de cada unidad de frío que tenemos en marcha hoy.",
+        "ar": "لخّص حالة كل وحدة تخزين مبرّد نشغّلها اليوم.",
+        "hi": "आज चल रही हर कोल्ड-स्टोरेज यूनिट की हालत का सार दो।"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "helth report active cold storge units",
+        "de": "statusbericht aktive kühleinheitn",
+        "es": "informe de estado unidades de frio activas porfa",
+        "ar": "تقرير حاله وحدات التبريد النشطه",
+        "hi": "एक्टिव कोल्ड स्टोरेज यूनिट की हेल्थ रिपोट"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Corporate wants a one-page snapshot of our refrigeration before the summer heat, covering only the units that are actually in service right now — temperatures, anything unusual, and whether anything needs attention.",
+        "de": "Die Zentrale will vor der Sommerhitze einen einseitigen Überblick über unsere Kühlung, nur für die Einheiten, die gerade wirklich in Betrieb sind – Temperaturen, Auffälligkeiten und ob etwas Aufmerksamkeit braucht.",
+        "es": "La central quiere una foto de una página de nuestra refrigeración antes del calor del verano, solo de las unidades que están realmente en servicio ahora: temperaturas, cualquier cosa rara y si algo necesita atención.",
+        "ar": "تريد الإدارة العامة لمحة من صفحة واحدة عن التبريد لدينا قبل حر الصيف، تشمل فقط الوحدات العاملة فعلًا الآن — درجات الحرارة، وأي شيء غير عادي، وما إذا كان شيء يحتاج إلى اهتمام.",
+        "hi": "कॉरपोरेट गर्मी से पहले हमारे रेफ़्रिजरेशन का एक पेज का सार चाहता है, सिर्फ़ उन यूनिटों का जो अभी सच में चालू हैं — तापमान, कुछ असामान्य, और किसी पर ध्यान देने की ज़रूरत है या नहीं।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Cold storage status for the auditor.",
+        "de": "Kühllagerstatus für den Prüfer.",
+        "es": "Estado del frío para el auditor.",
+        "ar": "حالة التبريد للمدقق.",
+        "hi": "ऑडिटर के लिए कोल्ड स्टोरेज स्टेटस।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Leave out anything we no longer run — how are the active cold units doing?",
+        "de": "Lass alles weg, was wir nicht mehr betreiben – wie geht es den aktiven Kühleinheiten?",
+        "es": "Deja fuera lo que ya no usamos: ¿cómo están las unidades de frío activas?",
+        "ar": "استبعد ما لم نعد نشغّله — كيف حال وحدات التبريد النشطة؟",
+        "hi": "जो अब नहीं चलाते उसे छोड़ दो — सक्रिय कोल्ड यूनिट कैसी चल रही हैं?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "After the changes this month, what does our cold-storage line-up look like and is it healthy?",
+        "de": "Wie sieht unser Kühllager nach den Änderungen diesen Monat aus, und ist alles in Ordnung?",
+        "es": "Tras los cambios de este mes, ¿cómo queda nuestro parque de frío y está bien?",
+        "ar": "بعد تغييرات هذا الشهر، كيف تبدو وحدات التخزين المبرّد لدينا وهل هي سليمة؟",
+        "hi": "इस महीने के बदलावों के बाद हमारी कोल्ड-स्टोरेज यूनिटें कैसी हैं और क्या सब ठीक है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "active cold storage health",
+        "de": "Zustand aktive Kühlung",
+        "es": "estado frío activo",
+        "ar": "حالة التبريد النشط",
+        "hi": "सक्रिय कोल्ड स्टोरेज हेल्थ",
+        "mixed": "Status de las active cold storage units, por favor."
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Write the cold-storage health report.",
+        "de": "Schreib den Statusbericht zum Kühllager.",
+        "es": "Escribe el informe de estado del frío.",
+        "ar": "اكتب تقرير حالة التخزين المبرّد.",
+        "hi": "कोल्ड-स्टोरेज हेल्थ रिपोर्ट लिखो।",
+        "mixed": "Schreib den health report für die aktiven cold-storage units."
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "WC-1",
+       "FZ-2"
+      ],
+      "absent": [
+       {
+        "text": "TRU-7",
+        "unless": [
+         {
+          "en": "dismantled",
+          "de": "abgebaut",
+          "es": "desmontado",
+          "ar": "تفكيك",
+          "hi": "हटा दिया"
+         }
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "WC-1",
+        "FZ-2"
+       ],
+       "absent": [
+        "TRU-7"
+       ]
+      }
+     }
+    }
+   ],
+   "origin": "inventorysmart-6"
+  },
+  {
+   "id": "forget-retail-discontinued-sku",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "logs",
+     "day": -50,
+     "at": "06:00",
+     "turns": [],
+     "repeat": {
+      "count": 30,
+      "every_hours": 24,
+      "role": "EVENT",
+      "text": {
+       "en": "Daily sales {date}: {u} units of SKU OLD-55 (summer citronella candles).",
+       "de": "Tagesumsatz {date}: {u} Stück von Artikel OLD-55 (Sommer-Citronella-Kerzen).",
+       "es": "Ventas del día {date}: {u} unidades del SKU OLD-55 (velas de citronela de verano).",
+       "ar": "مبيعات يوم {date}: {u} وحدة من SKU OLD-55 (شموع السترونيلا الصيفية).",
+       "hi": "दैनिक बिक्री {date}: SKU OLD-55 (गर्मियों की सिट्रोनेला मोमबत्तियाँ) की {u} यूनिट।"
+      },
+      "values": {
+       "u": {
+        "min": 4,
+        "max": 30
+       }
+      }
+     }
+    },
+    {
+     "id": "cur",
+     "day": -4,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Daily sales: 18 units of SKU NEW-21 (fleece throw blankets); stock at 40.",
+        "de": "Tagesumsatz: 18 Stück von Artikel NEW-21 (Fleecedecken); Bestand 40.",
+        "es": "Ventas del día: 18 unidades del SKU NEW-21 (mantas polares); stock en 40.",
+        "ar": "مبيعات اليوم: 18 وحدة من SKU NEW-21 (بطانيات صوف)؛ المخزون 40.",
+        "hi": "दैनिक बिक्री: SKU NEW-21 (फ़्लीस कंबल) की 18 यूनिट; स्टॉक 40।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "close",
+     "day": -3,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "SKU OLD-55 is discontinued and delisted; don't reorder it.",
+        "de": "Artikel OLD-55 ist eingestellt und ausgelistet; nicht nachbestellen.",
+        "es": "El SKU OLD-55 está descatalogado y retirado; no hay que volver a pedirlo.",
+        "ar": "SKU OLD-55 متوقف وأزيل من القائمة؛ لا تُعد طلبه.",
+        "hi": "SKU OLD-55 बंद कर दिया गया है और लिस्ट से हटा है; इसे दोबारा ऑर्डर मत करना।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Which items should go on this week's replenishment list?",
+        "de": "Welche Artikel gehören auf die Nachschubliste dieser Woche?",
+        "es": "¿Qué artículos van en la lista de reposición de esta semana?",
+        "ar": "ما الأصناف التي يجب أن تكون في قائمة التزويد لهذا الأسبوع؟",
+        "hi": "इस हफ़्ते की रीप्लेनिशमेंट सूची में कौन से आइटम होने चाहिए?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm about to place the weekly seasonal order.",
+        "de": "Ich gebe gleich die wöchentliche Saisonbestellung auf.",
+        "es": "Estoy a punto de hacer el pedido semanal de temporada.",
+        "ar": "أنا على وشك تقديم الطلب الموسمي الأسبوعي.",
+        "hi": "मैं साप्ताहिक सीज़नल ऑर्डर देने वाला हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What seasonal products are selling that we need to restock?",
+        "de": "Welche Saisonartikel verkaufen sich und müssen nachgefüllt werden?",
+        "es": "¿Qué productos de temporada se venden y hay que reponer?",
+        "ar": "ما المنتجات الموسمية التي تُباع ونحتاج إلى إعادة تخزينها؟",
+        "hi": "कौन से सीज़नल प्रोडक्ट बिक रहे हैं जिन्हें फिर से भरना है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "wat to reordr this weak",
+        "de": "was nachbestelen diese woche",
+        "es": "que repongo esta semna",
+        "ar": "شو نعيد طلبه هالاسبوع",
+        "hi": "इस हफते क्या रिऑर्डर करु"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm doing the weekly replenishment run for the seasonal aisle and I want a list of what's actually selling and still carried, so I don't waste open-to-buy on anything we've dropped.",
+        "de": "Ich mache den wöchentlichen Nachschub für den Saisongang und will eine Liste dessen, was sich tatsächlich verkauft und noch geführt wird, damit ich kein Budget für Artikel verschwende, die wir gestrichen haben.",
+        "es": "Estoy haciendo la reposición semanal del pasillo de temporada y quiero una lista de lo que de verdad se vende y seguimos teniendo, para no gastar presupuesto en algo que hayamos dejado.",
+        "ar": "أقوم بالتزويد الأسبوعي لممر المواسم وأريد قائمة بما يُباع فعلًا وما زلنا نحمله، حتى لا أهدر الميزانية على شيء أوقفناه.",
+        "hi": "मैं सीज़नल गलियारे का साप्ताहिक रीप्लेनिशमेंट कर रहा हूँ और उन चीज़ों की सूची चाहता हूँ जो सच में बिक रही हैं और अभी भी रखी जाती हैं, ताकि बंद किए गए आइटम पर बजट बर्बाद न हो।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Seasonal reorder time.",
+        "de": "Zeit für die Saisonnachbestellung.",
+        "es": "Hora del pedido de temporada.",
+        "ar": "حان وقت الطلب الموسمي.",
+        "hi": "सीज़नल रीऑर्डर का समय।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Don't include anything we've dropped — what should I reorder?",
+        "de": "Nichts aufnehmen, was wir gestrichen haben – was soll ich nachbestellen?",
+        "es": "No incluyas nada que hayamos dejado: ¿qué tengo que pedir?",
+        "ar": "لا تضمّن ما أوقفناه — ماذا أعيد طلبه؟",
+        "hi": "जो बंद किया है वह शामिल मत करो — क्या रीऑर्डर करूँ?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Given the line changes lately, what goes on the reorder?",
+        "de": "Was kommt angesichts der jüngsten Sortimentsänderungen auf die Nachbestellung?",
+        "es": "Con los cambios de surtido recientes, ¿qué va en el pedido?",
+        "ar": "بالنظر إلى تغييرات التشكيلة مؤخرًا، ماذا يدخل في إعادة الطلب؟",
+        "hi": "हाल के बदलावों को देखते हुए रीऑर्डर में क्या जाएगा?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "weekly replenishment list",
+        "de": "wöchentliche Nachschubliste",
+        "es": "lista reposición semanal",
+        "ar": "قائمة التزويد الأسبوعية",
+        "hi": "साप्ताहिक रीप्लेनिशमेंट सूची"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Build this week's replenishment list.",
+        "de": "Erstell die Nachschubliste für diese Woche.",
+        "es": "Prepara la lista de reposición de esta semana.",
+        "ar": "جهّز قائمة التزويد لهذا الأسبوع.",
+        "hi": "इस हफ़्ते की रीप्लेनिशमेंट सूची बनाओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "NEW-21"
+      ],
+      "absent": [
+       {
+        "text": "OLD-55",
+        "unless": [
+         {
+          "en": "discontinued",
+          "de": "eingestellt",
+          "es": "descatalogado",
+          "ar": "متوقف",
+          "hi": "बंद कर दिया"
+         }
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "NEW-21"
+       ],
+       "absent": [
+        "OLD-55"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "forget-retail-ended-promo",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "logs",
+     "day": -35,
+     "at": "06:00",
+     "turns": [],
+     "repeat": {
+      "count": 20,
+      "every_hours": 24,
+      "role": "EVENT",
+      "text": {
+       "en": "Promo log {date}: {c} coupon redemptions for the Summer BBQ Bonanza.",
+       "de": "Aktionsprotokoll {date}: {c} eingelöste Coupons für die Summer BBQ Bonanza.",
+       "es": "Registro de promoción {date}: {c} cupones canjeados de la Summer BBQ Bonanza.",
+       "ar": "سجل العروض {date}: {c} قسيمة مستخدمة لعرض Summer BBQ Bonanza.",
+       "hi": "प्रोमो लॉग {date}: Summer BBQ Bonanza के {c} कूपन भुनाए गए।"
+      },
+      "values": {
+       "c": {
+        "min": 10,
+        "max": 90
+       }
+      }
+     }
+    },
+    {
+     "id": "cur",
+     "day": -6,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The Back to School Saver promo is live: 25% off backpacks and lunch boxes.",
+        "de": "Die Aktion Back to School Saver läuft: 25% auf Rucksäcke und Brotdosen.",
+        "es": "La promoción Back to School Saver está activa: 25% en mochilas y fiambreras.",
+        "ar": "عرض Back to School Saver فعّال: خصم 25% على الحقائب وعلب الغداء.",
+        "hi": "Back to School Saver प्रोमो चालू है: बैग और लंचबॉक्स पर 25% छूट।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "close",
+     "day": -5,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The Summer BBQ Bonanza promo has ended; remove its signage.",
+        "de": "Die Aktion Summer BBQ Bonanza ist beendet; Schilder entfernen.",
+        "es": "La promoción Summer BBQ Bonanza ha terminado; quitad los carteles.",
+        "ar": "انتهى عرض Summer BBQ Bonanza؛ أزيلوا لافتاته.",
+        "hi": "Summer BBQ Bonanza प्रोमो ख़त्म हो गया है; उसके साइन हटा दो।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Which promotions are running right now?",
+        "de": "Welche Aktionen laufen gerade?",
+        "es": "¿Qué promociones están activas ahora mismo?",
+        "ar": "ما العروض السارية الآن؟",
+        "hi": "अभी कौन से प्रमोशन चल रहे हैं?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "A customer asked if we have any deals on at the moment.",
+        "de": "Ein Kunde hat gefragt, ob wir gerade Angebote haben.",
+        "es": "Un cliente preguntó si tenemos alguna oferta ahora.",
+        "ar": "سأل زبون إن كانت لدينا عروض حاليًا.",
+        "hi": "एक ग्राहक ने पूछा कि अभी कोई ऑफ़र है क्या।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What deals are live in the store today?",
+        "de": "Welche Angebote gelten heute im Laden?",
+        "es": "¿Qué ofertas hay hoy en la tienda?",
+        "ar": "ما العروض الفعالة في المتجر اليوم؟",
+        "hi": "आज स्टोर में कौन से ऑफ़र चालू हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "wat promos are runing",
+        "de": "welche aktionen laufn gerade",
+        "es": "que promosiones hay aora",
+        "ar": "شو العروض الشغاله",
+        "hi": "कौनसे प्रोमो चल रहे है"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm updating the front-of-store chalkboard and the weekly email to staff, and I want to list only the promotions that are actually active today, with their discounts.",
+        "de": "Ich aktualisiere die Kreidetafel am Eingang und die wöchentliche Mitarbeiter-Mail und will nur die Aktionen aufführen, die heute wirklich gelten, mit ihren Rabatten.",
+        "es": "Estoy actualizando la pizarra de la entrada y el correo semanal al personal, y quiero poner solo las promociones activas hoy, con sus descuentos.",
+        "ar": "أحدّث السبورة عند مدخل المتجر والبريد الأسبوعي للموظفين، وأريد ذكر العروض الفعالة اليوم فقط مع خصوماتها.",
+        "hi": "मैं स्टोर के सामने का बोर्ड और स्टाफ़ का साप्ताहिक ईमेल अपडेट कर रहा हूँ, और सिर्फ़ आज सच में चालू प्रमोशन उनकी छूट के साथ लिखना चाहता हूँ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Chalkboard promos for today.",
+        "de": "Aktionen für die Kreidetafel heute.",
+        "es": "Promos de hoy para la pizarra.",
+        "ar": "عروض اليوم للسبورة.",
+        "hi": "आज के प्रोमो बोर्ड के लिए।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Skip anything that's finished — what's on promotion?",
+        "de": "Lass Beendetes weg – was ist im Angebot?",
+        "es": "Sáltate lo que haya terminado: ¿qué está en promoción?",
+        "ar": "تجاهل ما انتهى — ما المعروض حاليًا؟",
+        "hi": "जो ख़त्म हो गया उसे छोड़ो — क्या प्रमोशन पर है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Since the summer stuff wrapped up, what promos do we have?",
+        "de": "Seit die Sommersachen vorbei sind – welche Aktionen haben wir?",
+        "es": "Ya que lo de verano terminó, ¿qué promociones tenemos?",
+        "ar": "بعد انتهاء عروض الصيف، ما العروض لدينا؟",
+        "hi": "गर्मियों वाला सब ख़त्म होने के बाद अब कौन से प्रोमो हैं?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "current promotions",
+        "de": "aktuelle Aktionen",
+        "es": "promociones actuales",
+        "ar": "العروض الحالية",
+        "hi": "मौजूदा प्रमोशन"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "List today's active promotions.",
+        "de": "Liste die heute aktiven Aktionen auf.",
+        "es": "Enumera las promociones activas hoy.",
+        "ar": "اذكر العروض الفعالة اليوم.",
+        "hi": "आज के चालू प्रमोशन बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "Back to School Saver"
+      ],
+      "absent": [
+       {
+        "text": "Summer BBQ Bonanza",
+        "unless": [
+         {
+          "en": "ended",
+          "de": "beendet",
+          "es": "terminado",
+          "ar": "انتهى",
+          "hi": "ख़त्म"
+         }
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "Back to School Saver"
+       ],
+       "absent": [
+        "Summer BBQ Bonanza"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "forget-retail-temp-staff",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "logs",
+     "day": -40,
+     "at": "06:00",
+     "turns": [],
+     "repeat": {
+      "count": 25,
+      "every_hours": 24,
+      "role": "EVENT",
+      "text": {
+       "en": "Shift log {date}: Jordan Lee (temp) worked receiving, unloaded {p} pallets.",
+       "de": "Schichtprotokoll {date}: Jordan Lee (Aushilfe) im Wareneingang, {p} Paletten entladen.",
+       "es": "Registro de turno {date}: Jordan Lee (temporal) en recepción, descargó {p} palés.",
+       "ar": "سجل المناوبة {date}: Jordan Lee (مؤقت) عمل في الاستلام وأفرغ {p} منصة.",
+       "hi": "शिफ़्ट लॉग {date}: Jordan Lee (अस्थायी) ने रिसीविंग में काम किया, {p} पैलेट उतारे।"
+      },
+      "values": {
+       "p": {
+        "min": 6,
+        "max": 22
+       }
+      }
+     }
+    },
+    {
+     "id": "cur",
+     "day": -4,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The permanent receiving team is Sam Ortiz and Mei Tanaka.",
+        "de": "Das feste Wareneingangsteam sind Sam Ortiz und Mei Tanaka.",
+        "es": "El equipo fijo de recepción son Sam Ortiz y Mei Tanaka.",
+        "ar": "فريق الاستلام الدائم هو Sam Ortiz وMei Tanaka.",
+        "hi": "स्थायी रिसीविंग टीम में Sam Ortiz और Mei Tanaka हैं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "close",
+     "day": -3,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Jordan Lee's temp assignment has ended; his badge is deactivated.",
+        "de": "Der Aushilfseinsatz von Jordan Lee ist beendet; sein Ausweis ist deaktiviert.",
+        "es": "La asignación temporal de Jordan Lee ha terminado; su tarjeta está desactivada.",
+        "ar": "انتهت مهمة Jordan Lee المؤقتة؛ وأُلغي تفعيل بطاقته.",
+        "hi": "Jordan Lee का अस्थायी काम ख़त्म हो गया है; उनका बैज बंद कर दिया गया है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Who's on the receiving team?",
+        "de": "Wer gehört zum Wareneingangsteam?",
+        "es": "¿Quién está en el equipo de recepción?",
+        "ar": "من في فريق الاستلام؟",
+        "hi": "रिसीविंग टीम में कौन है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I need two people to unload a trailer tomorrow morning.",
+        "de": "Ich brauche morgen früh zwei Leute zum Entladen eines Aufliegers.",
+        "es": "Necesito dos personas para descargar un remolque mañana por la mañana.",
+        "ar": "أحتاج شخصين لتفريغ مقطورة صباح الغد.",
+        "hi": "कल सुबह ट्रेलर उतारने के लिए मुझे दो लोग चाहिए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which staff currently handle receiving?",
+        "de": "Welche Mitarbeiter sind derzeit für den Wareneingang zuständig?",
+        "es": "¿Qué personal se encarga ahora de la recepción?",
+        "ar": "من الموظفون المسؤولون عن الاستلام حاليًا؟",
+        "hi": "अभी रिसीविंग कौन से कर्मचारी संभालते हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "whos on recieving",
+        "de": "wer ist im warenengang",
+        "es": "quien esta en resepcion",
+        "ar": "مين بالاستلام",
+        "hi": "रिसिविंग में कौन है"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm building next week's rota for the receiving dock and I want to schedule only people who are actually still on the team, so who do I have to work with?",
+        "de": "Ich erstelle den Dienstplan für den Wareneingang nächste Woche und will nur Leute einplanen, die wirklich noch im Team sind – mit wem kann ich rechnen?",
+        "es": "Estoy haciendo el cuadrante de recepción de la semana que viene y solo quiero programar a quien siga de verdad en el equipo. ¿Con quién cuento?",
+        "ar": "أعدّ جدول المناوبات لرصيف الاستلام للأسبوع المقبل وأريد جدولة من لا يزالون في الفريق فعلًا فقط — على من أعتمد؟",
+        "hi": "मैं अगले हफ़्ते का रिसीविंग डॉक रोटा बना रहा हूँ और सिर्फ़ उन्हें रखना चाहता हूँ जो सच में अभी टीम में हैं — मेरे पास कौन है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Rota for receiving next week.",
+        "de": "Dienstplan Wareneingang nächste Woche.",
+        "es": "Cuadrante de recepción para la semana que viene.",
+        "ar": "جدول الاستلام للأسبوع المقبل.",
+        "hi": "अगले हफ़्ते का रिसीविंग रोटा।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not anyone who's left — who's on receiving now?",
+        "de": "Niemand, der gegangen ist – wer ist jetzt im Wareneingang?",
+        "es": "Nadie que se haya ido: ¿quién está ahora en recepción?",
+        "ar": "ليس من غادر — من في الاستلام الآن؟",
+        "hi": "जो चले गए वे नहीं — अभी रिसीविंग में कौन है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "After the staffing change, who's left on receiving?",
+        "de": "Wer ist nach der Personaländerung noch im Wareneingang?",
+        "es": "Tras el cambio de personal, ¿quién queda en recepción?",
+        "ar": "بعد تغيير الموظفين، من بقي في الاستلام؟",
+        "hi": "स्टाफ़ बदलने के बाद रिसीविंग में कौन बचा है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "receiving team",
+        "de": "Team Wareneingang",
+        "es": "equipo de recepción",
+        "ar": "فريق الاستلام",
+        "hi": "रिसीविंग टीम"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Name the people on the receiving team.",
+        "de": "Nenn die Leute im Wareneingangsteam.",
+        "es": "Di los nombres del equipo de recepción.",
+        "ar": "اذكر أسماء فريق الاستلام.",
+        "hi": "रिसीविंग टीम के लोगों के नाम बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "Sam Ortiz"
+      ],
+      "absent": [
+       {
+        "text": "Jordan Lee",
+        "unless": [
+         {
+          "en": "ended",
+          "de": "beendet",
+          "es": "terminado",
+          "ar": "انتهت",
+          "hi": "ख़त्म"
+         }
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "Sam Ortiz",
+        "Mei Tanaka"
+       ],
+       "absent": [
+        "Jordan Lee"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "forget-retail-closed-store",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "logs",
+     "day": -45,
+     "at": "06:00",
+     "turns": [],
+     "repeat": {
+      "count": 20,
+      "every_hours": 48,
+      "role": "EVENT",
+      "text": {
+       "en": "Transfer log {date}: sent {u} cartons of household goods to Store 140.",
+       "de": "Umlagerungsprotokoll {date}: {u} Kartons Haushaltswaren an Filiale 140 geschickt.",
+       "es": "Registro de traspasos {date}: enviadas {u} cajas de artículos del hogar a la Tienda 140.",
+       "ar": "سجل النقل {date}: أُرسلت {u} كرتونة من الأدوات المنزلية إلى المتجر 140.",
+       "hi": "ट्रांसफ़र लॉग {date}: स्टोर 140 को घरेलू सामान के {u} कार्टन भेजे।"
+      },
+      "values": {
+       "u": {
+        "min": 5,
+        "max": 40
+       }
+      }
+     }
+    },
+    {
+     "id": "cur",
+     "day": -5,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Transfer log: sent 22 cartons of household goods to Store 112.",
+        "de": "Umlagerungsprotokoll: 22 Kartons Haushaltswaren an Filiale 112 geschickt.",
+        "es": "Registro de traspasos: enviadas 22 cajas de artículos del hogar a la Tienda 112.",
+        "ar": "سجل النقل: أُرسلت 22 كرتونة من الأدوات المنزلية إلى المتجر 112.",
+        "hi": "ट्रांसफ़र लॉग: स्टोर 112 को घरेलू सामान के 22 कार्टन भेजे।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "close",
+     "day": -4,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Store 140 has closed permanently; it can't receive transfers anymore.",
+        "de": "Filiale 140 ist dauerhaft geschlossen und kann keine Umlagerungen mehr annehmen.",
+        "es": "La Tienda 140 ha cerrado definitivamente; ya no puede recibir traspasos.",
+        "ar": "أُغلق المتجر 140 نهائيًا؛ ولم يعد يستقبل طلبات نقل.",
+        "hi": "स्टोर 140 हमेशा के लिए बंद हो गया है; अब वह ट्रांसफ़र नहीं ले सकता।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Which stores can we send transfers to?",
+        "de": "An welche Filialen können wir Umlagerungen schicken?",
+        "es": "¿A qué tiendas podemos enviar traspasos?",
+        "ar": "إلى أي متاجر يمكننا إرسال طلبات نقل؟",
+        "hi": "हम किन स्टोरों को ट्रांसफ़र भेज सकते हैं?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "We have extra household goods to move out.",
+        "de": "Wir haben überschüssige Haushaltswaren, die raus müssen.",
+        "es": "Tenemos artículos del hogar de sobra que sacar.",
+        "ar": "لدينا أدوات منزلية زائدة يجب نقلها.",
+        "hi": "हमारे पास अतिरिक्त घरेलू सामान है जिसे भेजना है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Where can our surplus stock be transferred?",
+        "de": "Wohin kann unser Überbestand umgelagert werden?",
+        "es": "¿A dónde se puede traspasar nuestro excedente?",
+        "ar": "إلى أين يمكن نقل المخزون الفائض؟",
+        "hi": "हमारा अतिरिक्त स्टॉक कहाँ ट्रांसफ़र हो सकता है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "wich stors take transfrs",
+        "de": "welche filalen nehmen umlagrungen",
+        "es": "que tiendas aceptan traspasso",
+        "ar": "اي متاجر تستقبل نقل",
+        "hi": "कौनसे स्टोर ट्रांसफर लेते है"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm planning where to send the surplus household goods that have piled up in the back room, and I only want to consider stores that can actually still receive transfers — which ones are those?",
+        "de": "Ich plane, wohin die überschüssigen Haushaltswaren aus dem Lager gehen sollen, und will nur Filialen berücksichtigen, die tatsächlich noch Umlagerungen annehmen können – welche sind das?",
+        "es": "Estoy planeando a dónde mandar los artículos del hogar sobrantes que se han acumulado en la trastienda y solo quiero considerar tiendas que todavía puedan recibir traspasos. ¿Cuáles son?",
+        "ar": "أخطط لوجهة الأدوات المنزلية الفائضة المتراكمة في المخزن، وأريد اعتبار المتاجر التي لا تزال تستقبل النقل فعلًا فقط — ما هي؟",
+        "hi": "मैं सोच रहा हूँ कि पीछे के कमरे में जमा अतिरिक्त घरेलू सामान कहाँ भेजूँ, और सिर्फ़ वे स्टोर देखना चाहता हूँ जो अभी भी ट्रांसफ़र ले सकते हैं — वे कौन से हैं?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Surplus transfer — where?",
+        "de": "Überbestand umlagern – wohin?",
+        "es": "Traspaso de excedentes: ¿a dónde?",
+        "ar": "نقل الفائض — إلى أين؟",
+        "hi": "अतिरिक्त ट्रांसफ़र — कहाँ?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not closed stores — which ones can take transfers?",
+        "de": "Keine geschlossenen Filialen – welche können Umlagerungen annehmen?",
+        "es": "Tiendas cerradas no: ¿cuáles pueden recibir traspasos?",
+        "ar": "ليست المتاجر المغلقة — أيها يستقبل النقل؟",
+        "hi": "बंद स्टोर नहीं — कौन से ट्रांसफ़र ले सकते हैं?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "With the closure we heard about, where do transfers go now?",
+        "de": "Wohin gehen Umlagerungen nach der Schließung, von der wir gehört haben?",
+        "es": "Con el cierre del que nos enteramos, ¿a dónde van ahora los traspasos?",
+        "ar": "مع الإغلاق الذي سمعنا عنه، إلى أين تذهب طلبات النقل الآن؟",
+        "hi": "जिस बंद होने की ख़बर आई थी, उसके बाद ट्रांसफ़र अब कहाँ जाते हैं?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "transfer destinations",
+        "de": "Umlagerungsziele",
+        "es": "destinos de traspaso",
+        "ar": "وجهات النقل",
+        "hi": "ट्रांसफ़र गंतव्य"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "List the stores that can receive transfers.",
+        "de": "Liste die Filialen auf, die Umlagerungen annehmen können.",
+        "es": "Enumera las tiendas que pueden recibir traspasos.",
+        "ar": "اذكر المتاجر التي تستقبل النقل.",
+        "hi": "ट्रांसफ़र ले सकने वाले स्टोर बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "Store 112",
+        "de": "Filiale 112",
+        "es": "Tienda 112",
+        "ar": "المتجر 112",
+        "hi": "स्टोर 112"
+       }
+      ],
+      "absent": [
+       {
+        "text": "140",
+        "unless": [
+         {
+          "en": "closed",
+          "de": "geschlossen",
+          "es": "cerrado",
+          "ar": "أُغلق",
+          "hi": "बंद हो गया"
+         }
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "112"
+       ],
+       "absent": [
+        "140"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "forget-retail-closed-recall",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "logs",
+     "day": -30,
+     "at": "06:00",
+     "turns": [],
+     "repeat": {
+      "count": 20,
+      "every_hours": 24,
+      "role": "EVENT",
+      "text": {
+       "en": "Recall check {date}: {u} units of lot L-2291 found and quarantined.",
+       "de": "Rückrufkontrolle {date}: {u} Einheiten der Charge L-2291 gefunden und gesperrt.",
+       "es": "Control de retirada {date}: {u} unidades del lote L-2291 localizadas y en cuarentena.",
+       "ar": "فحص السحب {date}: عُثر على {u} وحدة من الدفعة L-2291 ووُضعت في الحجر.",
+       "hi": "रिकॉल जाँच {date}: लॉट L-2291 की {u} यूनिट मिलीं और अलग रखी गईं।"
+      },
+      "values": {
+       "u": {
+        "min": 1,
+        "max": 9
+       }
+      }
+     }
+    },
+    {
+     "id": "cur",
+     "day": -3,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "New recall: lot L-3307 of frozen spinach — pull it from all freezers.",
+        "de": "Neuer Rückruf: Charge L-3307 Tiefkühlspinat – aus allen Truhen nehmen.",
+        "es": "Nueva retirada: lote L-3307 de espinacas congeladas; retirarlo de todos los congeladores.",
+        "ar": "سحب جديد: الدفعة L-3307 من السبانخ المجمدة — أزيلوها من كل المجمدات.",
+        "hi": "नया रिकॉल: फ़्रोज़न पालक का लॉट L-3307 — इसे सभी फ़्रीज़र से हटाओ।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "close",
+     "day": -2,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The recall of lot L-2291 is closed; all units were destroyed.",
+        "de": "Der Rückruf von Charge L-2291 ist abgeschlossen; alle Einheiten wurden vernichtet.",
+        "es": "La retirada del lote L-2291 está cerrada; se destruyeron todas las unidades.",
+        "ar": "أُغلق سحب الدفعة L-2291؛ وأُتلفت كل الوحدات.",
+        "hi": "लॉट L-2291 का रिकॉल बंद है; सारी यूनिट नष्ट कर दी गईं।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Which recalls are still open?",
+        "de": "Welche Rückrufe sind noch offen?",
+        "es": "¿Qué retiradas siguen abiertas?",
+        "ar": "ما عمليات السحب التي لا تزال مفتوحة؟",
+        "hi": "कौन से रिकॉल अभी खुले हैं?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm doing the morning freezer and shelf walk.",
+        "de": "Ich mache den morgendlichen Rundgang durch Truhen und Regale.",
+        "es": "Estoy haciendo la ronda matinal de congeladores y lineales.",
+        "ar": "أقوم بجولة الصباح على المجمدات والرفوف.",
+        "hi": "मैं सुबह फ़्रीज़र और शेल्फ़ का चक्कर लगा रहा हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What products do we still need to pull for recalls?",
+        "de": "Welche Produkte müssen wir wegen Rückrufen noch entfernen?",
+        "es": "¿Qué productos hay que seguir retirando por retiradas?",
+        "ar": "ما المنتجات التي لا يزال علينا سحبها بسبب عمليات السحب؟",
+        "hi": "रिकॉल के कारण अभी कौन से उत्पाद हटाने हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "wich recals are open",
+        "de": "welche rückrufe sind ofen",
+        "es": "que retiradas estan abiertass",
+        "ar": "اي عمليات سحب مفتوحه",
+        "hi": "कौनसे रिकाल खुले है"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Before the store opens I do a sweep for recalled product, and I want a list of only the recalls that are still active so the team doesn't waste time hunting for stuff that's already been cleared.",
+        "de": "Bevor der Laden öffnet, suche ich nach zurückgerufener Ware, und ich will nur die Rückrufe, die noch aktiv sind, damit das Team keine Zeit mit Dingen verschwendet, die schon erledigt sind.",
+        "es": "Antes de abrir hago una ronda buscando producto retirado y quiero una lista solo de las retiradas que siguen activas, para que el equipo no pierda tiempo buscando lo que ya se resolvió.",
+        "ar": "قبل افتتاح المتجر أبحث عن المنتجات المسحوبة، وأريد قائمة بعمليات السحب النشطة فقط حتى لا يضيع الفريق وقته في البحث عن أشياء أُغلقت بالفعل.",
+        "hi": "स्टोर खुलने से पहले मैं रिकॉल वाले उत्पाद ढूँढता हूँ, और सिर्फ़ अभी सक्रिय रिकॉल की सूची चाहता हूँ ताकि टीम पहले से निपटाई चीज़ें ढूँढने में समय न गँवाए।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Recall sweep list.",
+        "de": "Liste für die Rückrufkontrolle.",
+        "es": "Lista para la ronda de retiradas.",
+        "ar": "قائمة جولة السحب.",
+        "hi": "रिकॉल जाँच सूची।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Leave out closed ones — what recalls are active?",
+        "de": "Abgeschlossene weglassen – welche Rückrufe sind aktiv?",
+        "es": "Deja fuera las cerradas: ¿qué retiradas están activas?",
+        "ar": "استبعد المغلقة — ما عمليات السحب النشطة؟",
+        "hi": "बंद वाले छोड़ दो — कौन से रिकॉल सक्रिय हैं?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "After the recall that was wrapped up the other day, what's still open?",
+        "de": "Was ist nach dem Rückruf, der neulich abgeschlossen wurde, noch offen?",
+        "es": "Tras la retirada que se cerró el otro día, ¿qué sigue abierto?",
+        "ar": "بعد السحب الذي أُغلق قبل أيام، ما الذي لا يزال مفتوحًا؟",
+        "hi": "उस दिन बंद हुए रिकॉल के बाद क्या अभी खुला है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "open recalls",
+        "de": "offene Rückrufe",
+        "es": "retiradas abiertas",
+        "ar": "عمليات سحب مفتوحة",
+        "hi": "खुले रिकॉल"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "List the active recalls.",
+        "de": "Nenn die aktiven Rückrufe.",
+        "es": "Enumera las retiradas activas.",
+        "ar": "اذكر عمليات السحب النشطة.",
+        "hi": "सक्रिय रिकॉल बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "L-3307"
+      ],
+      "absent": [
+       {
+        "text": "L-2291",
+        "unless": [
+         {
+          "en": "closed",
+          "de": "abgeschlossen",
+          "es": "cerrada",
+          "ar": "أُغلق",
+          "hi": "बंद है"
+         }
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "L-3307"
+       ],
+       "absent": [
+        "L-2291"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "forget-personal-training-plan",
+   "domain": "personal",
+   "sessions": [
+    {
+     "id": "logs",
+     "day": -50,
+     "at": "07:00",
+     "turns": [],
+     "repeat": {
+      "count": 30,
+      "every_hours": 24,
+      "role": "EVENT",
+      "text": {
+       "en": "Couch to 5K log {date}: run {n} done, {m} minutes.",
+       "de": "Couch-to-5K-Protokoll {date}: Lauf {n} erledigt, {m} Minuten.",
+       "es": "Registro Couch to 5K {date}: carrera {n} hecha, {m} minutos.",
+       "ar": "سجل Couch to 5K بتاريخ {date}: الجري رقم {n} تم، {m} دقيقة.",
+       "hi": "Couch to 5K लॉग {date}: दौड़ {n} पूरी, {m} मिनट।"
+      },
+      "values": {
+       "m": {
+        "min": 20,
+        "max": 35
+       }
+      }
+     }
+    },
+    {
+     "id": "close",
+     "day": -10,
+     "at": "20:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "I've stopped the Couch to 5K plan because of my knee; I'm switching to swimming three times a week.",
+        "de": "Ich habe den Couch-to-5K-Plan wegen meines Knies abgebrochen und wechsle zu Schwimmen, dreimal pro Woche.",
+        "es": "He dejado el plan Couch to 5K por la rodilla; me paso a la natación tres veces por semana.",
+        "ar": "توقفت عن خطة Couch to 5K بسبب ركبتي؛ وسأتحول إلى السباحة ثلاث مرات أسبوعيًا.",
+        "hi": "घुटने की वजह से मैंने Couch to 5K प्लान बंद कर दिया है; अब हफ़्ते में तीन बार तैराकी करूँगा।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Plan my workouts for this week.",
+        "de": "Plane meine Trainingseinheiten für diese Woche.",
+        "es": "Planifica mis entrenamientos de esta semana.",
+        "ar": "خطط تماريني لهذا الأسبوع.",
+        "hi": "इस हफ़्ते के मेरे वर्कआउट प्लान करो।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I want to stay consistent with exercise this week.",
+        "de": "Ich will diese Woche beim Sport dranbleiben.",
+        "es": "Quiero ser constante con el ejercicio esta semana.",
+        "ar": "أريد الاستمرار في التمارين هذا الأسبوع.",
+        "hi": "मैं इस हफ़्ते कसरत में नियमित रहना चाहता हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What does my training schedule look like now?",
+        "de": "Wie sieht mein Trainingsplan jetzt aus?",
+        "es": "¿Cómo es ahora mi plan de entrenamiento?",
+        "ar": "كيف يبدو جدول تماريني الآن؟",
+        "hi": "अब मेरा ट्रेनिंग शेड्यूल कैसा है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "plan my workots this weak",
+        "de": "plan meine trainigs diese woche",
+        "es": "planea mis entrenos esta semna",
+        "ar": "خطط تماريني هالاسبوع",
+        "hi": "इस हफते के वरकआउट प्लान करो"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I've got a busy week with two late meetings, but I don't want to fall off the wagon with my fitness routine, so put together a realistic plan for this week that fits what I'm actually doing now.",
+        "de": "Ich habe eine volle Woche mit zwei späten Terminen, will aber mit meinem Training nicht aus dem Tritt kommen – stell mir einen realistischen Plan für diese Woche zusammen, der zu dem passt, was ich gerade tatsächlich mache.",
+        "es": "Tengo una semana cargada con dos reuniones tarde, pero no quiero dejar mi rutina de ejercicio, así que hazme un plan realista para esta semana que encaje con lo que hago ahora de verdad.",
+        "ar": "لدي أسبوع مزدحم فيه اجتماعان متأخران، لكنني لا أريد التوقف عن روتين اللياقة، فضع لي خطة واقعية لهذا الأسبوع تناسب ما أمارسه فعلًا الآن.",
+        "hi": "इस हफ़्ते देर तक दो मीटिंग हैं, पर मैं फ़िटनेस रूटीन नहीं छोड़ना चाहता, तो इस हफ़्ते के लिए ऐसा व्यावहारिक प्लान बनाओ जो मेरे अभी के असल रूटीन से मेल खाए।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Workout plan, please.",
+        "de": "Trainingsplan, bitte.",
+        "es": "Plan de entrenamiento, por favor.",
+        "ar": "خطة تمارين من فضلك.",
+        "hi": "वर्कआउट प्लान, प्लीज़।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "No running — what should this week's training be?",
+        "de": "Kein Laufen – wie soll das Training diese Woche aussehen?",
+        "es": "Nada de correr: ¿cómo debería ser el entrenamiento de esta semana?",
+        "ar": "لا جري — كيف يجب أن يكون تدريب هذا الأسبوع؟",
+        "hi": "दौड़ नहीं — इस हफ़्ते की ट्रेनिंग कैसी हो?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Since I changed my routine, what should my week look like?",
+        "de": "Wie sollte meine Woche aussehen, seit ich meine Routine geändert habe?",
+        "es": "Desde que cambié de rutina, ¿cómo debería ser mi semana?",
+        "ar": "منذ أن غيّرت روتيني، كيف يجب أن يكون أسبوعي؟",
+        "hi": "रूटीन बदलने के बाद मेरा हफ़्ता कैसा होना चाहिए?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "this week's workouts",
+        "de": "Training diese Woche",
+        "es": "entrenos de esta semana",
+        "ar": "تمارين هذا الأسبوع",
+        "hi": "इस हफ़्ते के वर्कआउट"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Schedule my exercise sessions for the week.",
+        "de": "Plan meine Trainingseinheiten für die Woche ein.",
+        "es": "Programa mis sesiones de ejercicio de la semana.",
+        "ar": "جدول جلسات التمارين للأسبوع.",
+        "hi": "हफ़्ते के मेरे व्यायाम सत्र तय करो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "swimming",
+        "de": "Schwimmen",
+        "es": "natación",
+        "ar": "السباحة",
+        "hi": "तैराकी"
+       }
+      ],
+      "absent": [
+       {
+        "text": {
+         "en": "Couch to 5K",
+         "de": "Couch-to-5K",
+         "es": "Couch to 5K",
+         "ar": "Couch to 5K",
+         "hi": "Couch to 5K"
+        },
+        "unless": [
+         {
+          "en": "stopped",
+          "de": "abgebrochen",
+          "es": "dejado",
+          "ar": "توقفت",
+          "hi": "बंद कर दिया"
+         }
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        {
+         "en": "swim",
+         "de": "Schwimm",
+         "es": "nata",
+         "ar": "سباحة",
+         "hi": "तैराकी"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "forget-it-decommissioned-db",
+   "domain": "it_support",
+   "sessions": [
+    {
+     "id": "logs",
+     "day": -30,
+     "at": "06:00",
+     "turns": [],
+     "repeat": {
+      "count": 30,
+      "every_hours": 24,
+      "role": "EVENT",
+      "text": {
+       "en": "Monitoring {date}: legacy-db-02 disk at {d}%, replication lag {l}s.",
+       "de": "Monitoring {date}: legacy-db-02 Festplatte bei {d}%, Replikationsverzug {l}s.",
+       "es": "Monitorización {date}: legacy-db-02 disco al {d}%, retraso de replicación {l}s.",
+       "ar": "المراقبة {date}: قرص legacy-db-02 عند {d}%، تأخر النسخ {l} ث.",
+       "hi": "मॉनिटरिंग {date}: legacy-db-02 डिस्क {d}% पर, रेप्लिकेशन लैग {l} सेकंड।"
+      },
+      "values": {
+       "d": {
+        "min": 80,
+        "max": 97
+       },
+       "l": {
+        "min": 2,
+        "max": 40
+       }
+      }
+     }
+    },
+    {
+     "id": "cur",
+     "day": -3,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Monitoring: db-01 healthy, disk 41%; db-03 healthy, disk 37%.",
+        "de": "Monitoring: db-01 in Ordnung, Festplatte 41%; db-03 in Ordnung, Festplatte 37%.",
+        "es": "Monitorización: db-01 sano, disco 41%; db-03 sano, disco 37%.",
+        "ar": "المراقبة: db-01 سليم، القرص 41%؛ db-03 سليم، القرص 37%.",
+        "hi": "मॉनिटरिंग: db-01 ठीक, डिस्क 41%; db-03 ठीक, डिस्क 37%।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "close",
+     "day": -2,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "legacy-db-02 has been decommissioned and wiped; remove it from all reports.",
+        "de": "legacy-db-02 wurde außer Dienst gestellt und gelöscht; aus allen Berichten entfernen.",
+        "es": "legacy-db-02 se ha dado de baja y borrado; quitadlo de todos los informes.",
+        "ar": "أُخرج legacy-db-02 من الخدمة ومُسح؛ أزيلوه من كل التقارير.",
+        "hi": "legacy-db-02 सेवा से हटा दिया गया और मिटा दिया गया है; उसे सभी रिपोर्ट से हटाओ।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Give me a health summary of our active database servers.",
+        "de": "Gib mir eine Zustandsübersicht unserer aktiven Datenbankserver.",
+        "es": "Dame un resumen del estado de nuestros servidores de base de datos activos.",
+        "ar": "أعطني ملخص حالة خوادم قواعد البيانات النشطة لدينا.",
+        "hi": "हमारे सक्रिय डेटाबेस सर्वरों की हेल्थ समरी दो।"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The CTO asked how the databases are holding up.",
+        "de": "Der CTO hat gefragt, wie sich die Datenbanken halten.",
+        "es": "El CTO preguntó cómo van las bases de datos.",
+        "ar": "سأل المدير التقني عن حال قواعد البيانات.",
+        "hi": "CTO ने पूछा कि डेटाबेस कैसे चल रहे हैं।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How are the production DB servers doing?",
+        "de": "Wie geht es den produktiven DB-Servern?",
+        "es": "¿Cómo están los servidores de BD de producción?",
+        "ar": "كيف حال خوادم قواعد البيانات الإنتاجية؟",
+        "hi": "प्रोडक्शन DB सर्वर कैसे चल रहे हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "db servr helth sumary",
+        "de": "db server zustand übersict",
+        "es": "resumen salud servidres bd",
+        "ar": "ملخص حاله سيرفرات الداتابيس",
+        "hi": "डीबी सर्वर हेल्थ समरी"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm writing the monthly infrastructure update for leadership and need a short section on database health covering only the servers we actually run today: disk usage, any replication issues, anything at risk.",
+        "de": "Ich schreibe das monatliche Infrastruktur-Update für die Geschäftsleitung und brauche einen kurzen Abschnitt zur Datenbankgesundheit, nur für die Server, die wir heute tatsächlich betreiben: Plattenbelegung, Replikationsprobleme, Risiken.",
+        "es": "Estoy redactando la actualización mensual de infraestructura para la dirección y necesito una sección breve sobre la salud de las bases de datos, solo de los servidores que tenemos hoy en marcha: uso de disco, problemas de replicación, riesgos.",
+        "ar": "أكتب التحديث الشهري للبنية التحتية للإدارة وأحتاج قسمًا قصيرًا عن صحة قواعد البيانات يشمل الخوادم التي نشغّلها اليوم فقط: استخدام القرص، ومشاكل النسخ، وأي مخاطر.",
+        "hi": "मैं लीडरशिप के लिए मासिक इन्फ्रास्ट्रक्चर अपडेट लिख रहा हूँ और डेटाबेस हेल्थ पर छोटा हिस्सा चाहिए, सिर्फ़ आज चल रहे सर्वरों का: डिस्क उपयोग, रेप्लिकेशन की दिक़्क़तें, कोई जोखिम।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "DB health for the monthly report.",
+        "de": "DB-Zustand für den Monatsbericht.",
+        "es": "Salud de BD para el informe mensual.",
+        "ar": "صحة قواعد البيانات للتقرير الشهري.",
+        "hi": "मासिक रिपोर्ट के लिए DB हेल्थ।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Only servers still in service — how are they?",
+        "de": "Nur Server, die noch in Betrieb sind – wie geht es ihnen?",
+        "es": "Solo los servidores que siguen en servicio: ¿cómo están?",
+        "ar": "الخوادم التي ما زالت في الخدمة فقط — كيف حالها؟",
+        "hi": "सिर्फ़ अभी सेवा में सर्वर — वे कैसे हैं?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "After the decommissioning work this month, how healthy are our databases?",
+        "de": "Wie gesund sind unsere Datenbanken nach den Stilllegungen diesen Monat?",
+        "es": "Tras las bajas de este mes, ¿qué salud tienen nuestras bases de datos?",
+        "ar": "بعد أعمال الإخراج من الخدمة هذا الشهر، ما مدى سلامة قواعد بياناتنا؟",
+        "hi": "इस महीने सर्वर हटाने के बाद हमारे डेटाबेस कितने ठीक हैं?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "active db health",
+        "de": "Zustand aktive DBs",
+        "es": "salud bd activas",
+        "ar": "صحة قواعد البيانات النشطة",
+        "hi": "सक्रिय DB हेल्थ"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Report on the active database servers.",
+        "de": "Berichte über die aktiven Datenbankserver.",
+        "es": "Informa sobre los servidores de BD activos.",
+        "ar": "قدّم تقريرًا عن خوادم قواعد البيانات النشطة.",
+        "hi": "सक्रिय डेटाबेस सर्वरों पर रिपोर्ट दो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "db-01",
+       "db-03"
+      ],
+      "absent": [
+       {
+        "text": "legacy-db-02",
+        "unless": [
+         {
+          "en": "decommissioned",
+          "de": "außer Dienst",
+          "es": "dado de baja",
+          "ar": "أُخرج",
+          "hi": "सेवा से हटा"
+         }
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "db-01",
+        "db-03"
+       ],
+       "absent": [
+        "legacy-db-02"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "forget-finance-old-vendor",
+   "domain": "finance_hr",
+   "sessions": [
+    {
+     "id": "logs",
+     "day": -120,
+     "at": "06:00",
+     "turns": [],
+     "repeat": {
+      "count": 20,
+      "every_hours": 120,
+      "role": "EVENT",
+      "text": {
+       "en": "AP log {date}: paid OfficeHub invoice for ${a} (office supplies).",
+       "de": "Kreditorenprotokoll {date}: OfficeHub-Rechnung über ${a} bezahlt (Büromaterial).",
+       "es": "Registro de pagos {date}: pagada factura de OfficeHub por ${a} (material de oficina).",
+       "ar": "سجل الدائنين {date}: دُفعت فاتورة OfficeHub بقيمة ${a} (لوازم مكتبية).",
+       "hi": "AP लॉग {date}: OfficeHub का ${a} का बिल चुकाया (ऑफ़िस सामान)।"
+      },
+      "values": {
+       "a": {
+        "min": 120,
+        "max": 900
+       }
+      }
+     }
+    },
+    {
+     "id": "cur",
+     "day": -9,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "AP log: paid PaperPoint invoice for $310 (office supplies).",
+        "de": "Kreditorenprotokoll: PaperPoint-Rechnung über $310 bezahlt (Büromaterial).",
+        "es": "Registro de pagos: pagada factura de PaperPoint por $310 (material de oficina).",
+        "ar": "سجل الدائنين: دُفعت فاتورة PaperPoint بقيمة $310 (لوازم مكتبية).",
+        "hi": "AP लॉग: PaperPoint का $310 का बिल चुकाया (ऑफ़िस सामान)।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "close",
+     "day": -8,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Our contract with OfficeHub ended and the account is closed; PaperPoint is our office-supply vendor now.",
+        "de": "Unser Vertrag mit OfficeHub ist beendet und das Konto geschlossen; PaperPoint ist jetzt unser Lieferant für Büromaterial.",
+        "es": "Nuestro contrato con OfficeHub terminó y la cuenta está cerrada; PaperPoint es ahora nuestro proveedor de material de oficina.",
+        "ar": "انتهى عقدنا مع OfficeHub وأُغلق الحساب؛ PaperPoint هو مورّد اللوازم المكتبية الآن.",
+        "hi": "OfficeHub के साथ हमारा अनुबंध ख़त्म हो गया और खाता बंद है; अब PaperPoint हमारा ऑफ़िस-सामान वेंडर है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Which office-supply vendors are we currently paying?",
+        "de": "Welche Büromaterial-Lieferanten bezahlen wir derzeit?",
+        "es": "¿A qué proveedores de material de oficina estamos pagando ahora?",
+        "ar": "ما مورّدو اللوازم المكتبية الذين ندفع لهم حاليًا؟",
+        "hi": "हम अभी किन ऑफ़िस-सामान वेंडरों को भुगतान कर रहे हैं?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm setting up this quarter's vendor accruals.",
+        "de": "Ich richte die Lieferantenabgrenzungen für dieses Quartal ein.",
+        "es": "Estoy preparando las provisiones de proveedores de este trimestre.",
+        "ar": "أعدّ مستحقات الموردين لهذا الربع.",
+        "hi": "मैं इस तिमाही के वेंडर एक्रूअल सेट कर रहा हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Who supplies our office materials these days?",
+        "de": "Wer liefert uns derzeit Büromaterial?",
+        "es": "¿Quién nos suministra ahora el material de oficina?",
+        "ar": "من يورّد لنا اللوازم المكتبية هذه الأيام؟",
+        "hi": "आजकल हमें ऑफ़िस का सामान कौन देता है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "curent ofice supply vendrs",
+        "de": "aktuele büromaterial lieferanten",
+        "es": "proveedores de material de ofisina actuales",
+        "ar": "موردين اللوازم المكتبيه الحاليين",
+        "hi": "मौजुदा ऑफिस सप्लाई वेंडर"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm reconciling the AP ledger for the quarter and want to know which office-supply vendors are still active, so I don't accrue for anyone we've stopped working with.",
+        "de": "Ich stimme das Kreditorenbuch für das Quartal ab und will wissen, welche Büromaterial-Lieferanten noch aktiv sind, damit ich nichts für jemanden abgrenze, mit dem wir nicht mehr arbeiten.",
+        "es": "Estoy conciliando el libro de proveedores del trimestre y quiero saber qué proveedores de material de oficina siguen activos para no provisionar a nadie con quien hayamos dejado de trabajar.",
+        "ar": "أطابق دفتر الدائنين للربع وأريد معرفة مورّدي اللوازم المكتبية النشطين حتى لا أسجّل مستحقات لمن توقفنا عن التعامل معه.",
+        "hi": "मैं तिमाही का AP लेजर मिला रहा हूँ और जानना चाहता हूँ कि कौन से ऑफ़िस-सामान वेंडर अभी सक्रिय हैं, ताकि जिनसे काम बंद हो चुका उनका एक्रूअल न करूँ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Accruals: office supplies vendor?",
+        "de": "Abgrenzung: Büromaterial-Lieferant?",
+        "es": "Provisiones: ¿proveedor de material de oficina?",
+        "ar": "المستحقات: مورّد اللوازم المكتبية؟",
+        "hi": "एक्रूअल: ऑफ़िस सामान वेंडर?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not closed accounts — who are we paying for office supplies?",
+        "de": "Keine geschlossenen Konten – wen bezahlen wir für Büromaterial?",
+        "es": "Cuentas cerradas no: ¿a quién pagamos el material de oficina?",
+        "ar": "ليست الحسابات المغلقة — لمن ندفع مقابل اللوازم المكتبية؟",
+        "hi": "बंद खाते नहीं — ऑफ़िस सामान के लिए किसे भुगतान करते हैं?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "After the vendor change we discussed, who's our office-supply vendor?",
+        "de": "Wer ist nach dem besprochenen Lieferantenwechsel unser Büromaterial-Lieferant?",
+        "es": "Tras el cambio de proveedor que comentamos, ¿quién es nuestro proveedor de material de oficina?",
+        "ar": "بعد تغيير المورّد الذي ناقشناه، من مورّد اللوازم المكتبية لدينا؟",
+        "hi": "जिस वेंडर बदलाव की बात हुई थी, उसके बाद हमारा ऑफ़िस-सामान वेंडर कौन है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "office supply vendors",
+        "de": "Büromaterial-Lieferanten",
+        "es": "proveedores material oficina",
+        "ar": "موردو اللوازم المكتبية",
+        "hi": "ऑफ़िस सामान वेंडर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "List our active office-supply vendors.",
+        "de": "Liste unsere aktiven Büromaterial-Lieferanten auf.",
+        "es": "Enumera nuestros proveedores activos de material de oficina.",
+        "ar": "اذكر مورّدي اللوازم المكتبية النشطين.",
+        "hi": "हमारे सक्रिय ऑफ़िस-सामान वेंडर बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "PaperPoint"
+      ],
+      "absent": [
+       {
+        "text": "OfficeHub",
+        "unless": [
+         "PaperPoint"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "PaperPoint"
+       ],
+       "absent": [
+        "OfficeHub"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "forget-field-temp-generator",
+   "domain": "field_service",
+   "sessions": [
+    {
+     "id": "logs",
+     "day": -25,
+     "at": "06:00",
+     "turns": [],
+     "repeat": {
+      "count": 30,
+      "every_hours": 12,
+      "role": "EVENT",
+      "text": {
+       "en": "Site 4 reading {date} {time}: temporary generator GEN-T1 at {f}% fuel, load {k} kW.",
+       "de": "Standort 4, Messung {date} {time}: Notstromaggregat GEN-T1 bei {f}% Kraftstoff, Last {k} kW.",
+       "es": "Emplazamiento 4, lectura {date} {time}: generador temporal GEN-T1 al {f}% de combustible, carga {k} kW.",
+       "ar": "قراءة الموقع 4 بتاريخ {date} {time}: المولّد المؤقت GEN-T1 عند {f}% وقود، الحمل {k} كيلوواط.",
+       "hi": "साइट 4 रीडिंग {date} {time}: अस्थायी जनरेटर GEN-T1 {f}% ईंधन पर, लोड {k} kW।"
+      },
+      "values": {
+       "f": {
+        "min": 20,
+        "max": 95
+       },
+       "k": {
+        "min": 18,
+        "max": 42
+       }
+      }
+     }
+    },
+    {
+     "id": "cur",
+     "day": -3,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "EVENT",
+       "text": {
+        "en": "Site 4: UPS-4 battery health 96%, on mains power.",
+        "de": "Standort 4: Batteriezustand UPS-4 bei 96%, am Netz.",
+        "es": "Emplazamiento 4: salud de batería del UPS-4 al 96%, con red eléctrica.",
+        "ar": "الموقع 4: صحة بطارية UPS-4 بنسبة 96%، على كهرباء الشبكة.",
+        "hi": "साइट 4: UPS-4 बैटरी हेल्थ 96%, मेन बिजली पर।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "close",
+     "day": -2,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Mains power is restored at Site 4 and the temporary generator GEN-T1 has been removed.",
+        "de": "Am Standort 4 ist der Netzstrom zurück und das Notstromaggregat GEN-T1 wurde abgebaut.",
+        "es": "Se ha restablecido la red en el Emplazamiento 4 y se ha retirado el generador temporal GEN-T1.",
+        "ar": "عادت كهرباء الشبكة إلى الموقع 4 وأُزيل المولّد المؤقت GEN-T1.",
+        "hi": "साइट 4 पर मेन बिजली बहाल हो गई है और अस्थायी जनरेटर GEN-T1 हटा दिया गया है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the status of the power equipment currently at Site 4?",
+        "de": "Wie ist der Zustand der Stromversorgungsgeräte, die derzeit am Standort 4 stehen?",
+        "es": "¿En qué estado está el equipo eléctrico que hay ahora en el Emplazamiento 4?",
+        "ar": "ما حالة معدات الطاقة الموجودة حاليًا في الموقع 4؟",
+        "hi": "साइट 4 पर अभी मौजूद बिजली उपकरणों की स्थिति क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm heading to Site 4 tomorrow for the quarterly check.",
+        "de": "Ich fahre morgen zur Quartalsprüfung an Standort 4.",
+        "es": "Mañana voy al Emplazamiento 4 para la revisión trimestral.",
+        "ar": "سأذهب إلى الموقع 4 غدًا للفحص الفصلي.",
+        "hi": "मैं कल तिमाही जाँच के लिए साइट 4 जा रहा हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What power gear do we have running at Site 4 now?",
+        "de": "Welche Stromtechnik läuft jetzt am Standort 4?",
+        "es": "¿Qué equipos de energía tenemos funcionando ahora en el Emplazamiento 4?",
+        "ar": "ما معدات الطاقة العاملة لدينا الآن في الموقع 4؟",
+        "hi": "साइट 4 पर अभी कौन से बिजली उपकरण चल रहे हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "site 4 powr equipmnt status",
+        "de": "standort 4 strom geräte stauts",
+        "es": "estado equipo electrico sitio 4",
+        "ar": "حاله معدات الطاقه الموقع 4",
+        "hi": "साईट 4 पावर उपकरन स्टेटस"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Before I drive out to Site 4 I want to know exactly which power equipment is on site now and how it's doing, so I bring the right parts and don't plan time for anything that's no longer there.",
+        "de": "Bevor ich zu Standort 4 fahre, will ich genau wissen, welche Stromtechnik jetzt vor Ort ist und in welchem Zustand, damit ich die richtigen Teile mitnehme und keine Zeit für etwas einplane, das nicht mehr da ist.",
+        "es": "Antes de ir al Emplazamiento 4 quiero saber exactamente qué equipo eléctrico hay ahora allí y cómo está, para llevar las piezas adecuadas y no reservar tiempo para algo que ya no está.",
+        "ar": "قبل أن أتوجه إلى الموقع 4 أريد أن أعرف بالضبط ما معدات الطاقة الموجودة هناك الآن وحالتها، لأحضر القطع الصحيحة ولا أخطط وقتًا لشيء لم يعد موجودًا.",
+        "hi": "साइट 4 जाने से पहले मैं ठीक-ठीक जानना चाहता हूँ कि अभी वहाँ कौन से बिजली उपकरण हैं और वे कैसे हैं, ताकि सही पार्ट्स ले जाऊँ और जो अब वहाँ नहीं है उसके लिए समय न रखूँ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Site 4 power check tomorrow.",
+        "de": "Morgen Stromprüfung am Standort 4.",
+        "es": "Revisión eléctrica en el Emplazamiento 4 mañana.",
+        "ar": "فحص الطاقة في الموقع 4 غدًا.",
+        "hi": "कल साइट 4 पर बिजली जाँच।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not anything that's been removed — what power equipment is at Site 4?",
+        "de": "Nichts, was abgebaut wurde – welche Stromtechnik ist am Standort 4?",
+        "es": "Nada que se haya retirado: ¿qué equipo eléctrico hay en el Emplazamiento 4?",
+        "ar": "ليس ما أُزيل — ما معدات الطاقة في الموقع 4؟",
+        "hi": "जो हटा दिया गया वह नहीं — साइट 4 पर कौन से बिजली उपकरण हैं?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Now that the outage work is done, what's on site at Site 4?",
+        "de": "Was steht am Standort 4, jetzt wo die Arbeiten wegen des Ausfalls erledigt sind?",
+        "es": "Ahora que terminó lo del apagón, ¿qué hay en el Emplazamiento 4?",
+        "ar": "بعد انتهاء أعمال الانقطاع، ما الموجود في الموقع 4؟",
+        "hi": "आउटेज का काम ख़त्म होने के बाद साइट 4 पर क्या है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Site 4 power status",
+        "de": "Stromstatus Standort 4",
+        "es": "estado energía Emplazamiento 4",
+        "ar": "حالة الطاقة الموقع 4",
+        "hi": "साइट 4 पावर स्टेटस"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Summarise Site 4's current power equipment.",
+        "de": "Fasse die aktuelle Stromtechnik am Standort 4 zusammen.",
+        "es": "Resume el equipo eléctrico actual del Emplazamiento 4.",
+        "ar": "لخّص معدات الطاقة الحالية في الموقع 4.",
+        "hi": "साइट 4 के मौजूदा बिजली उपकरणों का सार दो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "UPS-4"
+      ],
+      "absent": [
+       {
+        "text": "GEN-T1",
+        "unless": [
+         {
+          "en": "removed",
+          "de": "abgebaut",
+          "es": "retirado",
+          "ar": "أُزيل",
+          "hi": "हटा दिया"
+         }
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "UPS-4"
+       ],
+       "absent": [
+        "GEN-T1"
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

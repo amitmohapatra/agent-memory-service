@@ -282,6 +282,21 @@ def _require_may_act_as(request: Request, user_id: str | None, agent_id: str | N
         raise ScopeDenied("this key may not act as that agent", details={"field": "agent_id"})
 
 
+def credential_vouches_for_agent(request: Request, agent_id: str | None) -> bool:
+    """Whether the credential may act as ``agent_id``: an issued key whose ``may_act_as``
+    allows that agent (or any), the platform or a development key. A bearer token from an
+    identity provider names a person, not a run, and vouches for no agent. What an agent
+    says about its own run (its status, ``source=system``) is taken at its word only when
+    this holds (ADR 0039): there is no credential bound to one run."""
+    if agent_id is None:
+        return False
+    mode = credential_mode(request)
+    if mode not in ("api_key", "trusted_dev"):
+        return False
+    allowed = credential_claims(request).get("may_act_as") if mode == "api_key" else None
+    return allowed is None or ANY_PRINCIPAL in allowed or f"agent:{agent_id}" in allowed
+
+
 def request_context(request: Request, tenant_id: str) -> MemoryExecutionContext:
     """A bare execution context for administrative writes: the tenant acted on and the
     request's correlation ids, nothing about users or threads."""

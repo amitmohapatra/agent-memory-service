@@ -1,0 +1,1908 @@
+{
+ "capability": "test_time_learning",
+ "number": 9,
+ "title": "Test-time learning (correction)",
+ "definition": "Apply the user's correction of a mistake immediately and durably: the corrected procedure is served next time, the wrong one is not.",
+ "scenarios": [
+  {
+   "id": "correction-retail-shrinkage-command",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -12,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "How do I write off damaged inventory in the system?",
+        "de": "Wie schreibe ich beschädigten Bestand im System ab?",
+        "es": "¿Cómo doy de baja inventario dañado en el sistema?",
+        "ar": "كيف أشطب المخزون التالف في النظام؟",
+        "hi": "सिस्टम में ख़राब माल को कैसे राइट-ऑफ़ करूँ?"
+       }
+      },
+      {
+       "role": "ASSISTANT",
+       "text": {
+        "en": "To write off damaged inventory, use the /delete command.",
+        "de": "Um beschädigten Bestand abzuschreiben, nutze den Befehl /delete.",
+        "es": "Para dar de baja inventario dañado, usa el comando /delete.",
+        "ar": "لشطب المخزون التالف، استخدم الأمر /delete.",
+        "hi": "ख़राब माल राइट-ऑफ़ करने के लिए /delete कमांड इस्तेमाल करें।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "No, our system was updated. We now use the /shrinkage command to write off damage so it hits the right ledger.",
+        "de": "Nein, unser System wurde aktualisiert. Wir nutzen jetzt den Befehl /shrinkage, um Schäden abzuschreiben, damit es auf dem richtigen Konto landet.",
+        "es": "No, el sistema se actualizó. Ahora usamos el comando /shrinkage para dar de baja los daños y que vaya al libro correcto.",
+        "ar": "لا، تم تحديث نظامنا. نستخدم الآن الأمر /shrinkage لشطب التلف حتى يُسجَّل في الدفتر الصحيح.",
+        "hi": "नहीं, हमारा सिस्टम अपडेट हो गया है। अब हम नुक़सान राइट-ऑफ़ करने के लिए /shrinkage कमांड इस्तेमाल करते हैं ताकि वह सही लेजर में जाए।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -3,
+     "at": "14:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Can you list tomorrow's deliveries?",
+        "de": "Kannst du die Lieferungen für morgen auflisten?",
+        "es": "¿Puedes listar las entregas de mañana?",
+        "ar": "هل يمكنك سرد توريدات الغد؟",
+        "hi": "कल की डिलीवरी की सूची दे सकते हो?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "I have a pallet of crushed boxes. How do I remove them from the system?",
+        "de": "Ich habe eine Palette zerdrückter Kartons. Wie entferne ich sie aus dem System?",
+        "es": "Tengo un palé de cajas aplastadas. ¿Cómo las quito del sistema?",
+        "ar": "لدي منصة من الصناديق المهروسة. كيف أزيلها من النظام؟",
+        "hi": "मेरे पास कुचले हुए डिब्बों का एक पैलेट है। उन्हें सिस्टम से कैसे हटाऊँ?",
+        "mixed": "Crushed boxes ka ek pallet hai, system se kaise remove karun?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "A forklift ran into a stack of cereal and half the cases are ruined.",
+        "de": "Ein Stapler ist in einen Stapel Müsli gefahren und die Hälfte der Kartons ist hinüber.",
+        "es": "Una carretilla chocó con una pila de cereales y la mitad de las cajas están estropeadas.",
+        "ar": "اصطدمت رافعة بكومة من الحبوب وتلف نصف الصناديق.",
+        "hi": "एक फ़ोर्कलिफ़्ट सीरियल के ढेर से टकरा गया और आधे केस बर्बाद हो गए।",
+        "mixed": "Se cayó un pallet de cereal y quiero hacer el write-off, ¿qué command uso?"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What's the right way to write off damaged stock now?",
+        "de": "Wie schreibt man beschädigten Bestand jetzt richtig ab?",
+        "es": "¿Cuál es ahora la forma correcta de dar de baja stock dañado?",
+        "ar": "ما الطريقة الصحيحة لشطب المخزون التالف الآن؟",
+        "hi": "अब ख़राब स्टॉक राइट-ऑफ़ करने का सही तरीक़ा क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "how do i rite off damagd boxes",
+        "de": "wie schreib ich beschädigte kartns ab",
+        "es": "como doy de baja cajas dañadas porfa",
+        "ar": "كيف اشطب صناديق تالفه",
+        "hi": "खराब डिब्बे कैसे राइट ऑफ करु"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "We had a bad unload this morning — a pallet of canned goods came off the truck with the bottom layer completely crushed, nothing on it is sellable, and I need to get it out of our on-hand inventory properly so the books are right at month end.",
+        "de": "Heute früh lief eine Entladung schief – eine Palette Konserven kam mit völlig zerdrückter unterster Lage vom Lkw, nichts davon ist verkäuflich, und ich muss sie ordentlich aus dem Bestand nehmen, damit die Bücher zum Monatsende stimmen.",
+        "es": "Esta mañana hubo una mala descarga: un palé de conservas salió del camión con la capa de abajo totalmente aplastada, nada se puede vender y tengo que sacarlo bien del inventario para que las cuentas cuadren a fin de mes.",
+        "ar": "حدث تفريغ سيئ هذا الصباح — نزلت منصة معلبات من الشاحنة وطبقتها السفلية مهروسة تمامًا، ولا شيء منها صالح للبيع، وأحتاج إلى إخراجها من المخزون بالشكل الصحيح لتكون الدفاتر سليمة في نهاية الشهر.",
+        "hi": "आज सुबह माल उतारते समय गड़बड़ हुई — डिब्बाबंद सामान का एक पैलेट नीचे की परत पूरी तरह कुचली हुई हालत में ट्रक से उतरा, कुछ भी बिकने लायक़ नहीं, और महीने के अंत में हिसाब सही रहे इसलिए उसे स्टॉक से ठीक तरीक़े से निकालना है।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Crushed pallet on the dock — system?",
+        "de": "Zerdrückte Palette an der Rampe – im System?",
+        "es": "Palé aplastado en el muelle: ¿en el sistema?",
+        "ar": "منصة مهروسة على الرصيف — في النظام؟",
+        "hi": "डॉक पर कुचला पैलेट — सिस्टम में?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "I shouldn't use /delete for damaged stock, right? What do I use?",
+        "de": "Ich soll für beschädigten Bestand nicht /delete nehmen, oder? Was dann?",
+        "es": "No debo usar /delete para el stock dañado, ¿verdad? ¿Qué uso?",
+        "ar": "لا يجب أن أستخدم /delete للمخزون التالف، صحيح؟ ماذا أستخدم؟",
+        "hi": "ख़राब स्टॉक के लिए /delete इस्तेमाल नहीं करना है ना? फिर क्या?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "You were corrected about damage write-offs a while ago — what's the command?",
+        "de": "Du wurdest vor einer Weile bei Schadensabschreibungen korrigiert – wie lautet der Befehl?",
+        "es": "Hace un tiempo te corrigieron sobre las bajas por daños: ¿cuál es el comando?",
+        "ar": "صُحّحت قبل فترة بخصوص شطب التلف — ما الأمر؟",
+        "hi": "कुछ समय पहले नुक़सान राइट-ऑफ़ के बारे में तुम्हें सुधारा गया था — कमांड क्या है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "write off damaged command",
+        "de": "Befehl Schaden abschreiben",
+        "es": "comando dar de baja daños",
+        "ar": "أمر شطب التالف",
+        "hi": "नुक़सान राइट-ऑफ़ कमांड",
+        "mixed": "Welcher command für damaged stock write-off?"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me how to write off the crushed boxes.",
+        "de": "Sag mir, wie ich die zerdrückten Kartons abschreibe.",
+        "es": "Dime cómo dar de baja las cajas aplastadas.",
+        "ar": "أخبرني كيف أشطب الصناديق المهروسة.",
+        "hi": "बताओ कुचले डिब्बे कैसे राइट-ऑफ़ करूँ।",
+        "mixed": "قلي كيف أعمل write off للـ crushed boxes بالـ system."
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "/shrinkage"
+      ],
+      "absent": [
+       {
+        "text": "/delete",
+        "unless": [
+         "/shrinkage"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "/shrinkage"
+       ],
+       "absent": [
+        "/delete"
+       ]
+      }
+     }
+    }
+   ],
+   "origin": "inventorysmart-9"
+  },
+  {
+   "id": "correction-retail-opened-electronics",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -15,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Where do opened electronics returns go?",
+        "de": "Wohin kommen geöffnete Elektronik-Retouren?",
+        "es": "¿A dónde van las devoluciones de electrónica abierta?",
+        "ar": "أين تذهب مرتجعات الإلكترونيات المفتوحة؟",
+        "hi": "खुले इलेक्ट्रॉनिक्स रिटर्न कहाँ जाते हैं?"
+       }
+      },
+      {
+       "role": "ASSISTANT",
+       "text": {
+        "en": "Opened electronics can go straight back to the shelf after a quick check.",
+        "de": "Geöffnete Elektronik kann nach kurzer Prüfung direkt zurück ins Regal.",
+        "es": "La electrónica abierta puede volver directamente a la estantería tras una revisión rápida.",
+        "ar": "يمكن إعادة الإلكترونيات المفتوحة إلى الرف مباشرة بعد فحص سريع.",
+        "hi": "खुले इलेक्ट्रॉनिक्स जल्दी जाँच के बाद सीधे शेल्फ़ पर वापस जा सकते हैं।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "No — opened electronics go to the RTV cage for vendor return, never back to the shelf.",
+        "de": "Nein – geöffnete Elektronik kommt in den RTV-Käfig zur Rücksendung an den Lieferanten, niemals zurück ins Regal.",
+        "es": "No: la electrónica abierta va a la jaula RTV para devolverla al proveedor, nunca vuelve a la estantería.",
+        "ar": "لا — الإلكترونيات المفتوحة تذهب إلى قفص RTV لإرجاعها إلى المورّد، ولا تعود إلى الرف أبدًا.",
+        "hi": "नहीं — खुले इलेक्ट्रॉनिक्स वेंडर को लौटाने के लिए RTV केज में जाते हैं, शेल्फ़ पर कभी नहीं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -3,
+     "at": "14:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Can you list tomorrow's deliveries?",
+        "de": "Kannst du die Lieferungen für morgen auflisten?",
+        "es": "¿Puedes listar las entregas de mañana?",
+        "ar": "هل يمكنك سرد توريدات الغد؟",
+        "hi": "कल की डिलीवरी की सूची दे सकते हो?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "A customer returned opened earbuds. What do I do with them?",
+        "de": "Ein Kunde hat geöffnete Ohrhörer zurückgebracht. Was mache ich damit?",
+        "es": "Un cliente devolvió unos auriculares abiertos. ¿Qué hago con ellos?",
+        "ar": "أعاد زبون سماعات أذن مفتوحة. ماذا أفعل بها؟",
+        "hi": "एक ग्राहक ने खुले ईयरबड लौटाए। उनका क्या करूँ?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I've got an opened tablet from the returns desk.",
+        "de": "Ich habe ein geöffnetes Tablet von der Retourentheke.",
+        "es": "Tengo una tableta abierta del mostrador de devoluciones.",
+        "ar": "لدي جهاز لوحي مفتوح من مكتب المرتجعات.",
+        "hi": "रिटर्न डेस्क से एक खुला टैबलेट आया है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Where should returned, opened electronics be put?",
+        "de": "Wohin gehört zurückgegebene, geöffnete Elektronik?",
+        "es": "¿Dónde se pone la electrónica devuelta y abierta?",
+        "ar": "أين توضع الإلكترونيات المرتجعة المفتوحة؟",
+        "hi": "लौटाए गए खुले इलेक्ट्रॉनिक्स कहाँ रखें?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "opend electronics retrun where",
+        "de": "geöffnete elektronik retoure wohin",
+        "es": "electronica abierta devuelta donde va",
+        "ar": "الكترونيات مفتوحه مرتجعه وين",
+        "hi": "खुले इलेक्ट्रोनिक्स रिटर्न कहा"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "A customer just brought back a pair of wireless earbuds — box opened, everything inside, she just didn't like the fit — and I want to process it properly rather than guess where it goes.",
+        "de": "Eine Kundin hat gerade kabellose Ohrhörer zurückgebracht – Packung geöffnet, alles drin, sie mochte nur den Sitz nicht – und ich will das richtig bearbeiten, statt zu raten, wohin sie kommen.",
+        "es": "Una clienta acaba de devolver unos auriculares inalámbricos (caja abierta, todo dentro, no le gustó cómo le quedaban) y quiero tramitarlo bien en vez de adivinar a dónde van.",
+        "ar": "أعادت زبونة للتو سماعات لاسلكية — العلبة مفتوحة وكل شيء بداخلها، لكنها لم تحب مقاسها — وأريد معالجتها بشكل صحيح بدل التخمين أين تذهب.",
+        "hi": "एक ग्राहक अभी वायरलेस ईयरबड लौटा गईं — डिब्बा खुला, सब अंदर, बस फ़िट पसंद नहीं आया — और मैं अंदाज़ा लगाने की बजाय इसे सही तरीक़े से प्रोसेस करना चाहता हूँ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Opened return, electronics.",
+        "de": "Geöffnete Retoure, Elektronik.",
+        "es": "Devolución abierta, electrónica.",
+        "ar": "مرتجع مفتوح، إلكترونيات.",
+        "hi": "खुला रिटर्न, इलेक्ट्रॉनिक्स।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "They don't just go back on the shelf, do they?",
+        "de": "Die kommen doch nicht einfach zurück ins Regal, oder?",
+        "es": "No vuelven sin más a la estantería, ¿verdad?",
+        "ar": "لا تعود ببساطة إلى الرف، صحيح؟",
+        "hi": "वे सीधे शेल्फ़ पर वापस नहीं जाते ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "There was a correction about opened electronics a couple of weeks ago — what's the rule?",
+        "de": "Vor ein paar Wochen gab es eine Korrektur zu geöffneter Elektronik – wie lautet die Regel?",
+        "es": "Hace un par de semanas hubo una corrección sobre la electrónica abierta: ¿cuál es la norma?",
+        "ar": "كان هناك تصحيح بخصوص الإلكترونيات المفتوحة قبل أسبوعين — ما القاعدة؟",
+        "hi": "दो हफ़्ते पहले खुले इलेक्ट्रॉनिक्स पर सुधार हुआ था — नियम क्या है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "opened electronics returns",
+        "de": "geöffnete Elektronik Retouren",
+        "es": "devoluciones electrónica abierta",
+        "ar": "مرتجعات إلكترونيات مفتوحة",
+        "hi": "खुले इलेक्ट्रॉनिक्स रिटर्न"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me where opened electronics returns go.",
+        "de": "Sag mir, wohin geöffnete Elektronik-Retouren kommen.",
+        "es": "Dime a dónde van las devoluciones de electrónica abierta.",
+        "ar": "أخبرني أين تذهب مرتجعات الإلكترونيات المفتوحة.",
+        "hi": "बताओ खुले इलेक्ट्रॉनिक्स रिटर्न कहाँ जाते हैं।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "RTV"
+      ],
+      "absent": [
+       {
+        "text": {
+         "en": "straight back to the shelf",
+         "de": "direkt zurück ins Regal",
+         "es": "directamente a la estantería",
+         "ar": "إلى الرف مباشرة",
+         "hi": "सीधे शेल्फ़ पर"
+        },
+        "unless": [
+         "RTV"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "RTV"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "correction-retail-price-override",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -9,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "How do I override a price at the register?",
+        "de": "Wie überschreibe ich einen Preis an der Kasse?",
+        "es": "¿Cómo cambio un precio manualmente en la caja?",
+        "ar": "كيف أتجاوز سعرًا عند الصندوق؟",
+        "hi": "काउंटर पर क़ीमत ओवरराइड कैसे करूँ?"
+       }
+      },
+      {
+       "role": "ASSISTANT",
+       "text": {
+        "en": "Enter manager code 77 to override a price.",
+        "de": "Gib den Managercode 77 ein, um einen Preis zu überschreiben.",
+        "es": "Introduce el código de encargado 77 para cambiar un precio.",
+        "ar": "أدخل رمز المدير 77 لتجاوز السعر.",
+        "hi": "क़ीमत ओवरराइड करने के लिए मैनेजर कोड 77 डालें।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "That's outdated. Price overrides now need code PO-9 plus a reason note.",
+        "de": "Das ist veraltet. Preisüberschreibungen brauchen jetzt den Code PO-9 und eine Begründung.",
+        "es": "Eso está desfasado. Ahora los cambios de precio requieren el código PO-9 y una nota con el motivo.",
+        "ar": "هذا قديم. تجاوز الأسعار يتطلب الآن الرمز PO-9 مع ملاحظة بالسبب.",
+        "hi": "यह पुराना है। अब क़ीमत ओवरराइड के लिए कोड PO-9 और कारण का नोट चाहिए।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -3,
+     "at": "14:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Can you list tomorrow's deliveries?",
+        "de": "Kannst du die Lieferungen für morgen auflisten?",
+        "es": "¿Puedes listar las entregas de mañana?",
+        "ar": "هل يمكنك سرد توريدات الغد؟",
+        "hi": "कल की डिलीवरी की सूची दे सकते हो?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "How do I override a price at the register?",
+        "de": "Wie überschreibe ich einen Preis an der Kasse?",
+        "es": "¿Cómo cambio un precio en la caja?",
+        "ar": "كيف أتجاوز سعرًا عند الصندوق؟",
+        "hi": "काउंटर पर क़ीमत ओवरराइड कैसे करूँ?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "A shelf tag is wrong and the customer wants the lower price.",
+        "de": "Ein Regaletikett ist falsch und die Kundin will den niedrigeren Preis.",
+        "es": "Una etiqueta del lineal está mal y la clienta quiere el precio más bajo.",
+        "ar": "ملصق الرف خاطئ والزبونة تريد السعر الأقل.",
+        "hi": "शेल्फ़ टैग ग़लत है और ग्राहक कम क़ीमत चाहती हैं।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What code do I need for a manual price change at checkout?",
+        "de": "Welchen Code brauche ich für eine manuelle Preisänderung an der Kasse?",
+        "es": "¿Qué código necesito para un cambio manual de precio en caja?",
+        "ar": "ما الرمز الذي أحتاجه لتغيير السعر يدويًا عند الدفع؟",
+        "hi": "चेकआउट पर मैन्युअल क़ीमत बदलने के लिए कौन सा कोड चाहिए?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "price overide code",
+        "de": "preis überschreibn code",
+        "es": "codigo cambio de presio",
+        "ar": "رمز تجاوز السعر",
+        "hi": "प्राइस ओवरराइड कोड"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "There's a customer at register 4 holding a shelf tag that says $2.99 while the item rings up at $3.49; policy says we honour the tag, so walk me through doing the override properly.",
+        "de": "An Kasse 4 steht eine Kundin mit einem Regaletikett über $2.99, der Artikel wird aber mit $3.49 abgerechnet; laut Richtlinie gilt das Etikett, also erklär mir, wie ich die Überschreibung richtig mache.",
+        "es": "Hay una clienta en la caja 4 con una etiqueta de $2.99 mientras el artículo sale a $3.49; la política dice que respetamos la etiqueta, así que explícame cómo hacer bien el cambio.",
+        "ar": "زبونة عند الصندوق 4 تحمل ملصق رف بسعر $2.99 بينما يُسجل الصنف بـ $3.49؛ السياسة تقول إننا نلتزم بالملصق، فاشرح لي كيف أجري التجاوز بشكل صحيح.",
+        "hi": "काउंटर 4 पर एक ग्राहक के हाथ में $2.99 का शेल्फ़ टैग है जबकि आइटम $3.49 का बज रहा है; नीति कहती है टैग मानना है, तो ओवरराइड सही तरीक़े से करना समझाओ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Register 4 needs an override.",
+        "de": "Kasse 4 braucht eine Überschreibung.",
+        "es": "La caja 4 necesita un cambio de precio.",
+        "ar": "الصندوق 4 يحتاج إلى تجاوز.",
+        "hi": "काउंटर 4 को ओवरराइड चाहिए।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "It's not code 77 anymore, is it? What's the override code?",
+        "de": "Es ist nicht mehr Code 77, oder? Wie lautet der Überschreibungscode?",
+        "es": "Ya no es el código 77, ¿verdad? ¿Cuál es el código?",
+        "ar": "لم يعد الرمز 77، صحيح؟ ما رمز التجاوز؟",
+        "hi": "अब कोड 77 नहीं है ना? ओवरराइड कोड क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "You got corrected on price overrides recently — what's the procedure?",
+        "de": "Du wurdest kürzlich bei Preisüberschreibungen korrigiert – wie ist das Vorgehen?",
+        "es": "Hace poco te corrigieron sobre los cambios de precio: ¿cuál es el procedimiento?",
+        "ar": "صُحّحت مؤخرًا بشأن تجاوز الأسعار — ما الإجراء؟",
+        "hi": "हाल में क़ीमत ओवरराइड पर तुम्हें सुधारा गया था — प्रक्रिया क्या है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "override code register",
+        "de": "Überschreibungscode Kasse",
+        "es": "código cambio precio caja",
+        "ar": "رمز التجاوز الصندوق",
+        "hi": "ओवरराइड कोड काउंटर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me how to do a price override.",
+        "de": "Sag mir, wie ich einen Preis überschreibe.",
+        "es": "Dime cómo hacer un cambio de precio.",
+        "ar": "أخبرني كيف أجري تجاوز السعر.",
+        "hi": "बताओ क़ीमत ओवरराइड कैसे करूँ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "PO-9"
+      ],
+      "absent": [
+       {
+        "text": "77",
+        "unless": [
+         "PO-9"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "PO-9"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "correction-retail-short-shipment",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -20,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "How do I record a short shipment?",
+        "de": "Wie erfasse ich eine Minderlieferung?",
+        "es": "¿Cómo registro un envío incompleto?",
+        "ar": "كيف أسجّل شحنة ناقصة؟",
+        "hi": "कम आई शिपमेंट कैसे दर्ज करूँ?"
+       }
+      },
+      {
+       "role": "ASSISTANT",
+       "text": {
+        "en": "Just note the shortage on the driver's copy of the delivery slip.",
+        "de": "Vermerke die Fehlmenge einfach auf der Fahrerkopie des Lieferscheins.",
+        "es": "Anota la falta solo en la copia del albarán del conductor.",
+        "ar": "سجّل النقص فقط على نسخة السائق من إيصال التسليم.",
+        "hi": "बस ड्राइवर की डिलीवरी स्लिप वाली कॉपी पर कमी लिख दें।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Correction: every short shipment must be logged in the OS&D form in the WMS, and noted on the driver's copy as well.",
+        "de": "Korrektur: Jede Minderlieferung muss im OS&D-Formular im WMS erfasst und zusätzlich auf der Fahrerkopie vermerkt werden.",
+        "es": "Corrección: todo envío incompleto debe registrarse en el formulario OS&D del WMS y anotarse también en la copia del conductor.",
+        "ar": "تصحيح: يجب تسجيل كل شحنة ناقصة في نموذج OS&D في نظام WMS، وكتابتها على نسخة السائق أيضًا.",
+        "hi": "सुधार: हर कम आई शिपमेंट को WMS के OS&D फ़ॉर्म में दर्ज करना ज़रूरी है, और ड्राइवर की कॉपी पर भी लिखना है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -3,
+     "at": "14:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Can you list tomorrow's deliveries?",
+        "de": "Kannst du die Lieferungen für morgen auflisten?",
+        "es": "¿Puedes listar las entregas de mañana?",
+        "ar": "هل يمكنك سرد توريدات الغد؟",
+        "hi": "कल की डिलीवरी की सूची दे सकते हो?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "How do I record a short shipment?",
+        "de": "Wie erfasse ich eine Minderlieferung?",
+        "es": "¿Cómo registro un envío incompleto?",
+        "ar": "كيف أسجّل شحنة ناقصة؟",
+        "hi": "कम आई शिपमेंट कैसे दर्ज करूँ?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The truck brought 18 cases instead of 24.",
+        "de": "Der Lkw hat 18 statt 24 Kartons gebracht.",
+        "es": "El camión trajo 18 cajas en vez de 24.",
+        "ar": "أحضرت الشاحنة 18 صندوقًا بدل 24.",
+        "hi": "ट्रक 24 की जगह 18 केस लाया।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What's the process when a delivery comes in short?",
+        "de": "Wie ist der Ablauf, wenn eine Lieferung unvollständig ist?",
+        "es": "¿Cuál es el proceso cuando una entrega llega incompleta?",
+        "ar": "ما الإجراء عندما تصل شحنة ناقصة؟",
+        "hi": "जब डिलीवरी कम आए तो प्रक्रिया क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "short shipmnt how to log",
+        "de": "minderliefrung wie erfassen",
+        "es": "envio incompeto como registro",
+        "ar": "شحنه ناقصه كيف اسجل",
+        "hi": "कम शिपमेंट कैसे लॉग करु"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The PepsiCo truck just left and when we counted the pallets we were six cases short against the packing list; the driver already signed out, so tell me exactly how I'm supposed to record this.",
+        "de": "Der PepsiCo-Lkw ist gerade weg, und beim Zählen der Paletten fehlten sechs Kartons gegenüber der Packliste; der Fahrer hat schon unterschrieben – sag mir genau, wie ich das erfassen soll.",
+        "es": "El camión de PepsiCo acaba de irse y al contar los palés faltaban seis cajas respecto al albarán; el conductor ya firmó, así que dime exactamente cómo tengo que registrarlo.",
+        "ar": "غادرت شاحنة PepsiCo للتو، وعند عدّ المنصات كان هناك نقص ستة صناديق عن قائمة التعبئة؛ والسائق وقّع بالفعل، فأخبرني بالضبط كيف أسجّل ذلك.",
+        "hi": "PepsiCo का ट्रक अभी गया और पैलेट गिनने पर पैकिंग लिस्ट से छह केस कम निकले; ड्राइवर पहले ही साइन करके चला गया, तो ठीक-ठीक बताओ इसे कैसे दर्ज करूँ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Six cases short.",
+        "de": "Sechs Kartons fehlen.",
+        "es": "Faltan seis cajas.",
+        "ar": "ينقص ستة صناديق.",
+        "hi": "छह केस कम।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Just writing it on the driver's copy isn't enough, is it?",
+        "de": "Nur auf der Fahrerkopie vermerken reicht nicht, oder?",
+        "es": "Anotarlo solo en la copia del conductor no basta, ¿verdad?",
+        "ar": "الكتابة على نسخة السائق فقط لا تكفي، صحيح؟",
+        "hi": "सिर्फ़ ड्राइवर की कॉपी पर लिखना काफ़ी नहीं है ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "You were corrected on short shipments a few weeks back — what's the right process?",
+        "de": "Du wurdest vor ein paar Wochen bei Minderlieferungen korrigiert – wie ist der richtige Ablauf?",
+        "es": "Hace unas semanas te corrigieron sobre los envíos incompletos: ¿cuál es el proceso correcto?",
+        "ar": "صُحّحت قبل بضعة أسابيع بخصوص الشحنات الناقصة — ما الإجراء الصحيح؟",
+        "hi": "कुछ हफ़्ते पहले कम शिपमेंट पर तुम्हें सुधारा गया था — सही प्रक्रिया क्या है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "short shipment process",
+        "de": "Ablauf Minderlieferung",
+        "es": "proceso envío incompleto",
+        "ar": "إجراء الشحنة الناقصة",
+        "hi": "कम शिपमेंट प्रक्रिया"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Explain how to log a short delivery.",
+        "de": "Erklär mir, wie ich eine unvollständige Lieferung erfasse.",
+        "es": "Explícame cómo registrar una entrega incompleta.",
+        "ar": "اشرح لي كيف أسجّل تسليمًا ناقصًا.",
+        "hi": "समझाओ कम डिलीवरी कैसे लॉग करूँ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "OS&D"
+      ],
+      "absent": [
+       {
+        "text": {
+         "en": "Just note the shortage",
+         "de": "einfach auf der Fahrerkopie",
+         "es": "Anota la falta solo",
+         "ar": "سجّل النقص فقط",
+         "hi": "बस ड्राइवर की"
+        },
+        "unless": [
+         "OS&D"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "OS&D"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "correction-retail-chilled-threshold",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -16,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "What temperature should make us reject a chilled delivery?",
+        "de": "Ab welcher Temperatur lehnen wir eine Kühllieferung ab?",
+        "es": "¿A qué temperatura debemos rechazar una entrega refrigerada?",
+        "ar": "عند أي درجة حرارة نرفض شحنة مبرّدة؟",
+        "hi": "किस तापमान पर ठंडी डिलीवरी लौटानी चाहिए?"
+       }
+      },
+      {
+       "role": "ASSISTANT",
+       "text": {
+        "en": "Reject chilled deliveries that arrive above 45°F.",
+        "de": "Lehne Kühllieferungen ab, die über 45°F ankommen.",
+        "es": "Rechaza las entregas refrigeradas que lleguen por encima de 45°F.",
+        "ar": "ارفض الشحنات المبرّدة التي تصل فوق 45°F.",
+        "hi": "45°F से ऊपर आने वाली ठंडी डिलीवरी लौटा दें।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "No, our threshold for chilled deliveries is 41°F — anything warmer gets rejected.",
+        "de": "Nein, unsere Grenze für Kühllieferungen liegt bei 41°F – alles Wärmere wird abgelehnt.",
+        "es": "No, nuestro límite para entregas refrigeradas es 41°F; lo que esté más caliente se rechaza.",
+        "ar": "لا، حدّنا للشحنات المبرّدة هو 41°F — وأي شيء أدفأ يُرفض.",
+        "hi": "नहीं, ठंडी डिलीवरी के लिए हमारी सीमा 41°F है — उससे गर्म कुछ भी लौटाया जाएगा।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -3,
+     "at": "14:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Can you list tomorrow's deliveries?",
+        "de": "Kannst du die Lieferungen für morgen auflisten?",
+        "es": "¿Puedes listar las entregas de mañana?",
+        "ar": "هل يمكنك سرد توريدات الغد؟",
+        "hi": "कल की डिलीवरी की सूची दे सकते हो?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "A chilled delivery just arrived at 43°F. Do I accept it?",
+        "de": "Eine Kühllieferung ist gerade mit 43°F angekommen. Nehme ich sie an?",
+        "es": "Acaba de llegar una entrega refrigerada a 43°F. ¿La acepto?",
+        "ar": "وصلت للتو شحنة مبرّدة بدرجة 43°F. هل أقبلها؟",
+        "hi": "एक ठंडी डिलीवरी अभी 43°F पर आई। क्या मैं इसे लूँ?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The dairy truck's probe reading is 43°F.",
+        "de": "Das Thermometer am Milchlaster zeigt 43°F.",
+        "es": "La sonda del camión de lácteos marca 43°F.",
+        "ar": "قراءة مسبار شاحنة الألبان 43°F.",
+        "hi": "डेयरी ट्रक की प्रोब रीडिंग 43°F है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What's our cutoff temperature for accepting chilled goods?",
+        "de": "Bis zu welcher Temperatur nehmen wir Kühlware an?",
+        "es": "¿Cuál es nuestra temperatura límite para aceptar refrigerados?",
+        "ar": "ما درجة الحرارة القصوى لقبول البضائع المبرّدة؟",
+        "hi": "ठंडा सामान लेने का हमारा कटऑफ़ तापमान क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "chiled delivry 43F acept?",
+        "de": "kühllieferug 43F annehmn?",
+        "es": "entrega refrigerda 43F acepto?",
+        "ar": "شحنه مبرده 43F اقبلها؟",
+        "hi": "ठंडी डिलिवरी 43F लू क्या?"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The yoghurt delivery from Lakeside just pulled in and my probe reads 43°F at the core of the top pallet; the driver says that's fine, but I want to apply our actual rule before I sign anything.",
+        "de": "Die Joghurtlieferung von Lakeside ist gerade da, und mein Thermometer zeigt 43°F im Kern der oberen Palette; der Fahrer sagt, das passt, aber ich will unsere tatsächliche Regel anwenden, bevor ich etwas unterschreibe.",
+        "es": "Acaba de llegar el yogur de Lakeside y mi sonda marca 43°F en el centro del palé de arriba; el conductor dice que está bien, pero quiero aplicar nuestra norma real antes de firmar nada.",
+        "ar": "وصلت شحنة الزبادي من Lakeside للتو، ومسباري يقرأ 43°F في قلب المنصة العلوية؛ يقول السائق إن ذلك مقبول، لكني أريد تطبيق قاعدتنا الفعلية قبل أن أوقّع أي شيء.",
+        "hi": "Lakeside की दही की डिलीवरी अभी आई और मेरी प्रोब ऊपर वाले पैलेट के बीच में 43°F दिखा रही है; ड्राइवर कहता है ठीक है, पर कुछ साइन करने से पहले मैं अपना असली नियम लागू करना चाहता हूँ।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "43°F on the dairy load.",
+        "de": "43°F bei der Milchlieferung.",
+        "es": "43°F en la carga de lácteos.",
+        "ar": "43°F في حمولة الألبان.",
+        "hi": "डेयरी लोड पर 43°F।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "45°F isn't our limit anymore, is it?",
+        "de": "45°F ist doch nicht mehr unsere Grenze, oder?",
+        "es": "45°F ya no es nuestro límite, ¿verdad?",
+        "ar": "لم يعد 45°F حدّنا، صحيح؟",
+        "hi": "45°F अब हमारी सीमा नहीं है ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "You were corrected about the chilled threshold a while ago — what is it?",
+        "de": "Du wurdest vor einer Weile bei der Kühlgrenze korrigiert – wie hoch ist sie?",
+        "es": "Hace un tiempo te corrigieron sobre el límite de refrigerados: ¿cuál es?",
+        "ar": "صُحّحت قبل فترة بخصوص حد التبريد — ما هو؟",
+        "hi": "कुछ समय पहले ठंडी सीमा पर तुम्हें सुधारा गया था — वह क्या है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "chilled reject threshold",
+        "de": "Ablehnungsgrenze Kühlware",
+        "es": "umbral rechazo refrigerados",
+        "ar": "حد رفض المبرّدات",
+        "hi": "ठंडी डिलीवरी रिजेक्ट सीमा"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me whether to reject a chilled delivery at 43°F.",
+        "de": "Sag mir, ob ich eine Kühllieferung mit 43°F ablehne.",
+        "es": "Dime si rechazo una entrega refrigerada a 43°F.",
+        "ar": "أخبرني إن كنت أرفض شحنة مبرّدة عند 43°F.",
+        "hi": "बताओ 43°F वाली ठंडी डिलीवरी लौटाऊँ या नहीं।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "41°F"
+      ],
+      "absent": [
+       {
+        "text": "45°F",
+        "unless": [
+         "41°F"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "41"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "correction-retail-blind-recount",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -11,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "What do I do when a cycle count is off?",
+        "de": "Was mache ich, wenn eine Inventurzählung abweicht?",
+        "es": "¿Qué hago cuando un conteo cíclico no cuadra?",
+        "ar": "ماذا أفعل عندما لا يتطابق الجرد الدوري؟",
+        "hi": "साइकिल काउंट गड़बड़ हो तो क्या करूँ?"
+       }
+      },
+      {
+       "role": "ASSISTANT",
+       "text": {
+        "en": "If a count is off by more than 5 units, just adjust it to what you counted.",
+        "de": "Wenn eine Zählung um mehr als 5 Stück abweicht, pass sie einfach an das Gezählte an.",
+        "es": "Si un conteo difiere en más de 5 unidades, ajústalo sin más a lo contado.",
+        "ar": "إذا اختلف الجرد بأكثر من 5 وحدات، فقط عدّله إلى ما عددته.",
+        "hi": "अगर गिनती 5 यूनिट से ज़्यादा अलग हो, तो बस उसे गिनी हुई संख्या पर एडजस्ट कर दें।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Wrong — any variance over 5 units needs a blind recount by a second associate before anything is adjusted.",
+        "de": "Falsch – jede Abweichung über 5 Stück braucht eine Blindnachzählung durch eine zweite Person, bevor etwas angepasst wird.",
+        "es": "Error: cualquier diferencia de más de 5 unidades requiere un recuento ciego por un segundo empleado antes de ajustar nada.",
+        "ar": "خطأ — أي فرق يزيد على 5 وحدات يحتاج إلى إعادة عدّ عمياء من موظف ثانٍ قبل تعديل أي شيء.",
+        "hi": "ग़लत — 5 यूनिट से ज़्यादा के किसी भी अंतर पर कुछ भी एडजस्ट करने से पहले दूसरे कर्मचारी से ब्लाइंड रीकाउंट ज़रूरी है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -3,
+     "at": "14:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Can you list tomorrow's deliveries?",
+        "de": "Kannst du die Lieferungen für morgen auflisten?",
+        "es": "¿Puedes listar las entregas de mañana?",
+        "ar": "هل يمكنك سرد توريدات الغد؟",
+        "hi": "कल की डिलीवरी की सूची दे सकते हो?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "My count for SKU BT-310 is 9 units lower than the system. What now?",
+        "de": "Meine Zählung für BT-310 liegt 9 Stück unter dem System. Was jetzt?",
+        "es": "Mi conteo del BT-310 da 9 unidades menos que el sistema. ¿Y ahora?",
+        "ar": "جردي لـ BT-310 أقل من النظام بـ 9 وحدات. ماذا الآن؟",
+        "hi": "BT-310 की मेरी गिनती सिस्टम से 9 यूनिट कम है। अब क्या?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The batteries count came out way off.",
+        "de": "Die Zählung bei den Batterien ist stark daneben.",
+        "es": "El conteo de las pilas salió muy desviado.",
+        "ar": "جاء جرد البطاريات مختلفًا كثيرًا.",
+        "hi": "बैटरी की गिनती बहुत अलग आई।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What's the procedure when a count variance is over 5 units?",
+        "de": "Wie ist das Vorgehen bei einer Zählabweichung über 5 Stück?",
+        "es": "¿Cuál es el procedimiento cuando la diferencia de conteo supera 5 unidades?",
+        "ar": "ما الإجراء عندما يتجاوز فرق الجرد 5 وحدات؟",
+        "hi": "गिनती का अंतर 5 यूनिट से ज़्यादा हो तो प्रक्रिया क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "count of by 9 what do",
+        "de": "zählung 9 daneben was tun",
+        "es": "conteo desviado 9 que hago",
+        "ar": "الجرد ناقص 9 شو اسوي",
+        "hi": "गिनती 9 कम क्या करु"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm doing the evening cycle count in aisle 9 and the AA batteries came out nine units short of what the system shows; I'd like to fix the record before I leave, so what's the correct process?",
+        "de": "Ich mache die abendliche Inventurzählung in Gang 9, und bei den AA-Batterien fehlen neun Stück gegenüber dem System; ich will den Bestand vor Feierabend korrigieren – was ist der richtige Ablauf?",
+        "es": "Estoy haciendo el conteo cíclico de la tarde en el pasillo 9 y las pilas AA dan nueve unidades menos que el sistema; quiero corregir el registro antes de irme. ¿Cuál es el proceso correcto?",
+        "ar": "أجري الجرد الدوري المسائي في الممر 9، وبطاريات AA أقل بتسع وحدات مما يُظهره النظام؛ أود تصحيح السجل قبل أن أغادر، فما الإجراء الصحيح؟",
+        "hi": "मैं गलियारा 9 में शाम का साइकिल काउंट कर रहा हूँ और AA बैटरी सिस्टम से नौ यूनिट कम निकलीं; जाने से पहले रिकॉर्ड ठीक करना चाहता हूँ, तो सही प्रक्रिया क्या है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Count variance, aisle 9.",
+        "de": "Zählabweichung, Gang 9.",
+        "es": "Diferencia de conteo, pasillo 9.",
+        "ar": "فرق جرد، الممر 9.",
+        "hi": "गिनती अंतर, गलियारा 9।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "I can't just adjust it, can I?",
+        "de": "Ich kann es nicht einfach anpassen, oder?",
+        "es": "No puedo ajustarlo sin más, ¿verdad?",
+        "ar": "لا أستطيع تعديله ببساطة، صحيح؟",
+        "hi": "मैं इसे सीधे एडजस्ट नहीं कर सकता ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "You were corrected about count variances recently — what's the rule?",
+        "de": "Du wurdest kürzlich bei Zählabweichungen korrigiert – wie lautet die Regel?",
+        "es": "Hace poco te corrigieron sobre las diferencias de conteo: ¿cuál es la norma?",
+        "ar": "صُحّحت مؤخرًا بخصوص فروق الجرد — ما القاعدة؟",
+        "hi": "हाल में गिनती के अंतर पर तुम्हें सुधारा गया था — नियम क्या है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "count variance over 5",
+        "de": "Zählabweichung über 5",
+        "es": "diferencia conteo más de 5",
+        "ar": "فرق جرد أكثر من 5",
+        "hi": "गिनती अंतर 5 से ज़्यादा"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me how to handle a 9-unit count variance.",
+        "de": "Sag mir, wie ich mit einer Zählabweichung von 9 Stück umgehe.",
+        "es": "Dime cómo gestionar una diferencia de 9 unidades.",
+        "ar": "أخبرني كيف أتعامل مع فرق جرد قدره 9 وحدات.",
+        "hi": "बताओ 9 यूनिट के गिनती अंतर को कैसे संभालूँ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "blind recount",
+        "de": "Blindnachzählung",
+        "es": "recuento ciego",
+        "ar": "إعادة عدّ عمياء",
+        "hi": "ब्लाइंड रीकाउंट"
+       }
+      ],
+      "absent": [
+       {
+        "text": {
+         "en": "just adjust it",
+         "de": "einfach an das Gezählte",
+         "es": "ajústalo sin más",
+         "ar": "فقط عدّله",
+         "hi": "बस उसे गिनी"
+        },
+        "unless": [
+         {
+          "en": "blind recount",
+          "de": "Blindnachzählung",
+          "es": "recuento ciego",
+          "ar": "إعادة عدّ عمياء",
+          "hi": "ब्लाइंड रीकाउंट"
+         }
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        {
+         "en": "recount",
+         "de": "Nachzählung",
+         "es": "recuento",
+         "ar": "إعادة عدّ",
+         "hi": "रीकाउंट"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "correction-personal-dentist-time",
+   "domain": "personal",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -6,
+     "at": "18:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "When is my dentist appointment on the 20th?",
+        "de": "Wann ist mein Zahnarzttermin am 20.?",
+        "es": "¿A qué hora es mi cita con el dentista el día 20?",
+        "ar": "متى موعدي عند طبيب الأسنان يوم 20؟",
+        "hi": "20 तारीख़ को मेरा डेंटिस्ट का अपॉइंटमेंट कब है?"
+       }
+      },
+      {
+       "role": "ASSISTANT",
+       "text": {
+        "en": "Your dentist appointment on the 20th is at 15:00.",
+        "de": "Dein Zahnarzttermin am 20. ist um 15:00.",
+        "es": "Tu cita con el dentista del día 20 es a las 15:00.",
+        "ar": "موعدك عند طبيب الأسنان يوم 20 الساعة 15:00.",
+        "hi": "20 तारीख़ को तुम्हारा डेंटिस्ट अपॉइंटमेंट 15:00 बजे है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "No, they moved it — it's at 10:30 on the 20th now.",
+        "de": "Nein, sie haben ihn verschoben – er ist jetzt am 20. um 10:30.",
+        "es": "No, la cambiaron: ahora es el 20 a las 10:30.",
+        "ar": "لا، لقد نقلوه — أصبح الآن يوم 20 الساعة 10:30.",
+        "hi": "नहीं, उन्होंने बदल दिया — अब 20 तारीख़ को 10:30 बजे है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -2,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Add milk to the shopping list.",
+        "de": "Setz Milch auf die Einkaufsliste.",
+        "es": "Añade leche a la lista de la compra.",
+        "ar": "أضف الحليب إلى قائمة التسوق.",
+        "hi": "शॉपिंग लिस्ट में दूध जोड़ो।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What time is my dentist appointment on the 20th?",
+        "de": "Um wie viel Uhr ist mein Zahnarzttermin am 20.?",
+        "es": "¿A qué hora es mi cita con el dentista el 20?",
+        "ar": "في أي ساعة موعدي عند طبيب الأسنان يوم 20؟",
+        "hi": "20 तारीख़ को डेंटिस्ट का अपॉइंटमेंट कितने बजे है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm trying to plan my morning on the 20th.",
+        "de": "Ich versuche, meinen Vormittag am 20. zu planen.",
+        "es": "Estoy intentando organizar la mañana del 20.",
+        "ar": "أحاول تنظيم صباحي يوم 20.",
+        "hi": "मैं 20 तारीख़ की सुबह प्लान करने की कोशिश कर रहा हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "When do I need to be at the dentist on the 20th?",
+        "de": "Wann muss ich am 20. beim Zahnarzt sein?",
+        "es": "¿Cuándo tengo que estar en el dentista el 20?",
+        "ar": "متى يجب أن أكون عند طبيب الأسنان يوم 20؟",
+        "hi": "20 तारीख़ को डेंटिस्ट के पास कब पहुँचना है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "dentst apointment time 20th",
+        "de": "zahnartz termin uhrzeit 20.",
+        "es": "hora cita dentsita el 20",
+        "ar": "موعد دكتور الاسنان كم الساعه يوم 20",
+        "hi": "20 तारीख डेंटिस्ट टाइम"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "My manager wants to book a team call on the 20th and I need to tell her which part of the day I'm out for the dentist, so what time is the appointment?",
+        "de": "Meine Chefin will am 20. ein Teamtelefonat ansetzen, und ich muss ihr sagen, zu welcher Tageszeit ich beim Zahnarzt bin – um wie viel Uhr ist der Termin?",
+        "es": "Mi jefa quiere poner una llamada de equipo el día 20 y tengo que decirle en qué parte del día estaré en el dentista. ¿A qué hora es la cita?",
+        "ar": "تريد مديرتي حجز مكالمة للفريق يوم 20، وعلي إخبارها بالوقت الذي سأكون فيه عند طبيب الأسنان، فما موعد الزيارة؟",
+        "hi": "मेरी मैनेजर 20 तारीख़ को टीम कॉल रखना चाहती हैं और मुझे बताना है कि दिन के किस हिस्से में मैं डेंटिस्ट के पास रहूँगा, तो अपॉइंटमेंट कितने बजे है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Dentist on the 20th — when?",
+        "de": "Zahnarzt am 20. – wann?",
+        "es": "Dentista el 20: ¿a qué hora?",
+        "ar": "طبيب الأسنان يوم 20 — متى؟",
+        "hi": "20 को डेंटिस्ट — कब?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "It's not in the afternoon anymore, is it?",
+        "de": "Er ist nicht mehr nachmittags, oder?",
+        "es": "Ya no es por la tarde, ¿verdad?",
+        "ar": "لم يعد بعد الظهر، صحيح؟",
+        "hi": "अब दोपहर में नहीं है ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "I told you about a time change for the dentist — what's the new time?",
+        "de": "Ich habe dir von einer Zeitänderung beim Zahnarzt erzählt – wie ist die neue Uhrzeit?",
+        "es": "Te conté un cambio de hora del dentista: ¿cuál es la nueva hora?",
+        "ar": "أخبرتك بتغيير موعد طبيب الأسنان — ما الموعد الجديد؟",
+        "hi": "मैंने डेंटिस्ट के समय बदलने के बारे में बताया था — नया समय क्या है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "dentist time 20th",
+        "de": "Zahnarzt Uhrzeit 20.",
+        "es": "dentista hora 20",
+        "ar": "موعد الأسنان 20",
+        "hi": "डेंटिस्ट समय 20"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Remind me what time the dentist is on the 20th.",
+        "de": "Erinnere mich, um wie viel Uhr der Zahnarzt am 20. ist.",
+        "es": "Recuérdame a qué hora es el dentista el 20.",
+        "ar": "ذكّرني بموعد طبيب الأسنان يوم 20.",
+        "hi": "याद दिलाओ 20 को डेंटिस्ट कितने बजे है।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "10:30"
+      ],
+      "absent": [
+       {
+        "text": "15:00",
+        "unless": [
+         "10:30"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "10:30"
+       ],
+       "absent": [
+        "15:00"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "correction-it-account-unlock",
+   "domain": "it_support",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -14,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "How do I unlock a user's AD account?",
+        "de": "Wie entsperre ich das AD-Konto eines Nutzers?",
+        "es": "¿Cómo desbloqueo la cuenta de AD de un usuario?",
+        "ar": "كيف أفتح حساب AD لمستخدم؟",
+        "hi": "किसी यूज़र का AD अकाउंट कैसे अनलॉक करूँ?"
+       }
+      },
+      {
+       "role": "ASSISTANT",
+       "text": {
+        "en": "Unlock it in the old Helpdesk Tool under Accounts.",
+        "de": "Entsperre es im alten Helpdesk Tool unter Konten.",
+        "es": "Desbloquéala en la antigua Helpdesk Tool, en Cuentas.",
+        "ar": "افتحه في أداة Helpdesk Tool القديمة ضمن الحسابات.",
+        "hi": "पुराने Helpdesk Tool में Accounts के नीचे अनलॉक करें।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "We retired the Helpdesk Tool; account unlocks are done in the Entra admin portal now.",
+        "de": "Wir haben das Helpdesk Tool abgeschafft; Konten werden jetzt im Entra-Adminportal entsperrt.",
+        "es": "Retiramos la Helpdesk Tool; ahora los desbloqueos se hacen en el portal de administración de Entra.",
+        "ar": "أوقفنا أداة Helpdesk Tool؛ يتم فتح الحسابات الآن من بوابة إدارة Entra.",
+        "hi": "हमने Helpdesk Tool बंद कर दिया है; अब अकाउंट अनलॉक Entra एडमिन पोर्टल में होते हैं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -3,
+     "at": "14:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Can you list tomorrow's deliveries?",
+        "de": "Kannst du die Lieferungen für morgen auflisten?",
+        "es": "¿Puedes listar las entregas de mañana?",
+        "ar": "هل يمكنك سرد توريدات الغد؟",
+        "hi": "कल की डिलीवरी की सूची दे सकते हो?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "How do I unlock a user's account?",
+        "de": "Wie entsperre ich das Konto eines Nutzers?",
+        "es": "¿Cómo desbloqueo la cuenta de un usuario?",
+        "ar": "كيف أفتح حساب مستخدم؟",
+        "hi": "किसी यूज़र का अकाउंट कैसे अनलॉक करूँ?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Someone in sales locked themselves out after too many password attempts.",
+        "de": "Jemand im Vertrieb hat sich nach zu vielen Passwortversuchen ausgesperrt.",
+        "es": "Alguien de ventas se ha bloqueado tras demasiados intentos de contraseña.",
+        "ar": "شخص في المبيعات أغلق حسابه بعد محاولات كثيرة لكلمة المرور.",
+        "hi": "सेल्स में किसी ने बहुत बार ग़लत पासवर्ड डालकर ख़ुद को लॉक कर लिया।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Where do I go to unlock a locked-out account now?",
+        "de": "Wo entsperre ich jetzt ein gesperrtes Konto?",
+        "es": "¿Dónde desbloqueo ahora una cuenta bloqueada?",
+        "ar": "أين أذهب الآن لفتح حساب مقفل؟",
+        "hi": "अब लॉक अकाउंट अनलॉक करने कहाँ जाऊँ?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "unlok user acount how",
+        "de": "konto entsperen wie",
+        "es": "como desbloqueo cuenta de usario",
+        "ar": "كيف افتح حساب مستخدم مقفول",
+        "hi": "यूजर अकाउंट अनलॉक कैसे"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "One of the sales reps has been locked out since this morning because her phone kept trying an old password, she's got a client demo in an hour, and I need to unlock her account the right way.",
+        "de": "Eine Vertriebsmitarbeiterin ist seit heute früh gesperrt, weil ihr Handy ständig ein altes Passwort probiert hat, sie hat in einer Stunde eine Kundendemo, und ich muss ihr Konto richtig entsperren.",
+        "es": "Una comercial está bloqueada desde esta mañana porque su móvil seguía probando una contraseña antigua, tiene una demo con un cliente en una hora y tengo que desbloquear su cuenta como es debido.",
+        "ar": "إحدى مندوبات المبيعات محظورة منذ الصباح لأن هاتفها ظل يجرّب كلمة مرور قديمة، ولديها عرض لعميل خلال ساعة، وأحتاج إلى فتح حسابها بالطريقة الصحيحة.",
+        "hi": "सेल्स की एक प्रतिनिधि सुबह से लॉक हैं क्योंकि उनका फ़ोन पुराना पासवर्ड आज़माता रहा, एक घंटे में क्लाइंट डेमो है, और मुझे उनका अकाउंट सही तरीक़े से अनलॉक करना है।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Locked-out user, urgent.",
+        "de": "Gesperrte Nutzerin, dringend.",
+        "es": "Usuaria bloqueada, urgente.",
+        "ar": "مستخدمة محظورة، عاجل.",
+        "hi": "लॉक यूज़र, ज़रूरी।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "We don't use the Helpdesk Tool for this anymore, right?",
+        "de": "Dafür nutzen wir das Helpdesk Tool nicht mehr, oder?",
+        "es": "Ya no usamos la Helpdesk Tool para esto, ¿verdad?",
+        "ar": "لم نعد نستخدم Helpdesk Tool لهذا، صحيح؟",
+        "hi": "इसके लिए अब Helpdesk Tool इस्तेमाल नहीं करते ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "You were corrected about account unlocks before — where is it done?",
+        "de": "Du wurdest bei Kontoentsperrungen schon mal korrigiert – wo macht man das?",
+        "es": "Ya te corrigieron sobre los desbloqueos: ¿dónde se hace?",
+        "ar": "صُحّحت سابقًا بخصوص فتح الحسابات — أين يتم ذلك؟",
+        "hi": "अकाउंट अनलॉक पर पहले तुम्हें सुधारा गया था — यह कहाँ होता है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "account unlock where",
+        "de": "Kontoentsperrung wo",
+        "es": "desbloqueo cuenta dónde",
+        "ar": "فتح الحساب أين",
+        "hi": "अकाउंट अनलॉक कहाँ"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Walk me through unlocking the account.",
+        "de": "Erklär mir Schritt für Schritt, wie ich das Konto entsperre.",
+        "es": "Explícame paso a paso cómo desbloquear la cuenta.",
+        "ar": "اشرح لي خطوة بخطوة كيف أفتح الحساب.",
+        "hi": "अकाउंट अनलॉक करने के चरण बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "Entra"
+      ],
+      "absent": [
+       {
+        "text": "Helpdesk Tool",
+        "unless": [
+         "Entra"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "Entra"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "correction-finance-mileage",
+   "domain": "finance_hr",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -25,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "What's our mileage reimbursement rate?",
+        "de": "Wie hoch ist unsere Kilometerpauschale pro Meile?",
+        "es": "¿Cuál es nuestra tarifa de reembolso por milla?",
+        "ar": "ما معدل تعويض المسافة لدينا؟",
+        "hi": "हमारी माइलेज भरपाई दर क्या है?"
+       }
+      },
+      {
+       "role": "ASSISTANT",
+       "text": {
+        "en": "Mileage is reimbursed at $0.58 per mile.",
+        "de": "Fahrten werden mit $0.58 pro Meile erstattet.",
+        "es": "El kilometraje se reembolsa a $0.58 por milla.",
+        "ar": "يُعوَّض عن المسافة بمعدل $0.58 لكل ميل.",
+        "hi": "माइलेज की भरपाई $0.58 प्रति मील होती है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Not anymore — the rate has been $0.67 per mile since July.",
+        "de": "Nicht mehr – seit Juli gilt $0.67 pro Meile.",
+        "es": "Ya no: desde julio la tarifa es $0.67 por milla.",
+        "ar": "ليس بعد الآن — المعدل $0.67 لكل ميل منذ يوليو.",
+        "hi": "अब नहीं — जुलाई से दर $0.67 प्रति मील है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -3,
+     "at": "14:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Can you list tomorrow's deliveries?",
+        "de": "Kannst du die Lieferungen für morgen auflisten?",
+        "es": "¿Puedes listar las entregas de mañana?",
+        "ar": "هل يمكنك سرد توريدات الغد؟",
+        "hi": "कल की डिलीवरी की सूची दे सकते हो?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the mileage reimbursement rate?",
+        "de": "Wie hoch ist die Kilometerpauschale?",
+        "es": "¿Cuál es la tarifa de reembolso por milla?",
+        "ar": "ما معدل تعويض المسافة؟",
+        "hi": "माइलेज भरपाई दर क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I drove 120 miles to the client site last week.",
+        "de": "Ich bin letzte Woche 120 Meilen zum Kunden gefahren.",
+        "es": "La semana pasada conduje 120 millas hasta el cliente.",
+        "ar": "قدت 120 ميلًا إلى موقع العميل الأسبوع الماضي.",
+        "hi": "पिछले हफ़्ते मैं क्लाइंट साइट तक 120 मील गाड़ी चलाकर गया।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How much do we pay per mile for business driving?",
+        "de": "Wie viel zahlen wir pro Meile für Dienstfahrten?",
+        "es": "¿Cuánto pagamos por milla en desplazamientos de trabajo?",
+        "ar": "كم ندفع لكل ميل للقيادة لأغراض العمل؟",
+        "hi": "काम के लिए गाड़ी चलाने पर प्रति मील कितना देते हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "milage rate per mile",
+        "de": "kilometrpauschale pro meile",
+        "es": "tarifa por milla kilometrage",
+        "ar": "معدل الميل للتعويض",
+        "hi": "माइलेज रेट प्रति मील"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm filling in my expense claim for last week's client visits — 120 miles in my own car — and I want to make sure I use the current reimbursement rate so it doesn't get bounced back by finance.",
+        "de": "Ich fülle meine Spesenabrechnung für die Kundenbesuche letzte Woche aus – 120 Meilen mit dem eigenen Auto – und will sicher den aktuellen Erstattungssatz verwenden, damit die Buchhaltung sie nicht zurückweist.",
+        "es": "Estoy rellenando la nota de gastos de las visitas a clientes de la semana pasada, 120 millas en mi coche, y quiero usar la tarifa vigente para que finanzas no me la devuelva.",
+        "ar": "أملأ مطالبة المصاريف لزيارات العملاء الأسبوع الماضي — 120 ميلًا بسيارتي — وأريد استخدام معدل التعويض الحالي حتى لا ترفضها المالية.",
+        "hi": "मैं पिछले हफ़्ते की क्लाइंट विज़िट का ख़र्च दावा भर रहा हूँ — अपनी कार से 120 मील — और पक्का करना चाहता हूँ कि मौजूदा दर इस्तेमाल करूँ ताकि फ़ाइनेंस उसे वापस न भेजे।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Mileage claim, 120 miles.",
+        "de": "Kilometerabrechnung, 120 Meilen.",
+        "es": "Reclamación de kilometraje, 120 millas.",
+        "ar": "مطالبة مسافة، 120 ميلًا.",
+        "hi": "माइलेज दावा, 120 मील।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "It's not 58 cents anymore, is it?",
+        "de": "Es sind nicht mehr 58 Cent, oder?",
+        "es": "Ya no son 58 centavos, ¿verdad?",
+        "ar": "لم يعد 58 سنتًا، صحيح؟",
+        "hi": "अब 58 सेंट नहीं है ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "The mileage rate was corrected a while ago — what is it now?",
+        "de": "Die Kilometerpauschale wurde vor einer Weile korrigiert – wie hoch ist sie jetzt?",
+        "es": "La tarifa por milla se corrigió hace un tiempo: ¿cuál es ahora?",
+        "ar": "صُحّح معدل المسافة قبل فترة — كم هو الآن؟",
+        "hi": "कुछ समय पहले माइलेज दर सुधारी गई थी — अब कितनी है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "mileage rate",
+        "de": "Kilometerpauschale",
+        "es": "tarifa por milla",
+        "ar": "معدل المسافة",
+        "hi": "माइलेज दर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me the current mileage rate.",
+        "de": "Nenn mir die aktuelle Kilometerpauschale.",
+        "es": "Dime la tarifa por milla vigente.",
+        "ar": "أخبرني بمعدل المسافة الحالي.",
+        "hi": "मुझे मौजूदा माइलेज दर बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "0.67"
+      ],
+      "absent": [
+       {
+        "text": "0.58",
+        "unless": [
+         "0.67"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "0.67"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "correction-field-flange-torque",
+   "domain": "field_service",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -18,
+     "at": "10:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "What torque do the flange bolts on the PX-400 take?",
+        "de": "Mit welchem Drehmoment werden die Flanschschrauben der PX-400 angezogen?",
+        "es": "¿A qué par se aprietan los tornillos de brida de la PX-400?",
+        "ar": "ما عزم شدّ مسامير الشفة في PX-400؟",
+        "hi": "PX-400 के फ़्लैंज बोल्ट किस टॉर्क पर कसते हैं?"
+       }
+      },
+      {
+       "role": "ASSISTANT",
+       "text": {
+        "en": "Torque the PX-400 flange bolts to 40 Nm.",
+        "de": "Zieh die Flanschschrauben der PX-400 mit 40 Nm an.",
+        "es": "Aprieta los tornillos de brida de la PX-400 a 40 Nm.",
+        "ar": "اشدد مسامير شفة PX-400 إلى 40 Nm.",
+        "hi": "PX-400 के फ़्लैंज बोल्ट 40 Nm पर कसें।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "That's wrong for the PX-400 — its flange bolts go to 55 Nm in a star pattern.",
+        "de": "Das ist für die PX-400 falsch – ihre Flanschschrauben kommen über Kreuz auf 55 Nm.",
+        "es": "Eso está mal para la PX-400: sus tornillos de brida van a 55 Nm en estrella.",
+        "ar": "هذا خطأ بالنسبة لـ PX-400 — مسامير شفتها تُشد إلى 55 Nm بنمط النجمة.",
+        "hi": "PX-400 के लिए यह ग़लत है — उसके फ़्लैंज बोल्ट स्टार पैटर्न में 55 Nm पर कसते हैं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "other",
+     "day": -3,
+     "at": "14:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Can you list tomorrow's deliveries?",
+        "de": "Kannst du die Lieferungen für morgen auflisten?",
+        "es": "¿Puedes listar las entregas de mañana?",
+        "ar": "هل يمكنك سرد توريدات الغد؟",
+        "hi": "कल की डिलीवरी की सूची दे सकते हो?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What torque for the PX-400 flange bolts?",
+        "de": "Welches Drehmoment für die Flanschschrauben der PX-400?",
+        "es": "¿Qué par para los tornillos de brida de la PX-400?",
+        "ar": "ما العزم لمسامير شفة PX-400؟",
+        "hi": "PX-400 फ़्लैंज बोल्ट का टॉर्क क्या?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm reassembling the Riverside PX-400 after the seal change.",
+        "de": "Ich baue die PX-400 in Riverside nach dem Dichtungswechsel wieder zusammen.",
+        "es": "Estoy montando de nuevo la PX-400 de Riverside tras cambiar las juntas.",
+        "ar": "أعيد تركيب PX-400 في Riverside بعد تغيير الحشوات.",
+        "hi": "सील बदलने के बाद मैं Riverside का PX-400 फिर से जोड़ रहा हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How tight do the flange bolts on a PX-400 need to be?",
+        "de": "Wie fest müssen die Flanschschrauben an einer PX-400 sein?",
+        "es": "¿Cuánto hay que apretar los tornillos de brida de una PX-400?",
+        "ar": "ما درجة شدّ مسامير الشفة في PX-400؟",
+        "hi": "PX-400 के फ़्लैंज बोल्ट कितने कसने हैं?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "px400 flang bolt torqe",
+        "de": "px400 flanschschraubn drehmomnt",
+        "es": "par tornilos brida px400",
+        "ar": "عزم مسامير شفه px400",
+        "hi": "px400 फ्लेंज बोल्ट टार्क"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I've got the PX-400 at Riverside back together after the seal kit change and I'm about to tighten the flange bolts, but I want to be sure I use the right torque spec so we don't get a leak next week.",
+        "de": "Ich habe die PX-400 in Riverside nach dem Dichtungssatzwechsel wieder zusammengesetzt und will gleich die Flanschschrauben anziehen, will aber sicher den richtigen Drehmomentwert nehmen, damit nächste Woche nichts leckt.",
+        "es": "Ya he montado la PX-400 de Riverside tras cambiar el kit de juntas y voy a apretar los tornillos de brida, pero quiero asegurarme de usar el par correcto para que no haya fugas la semana que viene.",
+        "ar": "أعدت تركيب PX-400 في Riverside بعد تغيير طقم الحشوات وأنا على وشك شدّ مسامير الشفة، لكنني أريد التأكد من استخدام عزم الشدّ الصحيح حتى لا يحدث تسرب الأسبوع المقبل.",
+        "hi": "सील किट बदलने के बाद मैंने Riverside का PX-400 फिर जोड़ दिया है और फ़्लैंज बोल्ट कसने वाला हूँ, पर पक्का करना चाहता हूँ कि सही टॉर्क इस्तेमाल करूँ ताकि अगले हफ़्ते लीक न हो।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Flange bolts next.",
+        "de": "Als Nächstes die Flanschschrauben.",
+        "es": "Ahora los tornillos de brida.",
+        "ar": "مسامير الشفة هي التالية.",
+        "hi": "अगला काम फ़्लैंज बोल्ट।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "It's not 40 Nm, is it?",
+        "de": "Es sind nicht 40 Nm, oder?",
+        "es": "No son 40 Nm, ¿verdad?",
+        "ar": "ليس 40 Nm، صحيح؟",
+        "hi": "यह 40 Nm नहीं है ना?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "You were corrected on the PX-400 torque — what's the right value?",
+        "de": "Du wurdest beim Drehmoment der PX-400 korrigiert – wie lautet der richtige Wert?",
+        "es": "Te corrigieron sobre el par de la PX-400: ¿cuál es el valor correcto?",
+        "ar": "صُحّحت بشأن عزم PX-400 — ما القيمة الصحيحة؟",
+        "hi": "PX-400 टॉर्क पर तुम्हें सुधारा गया था — सही मान क्या है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "PX-400 flange torque",
+        "de": "PX-400 Flansch Drehmoment",
+        "es": "PX-400 par brida",
+        "ar": "عزم شفة PX-400",
+        "hi": "PX-400 फ़्लैंज टॉर्क"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the PX-400 flange bolt torque.",
+        "de": "Gib mir das Drehmoment der Flanschschrauben der PX-400.",
+        "es": "Dame el par de los tornillos de brida de la PX-400.",
+        "ar": "أعطني عزم مسامير شفة PX-400.",
+        "hi": "मुझे PX-400 फ़्लैंज बोल्ट का टॉर्क बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "55 Nm"
+      ],
+      "absent": [
+       {
+        "text": "40 Nm",
+        "unless": [
+         "55 Nm"
+        ]
+       }
+      ],
+      "answer": {
+       "contains": [
+        "55"
+       ],
+       "absent": [
+        "40 Nm"
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

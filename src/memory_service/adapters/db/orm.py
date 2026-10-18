@@ -641,6 +641,14 @@ class MemoryRow(Base):
             postgresql_where=text("deleted_at IS NULL"),
         ),
         Index("ix_memories_tenant_subject", "tenant_id", "subject", "predicate"),
+        # the candidate read's case-insensitive subject match (migration 0027)
+        Index(
+            "ix_memories_scope_subject_lower",
+            "tenant_id",
+            "scope_key",
+            text("lower(subject)"),
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index("ix_memories_tenant_user", "tenant_id", "user_id", "created_at"),
         Index("ix_memories_tenant_thread", "tenant_id", "thread_id"),
         Index(
@@ -1162,6 +1170,10 @@ class FeedbackRow(Base):
     reviewed_by: Mapped[str | None] = mapped_column(String(300))
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     review_note: Mapped[str | None] = mapped_column(String(4000))
+    #: a vote dismissed because its voter voted again on the target: the newer vote (ADR 0039)
+    review_replaced_by: Mapped[str | None] = mapped_column(String(200))
+    #: a person's vote, by who sent it (never by the source it claims); null before ADR 0039
+    is_vote: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     __table_args__ = (
         Index(
@@ -1170,6 +1182,25 @@ class FeedbackRow(Base):
             created_at.desc(),
             feedback_id.desc(),
             postgresql_where=text("review_state = 'pending'"),
+        ),
+        # review reports: one state of one tenant, newest first, and grouped by target
+        # (migration 0027)
+        Index(
+            "ix_feedback_review",
+            "tenant_id",
+            "review_state",
+            created_at.desc(),
+            feedback_id.desc(),
+            postgresql_where=text("review_state IS NOT NULL"),
+        ),
+        Index(
+            "ix_feedback_review_target",
+            "tenant_id",
+            "review_state",
+            "target_kind",
+            "target_id",
+            postgresql_include=["created_at", "verdict", "user_id", "agent_id"],
+            postgresql_where=text("review_state IS NOT NULL AND review_replaced_by IS NULL"),
         ),
         Index(
             "ix_feedback_target",

@@ -93,6 +93,8 @@ async def _label(container, ctx: MemoryExecutionContext, *, run: str, success: b
                 verdict=FeedbackVerdict.CONFIRM if success else FeedbackVerdict.REJECT,
                 source=FeedbackSource.SYSTEM,
             ),
+            # the harness's key may act as the agent: its run's status is taken (ADR 0039)
+            run_vouched=True,
         )
         await uow.commit()
     await feedback.project(ctx.tenant_id, stored.feedback_id)
@@ -263,6 +265,30 @@ async def test_a_rejected_procedure_is_not_offered_until_its_steps_change(
     await _run_once(container, run="run_2", quote="Q-2", sku="S-2")
     await learning.learn()
     assert await _procedures(container, _ctx()) == [], "same steps: still rejected"
+
+    # the same voter changes their mind: approved, the flip lifts the rejection they made
+    async with uow_factory() as uow:
+        flip, _ = await feedback.submit(
+            uow,
+            _ctx(),
+            Feedback(
+                tenant_id="acme",
+                target_kind=FeedbackTargetKind.PROCEDURE,
+                target_id=procedure.procedure_id,
+                verdict=FeedbackVerdict.CONFIRM,
+            ),
+        )
+        await uow.commit()
+    assert flip.pending
+    async with uow_factory() as uow:
+        await feedback.review(
+            uow, "acme", flip.feedback_id, approve=True, reviewed_by="key:acme-admin"
+        )
+        await uow.commit()
+    await container.tasks.drain()
+    assert [p.procedure_id for p in await _procedures(container, _ctx())] == [
+        procedure.procedure_id
+    ]
 
 
 async def test_redacted_arguments_never_reach_storage(container, uow_factory) -> None:

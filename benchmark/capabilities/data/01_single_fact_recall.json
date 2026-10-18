@@ -1,0 +1,1678 @@
+{
+ "capability": "single_fact_recall",
+ "number": 1,
+ "title": "Single-fact recall",
+ "definition": "Retrieve one specific, isolated piece of information the user stated earlier (a code, a number, a name), without being prompted for more context.",
+ "scenarios": [
+  {
+   "id": "recall-retail-hazmat-code",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -16,
+     "at": "07:40",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The master lock code for the hazardous materials cage in Warehouse 3 is 8492.",
+        "de": "Der Generalcode für das Schloss am Gefahrstoffkäfig in Lager 3 lautet 8492.",
+        "es": "El código maestro del candado de la jaula de materiales peligrosos del Almacén 3 es 8492.",
+        "ar": "رمز القفل الرئيسي لقفص المواد الخطرة في المستودع 3 هو 8492.",
+        "hi": "वेयरहाउस 3 में खतरनाक सामग्री वाले केज के मास्टर लॉक का कोड 8492 है।"
+       }
+      },
+      {
+       "role": "ASSISTANT",
+       "text": {
+        "en": "Got it — Warehouse 3 hazmat cage master code noted.",
+        "de": "Alles klar – den Generalcode für den Gefahrstoffkäfig in Lager 3 habe ich notiert.",
+        "es": "Entendido: he anotado el código maestro de la jaula de peligrosos del Almacén 3.",
+        "ar": "تم، سجّلت رمز القفل الرئيسي لقفص المواد الخطرة في المستودع 3.",
+        "hi": "ठीक है — वेयरहाउस 3 के हैज़मैट केज का मास्टर कोड नोट कर लिया।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -15,
+     "at": "10:15",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "How many pallets of bottled water do we have left in Warehouse 2?",
+        "de": "Wie viele Paletten Flaschenwasser haben wir noch in Lager 2?",
+        "es": "¿Cuántos palés de agua embotellada nos quedan en el Almacén 2?",
+        "ar": "كم منصة من المياه المعبأة تبقّت لدينا في المستودع 2؟",
+        "hi": "वेयरहाउस 2 में बोतलबंद पानी के कितने पैलेट बचे हैं?"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "The chemical storage room in Warehouse 2 uses keypad code 3317, not the master lock.",
+        "de": "Der Chemikalienraum in Lager 2 hat das Tastenfeld mit Code 3317, nicht das Generalschloss.",
+        "es": "El cuarto de químicos del Almacén 2 usa el teclado con el código 3317, no el candado maestro.",
+        "ar": "غرفة تخزين المواد الكيميائية في المستودع 2 تستخدم لوحة مفاتيح برمز 3317، وليس القفل الرئيسي.",
+        "hi": "वेयरहाउस 2 के केमिकल स्टोरेज रूम में कीपैड कोड 3317 है, मास्टर लॉक नहीं।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Move twelve cases of paper towels from aisle 4 to the front of the store.",
+        "de": "Bring zwölf Kartons Küchenrollen aus Gang 4 nach vorne in den Laden.",
+        "es": "Pasa doce cajas de papel de cocina del pasillo 4 a la parte delantera de la tienda.",
+        "ar": "انقل اثني عشر صندوقًا من المناشف الورقية من الممر 4 إلى واجهة المتجر.",
+        "hi": "पेपर टॉवल के बारह केस गलियारा 4 से स्टोर के आगे वाले हिस्से में ले जाओ।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "I need to get into the hazmat cage in Warehouse 3. What's the code?",
+        "de": "Ich muss in den Gefahrstoffkäfig in Lager 3. Wie lautet der Code?",
+        "es": "Necesito entrar en la jaula de materiales peligrosos del Almacén 3. ¿Cuál es el código?",
+        "ar": "أحتاج إلى الدخول إلى قفص المواد الخطرة في المستودع 3. ما هو الرمز؟",
+        "hi": "मुझे वेयरहाउस 3 के हैज़मैट केज में जाना है। कोड क्या है?",
+        "mixed": "Warehouse 3 ke hazmat cage ka code kya hai? Mujhe andar jaana hai."
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Some drums in the Warehouse 3 hazmat cage need to come out this morning and I'm the one opening it.",
+        "de": "Heute früh müssen Fässer aus dem Gefahrstoffkäfig in Lager 3 raus, und ich soll ihn aufschließen.",
+        "es": "Esta mañana hay que sacar unos bidones de la jaula de peligrosos del Almacén 3 y me toca abrirla a mí.",
+        "ar": "يجب إخراج بعض البراميل من قفص المواد الخطرة في المستودع 3 هذا الصباح وأنا من سيفتحه.",
+        "hi": "आज सुबह वेयरहाउस 3 के हैज़मैट केज से कुछ ड्रम निकालने हैं और उसे खोलने का काम मेरा है।",
+        "mixed": "Tengo que entrar al hazmat cage de Warehouse 3 ahora mismo, ¿me ayudas con el code?"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What combination opens the hazardous-materials enclosure at Warehouse 3?",
+        "de": "Mit welcher Kombination öffnet man die Gefahrstoffumzäunung in Lager 3?",
+        "es": "¿Qué combinación abre el recinto de materiales peligrosos del Almacén 3?",
+        "ar": "ما التركيبة التي تفتح حاوية المواد الخطرة في المستودع 3؟",
+        "hi": "वेयरहाउस 3 के खतरनाक सामग्री वाले घेरे को कौन सा कॉम्बिनेशन खोलता है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "whats the cod for the hazmat cge in warehose 3",
+        "de": "wie ist der kod für den gefahrstofkäfig in lagr 3",
+        "es": "cual es el codigo de la jaula de peligrosos del almacen 3",
+        "ar": "ما هو رمز قفص المواد الخطره في المستودغ 3",
+        "hi": "वेयरहाउस 3 के हैजमैट केज का कोड क्या ह"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "Morning! I'm covering the floor today because Dana is out, and first on my list is pulling a couple of drums of solvent for the paint department, which means getting into the hazmat cage over in Warehouse 3 — remind me what the lock code is?",
+        "de": "Guten Morgen! Ich vertrete heute Dana auf der Fläche, und als Erstes muss ich ein paar Fässer Lösungsmittel für die Farbenabteilung holen, also in den Gefahrstoffkäfig in Lager 3 – wie war noch mal der Code für das Schloss?",
+        "es": "¡Buenos días! Hoy cubro el turno de Dana y lo primero de mi lista es sacar un par de bidones de disolvente para pintura, así que tengo que entrar en la jaula de peligrosos del Almacén 3. ¿Me recuerdas el código del candado?",
+        "ar": "صباح الخير! أغطي مناوبة دانا اليوم، وأول مهمة عندي هي إخراج برميلين من المذيبات لقسم الدهانات، أي أنني أحتاج إلى دخول قفص المواد الخطرة في المستودع 3 — هل تذكّرني برمز القفل؟",
+        "hi": "नमस्ते! आज डाना की जगह मैं फ्लोर संभाल रहा हूँ, और सबसे पहले पेंट विभाग के लिए सॉल्वेंट के दो ड्रम निकालने हैं, यानी वेयरहाउस 3 के हैज़मैट केज में जाना पड़ेगा — ज़रा लॉक कोड याद दिला दो?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Heading over to the Warehouse 3 hazmat cage now — anything I need to get it open?",
+        "de": "Ich gehe jetzt zum Gefahrstoffkäfig in Lager 3 – was brauche ich, um ihn aufzumachen?",
+        "es": "Voy ahora a la jaula de peligrosos del Almacén 3. ¿Qué necesito para abrirla?",
+        "ar": "أنا متجه الآن إلى قفص المواد الخطرة في المستودع 3 — ماذا أحتاج لفتحه؟",
+        "hi": "मैं अभी वेयरहाउस 3 के हैज़मैट केज की तरफ़ जा रहा हूँ — उसे खोलने के लिए क्या चाहिए?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "I don't remember the hazmat cage code for Warehouse 3 — and it's not the Warehouse 2 chemical room one. What is it?",
+        "de": "Ich weiß den Code für den Gefahrstoffkäfig in Lager 3 nicht mehr – und es ist nicht der vom Chemikalienraum in Lager 2. Wie lautet er?",
+        "es": "No recuerdo el código de la jaula de peligrosos del Almacén 3, y no es el del cuarto de químicos del Almacén 2. ¿Cuál es?",
+        "ar": "لا أتذكر رمز قفص المواد الخطرة في المستودع 3 — وهو ليس رمز غرفة الكيماويات في المستودع 2. ما هو؟",
+        "hi": "मुझे वेयरहाउस 3 के हैज़मैट केज का कोड याद नहीं — और यह वेयरहाउस 2 के केमिकल रूम वाला नहीं है। कोड क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "A couple of weeks back I gave you the master lock code for the hazmat cage in Warehouse 3. What was it again?",
+        "de": "Vor ein paar Wochen habe ich dir den Generalcode für den Gefahrstoffkäfig in Lager 3 gegeben. Wie lautete er noch mal?",
+        "es": "Hace un par de semanas te di el código maestro de la jaula de peligrosos del Almacén 3. ¿Cuál era?",
+        "ar": "قبل أسبوعين أعطيتك رمز القفل الرئيسي لقفص المواد الخطرة في المستودع 3. ما كان؟",
+        "hi": "कुछ हफ़्ते पहले मैंने तुम्हें वेयरहाउस 3 के हैज़मैट केज का मास्टर लॉक कोड बताया था। वह क्या था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "hazmat cage W3 code",
+        "de": "Code Gefahrstoffkäfig Lager 3",
+        "es": "código jaula peligrosos Almacén 3",
+        "ar": "رمز قفص المواد الخطرة المستودع 3",
+        "hi": "वेयरहाउस 3 हैज़मैट केज कोड",
+        "mixed": "Code für den hazmat cage in Warehouse 3?"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me the master lock code for the hazmat cage in Warehouse 3.",
+        "de": "Nenn mir den Generalcode für den Gefahrstoffkäfig in Lager 3.",
+        "es": "Dime el código maestro de la jaula de materiales peligrosos del Almacén 3.",
+        "ar": "أخبرني برمز القفل الرئيسي لقفص المواد الخطرة في المستودع 3.",
+        "hi": "मुझे वेयरहाउस 3 के हैज़मैट केज का मास्टर लॉक कोड बताओ।",
+        "mixed": "قل لي الـ master lock code تبع الـ hazmat cage في Warehouse 3."
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "8492"
+      ],
+      "answer": {
+       "contains": [
+        "8492"
+       ],
+       "absent": [
+        "3317"
+       ]
+      }
+     }
+    }
+   ],
+   "origin": "inventorysmart-1"
+  },
+  {
+   "id": "recall-retail-dock-door",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -24,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "From now on, dock door 14 is reserved for FreshWay's cold-chain deliveries.",
+        "de": "Ab sofort ist Tor 14 für die Kühlkettenlieferungen von FreshWay reserviert.",
+        "es": "A partir de ahora, el muelle 14 queda reservado para las entregas de cadena de frío de FreshWay.",
+        "ar": "اعتبارًا من الآن، باب الرصيف 14 مخصص لتوريدات FreshWay المبرّدة.",
+        "hi": "अब से डॉक डोर 14 FreshWay की कोल्ड-चेन डिलीवरी के लिए आरक्षित है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Customer returns go through dock door 9, as before.",
+        "de": "Kundenretouren laufen wie bisher über Tor 9.",
+        "es": "Las devoluciones de clientes siguen entrando por el muelle 9, como antes.",
+        "ar": "مرتجعات العملاء تمر عبر باب الرصيف 9 كما كان سابقًا.",
+        "hi": "ग्राहकों के रिटर्न पहले की तरह डॉक डोर 9 से आते हैं।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -10,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Please draft the weekly cycle count schedule for the chilled section.",
+        "de": "Bitte entwirf den wöchentlichen Inventurplan für den Kühlbereich.",
+        "es": "Prepara el calendario semanal de conteo cíclico para la sección refrigerada.",
+        "ar": "من فضلك جهّز جدول الجرد الدوري الأسبوعي لقسم المبرّدات.",
+        "hi": "कृपया ठंडे सेक्शन के लिए साप्ताहिक साइकिल काउंट शेड्यूल तैयार करो।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Which dock door should the FreshWay truck use?",
+        "de": "An welches Tor soll der FreshWay-Lkw fahren?",
+        "es": "¿Qué muelle debe usar el camión de FreshWay?",
+        "ar": "أي باب رصيف يجب أن تستخدمه شاحنة FreshWay؟",
+        "hi": "FreshWay का ट्रक किस डॉक डोर पर लगना चाहिए?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The FreshWay driver just called, he's ten minutes out and asking where to back in.",
+        "de": "Der FreshWay-Fahrer hat gerade angerufen, er ist in zehn Minuten da und fragt, wo er andocken soll.",
+        "es": "Acaba de llamar el conductor de FreshWay: llega en diez minutos y pregunta dónde aparcar marcha atrás.",
+        "ar": "اتصل سائق FreshWay للتو، سيصل خلال عشر دقائق ويسأل أين يركن للتفريغ.",
+        "hi": "FreshWay के ड्राइवर का फ़ोन आया है, वह दस मिनट में पहुँचेगा और पूछ रहा है कि ट्रक कहाँ लगाए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Where do refrigerated deliveries from FreshWay get unloaded?",
+        "de": "Wo werden die gekühlten Lieferungen von FreshWay entladen?",
+        "es": "¿Dónde se descargan las entregas refrigeradas de FreshWay?",
+        "ar": "أين يتم تفريغ الشحنات المبرّدة من FreshWay؟",
+        "hi": "FreshWay की रेफ्रिजरेटेड डिलीवरी कहाँ उतारी जाती है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "wich dock dor is for freshway",
+        "de": "welches tor is für freshway",
+        "es": "que muele es para freshway",
+        "ar": "اي باب رصيف لفريش واي FreshWay",
+        "hi": "freshway के लिए कोनसा डॉक डोर है"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "We've got a FreshWay delivery coming in this afternoon with yoghurt and fresh juice, and I want to make sure the receiving team sends it to the right bay so it doesn't sit in the sun — which dock door was that supposed to be?",
+        "de": "Heute Nachmittag kommt eine FreshWay-Lieferung mit Joghurt und frischem Saft, und ich will sicherstellen, dass der Wareneingang sie an das richtige Tor schickt, damit sie nicht in der Sonne steht – welches Tor war dafür vorgesehen?",
+        "es": "Esta tarde llega una entrega de FreshWay con yogur y zumo fresco y quiero asegurarme de que recepción la mande al muelle correcto para que no se quede al sol. ¿Qué muelle era?",
+        "ar": "لدينا شحنة من FreshWay بعد الظهر فيها زبادي وعصير طازج، وأريد التأكد من أن فريق الاستلام يوجهها إلى الرصيف الصحيح حتى لا تبقى تحت الشمس — أي باب رصيف كان مخصصًا لذلك؟",
+        "hi": "आज दोपहर FreshWay की डिलीवरी आ रही है जिसमें दही और ताज़ा जूस है, और मैं पक्का करना चाहता हूँ कि रिसीविंग टीम उसे सही बे पर भेजे ताकि वह धूप में न पड़ी रहे — वह कौन सा डॉक डोर था?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "FreshWay's reefer is at the gate.",
+        "de": "Der Kühllaster von FreshWay steht am Tor.",
+        "es": "El camión frigorífico de FreshWay está en la entrada.",
+        "ar": "شاحنة التبريد من FreshWay عند البوابة.",
+        "hi": "FreshWay का रीफ़र ट्रक गेट पर खड़ा है।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "It's not door 9 for FreshWay, is it? Which one is it?",
+        "de": "Für FreshWay ist es nicht Tor 9, oder? Welches dann?",
+        "es": "Para FreshWay no es el muelle 9, ¿verdad? ¿Cuál es?",
+        "ar": "ليس الباب 9 بالنسبة لـ FreshWay، صحيح؟ أي باب إذن؟",
+        "hi": "FreshWay के लिए डोर 9 नहीं है ना? फिर कौन सा है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "A while ago we set aside one dock door just for FreshWay's cold-chain loads. Which number was it?",
+        "de": "Vor einer Weile haben wir ein Tor nur für die Kühlkettenladungen von FreshWay reserviert. Welche Nummer war das?",
+        "es": "Hace un tiempo reservamos un muelle solo para las cargas de frío de FreshWay. ¿Qué número era?",
+        "ar": "قبل فترة خصصنا بابًا واحدًا لشحنات FreshWay المبرّدة فقط. ما رقمه؟",
+        "hi": "कुछ समय पहले हमने FreshWay के कोल्ड-चेन लोड के लिए एक डॉक डोर अलग रखा था। उसका नंबर क्या था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "FreshWay dock door",
+        "de": "FreshWay Tor",
+        "es": "muelle FreshWay",
+        "ar": "باب رصيف FreshWay",
+        "hi": "FreshWay डॉक डोर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell receiving which dock door FreshWay unloads at.",
+        "de": "Sag dem Wareneingang, an welchem Tor FreshWay entlädt.",
+        "es": "Dile a recepción en qué muelle descarga FreshWay.",
+        "ar": "أخبر فريق الاستلام عند أي باب رصيف تفرّغ FreshWay.",
+        "hi": "रिसीविंग टीम को बताओ कि FreshWay किस डॉक डोर पर माल उतारता है।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       {
+        "en": "dock door 14",
+        "de": "Tor 14",
+        "es": "muelle 14",
+        "ar": "الرصيف 14",
+        "hi": "डोर 14"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "recall-retail-upc",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -40,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "For the record, the UPC on our private-label paper towels, SKU PT-2207, is 084213557106.",
+        "de": "Zur Info: Der UPC unserer Eigenmarken-Küchenrollen, Artikel PT-2207, ist 084213557106.",
+        "es": "Para que conste: el UPC de nuestro papel de cocina de marca propia, SKU PT-2207, es 084213557106.",
+        "ar": "للتوثيق: رمز UPC لمناشفنا الورقية من علامتنا الخاصة، SKU PT-2207، هو 084213557106.",
+        "hi": "रिकॉर्ड के लिए: हमारे प्राइवेट-लेबल पेपर टॉवल, SKU PT-2207, का UPC 084213557106 है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "And the facial tissues, SKU FT-1180, carry UPC 084213551029.",
+        "de": "Und die Kosmetiktücher, Artikel FT-1180, haben den UPC 084213551029.",
+        "es": "Y los pañuelos faciales, SKU FT-1180, llevan el UPC 084213551029.",
+        "ar": "أما المناديل الوجهية، SKU FT-1180، فرمزها UPC 084213551029.",
+        "hi": "और फेशियल टिशू, SKU FT-1180, का UPC 084213551029 है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -5,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Remind me to call the label printer vendor on Monday.",
+        "de": "Erinnere mich daran, am Montag den Etikettendrucker-Lieferanten anzurufen.",
+        "es": "Recuérdame llamar al proveedor de la impresora de etiquetas el lunes.",
+        "ar": "ذكّرني بالاتصال بمورّد طابعة الملصقات يوم الاثنين.",
+        "hi": "मुझे सोमवार को लेबल प्रिंटर वाले वेंडर को फ़ोन करने की याद दिलाना।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the UPC for our paper towels?",
+        "de": "Wie lautet der UPC unserer Küchenrollen?",
+        "es": "¿Cuál es el UPC de nuestro papel de cocina?",
+        "ar": "ما هو رمز UPC لمناشفنا الورقية؟",
+        "hi": "हमारे पेपर टॉवल का UPC क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "The scanner at register 3 won't read the paper towel barcode, I need to key it in by hand.",
+        "de": "Der Scanner an Kasse 3 liest den Barcode der Küchenrollen nicht, ich muss ihn von Hand eintippen.",
+        "es": "El escáner de la caja 3 no lee el código de barras del papel de cocina, tengo que teclearlo a mano.",
+        "ar": "الماسح في الصندوق 3 لا يقرأ باركود المناشف الورقية، علي إدخاله يدويًا.",
+        "hi": "काउंटर 3 का स्कैनर पेपर टॉवल का बारकोड नहीं पढ़ रहा, मुझे उसे हाथ से डालना होगा।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which barcode number belongs to SKU PT-2207?",
+        "de": "Welche Barcodenummer gehört zu Artikel PT-2207?",
+        "es": "¿Qué número de código de barras corresponde al SKU PT-2207?",
+        "ar": "ما رقم الباركود الخاص بـ SKU PT-2207؟",
+        "hi": "SKU PT-2207 का बारकोड नंबर कौन सा है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "upc for papr towles PT-2207",
+        "de": "UPC für küchenroln PT-2207",
+        "es": "upc del papel de cosina PT-2207",
+        "ar": "رمز يو بي سي للمناشف الورقيه PT-2207",
+        "hi": "पेपर टोवल PT-2207 का युपीसी"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm setting up the new promo end cap and the planogram software wants the UPC for each item; the one I'm missing is our own-brand paper towels, the PT-2207 ones — what's the code?",
+        "de": "Ich richte das neue Aktionsregal ein und die Planogramm-Software will für jeden Artikel den UPC; mir fehlt noch der unserer Eigenmarken-Küchenrollen, PT-2207 – wie lautet der Code?",
+        "es": "Estoy montando la nueva cabecera de promoción y el programa de planogramas pide el UPC de cada artículo; me falta el de nuestro papel de cocina de marca propia, el PT-2207. ¿Cuál es?",
+        "ar": "أجهّز رف العرض الترويجي الجديد وبرنامج المخططات يطلب رمز UPC لكل صنف؛ الناقص عندي هو مناشفنا الورقية من علامتنا، PT-2207 — ما الرمز؟",
+        "hi": "मैं नया प्रोमो एंड-कैप लगा रहा हूँ और प्लैनोग्राम सॉफ़्टवेयर हर आइटम का UPC माँग रहा है; मेरे पास सिर्फ़ हमारे अपने ब्रांड के पेपर टॉवल, PT-2207, का कोड नहीं है — वह क्या है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Need to key in PT-2207 manually at the till.",
+        "de": "Muss PT-2207 an der Kasse manuell eingeben.",
+        "es": "Tengo que meter PT-2207 a mano en la caja.",
+        "ar": "يجب أن أدخل PT-2207 يدويًا على الصندوق.",
+        "hi": "काउंटर पर PT-2207 हाथ से डालना है।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not the tissues — the paper towels. What's their UPC?",
+        "de": "Nicht die Kosmetiktücher – die Küchenrollen. Welchen UPC haben die?",
+        "es": "No los pañuelos, el papel de cocina. ¿Cuál es su UPC?",
+        "ar": "ليست المناديل — بل المناشف الورقية. ما رمز UPC الخاص بها؟",
+        "hi": "टिशू नहीं — पेपर टॉवल। उनका UPC क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Back in the summer I gave you the UPC for the private-label paper towels. What was it?",
+        "de": "Im Sommer habe ich dir den UPC der Eigenmarken-Küchenrollen gegeben. Wie lautete er?",
+        "es": "En verano te di el UPC del papel de cocina de marca propia. ¿Cuál era?",
+        "ar": "في الصيف أعطيتك رمز UPC للمناشف الورقية من علامتنا الخاصة. ما كان؟",
+        "hi": "गर्मियों में मैंने तुम्हें प्राइवेट-लेबल पेपर टॉवल का UPC दिया था। वह क्या था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "PT-2207 UPC",
+        "de": "PT-2207 UPC",
+        "es": "UPC PT-2207",
+        "ar": "UPC الخاص بـ PT-2207",
+        "hi": "PT-2207 UPC"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the UPC for SKU PT-2207.",
+        "de": "Gib mir den UPC für Artikel PT-2207.",
+        "es": "Dame el UPC del SKU PT-2207.",
+        "ar": "أعطني رمز UPC لـ SKU PT-2207.",
+        "hi": "मुझे SKU PT-2207 का UPC दो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "084213557106"
+      ],
+      "answer": {
+       "contains": [
+        "084213557106"
+       ],
+       "absent": [
+        "084213551029"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "recall-retail-supplier-account",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -33,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Our customer account number with Northwind Packaging is NW-55190.",
+        "de": "Unsere Kundennummer bei Northwind Packaging lautet NW-55190.",
+        "es": "Nuestro número de cuenta de cliente en Northwind Packaging es NW-55190.",
+        "ar": "رقم حساب العميل الخاص بنا لدى Northwind Packaging هو NW-55190.",
+        "hi": "Northwind Packaging के साथ हमारा कस्टमर अकाउंट नंबर NW-55190 है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "With Harbor Freight Supplies we're account HF-20761.",
+        "de": "Bei Harbor Freight Supplies haben wir die Kundennummer HF-20761.",
+        "es": "Con Harbor Freight Supplies somos la cuenta HF-20761.",
+        "ar": "لدى Harbor Freight Supplies رقم حسابنا HF-20761.",
+        "hi": "Harbor Freight Supplies में हमारा अकाउंट HF-20761 है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -12,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Can you summarise last week's shrink numbers for the bakery?",
+        "de": "Kannst du die Inventurdifferenzen der Bäckerei von letzter Woche zusammenfassen?",
+        "es": "¿Puedes resumir las mermas de la panadería de la semana pasada?",
+        "ar": "هل يمكنك تلخيص أرقام الفاقد في المخبز للأسبوع الماضي؟",
+        "hi": "क्या तुम पिछले हफ़्ते के बेकरी के श्रिंक आंकड़ों का सार दे सकते हो?"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's our account number with Northwind Packaging?",
+        "de": "Wie lautet unsere Kundennummer bei Northwind Packaging?",
+        "es": "¿Cuál es nuestro número de cuenta en Northwind Packaging?",
+        "ar": "ما رقم حسابنا لدى Northwind Packaging؟",
+        "hi": "Northwind Packaging के साथ हमारा अकाउंट नंबर क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm on hold with Northwind Packaging and they want our account details.",
+        "de": "Ich hänge in der Warteschleife bei Northwind Packaging und die wollen unsere Kundendaten.",
+        "es": "Estoy en espera con Northwind Packaging y me piden los datos de nuestra cuenta.",
+        "ar": "أنا على الانتظار مع Northwind Packaging ويطلبون بيانات حسابنا.",
+        "hi": "मैं Northwind Packaging के साथ होल्ड पर हूँ और वे हमारे अकाउंट की जानकारी माँग रहे हैं।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Under which customer ID does Northwind Packaging know us?",
+        "de": "Unter welcher Kunden-ID kennt uns Northwind Packaging?",
+        "es": "¿Con qué ID de cliente nos tiene registrados Northwind Packaging?",
+        "ar": "بأي معرّف عميل تعرفنا Northwind Packaging؟",
+        "hi": "Northwind Packaging हमें किस कस्टमर आईडी से जानता है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "acount no for nortwind packging",
+        "de": "kundennumer bei nortwind packaging",
+        "es": "numero de cuenta en nortwind packagin",
+        "ar": "رقم الحساب عند نورثويند باكيجنغ Northwind",
+        "hi": "नॉर्थविंड पैकेजिंग का अकाउंट नमबर"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm filling out the online reorder form for stretch wrap and corner boards, and the very first field asks for our existing account with the supplier, Northwind Packaging — can you tell me what we're registered under?",
+        "de": "Ich fülle gerade das Online-Bestellformular für Stretchfolie und Kantenschutz aus, und das erste Feld fragt nach unserem bestehenden Konto beim Lieferanten Northwind Packaging – unter welcher Nummer sind wir registriert?",
+        "es": "Estoy rellenando el formulario de pedido online de film estirable y cantoneras, y el primer campo pide nuestra cuenta con el proveedor, Northwind Packaging. ¿Con qué número estamos registrados?",
+        "ar": "أملأ نموذج إعادة الطلب الإلكتروني للفيلم المطاطي وزوايا الحماية، وأول حقل يطلب حسابنا الحالي لدى المورّد Northwind Packaging — هل تخبرني برقم تسجيلنا؟",
+        "hi": "मैं स्ट्रेच रैप और कॉर्नर बोर्ड का ऑनलाइन रीऑर्डर फ़ॉर्म भर रहा हूँ, और पहला फ़ील्ड सप्लायर Northwind Packaging के साथ हमारे मौजूदा अकाउंट के बारे में पूछता है — हम किस नंबर से रजिस्टर्ड हैं?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Northwind's portal is asking who we are.",
+        "de": "Das Portal von Northwind fragt, wer wir sind.",
+        "es": "El portal de Northwind pregunta quiénes somos.",
+        "ar": "بوابة Northwind تسأل من نحن.",
+        "hi": "Northwind का पोर्टल पूछ रहा है कि हम कौन हैं।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not the Harbor Freight number — the Northwind Packaging one. What is it?",
+        "de": "Nicht die Nummer von Harbor Freight – die von Northwind Packaging. Wie lautet sie?",
+        "es": "No el número de Harbor Freight, el de Northwind Packaging. ¿Cuál es?",
+        "ar": "ليس رقم Harbor Freight — بل رقم Northwind Packaging. ما هو؟",
+        "hi": "Harbor Freight वाला नंबर नहीं — Northwind Packaging वाला। वह क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Last month I told you our Northwind Packaging account number. Remind me?",
+        "de": "Letzten Monat habe ich dir unsere Kundennummer bei Northwind Packaging gesagt. Erinnerst du mich?",
+        "es": "El mes pasado te dije nuestro número de cuenta de Northwind Packaging. ¿Me lo recuerdas?",
+        "ar": "الشهر الماضي أخبرتك برقم حسابنا لدى Northwind Packaging. هل تذكّرني؟",
+        "hi": "पिछले महीने मैंने तुम्हें Northwind Packaging का हमारा अकाउंट नंबर बताया था। याद दिलाओगे?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Northwind account number",
+        "de": "Kundennummer Northwind",
+        "es": "cuenta Northwind",
+        "ar": "رقم حساب Northwind",
+        "hi": "Northwind अकाउंट नंबर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Read me our Northwind Packaging account number.",
+        "de": "Lies mir unsere Kundennummer bei Northwind Packaging vor.",
+        "es": "Léeme nuestro número de cuenta de Northwind Packaging.",
+        "ar": "اقرأ لي رقم حسابنا لدى Northwind Packaging.",
+        "hi": "Northwind Packaging वाला हमारा अकाउंट नंबर पढ़कर सुनाओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "NW-55190"
+      ],
+      "answer": {
+       "contains": [
+        "NW-55190"
+       ],
+       "absent": [
+        "HF-20761"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "recall-retail-recall-contact",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -50,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "If Lakeside Dairy ever issues a recall, the person to call is Priya Natarajan on extension 4417.",
+        "de": "Falls Lakeside Dairy je einen Rückruf startet, ist Priya Natarajan unter Durchwahl 4417 die Ansprechpartnerin.",
+        "es": "Si Lakeside Dairy emite alguna vez una retirada, hay que llamar a Priya Natarajan, extensión 4417.",
+        "ar": "إذا أصدرت Lakeside Dairy سحبًا لمنتج، فالشخص الذي يجب الاتصال به هو Priya Natarajan على التحويلة 4417.",
+        "hi": "अगर Lakeside Dairy कभी रिकॉल जारी करे, तो Priya Natarajan को एक्सटेंशन 4417 पर फ़ोन करना है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Their general sales line is extension 4400.",
+        "de": "Deren allgemeine Vertriebsnummer ist die Durchwahl 4400.",
+        "es": "Su línea general de ventas es la extensión 4400.",
+        "ar": "خط المبيعات العام لديهم هو التحويلة 4400.",
+        "hi": "उनकी सामान्य सेल्स लाइन एक्सटेंशन 4400 है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Who do I call at Lakeside Dairy about a recall?",
+        "de": "Wen rufe ich bei Lakeside Dairy wegen eines Rückrufs an?",
+        "es": "¿A quién llamo en Lakeside Dairy por una retirada de producto?",
+        "ar": "بمن أتصل في Lakeside Dairy بخصوص سحب منتج؟",
+        "hi": "रिकॉल के बारे में Lakeside Dairy में किसे फ़ोन करूँ?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "There's an FDA notice about Lakeside Dairy yogurt on the news.",
+        "de": "In den Nachrichten gibt es eine FDA-Meldung zu Joghurt von Lakeside Dairy.",
+        "es": "En las noticias hay un aviso de la FDA sobre el yogur de Lakeside Dairy.",
+        "ar": "هناك إشعار من FDA في الأخبار بخصوص زبادي Lakeside Dairy.",
+        "hi": "न्यूज़ में Lakeside Dairy के दही के बारे में FDA का नोटिस है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Who's our recall contact at Lakeside Dairy, and what's the extension?",
+        "de": "Wer ist unsere Ansprechpartnerin für Rückrufe bei Lakeside Dairy, und welche Durchwahl hat sie?",
+        "es": "¿Quién es nuestro contacto de retiradas en Lakeside Dairy y cuál es su extensión?",
+        "ar": "من هو جهة اتصالنا للسحب في Lakeside Dairy، وما التحويلة؟",
+        "hi": "Lakeside Dairy में हमारा रिकॉल संपर्क कौन है, और एक्सटेंशन क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "who to cal at lakeside dairy for a recal",
+        "de": "wen anrufn bei lakeside dairy wegen rückruff",
+        "es": "a quien llamo en lakeside dairi por la retirada",
+        "ar": "مين اتصل في ليكسايد ديري Lakeside Dairy بخصوص السحب",
+        "hi": "रिकाल के लिये lakeside dairy में किसको फोन करु"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "A customer just brought back two tubs of Lakeside Dairy cottage cheese saying they smelled off, and there's chatter on social media about a possible recall, so before I pull anything from the shelf I'd like to talk to the right person at Lakeside — who was that again, and how do I reach them?",
+        "de": "Eine Kundin hat gerade zwei Becher Hüttenkäse von Lakeside Dairy zurückgebracht, weil sie komisch rochen, und in den sozialen Medien ist von einem möglichen Rückruf die Rede. Bevor ich etwas aus dem Regal nehme, möchte ich mit der richtigen Person bei Lakeside sprechen – wer war das noch, und wie erreiche ich sie?",
+        "es": "Un cliente acaba de devolver dos tarrinas de requesón de Lakeside Dairy porque olían raro, y en redes se habla de una posible retirada; antes de quitar nada del lineal quiero hablar con la persona adecuada de Lakeside. ¿Quién era y cómo la localizo?",
+        "ar": "أعاد زبون للتو علبتين من جبن القريش من Lakeside Dairy لأن رائحتهما غريبة، وهناك حديث على مواقع التواصل عن سحب محتمل، لذا قبل أن أسحب أي شيء من الرف أريد التحدث إلى الشخص المناسب في Lakeside — من كان، وكيف أتواصل معه؟",
+        "hi": "एक ग्राहक अभी Lakeside Dairy के कॉटेज चीज़ के दो डिब्बे लौटा गया कि उनसे अजीब गंध आ रही थी, और सोशल मीडिया पर संभावित रिकॉल की चर्चा है, इसलिए शेल्फ़ से कुछ हटाने से पहले मैं Lakeside में सही व्यक्ति से बात करना चाहता हूँ — वह कौन था, और उनसे कैसे संपर्क करूँ?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Possible Lakeside Dairy recall — need to escalate.",
+        "de": "Möglicher Rückruf bei Lakeside Dairy – muss eskalieren.",
+        "es": "Posible retirada de Lakeside Dairy: tengo que escalarlo.",
+        "ar": "سحب محتمل من Lakeside Dairy — يجب التصعيد.",
+        "hi": "Lakeside Dairy का संभावित रिकॉल — एस्केलेट करना है।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not their sales line — the recall person at Lakeside Dairy. What's the extension?",
+        "de": "Nicht die Vertriebsnummer – die Rückruf-Ansprechpartnerin bei Lakeside Dairy. Welche Durchwahl?",
+        "es": "No la línea de ventas, la persona de retiradas de Lakeside Dairy. ¿Qué extensión?",
+        "ar": "ليس خط المبيعات — بل مسؤولة السحب في Lakeside Dairy. ما التحويلة؟",
+        "hi": "सेल्स लाइन नहीं — Lakeside Dairy का रिकॉल वाला व्यक्ति। एक्सटेंशन क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Ages ago I told you who handles recalls at Lakeside Dairy. Who was it?",
+        "de": "Vor langer Zeit habe ich dir gesagt, wer bei Lakeside Dairy für Rückrufe zuständig ist. Wer war das?",
+        "es": "Hace tiempo te dije quién lleva las retiradas en Lakeside Dairy. ¿Quién era?",
+        "ar": "منذ مدة طويلة أخبرتك بمن يتولى عمليات السحب في Lakeside Dairy. من كان؟",
+        "hi": "बहुत पहले मैंने तुम्हें बताया था कि Lakeside Dairy में रिकॉल कौन देखता है। वह कौन था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Lakeside Dairy recall contact",
+        "de": "Rückrufkontakt Lakeside Dairy",
+        "es": "contacto retiradas Lakeside Dairy",
+        "ar": "جهة اتصال السحب Lakeside Dairy",
+        "hi": "Lakeside Dairy रिकॉल संपर्क"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the recall contact and extension for Lakeside Dairy.",
+        "de": "Gib mir die Rückruf-Ansprechpartnerin und Durchwahl für Lakeside Dairy.",
+        "es": "Dame el contacto y la extensión de retiradas de Lakeside Dairy.",
+        "ar": "أعطني جهة اتصال السحب والتحويلة لدى Lakeside Dairy.",
+        "hi": "मुझे Lakeside Dairy का रिकॉल संपर्क और एक्सटेंशन दो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "4417"
+      ],
+      "answer": {
+       "contains": [
+        "4417",
+        "Priya"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "recall-retail-transfer-cutoff",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -20,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Transfer requests to Store 112 have to be in by 14:00 on Thursdays so they make Friday's truck.",
+        "de": "Umlagerungsanfragen an Filiale 112 müssen donnerstags bis 14:00 eingehen, damit sie auf den Freitags-Lkw kommen.",
+        "es": "Las solicitudes de traspaso a la Tienda 112 tienen que entrar antes de las 14:00 de los jueves para ir en el camión del viernes.",
+        "ar": "يجب تقديم طلبات النقل إلى المتجر 112 قبل الساعة 14:00 يوم الخميس لتلحق بشاحنة الجمعة.",
+        "hi": "स्टोर 112 के लिए ट्रांसफ़र अनुरोध गुरुवार को 14:00 बजे तक देने होते हैं ताकि वे शुक्रवार के ट्रक में जाएँ।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Store 140 takes transfers until 11:00 on Mondays.",
+        "de": "Filiale 140 nimmt Umlagerungen bis montags 11:00 an.",
+        "es": "La Tienda 140 acepta traspasos hasta las 11:00 de los lunes.",
+        "ar": "المتجر 140 يقبل طلبات النقل حتى الساعة 11:00 يوم الاثنين.",
+        "hi": "स्टोर 140 सोमवार 11:00 बजे तक ट्रांसफ़र लेता है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the cutoff for transfer requests to Store 112?",
+        "de": "Wann ist der Annahmeschluss für Umlagerungen an Filiale 112?",
+        "es": "¿Cuál es la hora límite para pedir traspasos a la Tienda 112?",
+        "ar": "ما هو الموعد النهائي لطلبات النقل إلى المتجر 112؟",
+        "hi": "स्टोर 112 के ट्रांसफ़र अनुरोध की कटऑफ़ क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I want to send Store 112 some of our extra patio chairs on this week's truck.",
+        "de": "Ich will Filiale 112 mit dem Lkw dieser Woche ein paar unserer überzähligen Terrassenstühle schicken.",
+        "es": "Quiero mandar a la Tienda 112 algunas de nuestras sillas de jardín sobrantes en el camión de esta semana.",
+        "ar": "أريد إرسال بعض كراسي الحديقة الزائدة لدينا إلى المتجر 112 على شاحنة هذا الأسبوع.",
+        "hi": "मैं इस हफ़्ते के ट्रक से स्टोर 112 को हमारी कुछ अतिरिक्त पैटियो कुर्सियाँ भेजना चाहता हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "By when does a transfer to Store 112 need to be submitted?",
+        "de": "Bis wann muss eine Umlagerung an Filiale 112 eingereicht sein?",
+        "es": "¿Hasta cuándo se puede enviar un traspaso a la Tienda 112?",
+        "ar": "متى يجب تقديم طلب نقل إلى المتجر 112 كحد أقصى؟",
+        "hi": "स्टोर 112 का ट्रांसफ़र कब तक जमा करना होता है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "transfer cutof for stor 112",
+        "de": "umlagerung schluss filale 112",
+        "es": "hora limite traspaso tienda 112",
+        "ar": "اخر موعد للنقل للمتجر 112",
+        "hi": "स्टोर 112 ट्रांसफर कटआफ"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "We overstocked on grills this season and Store 112 is short, so I'm putting together a transfer for them, but I don't want it to miss the truck and sit here another week — when's the deadline for getting the request in?",
+        "de": "Wir haben diese Saison zu viele Grills und Filiale 112 hat zu wenige, also stelle ich eine Umlagerung zusammen, aber sie soll den Lkw nicht verpassen und noch eine Woche hier stehen – bis wann muss die Anfrage drin sein?",
+        "es": "Esta temporada tenemos demasiadas barbacoas y a la Tienda 112 le faltan, así que preparo un traspaso, pero no quiero que pierda el camión y se quede aquí otra semana. ¿Cuál es el plazo para enviar la solicitud?",
+        "ar": "لدينا فائض من الشوايات هذا الموسم والمتجر 112 يعاني نقصًا، لذا أجهز طلب نقل لهم، لكن لا أريده أن يفوت الشاحنة ويبقى هنا أسبوعًا آخر — ما الموعد النهائي لتقديم الطلب؟",
+        "hi": "इस सीज़न हमारे पास ग्रिल ज़्यादा हैं और स्टोर 112 में कमी है, इसलिए मैं उनके लिए ट्रांसफ़र तैयार कर रहा हूँ, पर नहीं चाहता कि वह ट्रक छोड़ दे और एक हफ़्ता और यहीं पड़ा रहे — अनुरोध जमा करने की आख़िरी समय-सीमा क्या है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Store 112 transfer — am I too late?",
+        "de": "Umlagerung an Filiale 112 – bin ich zu spät?",
+        "es": "Traspaso a la Tienda 112: ¿llego tarde?",
+        "ar": "نقل إلى المتجر 112 — هل تأخرت؟",
+        "hi": "स्टोर 112 ट्रांसफ़र — क्या मुझे देर हो गई?"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "It's not the Monday 11:00 one for Store 112, right? What's their cutoff?",
+        "de": "Für Filiale 112 ist es nicht montags 11:00, oder? Wann ist dort Schluss?",
+        "es": "Para la Tienda 112 no es el lunes a las 11:00, ¿no? ¿Cuál es su límite?",
+        "ar": "ليس موعد الاثنين 11:00 بالنسبة للمتجر 112، صحيح؟ ما هو موعده؟",
+        "hi": "स्टोर 112 के लिए सोमवार 11:00 वाला नहीं है ना? उनकी कटऑफ़ क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "A few weeks ago I explained when Store 112 needs transfer requests by. What did I say?",
+        "de": "Vor ein paar Wochen habe ich erklärt, bis wann Filiale 112 Umlagerungsanfragen braucht. Was hatte ich gesagt?",
+        "es": "Hace unas semanas expliqué hasta cuándo necesita la Tienda 112 las solicitudes de traspaso. ¿Qué dije?",
+        "ar": "قبل بضعة أسابيع شرحت متى يحتاج المتجر 112 طلبات النقل. ماذا قلت؟",
+        "hi": "कुछ हफ़्ते पहले मैंने बताया था कि स्टोर 112 को ट्रांसफ़र अनुरोध कब तक चाहिए। मैंने क्या कहा था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Store 112 transfer deadline",
+        "de": "Frist Umlagerung Filiale 112",
+        "es": "plazo traspaso Tienda 112",
+        "ar": "موعد نقل المتجر 112",
+        "hi": "स्टोर 112 ट्रांसफ़र डेडलाइन"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me the deadline for transfers to Store 112.",
+        "de": "Sag mir die Frist für Umlagerungen an Filiale 112.",
+        "es": "Dime el plazo para los traspasos a la Tienda 112.",
+        "ar": "أخبرني بالموعد النهائي لطلبات النقل إلى المتجر 112.",
+        "hi": "मुझे स्टोर 112 के ट्रांसफ़र की डेडलाइन बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "14:00"
+      ],
+      "answer": {
+       "contains": [
+        "14:00"
+       ],
+       "absent": [
+        "11:00"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "recall-personal-locker",
+   "domain": "personal",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -27,
+     "at": "20:10",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "My locker at the climbing gym is number 317 and the padlock combination is 22-08-41.",
+        "de": "Mein Spind in der Kletterhalle hat die Nummer 317, und die Zahlenkombination des Schlosses ist 22-08-41.",
+        "es": "Mi taquilla del rocódromo es la 317 y la combinación del candado es 22-08-41.",
+        "ar": "خزانتي في صالة التسلق رقمها 317 وتركيبة القفل هي 22-08-41.",
+        "hi": "क्लाइम्बिंग जिम में मेरा लॉकर नंबर 317 है और ताले का कॉम्बिनेशन 22-08-41 है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -3,
+     "at": "18:30",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Add oat milk and bananas to my shopping list.",
+        "de": "Setz Hafermilch und Bananen auf meine Einkaufsliste.",
+        "es": "Añade leche de avena y plátanos a mi lista de la compra.",
+        "ar": "أضف حليب الشوفان والموز إلى قائمة التسوق.",
+        "hi": "मेरी शॉपिंग लिस्ट में ओट मिल्क और केले जोड़ दो।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "My bike lock code is 6-6-1-9, by the way.",
+        "de": "Der Code meines Fahrradschlosses ist übrigens 6-6-1-9.",
+        "es": "Por cierto, el código del candado de la bici es 6-6-1-9.",
+        "ar": "بالمناسبة، رمز قفل دراجتي هو 6-6-1-9.",
+        "hi": "वैसे, मेरी साइकिल के लॉक का कोड 6-6-1-9 है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the combination for my gym locker?",
+        "de": "Wie ist die Kombination für meinen Spind in der Halle?",
+        "es": "¿Cuál es la combinación de mi taquilla del gimnasio?",
+        "ar": "ما هي تركيبة خزانتي في النادي؟",
+        "hi": "मेरे जिम लॉकर का कॉम्बिनेशन क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm standing in front of my locker at the climbing gym and my mind has gone blank.",
+        "de": "Ich stehe vor meinem Spind in der Kletterhalle und habe einen totalen Blackout.",
+        "es": "Estoy delante de mi taquilla del rocódromo y me he quedado en blanco.",
+        "ar": "أقف أمام خزانتي في صالة التسلق وذهني فارغ تمامًا.",
+        "hi": "मैं क्लाइम्बिंग जिम में अपने लॉकर के सामने खड़ा हूँ और दिमाग़ बिल्कुल ख़ाली है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which numbers open the padlock on locker 317?",
+        "de": "Welche Zahlen öffnen das Schloss an Spind 317?",
+        "es": "¿Qué números abren el candado de la taquilla 317?",
+        "ar": "ما الأرقام التي تفتح قفل الخزانة 317؟",
+        "hi": "लॉकर 317 का ताला किन नंबरों से खुलता है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "whats my gym lokcer combo",
+        "de": "was ist meine spint kombi in der halle",
+        "es": "cual es la conbinacion de mi taquiya del gym",
+        "ar": "ما هي تركيبه خزانتي في الجيم",
+        "hi": "मेरे जिम लॉकर का कॉमबिनेशन कया है"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "So I finally made it to the climbing gym after work, changed, put my stuff in the locker like always, and now after two hours on the wall I can't for the life of me remember the padlock numbers — can you remind me?",
+        "de": "Ich habe es nach der Arbeit endlich in die Kletterhalle geschafft, mich umgezogen und meine Sachen wie immer in den Spind gelegt, und jetzt nach zwei Stunden an der Wand fallen mir die Zahlen fürs Schloss beim besten Willen nicht mehr ein – kannst du mir helfen?",
+        "es": "Por fin llegué al rocódromo después del trabajo, me cambié, dejé mis cosas en la taquilla como siempre y ahora, tras dos horas escalando, no hay manera de que recuerde los números del candado. ¿Me los recuerdas?",
+        "ar": "وصلت أخيرًا إلى صالة التسلق بعد العمل، وغيّرت ملابسي ووضعت أغراضي في الخزانة كالعادة، والآن بعد ساعتين على الجدار لا أستطيع تذكّر أرقام القفل إطلاقًا — هل تذكّرني بها؟",
+        "hi": "आख़िरकार ऑफ़िस के बाद क्लाइम्बिंग जिम पहुँचा, कपड़े बदले, हमेशा की तरह सामान लॉकर में रखा, और अब दीवार पर दो घंटे के बाद मुझे ताले के नंबर बिल्कुल याद नहीं आ रहे — याद दिला सकते हो?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Locked out of locker 317 again.",
+        "de": "Schon wieder komme ich nicht an Spind 317.",
+        "es": "Otra vez no puedo abrir la taquilla 317.",
+        "ar": "لا أستطيع فتح الخزانة 317 مرة أخرى.",
+        "hi": "फिर से लॉकर 317 नहीं खुल रहा।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not my bike lock — the gym locker. What's that combination?",
+        "de": "Nicht das Fahrradschloss – der Spind in der Halle. Wie ist die Kombination?",
+        "es": "No el candado de la bici, la taquilla del gimnasio. ¿Cuál es la combinación?",
+        "ar": "ليس قفل الدراجة — بل خزانة النادي. ما تركيبتها؟",
+        "hi": "साइकिल का लॉक नहीं — जिम का लॉकर। उसका कॉम्बिनेशन क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Weeks ago I told you my climbing gym locker combination. What was it?",
+        "de": "Vor Wochen habe ich dir die Kombination meines Spinds in der Kletterhalle gesagt. Wie war sie?",
+        "es": "Hace semanas te dije la combinación de mi taquilla del rocódromo. ¿Cuál era?",
+        "ar": "قبل أسابيع أخبرتك بتركيبة خزانتي في صالة التسلق. ما كانت؟",
+        "hi": "हफ़्तों पहले मैंने तुम्हें क्लाइम्बिंग जिम के लॉकर का कॉम्बिनेशन बताया था। वह क्या था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "gym locker combination",
+        "de": "Spind Kombination",
+        "es": "combinación taquilla",
+        "ar": "تركيبة خزانة النادي",
+        "hi": "जिम लॉकर कॉम्बिनेशन"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Remind me of my gym locker combination.",
+        "de": "Erinnere mich an die Kombination meines Spinds.",
+        "es": "Recuérdame la combinación de mi taquilla.",
+        "ar": "ذكّرني بتركيبة خزانة النادي.",
+        "hi": "मुझे मेरे जिम लॉकर का कॉम्बिनेशन याद दिलाओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "22-08-41"
+      ],
+      "answer": {
+       "contains": [
+        "22-08-41"
+       ],
+       "absent": [
+        "6-6-1-9"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "recall-it-backup-console",
+   "domain": "it_support",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -45,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The admin console for the backup appliance lives at 10.20.4.15 on port 8443.",
+        "de": "Die Admin-Konsole der Backup-Appliance läuft unter 10.20.4.15 auf Port 8443.",
+        "es": "La consola de administración del appliance de copias está en 10.20.4.15, puerto 8443.",
+        "ar": "وحدة تحكم المسؤول لجهاز النسخ الاحتياطي على العنوان 10.20.4.15 والمنفذ 8443.",
+        "hi": "बैकअप अप्लायंस का एडमिन कंसोल 10.20.4.15 पर पोर्ट 8443 पर है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "The print server is 10.20.4.30.",
+        "de": "Der Druckserver ist 10.20.4.30.",
+        "es": "El servidor de impresión es 10.20.4.30.",
+        "ar": "خادم الطباعة هو 10.20.4.30.",
+        "hi": "प्रिंट सर्वर 10.20.4.30 है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -6,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Open a ticket: the conference room projector flickers.",
+        "de": "Leg ein Ticket an: Der Beamer im Konferenzraum flackert.",
+        "es": "Abre un ticket: el proyector de la sala de reuniones parpadea.",
+        "ar": "افتح تذكرة: جهاز العرض في غرفة الاجتماعات يومض.",
+        "hi": "टिकट खोलो: कॉन्फ़्रेंस रूम का प्रोजेक्टर टिमटिमा रहा है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the address of the backup appliance's admin console?",
+        "de": "Unter welcher Adresse erreiche ich die Admin-Konsole der Backup-Appliance?",
+        "es": "¿Cuál es la dirección de la consola de administración del appliance de copias?",
+        "ar": "ما عنوان وحدة تحكم المسؤول لجهاز النسخ الاحتياطي؟",
+        "hi": "बैकअप अप्लायंस के एडमिन कंसोल का पता क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Last night's backup job failed and I need to log into the appliance to look at it.",
+        "de": "Der Backup-Job von gestern Nacht ist fehlgeschlagen, und ich muss mich an der Appliance anmelden, um nachzusehen.",
+        "es": "La copia de anoche falló y necesito entrar en el appliance para revisarla.",
+        "ar": "فشلت مهمة النسخ الاحتياطي الليلة الماضية وأحتاج إلى الدخول إلى الجهاز لفحصها.",
+        "hi": "कल रात का बैकअप जॉब फ़ेल हो गया और मुझे देखने के लिए अप्लायंस में लॉग इन करना है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which IP and port do I open in the browser for backup administration?",
+        "de": "Welche IP und welchen Port öffne ich im Browser für die Backup-Verwaltung?",
+        "es": "¿Qué IP y qué puerto abro en el navegador para administrar las copias?",
+        "ar": "ما عنوان IP والمنفذ اللذان أفتحهما في المتصفح لإدارة النسخ الاحتياطي؟",
+        "hi": "बैकअप एडमिनिस्ट्रेशन के लिए ब्राउज़र में कौन सा IP और पोर्ट खोलूँ?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "backup consol ip adress",
+        "de": "backup konsole ip adresse",
+        "es": "ip de la consola de bakup",
+        "ar": "عنوان اي بي لوحة النسخ الاحتياطي",
+        "hi": "बैकप कंसोल का आईपी"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm on call this weekend and got paged because the overnight backup to the appliance didn't complete; before I start digging through logs I want to check the job status in the web console, but I can't remember where it lives — what's the IP and port?",
+        "de": "Ich habe dieses Wochenende Bereitschaft und wurde alarmiert, weil das nächtliche Backup auf die Appliance nicht durchgelaufen ist. Bevor ich in den Logs grabe, will ich den Jobstatus in der Webkonsole prüfen, aber ich weiß nicht mehr, wo die liegt – welche IP und welcher Port?",
+        "es": "Estoy de guardia este fin de semana y me han avisado porque la copia nocturna al appliance no terminó; antes de ponerme con los logs quiero ver el estado del trabajo en la consola web, pero no recuerdo dónde está. ¿Qué IP y puerto?",
+        "ar": "أنا مناوب في عطلة نهاية الأسبوع وتلقيت تنبيهًا لأن النسخ الليلي إلى الجهاز لم يكتمل؛ قبل أن أبحث في السجلات أريد التحقق من حالة المهمة في وحدة التحكم على الويب، لكنني لا أتذكر عنوانها — ما IP والمنفذ؟",
+        "hi": "इस वीकेंड मेरी ऑन-कॉल ड्यूटी है और अलर्ट आया क्योंकि अप्लायंस पर रात का बैकअप पूरा नहीं हुआ; लॉग खंगालने से पहले मैं वेब कंसोल में जॉब का स्टेटस देखना चाहता हूँ, पर याद नहीं कि वह कहाँ है — IP और पोर्ट क्या है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Backup alerts are firing.",
+        "de": "Die Backup-Alarme schlagen an.",
+        "es": "Están saltando las alertas de copias.",
+        "ar": "تنبيهات النسخ الاحتياطي تعمل.",
+        "hi": "बैकअप के अलर्ट आ रहे हैं।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not the print server — the backup console. What's its address?",
+        "de": "Nicht der Druckserver – die Backup-Konsole. Welche Adresse hat sie?",
+        "es": "No el servidor de impresión, la consola de copias. ¿Cuál es su dirección?",
+        "ar": "ليس خادم الطباعة — بل وحدة تحكم النسخ الاحتياطي. ما عنوانها؟",
+        "hi": "प्रिंट सर्वर नहीं — बैकअप कंसोल। उसका पता क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Some time ago I noted where the backup appliance console is. Where was it?",
+        "de": "Vor einiger Zeit habe ich notiert, wo die Konsole der Backup-Appliance ist. Wo war das?",
+        "es": "Hace tiempo apunté dónde está la consola del appliance de copias. ¿Dónde era?",
+        "ar": "قبل فترة سجلت مكان وحدة تحكم جهاز النسخ الاحتياطي. أين كانت؟",
+        "hi": "कुछ समय पहले मैंने नोट किया था कि बैकअप अप्लायंस का कंसोल कहाँ है। वह कहाँ था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "backup console IP",
+        "de": "IP Backup-Konsole",
+        "es": "IP consola copias",
+        "ar": "IP وحدة النسخ الاحتياطي",
+        "hi": "बैकअप कंसोल IP"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the backup console address and port.",
+        "de": "Gib mir Adresse und Port der Backup-Konsole.",
+        "es": "Dame la dirección y el puerto de la consola de copias.",
+        "ar": "أعطني عنوان ومنفذ وحدة تحكم النسخ الاحتياطي.",
+        "hi": "मुझे बैकअप कंसोल का पता और पोर्ट दो।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "10.20.4.15"
+      ],
+      "answer": {
+       "contains": [
+        "10.20.4.15"
+       ],
+       "absent": [
+        "10.20.4.30"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "recall-finance-cost-centre",
+   "domain": "finance_hr",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -30,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Book everything for the marketing offsite in Lisbon to cost centre CC-4471.",
+        "de": "Buche alles für das Marketing-Offsite in Lissabon auf Kostenstelle CC-4471.",
+        "es": "Imputa todo lo del offsite de marketing en Lisboa al centro de coste CC-4471.",
+        "ar": "سجّل كل نفقات الملتقى الخارجي للتسويق في لشبونة على مركز التكلفة CC-4471.",
+        "hi": "लिस्बन वाले मार्केटिंग ऑफ़साइट का सारा ख़र्च कॉस्ट सेंटर CC-4471 पर डालो।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Regular marketing travel stays on CC-4400.",
+        "de": "Normale Marketing-Reisen bleiben auf CC-4400.",
+        "es": "Los viajes normales de marketing siguen en CC-4400.",
+        "ar": "تبقى رحلات التسويق المعتادة على CC-4400.",
+        "hi": "मार्केटिंग की सामान्य यात्राएँ CC-4400 पर ही रहेंगी।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "Which cost centre does the Lisbon offsite go to?",
+        "de": "Auf welche Kostenstelle läuft das Offsite in Lissabon?",
+        "es": "¿A qué centro de coste va el offsite de Lisboa?",
+        "ar": "على أي مركز تكلفة يُحمَّل ملتقى لشبونة؟",
+        "hi": "लिस्बन ऑफ़साइट किस कॉस्ट सेंटर में जाएगा?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I've got the hotel invoice for the Lisbon offsite here and need to code it.",
+        "de": "Ich habe hier die Hotelrechnung vom Offsite in Lissabon und muss sie kontieren.",
+        "es": "Tengo aquí la factura del hotel del offsite de Lisboa y tengo que imputarla.",
+        "ar": "لدي فاتورة الفندق الخاصة بملتقى لشبونة وأحتاج إلى ترميزها.",
+        "hi": "मेरे पास लिस्बन ऑफ़साइट का होटल बिल है और उसे कोड करना है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What cost centre should Lisbon offsite expenses be charged to?",
+        "de": "Welcher Kostenstelle sollen die Ausgaben fürs Lissabon-Offsite belastet werden?",
+        "es": "¿A qué centro de coste se cargan los gastos del offsite de Lisboa?",
+        "ar": "على أي مركز تكلفة يجب تحميل نفقات ملتقى لشبونة؟",
+        "hi": "लिस्बन ऑफ़साइट के ख़र्च किस कॉस्ट सेंटर पर चार्ज होंगे?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "cost center for lisbon ofsite",
+        "de": "kostenstele lissabon offsite",
+        "es": "centro de coste ofsite lisboa",
+        "ar": "مركز تكلفه ملتقى لشبونه",
+        "hi": "लिस्बन ओफसाइट का कॉस्ट सेंटर"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm working through the expense reports from the team trip, and most of them are from the Lisbon marketing offsite — dinners, the venue deposit, a couple of taxis — and the system won't let me submit without a cost centre; which one were we told to use?",
+        "de": "Ich arbeite die Spesenabrechnungen vom Teamausflug ab, die meisten sind vom Marketing-Offsite in Lissabon – Abendessen, Anzahlung für die Location, ein paar Taxis – und das System lässt mich ohne Kostenstelle nicht abschicken; welche sollten wir nehmen?",
+        "es": "Estoy revisando los informes de gastos del viaje del equipo; la mayoría son del offsite de marketing en Lisboa (cenas, la señal del local, algunos taxis) y el sistema no me deja enviarlos sin centro de coste. ¿Cuál nos dijeron que usáramos?",
+        "ar": "أراجع تقارير المصاريف من رحلة الفريق، ومعظمها من الملتقى التسويقي في لشبونة — عشاءات، عربون المكان، بضع سيارات أجرة — والنظام لا يسمح بالإرسال دون مركز تكلفة؛ أي مركز قيل لنا أن نستخدم؟",
+        "hi": "मैं टीम ट्रिप की ख़र्च रिपोर्टें देख रहा हूँ, ज़्यादातर लिस्बन मार्केटिंग ऑफ़साइट की हैं — डिनर, वेन्यू का एडवांस, कुछ टैक्सी — और सिस्टम कॉस्ट सेंटर के बिना सबमिट नहीं करने देता; हमें कौन सा इस्तेमाल करने को कहा गया था?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Lisbon receipts, ready to file.",
+        "de": "Belege aus Lissabon, bereit zum Einreichen.",
+        "es": "Recibos de Lisboa, listos para presentar.",
+        "ar": "إيصالات لشبونة جاهزة للتقديم.",
+        "hi": "लिस्बन की रसीदें, जमा करने को तैयार।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "It's not the regular marketing travel code for Lisbon, is it? Which one?",
+        "de": "Für Lissabon ist es nicht die normale Marketing-Reisekostenstelle, oder? Welche dann?",
+        "es": "Para Lisboa no es el código normal de viajes de marketing, ¿verdad? ¿Cuál es?",
+        "ar": "ليس رمز سفر التسويق المعتاد بالنسبة لشبونة، صحيح؟ أي رمز إذن؟",
+        "hi": "लिस्बन के लिए मार्केटिंग यात्रा वाला सामान्य कोड नहीं है ना? कौन सा है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Last month I gave you a special cost centre for the Lisbon offsite. What was it?",
+        "de": "Letzten Monat habe ich dir eine eigene Kostenstelle fürs Lissabon-Offsite genannt. Welche war das?",
+        "es": "El mes pasado te di un centro de coste especial para el offsite de Lisboa. ¿Cuál era?",
+        "ar": "الشهر الماضي أعطيتك مركز تكلفة خاصًا بملتقى لشبونة. ما كان؟",
+        "hi": "पिछले महीने मैंने लिस्बन ऑफ़साइट के लिए एक अलग कॉस्ट सेंटर बताया था। वह क्या था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Lisbon offsite cost centre",
+        "de": "Kostenstelle Lissabon-Offsite",
+        "es": "centro de coste offsite Lisboa",
+        "ar": "مركز تكلفة ملتقى لشبونة",
+        "hi": "लिस्बन ऑफ़साइट कॉस्ट सेंटर"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me the cost centre for the Lisbon offsite.",
+        "de": "Nenn mir die Kostenstelle für das Lissabon-Offsite.",
+        "es": "Dime el centro de coste del offsite de Lisboa.",
+        "ar": "أخبرني بمركز التكلفة الخاص بملتقى لشبونة.",
+        "hi": "मुझे लिस्बन ऑफ़साइट का कॉस्ट सेंटर बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "CC-4471"
+      ],
+      "answer": {
+       "contains": [
+        "CC-4471"
+       ],
+       "absent": [
+        "CC-4400"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "recall-field-gate-code",
+   "domain": "field_service",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -38,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The gate code at the Riverside pumping station is 5512#.",
+        "de": "Der Torcode an der Pumpstation Riverside ist 5512#.",
+        "es": "El código de la verja de la estación de bombeo Riverside es 5512#.",
+        "ar": "رمز البوابة في محطة ضخ Riverside هو 5512#.",
+        "hi": "Riverside पंपिंग स्टेशन के गेट का कोड 5512# है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Hilltop station's gate is 7720#.",
+        "de": "Das Tor der Station Hilltop hat den Code 7720#.",
+        "es": "La verja de la estación Hilltop es 7720#.",
+        "ar": "بوابة محطة Hilltop رمزها 7720#.",
+        "hi": "Hilltop स्टेशन के गेट का कोड 7720# है।"
+       }
+      }
+     ]
+    },
+    {
+     "id": "s2",
+     "day": -9,
+     "at": "09:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Log 2.5 hours on the Hilltop valve inspection.",
+        "de": "Trag 2,5 Stunden für die Ventilprüfung in Hilltop ein.",
+        "es": "Registra 2,5 horas en la inspección de válvulas de Hilltop.",
+        "ar": "سجّل ساعتين ونصف لفحص الصمامات في Hilltop.",
+        "hi": "Hilltop वाल्व निरीक्षण पर 2.5 घंटे दर्ज करो।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the gate code at Riverside pumping station?",
+        "de": "Wie lautet der Torcode an der Pumpstation Riverside?",
+        "es": "¿Cuál es el código de la verja de la estación de bombeo Riverside?",
+        "ar": "ما رمز البوابة في محطة ضخ Riverside؟",
+        "hi": "Riverside पंपिंग स्टेशन के गेट का कोड क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm pulling up to Riverside for the pump inspection and the gate's shut.",
+        "de": "Ich fahre gerade zur Pumpeninspektion in Riverside vor, und das Tor ist zu.",
+        "es": "Llego a Riverside para la inspección de bombas y la verja está cerrada.",
+        "ar": "أصل إلى Riverside لفحص المضخات والبوابة مغلقة.",
+        "hi": "मैं पंप निरीक्षण के लिए Riverside पहुँच रहा हूँ और गेट बंद है।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which keypad code lets me through the Riverside station gate?",
+        "de": "Mit welchem Tastencode komme ich durch das Tor der Station Riverside?",
+        "es": "¿Con qué código del teclado paso la verja de la estación Riverside?",
+        "ar": "ما رمز لوحة المفاتيح الذي يسمح لي بعبور بوابة محطة Riverside؟",
+        "hi": "Riverside स्टेशन के गेट से निकलने के लिए कीपैड पर कौन सा कोड डालूँ?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "gate cod riversid pump staton",
+        "de": "torkode riversid pumpstation",
+        "es": "codigo verja riversid estacion",
+        "ar": "رمز بوابه محطه ريفرسايد Riverside",
+        "hi": "रिवरसाइड पंप स्टेसन गेट कोड"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm the tech covering the east route today, my first stop is the quarterly pump inspection at the Riverside pumping station, I'm about five minutes away and I've never been there before — what do I punch in at the gate?",
+        "de": "Ich bin heute der Techniker für die Ostroute, mein erster Halt ist die Quartalsinspektion an der Pumpstation Riverside, ich bin etwa fünf Minuten entfernt und war noch nie dort – was tippe ich am Tor ein?",
+        "es": "Hoy cubro la ruta este como técnico; mi primera parada es la inspección trimestral en la estación de bombeo Riverside, estoy a unos cinco minutos y nunca he ido. ¿Qué marco en la verja?",
+        "ar": "أنا الفني المسؤول عن المسار الشرقي اليوم، ومحطتي الأولى هي الفحص الفصلي في محطة ضخ Riverside، أنا على بعد خمس دقائق تقريبًا ولم أذهب إلى هناك من قبل — ماذا أُدخل عند البوابة؟",
+        "hi": "आज ईस्ट रूट मैं संभाल रहा हूँ, मेरा पहला स्टॉप Riverside पंपिंग स्टेशन पर तिमाही पंप निरीक्षण है, मैं लगभग पाँच मिनट दूर हूँ और पहले कभी वहाँ नहीं गया — गेट पर क्या डालूँ?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "At Riverside, gate's locked.",
+        "de": "Bin in Riverside, Tor ist abgeschlossen.",
+        "es": "En Riverside, la verja está cerrada.",
+        "ar": "في Riverside، البوابة مقفلة.",
+        "hi": "Riverside पर हूँ, गेट बंद है।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not Hilltop's code — Riverside's. What is it?",
+        "de": "Nicht der Code von Hilltop – der von Riverside. Wie lautet er?",
+        "es": "No el código de Hilltop, el de Riverside. ¿Cuál es?",
+        "ar": "ليس رمز Hilltop — بل رمز Riverside. ما هو؟",
+        "hi": "Hilltop का कोड नहीं — Riverside का। वह क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Over a month ago I told you the Riverside gate code. What was it?",
+        "de": "Vor über einem Monat habe ich dir den Torcode von Riverside gesagt. Wie war er?",
+        "es": "Hace más de un mes te dije el código de la verja de Riverside. ¿Cuál era?",
+        "ar": "قبل أكثر من شهر أخبرتك برمز بوابة Riverside. ما كان؟",
+        "hi": "एक महीने से पहले मैंने तुम्हें Riverside गेट का कोड बताया था। वह क्या था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Riverside gate code",
+        "de": "Torcode Riverside",
+        "es": "código verja Riverside",
+        "ar": "رمز بوابة Riverside",
+        "hi": "Riverside गेट कोड"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me the Riverside pumping station gate code.",
+        "de": "Sag mir den Torcode der Pumpstation Riverside.",
+        "es": "Dime el código de la verja de la estación Riverside.",
+        "ar": "أخبرني برمز بوابة محطة ضخ Riverside.",
+        "hi": "मुझे Riverside पंपिंग स्टेशन के गेट का कोड बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "contains": [
+       "5512"
+      ],
+      "answer": {
+       "contains": [
+        "5512"
+       ],
+       "absent": [
+        "7720"
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

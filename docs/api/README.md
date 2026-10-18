@@ -15,7 +15,7 @@ same thing, browsable. These pages are the explanation; the contract is the auth
 | [documents.md](documents.md) | how does a file become retrievable knowledge with page-level provenance? | `/v1/documents` |
 | [tools.md](tools.md) | which tool, which plan, which arguments — and what may run unasked? | `/v1/tools/*` |
 | [skills.md](skills.md) | what did each agent learn from its successful runs, and how is it offered back? | `/v1/skills`, `/v1/skills/{id}/dismiss` |
-| [feedback.md](feedback.md) | how is a judgement on a run (and its answer), a memory, a tool call or a procedure recorded, and what does it change — and who reviews a vote before it counts? | `/v1/feedback` (incl. `?review=pending`), `/v1/feedback/{id}/approve`, `/v1/feedback/{id}/dismiss` |
+| [feedback.md](feedback.md) | how is a judgement on a run (and its answer), a memory, a tool call or a procedure recorded, and what does it change — and who reviews a vote before it counts? | `/v1/feedback` (incl. `?review=pending[&group=target]`), `/v1/feedback/{id}/approve`, `/v1/feedback/{id}/dismiss`, `/v1/feedback/approve`, `/v1/feedback/dismiss` |
 | [tenancy.md](tenancy.md) | who may see what: workspaces, keys, model keys, and the read audit | `/v1/workspaces/*`, `/v1/keys`, `/v1/keys/self`, `/v1/keys/{id}`, `/v1/model-key`, `/v1/model-key/policy`, `/v1/model-key/usage`, `/v1/agents/model-key`, `/v1/reads` |
 | [admin.md](admin.md) | onboarding a tenant, and is the service healthy? | `/v1/admin/tenants`, `/health/live`, `/health/ready`, `/version`, `/metrics` |
 

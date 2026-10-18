@@ -1,0 +1,353 @@
+{
+ "name": "scale_retail",
+ "description": "Three years of a distribution centre's records: weekly shrink reports, receiving logs and shipping manifests over twelve SKUs, monthly supplier invoices. 'large' files the weekly kinds daily over four years.",
+ "years": 3,
+ "entities": {
+  "sku": [
+   {
+    "id": "SKU-10442",
+    "name": {
+     "en": "AA batteries 24-pack",
+     "de": "AA-Batterien 24er-Pack",
+     "es": "pilas AA pack de 24",
+     "ar": "بطاريات AA عبوة 24",
+     "hi": "AA बैटरी 24 पैक"
+    }
+   },
+   {
+    "id": "SKU-20917",
+    "name": {
+     "en": "razor blade refills",
+     "de": "Rasierklingen-Nachfüllpack",
+     "es": "recambios de cuchillas",
+     "ar": "شفرات حلاقة بديلة",
+     "hi": "रेज़र ब्लेड रिफ़िल"
+    }
+   },
+   {
+    "id": "SKU-31188",
+    "name": {
+     "en": "teeth whitening strips",
+     "de": "Zahnaufhellungsstreifen",
+     "es": "tiras blanqueadoras",
+     "ar": "شرائط تبييض الأسنان",
+     "hi": "दाँत सफ़ेद करने की स्ट्रिप"
+    }
+   },
+   {
+    "id": "SKU-40551",
+    "name": {
+     "en": "olive oil 1 l",
+     "de": "Olivenöl 1 l",
+     "es": "aceite de oliva 1 l",
+     "ar": "زيت زيتون 1 لتر",
+     "hi": "जैतून का तेल 1 लीटर"
+    }
+   },
+   {
+    "id": "SKU-51203",
+    "name": {
+     "en": "baby formula 800 g",
+     "de": "Säuglingsnahrung 800 g",
+     "es": "leche infantil 800 g",
+     "ar": "حليب أطفال 800 غ",
+     "hi": "शिशु फ़ॉर्मूला 800 ग्राम"
+    }
+   },
+   {
+    "id": "SKU-62014",
+    "name": {
+     "en": "laundry pods 40",
+     "de": "Waschmittel-Pods 40",
+     "es": "cápsulas de detergente 40",
+     "ar": "كبسولات غسيل 40",
+     "hi": "लॉन्ड्री पॉड 40"
+    }
+   },
+   {
+    "id": "SKU-70388",
+    "name": {
+     "en": "earbuds wireless",
+     "de": "kabellose Ohrhörer",
+     "es": "auriculares inalámbricos",
+     "ar": "سماعات لاسلكية",
+     "hi": "वायरलेस ईयरबड"
+    }
+   },
+   {
+    "id": "SKU-81125",
+    "name": {
+     "en": "printer ink black",
+     "de": "Druckertinte schwarz",
+     "es": "tinta de impresora negra",
+     "ar": "حبر طابعة أسود",
+     "hi": "प्रिंटर इंक काली"
+    }
+   },
+   {
+    "id": "SKU-90273",
+    "name": {
+     "en": "coffee beans 1 kg",
+     "de": "Kaffeebohnen 1 kg",
+     "es": "café en grano 1 kg",
+     "ar": "حبوب قهوة 1 كغ",
+     "hi": "कॉफ़ी बीन्स 1 किलो"
+    }
+   },
+   {
+    "id": "SKU-11870",
+    "name": {
+     "en": "phone charger USB-C",
+     "de": "Ladegerät USB-C",
+     "es": "cargador USB-C",
+     "ar": "شاحن USB-C",
+     "hi": "USB-C चार्जर"
+    }
+   },
+   {
+    "id": "SKU-22659",
+    "name": {
+     "en": "paper towels 6 rolls",
+     "de": "Küchenrollen 6 Rollen",
+     "es": "papel de cocina 6 rollos",
+     "ar": "مناشف ورقية 6 لفات",
+     "hi": "पेपर टॉवल 6 रोल"
+    }
+   },
+   {
+    "id": "SKU-33406",
+    "name": {
+     "en": "sunscreen SPF 50",
+     "de": "Sonnencreme LSF 50",
+     "es": "protector solar FPS 50",
+     "ar": "واقي شمس SPF 50",
+     "hi": "सनस्क्रीन SPF 50"
+    }
+   }
+  ],
+  "supplier": [
+   {
+    "id": "SUP-01",
+    "name": {
+     "en": "Evergreen Imports",
+     "de": "Evergreen Imports",
+     "es": "Evergreen Imports",
+     "ar": "Evergreen Imports",
+     "hi": "Evergreen Imports"
+    }
+   },
+   {
+    "id": "SUP-02",
+    "name": {
+     "en": "Northwind Packaging",
+     "de": "Northwind Packaging",
+     "es": "Northwind Packaging",
+     "ar": "Northwind Packaging",
+     "hi": "Northwind Packaging"
+    }
+   },
+   {
+    "id": "SUP-03",
+    "name": {
+     "en": "Lakeside Dairy",
+     "de": "Lakeside Dairy",
+     "es": "Lakeside Dairy",
+     "ar": "Lakeside Dairy",
+     "hi": "Lakeside Dairy"
+    }
+   },
+   {
+    "id": "SUP-04",
+    "name": {
+     "en": "ColorMax",
+     "de": "ColorMax",
+     "es": "ColorMax",
+     "ar": "ColorMax",
+     "hi": "ColorMax"
+    }
+   }
+  ]
+ },
+ "records": {
+  "shrink": {
+   "every": "week",
+   "role": "EVENT",
+   "lines_from": "sku",
+   "header": {
+    "en": "Weekly shrink report {period}, Store 12:",
+    "de": "Wöchentlicher Inventurdifferenzbericht {period}, Filiale 12:",
+    "es": "Informe semanal de mermas {period}, Tienda 12:",
+    "ar": "تقرير الفاقد الأسبوعي {period}، المتجر 12:",
+    "hi": "साप्ताहिक श्रिंक रिपोर्ट {period}, स्टोर 12:"
+   },
+   "line": {
+    "en": "{sku} ({sku.name}): counted {counted}, shrink {shrink} units",
+    "de": "{sku} ({sku.name}): gezählt {counted}, Differenz {shrink} Stück",
+    "es": "{sku} ({sku.name}): contadas {counted}, merma {shrink} unidades",
+    "ar": "{sku} ({sku.name}): المعدود {counted}، الفاقد {shrink} وحدة",
+    "hi": "{sku} ({sku.name}): गिने गए {counted}, श्रिंक {shrink} यूनिट"
+   },
+   "fields": {
+    "counted": {
+     "min": 150,
+     "max": 600
+    },
+    "shrink": {
+     "min": 0,
+     "max": 6
+    }
+   },
+   "boost": [
+    {
+     "period": {
+      "year_offset": -1,
+      "quarter": 3
+     },
+     "keys": [
+      "SKU-10442",
+      "SKU-20917",
+      "SKU-31188"
+     ],
+     "field": "shrink",
+     "factor": 4
+    },
+    {
+     "period": {
+      "year_offset": -2,
+      "quarter": 3
+     },
+     "keys": [
+      "SKU-40551",
+      "SKU-70388"
+     ],
+     "field": "shrink",
+     "factor": 5
+    },
+    {
+     "period": {
+      "year_offset": 0,
+      "quarter": 1
+     },
+     "keys": [
+      "SKU-81125"
+     ],
+     "field": "shrink",
+     "factor": 5
+    }
+   ]
+  },
+  "receiving": {
+   "every": "week",
+   "role": "EVENT",
+   "lines_from": "sku",
+   "header": {
+    "en": "Receiving log {period}, DC-1:",
+    "de": "Wareneingangsprotokoll {period}, DC-1:",
+    "es": "Registro de recepción {period}, DC-1:",
+    "ar": "سجل الاستلام {period}، DC-1:",
+    "hi": "रिसीविंग लॉग {period}, DC-1:"
+   },
+   "line": {
+    "en": "{sku}: received {received} units",
+    "de": "{sku}: {received} Stück eingegangen",
+    "es": "{sku}: recibidas {received} unidades",
+    "ar": "{sku}: استُلمت {received} وحدة",
+    "hi": "{sku}: {received} यूनिट प्राप्त"
+   },
+   "fields": {
+    "received": {
+     "min": 0,
+     "max": 400
+    }
+   }
+  },
+  "manifest": {
+   "every": "week",
+   "role": "EVENT",
+   "lines_from": "sku",
+   "header": {
+    "en": "Shipping manifest {period}, DC-1 to stores:",
+    "de": "Versandliste {period}, DC-1 an die Filialen:",
+    "es": "Manifiesto de envío {period}, DC-1 a tiendas:",
+    "ar": "بيان الشحن {period}، من DC-1 إلى المتاجر:",
+    "hi": "शिपिंग मैनिफ़ेस्ट {period}, DC-1 से स्टोर:"
+   },
+   "line": {
+    "en": "{sku}: shipped {shipped} units",
+    "de": "{sku}: {shipped} Stück versandt",
+    "es": "{sku}: enviadas {shipped} unidades",
+    "ar": "{sku}: شُحنت {shipped} وحدة",
+    "hi": "{sku}: {shipped} यूनिट भेजी गईं"
+   },
+   "fields": {
+    "shipped": {
+     "min": 50,
+     "max": 450
+    }
+   },
+   "boost": [
+    {
+     "period": {
+      "year_offset": -1,
+      "month": 12
+     },
+     "keys": [
+      "SKU-70388",
+      "SKU-11870",
+      "SKU-90273"
+     ],
+     "field": "shipped",
+     "factor": 3
+    }
+   ]
+  },
+  "invoice": {
+   "every": "month",
+   "role": "EVENT",
+   "lines_from": "supplier",
+   "header": {
+    "en": "Supplier invoices {period}:",
+    "de": "Lieferantenrechnungen {period}:",
+    "es": "Facturas de proveedores {period}:",
+    "ar": "فواتير الموردين {period}:",
+    "hi": "सप्लायर बिल {period}:"
+   },
+   "line": {
+    "en": "{supplier} ({supplier.name}): invoice total ${amount}",
+    "de": "{supplier} ({supplier.name}): Rechnungssumme ${amount}",
+    "es": "{supplier} ({supplier.name}): total facturado ${amount}",
+    "ar": "{supplier} ({supplier.name}): إجمالي الفاتورة ${amount}",
+    "hi": "{supplier} ({supplier.name}): बिल कुल ${amount}"
+   },
+   "fields": {
+    "amount": {
+     "min": 2000,
+     "max": 20000
+    }
+   },
+   "boost": [
+    {
+     "period": {
+      "year_offset": -1
+     },
+     "keys": [
+      "SUP-03"
+     ],
+     "field": "amount",
+     "factor": 2
+    }
+   ]
+  }
+ },
+ "sizes": {
+  "standard": {},
+  "large": {
+   "years": 4,
+   "every": {
+    "shrink": "day",
+    "receiving": "day",
+    "manifest": "day"
+   }
+  }
+ }
+}

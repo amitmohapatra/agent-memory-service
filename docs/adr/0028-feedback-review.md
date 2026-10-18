@@ -1,6 +1,8 @@
 # ADR 0028: A vote waits for review before the platform learns from it
 
-Date: 2026-10-04. Status: accepted.
+Date: 2026-10-04. Status: accepted. Amended by [ADR 0039](0039-thumbs-wait-once-per-voter.md):
+an owner's thumbs-down on their memory waits too (only a correction with text is an edit), a
+voter counts once per target, and the queue is grouped by target and decided in bulk.
 
 ## Context
 

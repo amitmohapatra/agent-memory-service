@@ -164,7 +164,8 @@ Confidence and reinforcement feed the ranking (the ±15% standing factor, chapte
 forgetting (chapter 3). So before ADR 0028, anyone who could read a memory could confirm it
 again and again under fresh feedback ids, and a thumbs-down on a correct answer lowered every
 memory it cited. **Now a vote is stored and changes nothing until the tenant's administrator
-approves it** (ADR 0028, `_needs_review`):
+approves it** (ADR 0028, `_needs_review`), and since ADR 0039 a person's vote counts once per
+target — their newer vote replaces their earlier pending one:
 
 ```mermaid
 flowchart TB
@@ -174,12 +175,12 @@ flowchart TB
   S -->|yes| APPLY
   S -->|no| TC{target is a tool call?}
   TC -->|yes| APPLY
-  TC -->|no| OW{"reject / correct / edit of a memory?<br/>(already limited to its owner,<br/>the user an agent acts for, or an admin)"}
+  TC -->|no| OW{"correct / edit of a memory carrying new text?<br/>(already limited to its owner,<br/>the user an agent acts for, or an admin)"}
   OW -->|yes| APPLY
-  OW -->|no| PEND["pending: stored, changes nothing<br/>(includes a client-claimed source=judge)"]
-  PEND --> Q["GET /v1/feedback/pending<br/>(admin key, with author_record)"]
-  Q --> AP["approve: projected as if it had just arrived"]
-  Q --> DI["dismiss: kept for statistics, never applied"]
+  OW -->|no| PEND["pending: stored, changes nothing<br/>(a thumbs-up or -down, even the owner's;<br/>a client-claimed source=judge)<br/>the voter's earlier pending vote: dismissed,<br/>replaced_by the new one"]
+  PEND --> Q["GET /v1/feedback?review=pending[&group=target]<br/>(admin key, with author_record)"]
+  Q --> AP["approve (one, or in bulk by ids or target):<br/>projected as if it had just arrived"]
+  Q --> DI["dismiss (one, or in bulk): kept for statistics, never applied"]
   J["the service's own judge, from /v1/verify"] --> APPLY
 ```
 

@@ -11,8 +11,12 @@ the record, so a verdict is never lost and never slows the request that carried 
 - procedure: a rejection takes it out of what is offered.
 
 A verdict that would change what was learned on a person's or an agent's word alone waits in
-review (ADR 0028): it is stored ``pending`` and projected only once a tenant admin approves
-it; a dismissed one is kept for statistics and changes nothing. ``_needs_review`` says which.
+review (ADR 0028, amended by ADR 0039): it is stored ``pending`` and projected only once a
+tenant admin approves it; a dismissed one is kept for statistics and changes nothing.
+``_needs_review`` says which. A person counts once per target (``modules.feedback.votes``):
+their newer vote replaces their earlier pending one (dismissed with ``replaced_by``), a vote
+the same as the one of theirs already applied changes nothing, and a flipped one, once
+approved, undoes the earlier one's effect before it applies its own.
 
 Every projection that touches a memory re-indexes it (the index carries the confidence and
 reinforcement retrieval ranks by) and bumps its revisions, so a cached bundle that showed the
@@ -23,7 +27,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, Final
+from typing import Final
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import TemporalStatus
@@ -34,10 +38,12 @@ from memory_service.domain.feedback import (
     APPROVAL_COUNTER,
     CORRECTING_VERDICTS,
     OUTCOME_PRECEDENCE,
+    REPLACED_REASON,
     Feedback,
     FeedbackProjection,
     FeedbackReview,
     FeedbackSource,
+    FeedbackTargetGroup,
     FeedbackTargetKind,
     FeedbackVerdict,
     ProjectionAction,
@@ -52,6 +58,16 @@ from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.tools import RunOutcome
 from memory_service.modules.authz.service import AuthorizationService
+from memory_service.modules.feedback.votes import (
+    ALREADY_COUNTED_REASON,
+    classify,
+    correction_text,
+    is_vote,
+    rewrites,
+    same_thumb,
+    thumbs_up,
+    voter_key,
+)
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.memory.native import normalized_hash
 from memory_service.modules.memory.revisions import bump_memory_revisions, retract, supersede
@@ -67,17 +83,17 @@ log = get_logger(__name__)
 TASK_FEEDBACK_PROJECT = "feedback.project"
 #: How much one affirming verdict moves a memory's confidence.
 REINFORCEMENT_STEP: Final = 0.1
+#: How many verdicts one bulk review decides at most (ids sent, or pending on one target).
+BULK_REVIEW_MAX: Final = 500
 #: The record fields the trusted headers decide; a body that disagrees is refused.
 IDENTITY_FIELDS: Final = ("tenant_id", "workspace_id", "user_id")
 EVIDENCE_SOURCE: Final = EvidenceSource.FEEDBACK
 
 
-def _correction_text(correction: Any) -> str:
-    if isinstance(correction, str):
-        return correction.strip()
-    if isinstance(correction, dict) and isinstance(correction.get("content"), str):
-        return str(correction["content"]).strip()
-    return ""
+#: kept for callers that import it from here
+_correction_text = correction_text
+#: Why a vote's projection did nothing because another vote of the same voter counts instead.
+STOOD_DOWN: Final = frozenset({REPLACED_REASON, ALREADY_COUNTED_REASON})
 
 
 class FeedbackService:
@@ -102,27 +118,28 @@ class FeedbackService:
         feedback: Feedback,
         *,
         trusted: bool = False,
+        run_vouched: bool = False,
     ) -> tuple[Feedback, bool]:
         """Store the record and schedule its projection, or leave it waiting for review.
         Returns the stored record and whether it was new (a retry with the same
-        ``feedback_id`` returns the original).
+        ``feedback_id`` returns the original; a vote the same as the voter's vote already
+        applied on the target returns that vote, and nothing is stored).
 
         The record only claims who it is from: its identity fields must agree with the
         trusted headers, and a memory target must be readable by the caller. ``trusted`` is
         a verdict applied without review: the service's own (the grounding judge), or one
-        the tenant's administrator credential carries."""
-        for name in IDENTITY_FIELDS:
-            claimed, header = getattr(feedback, name), getattr(ctx, name)
-            if claimed is not None and header is not None and claimed != header:
-                raise ValidationFailed(
-                    f"feedback {name} does not match the trusted header", details={"field": name}
-                )
-        if feedback.target_kind is FeedbackTargetKind.MEMORY:
-            await self._authorize_memory_verdict(uow, ctx, feedback)
-        for memory_id in feedback.cited_memory_ids(CITED_MEMORIES_MAX):
-            # an answer verdict moves the confidence of what it cites: only what the
-            # reviewer may read (404 / 403 otherwise)
-            await self.memory.get_memory(uow, ctx, memory_id)
+        the tenant's administrator credential carries. ``run_vouched``: the credential may
+        act as the agent the context names, so a ``system`` verdict on that agent's own run
+        is its status rather than a client's claim (``_needs_review``)."""
+        await self._admit(uow, ctx, feedback)
+        voter = voter_key(feedback.user_id or ctx.user_id, feedback.agent_id or ctx.agent_id)
+        if voter is not None:
+            # one voter's clicks on one target apply one after another - whichever agent
+            # carried them, a person is one voter - so two at once still leave one vote
+            await uow.serialize(
+                f"feedback-vote:{ctx.tenant_id}:{feedback.target_kind.value}:"
+                f"{feedback.target_id}:{voter}"
+            )
         existing = await uow.feedback.get(ctx.tenant_id, feedback.feedback_id)
         if existing is not None:
             return existing, False
@@ -139,27 +156,155 @@ class FeedbackService:
                 "review": None,
             }
         )
-        if await self._needs_review(ctx, stored, trusted=trusted):
+        stored = stored.model_copy(
+            update={"vote": classify(stored, trusted=trusted, run_vouched=run_vouched)}
+        )
+        if await self._needs_review(ctx, stored, trusted=trusted, run_vouched=run_vouched):
             stored = stored.model_copy(update={"review": FeedbackReview(state=ReviewState.PENDING)})
+        if stored.pending and voter is not None and is_vote(stored):
+            stored = await self._count_once(uow, stored)
         await uow.feedback.add(stored)
-        if not stored.pending:
+        if stored.review is None:  # applied as it arrives (a repeat is stored decided)
             await self._schedule(uow, stored)
         return stored, True
 
+    async def _admit(
+        self, uow: UnitOfWork, ctx: MemoryExecutionContext, feedback: Feedback
+    ) -> None:
+        """The record's identity agrees with the trusted headers, and the caller may judge
+        its target and read what it cites."""
+        for name in IDENTITY_FIELDS:
+            claimed, header = getattr(feedback, name), getattr(ctx, name)
+            if claimed is not None and header is not None and claimed != header:
+                raise ValidationFailed(
+                    f"feedback {name} does not match the trusted header", details={"field": name}
+                )
+        if feedback.target_kind is FeedbackTargetKind.MEMORY:
+            await self._authorize_memory_verdict(uow, ctx, feedback)
+        for memory_id in feedback.cited_memory_ids(CITED_MEMORIES_MAX):
+            # an answer verdict moves the confidence of what it cites: only what the
+            # reviewer may read (404 / 403 otherwise)
+            await self.memory.get_memory(uow, ctx, memory_id)
+
+    async def _count_once(self, uow: UnitOfWork, vote: Feedback) -> Feedback:
+        """One vote per voter per target, across approvals. The same thumb as the voter's
+        approved vote changes nothing: it is stored dismissed, ``replaced_by`` naming the vote
+        that counts (so the id the client sent reads back, and points at it), and the voter's
+        pending change of mind is withdrawn the same way. Otherwise ``vote`` waits and
+        replaces their pending ones."""
+        counted = await self._applied_vote(uow, vote)
+        if counted is None or not same_thumb(counted, vote):
+            await self._replace_earlier_votes(uow, vote, replaced_by=vote.feedback_id)
+            return vote
+        await self._replace_earlier_votes(uow, vote, replaced_by=counted.feedback_id)
+        return vote.model_copy(
+            update={
+                "review": FeedbackReview(
+                    state=ReviewState.DISMISSED,
+                    reviewed_at=vote.created_at,
+                    note=ALREADY_COUNTED_REASON,
+                    replaced_by=counted.feedback_id,
+                ),
+                "projection": FeedbackProjection(
+                    action=ProjectionAction.NONE,
+                    reason=ALREADY_COUNTED_REASON,
+                    projected_at=vote.created_at,
+                ),
+            }
+        )
+
+    @staticmethod
+    async def _applied_vote(uow: UnitOfWork, vote: Feedback) -> Feedback | None:
+        """The voter's vote on this target that counts now: their newest approved one, not
+        counting ``vote`` itself or anything after it. Only reviewed votes take part: what the
+        administrator says, applied as it arrives, is the administrator's own word."""
+        for found in await uow.feedback.applied_votes(
+            vote.tenant_id,
+            target_kind=vote.target_kind,
+            target_id=vote.target_id,
+            user_id=vote.user_id,
+            agent_id=vote.agent_id,
+        ):
+            if (
+                found.feedback_id != vote.feedback_id
+                and is_vote(found)
+                and ((found.created_at, found.feedback_id) < (vote.created_at, vote.feedback_id))
+                # a repeat that changed nothing is not the vote that counts
+                and not (found.projection and found.projection.reason == ALREADY_COUNTED_REASON)
+            ):
+                return found
+        return None
+
+    async def _replace_earlier_votes(
+        self, uow: UnitOfWork, vote: Feedback, *, replaced_by: str
+    ) -> None:
+        """One vote per voter per target: the voter's earlier pending votes on this target
+        are dismissed with ``replaced_by`` (never applied), so repeated clicks count once
+        and a changed mind is the vote that waits. Only people's votes: a run's status or a
+        judge's word never replaces a thumb, nor the reverse. Not a review state of its own:
+        a client that knows pending, approved and dismissed parses every record."""
+        earlier = await uow.feedback.pending_on(
+            vote.tenant_id,
+            target_kind=vote.target_kind,
+            target_id=vote.target_id,
+            user_id=vote.user_id,
+            agent_id=vote.agent_id,
+            voter_only=True,
+            votes_only=True,
+        )
+        # the lock a review takes, so a vote is never both approved and replaced
+        await uow.serialize(
+            *(
+                f"feedback:{vote.tenant_id}:{f.feedback_id}"
+                for f in sorted(earlier, key=lambda f: f.feedback_id)
+            )
+        )
+        now = vote.created_at
+        for found in earlier:
+            old = await uow.feedback.get(vote.tenant_id, found.feedback_id)
+            if old is None or not old.pending:
+                continue  # decided in the meantime
+            await uow.feedback.set_review(
+                vote.tenant_id,
+                old.feedback_id,
+                FeedbackReview(
+                    state=ReviewState.DISMISSED,
+                    reviewed_at=now,
+                    note=REPLACED_REASON,
+                    replaced_by=replaced_by,
+                ),
+            )
+            await uow.feedback.set_projection(
+                vote.tenant_id,
+                old.feedback_id,
+                FeedbackProjection(
+                    action=ProjectionAction.NONE,
+                    reason=REPLACED_REASON,
+                    projected_at=now,
+                ),
+            )
+
     async def _needs_review(
-        self, ctx: MemoryExecutionContext, record: Feedback, *, trusted: bool
+        self, ctx: MemoryExecutionContext, record: Feedback, *, trusted: bool, run_vouched: bool
     ) -> bool:
-        """Whether ``record`` waits for a tenant admin before it changes anything. Applied as
-        it arrives: the service's own judge; a run reporting its own final status, citing
-        nothing (the lowest-ranked word on a run, which never overrides a person or the
-        judge); an owner's retraction or correction of a memory (an edit, authorised as one
-        by ``_authorize_memory_verdict``); a decision on a tool call (what is learned from it
-        is a suggestion, applied only once accepted); and what a tenant admin says, in person
-        or through the tenant's administrator credential (``trusted``)."""
+        """Whether ``record`` waits for a tenant admin before it changes anything: an end
+        user's vote does. Applied as it arrives: the service's own judge; a run reporting its
+        own final status, citing nothing (the lowest-ranked word on a run, which never
+        overrides a person or the judge); an owner's correction of a memory carrying new text
+        (an edit, authorised as one by ``_authorize_memory_verdict``; a thumbs-down is a vote
+        and waits); a decision on a tool call (what is learned from it is a suggestion,
+        applied only once accepted); and what a tenant admin says, in person or through the
+        tenant's administrator credential (``trusted``).
+
+        A run's status is only as good as who reports it: the run id is the caller's own
+        (``agent_run_id`` of the context), and the credential must be one that may act as that
+        agent (``run_vouched``); a ``system`` verdict from any other caller - a person's own
+        token, another run, one citing memories - waits like a vote."""
         if trusted:
             return False
         if (
-            record.source is FeedbackSource.SYSTEM
+            run_vouched
+            and record.source is FeedbackSource.SYSTEM
             and record.target_kind is FeedbackTargetKind.RUN
             and ctx.agent_run_id is not None
             and record.target_id == ctx.agent_run_id
@@ -170,10 +315,7 @@ class FeedbackService:
             return False
         if record.target_kind is FeedbackTargetKind.TOOL_CALL:
             return False
-        if (
-            record.target_kind is FeedbackTargetKind.MEMORY
-            and record.verdict not in AFFIRMING_VERDICTS
-        ):
+        if record.target_kind is FeedbackTargetKind.MEMORY and rewrites(record):
             return False
         # a tenant admin speaking in person (never an agent acting for one)
         return ctx.is_agent or not await self.authz.is_tenant_admin(ctx)
@@ -193,14 +335,18 @@ class FeedbackService:
     async def _authorize_memory_verdict(
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, feedback: Feedback
     ) -> None:
-        """An affirming verdict needs what reading needs. A verdict that retracts or rewrites
-        the memory is the forget rule: the owner, the user an agent acts for, or a tenant
-        admin; a reader may not rewrite what a colleague remembered."""
+        """A vote - thumbs up or down - needs what reading needs: it changes nothing until a
+        tenant admin approves it (ADR 0039). A correction that rewrites the memory is the
+        forget rule: the owner, the user an agent acts for, or a tenant admin in person; a
+        reader may not rewrite what a colleague remembered, and an agent edits only its own
+        user's memories, whoever that user is."""
         memory = await self.memory.get_memory(uow, ctx, feedback.target_id)  # 404 / 403
-        if feedback.verdict in AFFIRMING_VERDICTS:
+        if not rewrites(feedback):
             return
         owner_ok = memory.owner_principal in (ctx.principal_id, f"user:{ctx.user_id}")
-        if not owner_ok and not await self.authz.is_tenant_admin(ctx):
+        # an agent acting for an admin is still an agent: the admin's word is the admin's own
+        admin = not ctx.is_agent and await self.authz.is_tenant_admin(ctx)
+        if not owner_ok and not admin:
             raise ScopeDenied(
                 f"only the owner (or a tenant admin) can {feedback.verdict.value} a memory",
                 details={"principal": ctx.principal_id},
@@ -229,6 +375,79 @@ class FeedbackService:
                 f"feedback {feedback_id} is not waiting for review",
                 details={"review": record.review.state.value if record.review else None},
             )
+        return await self._decide(uow, record, approve=approve, reviewed_by=reviewed_by, note=note)
+
+    async def review_many(
+        self,
+        uow: UnitOfWork,
+        tenant_id: str,
+        *,
+        feedback_ids: list[str] | None = None,
+        target: tuple[FeedbackTargetKind, str] | None = None,
+        approve: bool,
+        reviewed_by: str,
+        note: str | None = None,
+    ) -> tuple[list[Feedback], list[Feedback], bool]:
+        """Approve or dismiss several verdicts at once: the ``feedback_ids`` named, or every
+        verdict pending on one ``target``. Idempotent: a verdict already decided (approved,
+        or dismissed by a reviewer or by a newer vote) is left as it is and returned among
+        the unchanged, never applied twice. An id this tenant does not have refuses the whole
+        call (404) before anything is decided. Returns (decided, unchanged, more): ``more``
+        when the target holds more pending verdicts than one call decides."""
+        if (feedback_ids is None) == (target is None):
+            raise ValidationFailed("send feedback_ids or a target, not both")
+        more = False
+        if feedback_ids is not None:
+            ids = list(dict.fromkeys(feedback_ids))
+            if not ids or len(ids) > BULK_REVIEW_MAX:
+                raise ValidationFailed(
+                    f"send between 1 and {BULK_REVIEW_MAX} feedback ids",
+                    details={"count": len(ids)},
+                )
+        else:
+            assert target is not None
+            found = await uow.feedback.pending_on(
+                tenant_id, target_kind=target[0], target_id=target[1], limit=BULK_REVIEW_MAX + 1
+            )
+            more = len(found) > BULK_REVIEW_MAX
+            ids = [f.feedback_id for f in found[:BULK_REVIEW_MAX]]
+        # one lock order for every caller, so two bulk reviews never deadlock
+        await uow.serialize(*(f"feedback:{tenant_id}:{i}" for i in sorted(ids)))
+        records: list[Feedback] = []
+        missing: list[str] = []
+        for feedback_id in ids:
+            record = await uow.feedback.get(tenant_id, feedback_id)
+            if record is None:
+                missing.append(feedback_id)
+            else:
+                records.append(record)
+        if missing:
+            raise NotFound(
+                f"{len(missing)} feedback id(s) not found", details={"feedback_ids": missing}
+            )
+        decided: list[Feedback] = []
+        unchanged: list[Feedback] = []
+        for record in records:
+            if record.pending:
+                decided.append(
+                    await self._decide(
+                        uow, record, approve=approve, reviewed_by=reviewed_by, note=note
+                    )
+                )
+            else:
+                unchanged.append(record)
+        return decided, unchanged, more
+
+    async def _decide(
+        self,
+        uow: UnitOfWork,
+        record: Feedback,
+        *,
+        approve: bool,
+        reviewed_by: str,
+        note: str | None,
+    ) -> Feedback:
+        tenant_id, feedback_id = record.tenant_id, record.feedback_id
         now = self.clock()
         review = FeedbackReview(
             state=ReviewState.APPROVED if approve else ReviewState.DISMISSED,
@@ -258,12 +477,14 @@ class FeedbackService:
         uow: UnitOfWork,
         tenant_id: str,
         *,
+        state: ReviewState = ReviewState.PENDING,
         before: tuple[datetime, str] | None = None,
         limit: int = 100,
     ) -> list[tuple[Feedback, dict[str, int]]]:
-        """The review queue, newest first, each verdict with how its author's verdicts fared
-        in review (pending / approved / dismissed)."""
-        rows = await uow.feedback.list_pending(tenant_id, before=before, limit=limit)
+        """The review queue (or the verdicts in another review ``state``, for reporting),
+        newest first, each verdict with how its author's verdicts fared in review
+        (pending / approved / dismissed)."""
+        rows = await uow.feedback.list_pending(tenant_id, state=state, before=before, limit=limit)
         history: dict[tuple[str | None, str | None], dict[str, int]] = {}
         for r in rows:
             author = (r.user_id, r.agent_id)
@@ -272,6 +493,21 @@ class FeedbackService:
                     tenant_id, user_id=r.user_id, agent_id=r.agent_id
                 )
         return [(r, history[(r.user_id, r.agent_id)]) for r in rows]
+
+    async def pending_by_target(
+        self,
+        uow: UnitOfWork,
+        tenant_id: str,
+        *,
+        state: ReviewState = ReviewState.PENDING,
+        before: tuple[datetime, str, str] | None = None,
+        limit: int = 100,
+    ) -> list[FeedbackTargetGroup]:
+        """The review queue grouped: one row per target with its thumbs up and down, how
+        many voters, and when the latest vote came; the most recently voted target first."""
+        return await uow.feedback.group_by_target(
+            tenant_id, state=state, before=before, limit=limit
+        )
 
     # ------------------------------------------------------------------ reads
     async def get(self, uow: UnitOfWork, ctx: MemoryExecutionContext, feedback_id: str) -> Feedback:
@@ -354,7 +590,10 @@ class FeedbackService:
             if record.target_kind is FeedbackTargetKind.MEMORY:
                 await uow.serialize(f"memory:{tenant_id}:{record.target_id}")
             now = self.clock()
-            projection = await self._project(uow, record, now=now)
+            if record.review is not None and is_vote(record):
+                projection = await self._project_vote(uow, record, now=now)
+            else:
+                projection = await self._project(uow, record, now=now)
             await uow.feedback.set_projection(tenant_id, feedback_id, projection)
             await uow.commit()
         log.info(
@@ -364,6 +603,130 @@ class FeedbackService:
             action=projection.action.value,
         )
         return projection
+
+    async def _project_vote(
+        self, uow: UnitOfWork, record: Feedback, *, now: datetime
+    ) -> FeedbackProjection:
+        """A person's vote counts once per target: the same thumb as their vote already
+        applied changes nothing, and a flipped one undoes that vote's effect before applying
+        its own. Serialised per voter and target, so two of their votes apply in order."""
+        voter = voter_key(record.user_id, record.agent_id)
+        if voter is None:
+            return await self._project(uow, record, now=now)
+        await uow.serialize(
+            f"feedback-effect:{record.tenant_id}:{record.target_kind.value}:"
+            f"{record.target_id}:{voter}"
+        )
+        prior = await self._settle_earlier(uow, record, now=now)
+        if prior is not None and same_thumb(prior, record):
+            return FeedbackProjection(
+                action=ProjectionAction.NONE,
+                memory_id=record.target_id
+                if record.target_kind is FeedbackTargetKind.MEMORY
+                else None,
+                run_id=record.target_id if record.target_kind is FeedbackTargetKind.RUN else None,
+                reason=ALREADY_COUNTED_REASON,
+                projected_at=now,
+            )
+        reversed_id = None
+        if prior is not None:
+            await self._reverse(uow, prior, now=now)
+            reversed_id = prior.feedback_id
+        projection = await self._project(uow, record, now=now)
+        return projection.model_copy(update={"reversed": reversed_id})
+
+    async def _settle_earlier(
+        self, uow: UnitOfWork, record: Feedback, *, now: datetime
+    ) -> Feedback | None:
+        """The voter's vote whose effect stands: the newest of their earlier approved votes
+        that was actually applied (its projection ran and did not stand down). An earlier one
+        approved but not applied yet never will be - the newer vote stands - so it is closed
+        here, before its own job can run after this one and count a second time."""
+        applied = None
+        for found in await uow.feedback.applied_votes(
+            record.tenant_id,
+            target_kind=record.target_kind,
+            target_id=record.target_id,
+            user_id=record.user_id,
+            agent_id=record.agent_id,
+        ):
+            if found.feedback_id == record.feedback_id or not is_vote(found):
+                continue
+            if (found.created_at, found.feedback_id) > (record.created_at, record.feedback_id):
+                continue
+            if found.projection is None:
+                await uow.feedback.set_projection(
+                    record.tenant_id,
+                    found.feedback_id,
+                    FeedbackProjection(
+                        action=ProjectionAction.NONE, reason=REPLACED_REASON, projected_at=now
+                    ),
+                )
+            elif applied is None and found.projection.reason not in STOOD_DOWN:
+                applied = found
+        return applied
+
+    async def _reverse(self, uow: UnitOfWork, prior: Feedback, *, now: datetime) -> None:
+        """Undo what ``prior`` - the voter's vote that counted until now - did to its target:
+        a reinforcement is taken back, a retraction it made is lifted, the confidence it moved
+        on the memories a run cited moves back. Its run label needs no undoing: the newer
+        vote labels the run again, at the same rank."""
+        projection = prior.projection
+        assert projection is not None
+        if prior.target_kind is FeedbackTargetKind.RUN and projection.memory_ids:
+            affirmed = thumbs_up(prior)
+            await self._adjust(
+                uow,
+                prior.tenant_id,
+                projection.memory_ids,
+                step=-CITED_CONFIDENCE_STEP if affirmed else CITED_CONFIDENCE_STEP,
+                reinforce=-1 if affirmed else 0,
+                now=now,
+            )
+            return
+        if prior.target_kind is FeedbackTargetKind.PROCEDURE:
+            # a rejection this vote made is lifted: the procedure is offered again
+            if projection.action is ProjectionAction.PROCEDURE_REJECTED and (
+                await uow.procedures.restore(prior.tenant_id, prior.target_id)
+            ):
+                await uow.revisions.bump(prior.tenant_id, RevisionKind.TENANT, "")
+            return
+        if prior.target_kind is not FeedbackTargetKind.MEMORY:
+            return
+        memory = await uow.memories.get(prior.tenant_id, prior.target_id)
+        if memory is None or memory.deleted_at is not None:
+            return
+        if projection.action is ProjectionAction.MEMORY_REINFORCED:
+            if memory.temporal.status is TemporalStatus.CURRENT:
+                memory.confidence = max(CONFIDENCE_FLOOR, memory.confidence - REINFORCEMENT_STEP)
+                memory.reinforcement_count = max(0, memory.reinforcement_count - 1)
+                memory.updated_at = now
+                await uow.memories.update(memory)
+                await self._reindex(uow, memory)
+        elif projection.action is ProjectionAction.MEMORY_RETRACTED:
+            await self._lift_retraction(uow, memory, projection.projected_at, now=now)
+
+    async def _lift_retraction(
+        self, uow: UnitOfWork, memory: CanonicalMemory, retracted_at: datetime, *, now: datetime
+    ) -> None:
+        """The memory, and the twins retracted with it, current again - only those this vote
+        retracted (their validity closed at its instant), not ones withdrawn since for another
+        reason."""
+        twins = await uow.memories.twins(memory.tenant_id, memory, current_only=False)
+        lifted = []
+        for m in (memory, *twins):
+            if (
+                m.temporal.status is TemporalStatus.RETRACTED
+                and m.temporal.valid_to == retracted_at
+            ):
+                m.temporal = m.temporal.model_copy(
+                    update={"status": TemporalStatus.CURRENT, "valid_to": None}
+                )
+                m.updated_at = now
+                await uow.memories.update(m)
+                lifted.append(m)
+        if lifted:
+            await self._reindex(uow, *lifted)
 
     async def _project(
         self, uow: UnitOfWork, record: Feedback, *, now: datetime
@@ -479,19 +842,37 @@ class FeedbackService:
     async def _adjust_cited(
         self, uow: UnitOfWork, record: Feedback, *, affirmed: bool, now: datetime
     ) -> list[str]:
-        ids = record.cited_memory_ids(CITED_MEMORIES_MAX)
+        return await self._adjust(
+            uow,
+            record.tenant_id,
+            record.cited_memory_ids(CITED_MEMORIES_MAX),
+            step=CITED_CONFIDENCE_STEP if affirmed else -CITED_CONFIDENCE_STEP,
+            reinforce=1 if affirmed else 0,
+            now=now,
+        )
+
+    async def _adjust(
+        self,
+        uow: UnitOfWork,
+        tenant_id: str,
+        ids: list[str],
+        *,
+        step: float,
+        reinforce: int,
+        now: datetime,
+    ) -> list[str]:
+        """Move the confidence (and reinforcement) of the current memories among ``ids``."""
         if not ids:
             return []
-        await uow.serialize(*(f"memory:{record.tenant_id}:{i}" for i in sorted(ids)))
+        await uow.serialize(*(f"memory:{tenant_id}:{i}" for i in sorted(ids)))
         memories = [
             m
-            for m in await uow.memories.get_many(record.tenant_id, ids)
+            for m in await uow.memories.get_many(tenant_id, ids)
             if m.deleted_at is None and m.temporal.status is TemporalStatus.CURRENT
         ]
-        step = CITED_CONFIDENCE_STEP if affirmed else -CITED_CONFIDENCE_STEP
         for memory in memories:
             memory.confidence = min(1.0, max(CONFIDENCE_FLOOR, memory.confidence + step))
-            memory.reinforcement_count += 1 if affirmed else 0
+            memory.reinforcement_count = max(0, memory.reinforcement_count + reinforce)
             memory.updated_at = now
             await uow.memories.update(memory)
         if memories:
