@@ -14,6 +14,14 @@ override the container keeps for tests and benchmarks - set from the environment
     the breaker opened for everyone (main's llm_core baseline: >1,000 fallbacks). The eval sets
     a timeout the model can meet, and records it with the run (``meta.stack``).
 
+``CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS``
+    the read path's deadline for model-assisted query expansion
+    (``RetrievalSettings.query_expansion_timeout_ms``, 250 ms). The CPU model needs seconds to
+    answer: at 250 ms every expansion was abandoned (llama-server cancelled 1,007 requests in
+    one llm_core run), so the llm baseline's read path never used the model and its context
+    latency was the deadline. The eval sets one the model can meet (recorded in ``meta.stack``);
+    its context latency then includes the CPU model and is reported, not gated.
+
 Unset, this is exactly ``run_api()`` / ``run_worker()``.
 """
 
@@ -29,12 +37,19 @@ from typing import Any
 def overrides() -> Any:
     """The eval's ``Overrides``, or None when nothing is overridden."""
     timeout = os.environ.get("CAPEVAL_LLM_TIMEOUT_SECONDS")
-    if not timeout:
+    expansion = os.environ.get("CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS")
+    if not timeout and not expansion:
         return None
     from memory_service.application.container import Overrides
-    from memory_service.config.constants import LLM
+    from memory_service.config.constants import LLM, RETRIEVAL
 
-    return Overrides(llm=dataclasses.replace(LLM, timeout_seconds=float(timeout)))
+    return Overrides(
+        llm=dataclasses.replace(LLM, timeout_seconds=float(timeout)) if timeout else None,
+        # model_copy: the setting's own bound (5 s) is a production read path's, not a CPU model's
+        retrieval=RETRIEVAL.model_copy(update={"query_expansion_timeout_ms": int(expansion)})
+        if expansion
+        else None,
+    )
 
 
 def _with_overrides(module: ModuleType, tuned: Any) -> None:

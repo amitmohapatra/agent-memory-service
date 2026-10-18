@@ -222,6 +222,16 @@ logged over 1,000 `llm.assist.fallback`. On the English llm_core subset (122 tur
 stack with the shipped timeout used the model 85 times and fell back 58 times (19 exhausted, 39
 circuit open); with 600 s it used it 190 times and fell back 0 times (wall 956 s → 1,078 s).
 Key, model name, llama-server slots and prompt length were all checked and were not the cause.
+
+The read path had the same mismatch, unseen: model-assisted query expansion waits
+`query_expansion_timeout_ms` (250 ms) and then searches the query as written. Granite needs
+seconds, so every expansion was abandoned - llama-server cancelled 1,007 requests in one llm_core
+run - and the cancellation was counted nowhere, so the API reported no model call at all while
+each context carried the 250 ms wait (llm_core context p95 312 ms against nollm's 63 ms). The
+service now counts a missed deadline as the use's fallback, and the llm stack sets the deadline
+too (`CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS`, default 60,000; recorded as `meta.stack`). The llm
+read path then really asks the model, and its context latency is the CPU model's: recorded,
+not gated (`latency_gated: false` for llm_core).
 `meta.llm_calls` records each process's calls by use and outcome, so a run that measured the
 model-free path says so, and the gate holds it to that: an llm run in which more than 1 % of the
 model calls never reached the model (`exhausted`, `circuit_open`, an HTTP error; the model's own

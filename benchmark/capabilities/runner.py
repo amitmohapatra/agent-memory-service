@@ -935,6 +935,7 @@ async def run(
         #: what the isolated stack set beside the shipped service (``stack_service.py``)
         "stack": {
             "llm_timeout_seconds": os.environ.get("CAPEVAL_LLM_TIMEOUT_SECONDS"),
+            "query_expansion_timeout_ms": os.environ.get("CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS"),
             "worker_concurrency": os.environ.get("CAPEVAL_WORKER_CONCURRENCY"),
         },
         "reused_writes_of": str(settings.reuse) if settings.reuse else None,
