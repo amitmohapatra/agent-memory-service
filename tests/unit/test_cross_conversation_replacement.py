@@ -44,6 +44,7 @@ from memory_service.modules.memory.replacement import (
     Thresholds,
     anchors,
     decide,
+    finished_after_ongoing,
     misread_rule,
     reinstate,
     relate,
@@ -492,7 +493,7 @@ async def test_the_model_settles_the_heads_unsure_band(verdict: str | None, repl
     [
         # a stated change about the thing both name: asked, whatever the head read
         (
-            "Ana Petrova is on sabbatical until further notice.",
+            "Ana Petrova is on sabbatical.",
             "Ana Petrova is back from sabbatical as of Monday.",
             True,
         ),
@@ -542,14 +543,14 @@ async def test_a_stated_change_about_the_shared_thing_is_put_to_the_model(
         # the head reads these at 0.02 in Arabic and Hindi: the stated change about the thing
         # the older statement is about, close by the encoder, marks it
         (
-            "Ana Petrova is on sabbatical until further notice.",
+            "Ana Petrova is on sabbatical.",
             "Ana Petrova is back from sabbatical as of Monday.",
             0.6,
             True,
         ),
         # the same pair the encoder puts apart: about another aspect of Ana, left alone
         (
-            "Ana Petrova is on sabbatical until further notice.",
+            "Ana Petrova is on sabbatical.",
             "Ana Petrova is back from sabbatical as of Monday.",
             0.4,
             False,
@@ -580,7 +581,7 @@ async def test_a_stated_change_about_the_same_thing_marks_an_earlier_value(
 
 
 async def test_a_stated_change_is_not_put_to_the_model_without_one() -> None:
-    old = _memory("Ana Petrova is on sabbatical until further notice.", at=T0, source="msg_a")
+    old = _memory("Ana Petrova is on sabbatical.", at=T0, source="msg_a")
     new = _memory("Ana Petrova is back from sabbatical as of Monday.", at=T1, source="msg_b")
     out = await CrossConversationReplacement(ScriptedNLI({})).run(
         _uow([old, new]), CTX, [new], now=T1
@@ -991,3 +992,62 @@ async def test_a_replacement_the_search_found_itself_is_kept_with_the_old_value(
     )
     assert [c.record_id for c in out] == [now.memory_id, was.memory_id]
     assert out[0].expanded_from == was.memory_id and out[0].expansion_edge == "REPLACEMENT"
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        (
+            "I'm reading Dune at the moment, about a third of the way through.",
+            "I finished Dune last night.",
+        ),
+        (
+            "Ich lese gerade Dune – ungefähr ein Drittel habe ich durch.",
+            "Ich habe Dune gestern Abend zu Ende gelesen.",
+        ),
+        ("Ahora mismo estoy leyendo Dune, voy por un tercio.", "Anoche terminé Dune."),
+        ("أقرأ رواية Dune حاليًا — أنهيت نحو ثلثها.", "أنهيت Dune الليلة الماضية."),
+        ("मैं इन दिनों Dune पढ़ रहा हूँ — लगभग एक तिहाई हो गई है।", "कल रात मैंने Dune ख़त्म की।"),
+        (
+            "Maria Lopez من قسم الحسابات الدائنة في إجازة والدية حتى إشعار آخر.",
+            "عادت Maria Lopez من الإجازة الوالدية منذ الاثنين.",
+        ),
+    ],
+)
+async def test_a_finished_state_after_an_ongoing_one_marks_an_earlier_value(
+    old: str, new: str
+) -> None:
+    """The head reads these at 0.02-0.3 in German, Arabic and Hindi; the words say it."""
+    assert finished_after_ongoing(new, old)
+    old_m = _memory(old, at=T0, source="msg_a")
+    new_m = _memory(new, at=T1, source="msg_b")
+    uow = _uow([old_m, new_m])
+    out = await CrossConversationReplacement(ScriptedNLI({})).run(uow, CTX, [new_m], now=T1)
+    assert [m.memory_id for m in out.changed] == [old_m.memory_id]
+    stored = uow.memories.rows[old_m.memory_id]
+    assert earlier_value(stored.system_metadata), "an earlier value, never superseded"
+    assert stored.temporal.status is TemporalStatus.CURRENT
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        # nothing in common: the finished thing is another one
+        ("I'm reading Dune at the moment.", "I finished Neuromancer last night."),
+        # the older statement says nothing was going on
+        ("Dune is my favourite novel.", "I finished Dune last night."),
+        # the newer one says nothing finished
+        ("I'm reading Dune at the moment.", "Dune has a great ending, I hear."),
+        # two things of one kind
+        ("Forklift #3 is still out of service.", "Forklift #4 is repaired."),
+    ],
+)
+async def test_a_finished_state_needs_an_ongoing_one_about_the_same_thing(
+    old: str, new: str
+) -> None:
+    old_m = _memory(old, at=T0, source="msg_a")
+    new_m = _memory(new, at=T1, source="msg_b")
+    out = await CrossConversationReplacement(ScriptedNLI({})).run(
+        _uow([old_m, new_m]), CTX, [new_m], now=T1
+    )
+    assert out.changed == []

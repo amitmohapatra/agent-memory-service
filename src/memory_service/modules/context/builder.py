@@ -36,6 +36,7 @@ from memory_service.domain.ids import stable_key
 from memory_service.domain.memory import unverified_representation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.service import AuthorizationService
+from memory_service.modules.context.coverage import unanswered
 from memory_service.modules.context.handles import BundleRecords, record_of
 from memory_service.modules.context.sections import (
     ContextSections,
@@ -958,6 +959,19 @@ class ContextBuilder:
                         ],
                         "notes": [*report.notes, "companion evidence exceeded the token budget"],
                     }
+                )
+        if (
+            self.retrieval_cfg.abstain_when_insufficient
+            and self.retrieval_cfg.coverage_check
+            and report.status is not EvidenceStatus.INSUFFICIENT
+        ):
+            # current evidence only: an earlier value answers nothing about now
+            gap = unanswered(
+                query, [i.text for i in (*memories, *knowledge, *graph_facts, *summaries)]
+            )
+            if gap:
+                report = report.model_copy(
+                    update={"status": EvidenceStatus.INSUFFICIENT, "notes": [*report.notes, gap]}
                 )
         if not (knowledge or memories or graph_facts or summaries or history):
             report = report.model_copy(update={"status": EvidenceStatus.INSUFFICIENT})

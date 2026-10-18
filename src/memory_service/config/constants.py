@@ -820,6 +820,11 @@ class RetrievalSettings(BaseModel):
     #: conversation shares terms with any question about either of them. Measured on LoCoMo:
     #: every one of 304 bundles, 71 of them unanswerable by construction, reported COMPLETE.
     subject_evidence_check: bool = True
+    #: Say INSUFFICIENT when the question asks for a contact detail or a secret (a phone
+    #: number, an e-mail address, a code or password) that no evidence about what it names
+    #: states, or names a month the evidence never does (``modules/context/coverage.py``,
+    #: ADR 0040). The evidence stays in the bundle.
+    coverage_check: bool = True
 
     @model_validator(mode="before")
     @classmethod

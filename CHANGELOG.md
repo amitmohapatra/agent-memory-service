@@ -8,6 +8,12 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- A question asking for a phone number, an e-mail address or a code or password that no
+  evidence about what it names states - "the alarm code for Store 33" when only Store 31's is
+  known - or for a month the evidence never names, is INSUFFICIENT; the evidence stays in the
+  bundle, a note says what is missing (`RetrievalSettings.coverage_check`). A user's "I
+  finished Dune" replaces their "I'm reading Dune at the moment" as an earlier value in all
+  five languages, whatever the NLI head reads (ADR 0040).
 - A value a user replaces in a later conversation is no longer served as current. Since a
   user's words follow the user (ADR 0036) the old and the new statement were both current in
   every conversation, and the same-session update and recency cells fell to 0.04 and 0.33. A

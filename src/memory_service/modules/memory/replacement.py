@@ -876,6 +876,14 @@ class CrossConversationReplacement:
                 thresholds=self.thresholds,
             )
             (decided if decision.grade is not None else undecided).append((pair, decision))
+        still: list[tuple[_Pair, Decision]] = []
+        for pair, native in undecided:
+            if moved_on(pair):
+                reason = f"a finished state after an ongoing one ({pair.contradiction:.2f})"
+                decided.append((pair, Decision(Grade.EARLIER, pair.contradiction, reason)))
+            else:
+                still.append((pair, native))
+        undecided = still
         change = any(k in CHANGE_KINDS for k in kinds)
         if change and undecided:
             undecided = await self._stated_changes(undecided, decided)
@@ -1146,6 +1154,48 @@ def stated_change(pair: _Pair) -> bool:
         pair.relation.anchored
         and not pair.relation.apart
         and leads_with_shared(pair.unit, pair.old)
+    )
+
+
+#: A state that is going on: what the older statement of a finished-after-ongoing pair says
+#: ("I'm reading Dune at the moment", "on leave until further notice", "investigating").
+_ONGOING = re.compile(
+    r"(?<![^\W\d_])(?:currently|at the moment|right now|these days|for now|so far|"
+    r"in progress|until further notice|still|gerade|zurzeit|derzeit|momentan|im moment|"
+    r"bis auf weiteres|noch|ahora mismo|actualmente|en este momento|por ahora|todav[ií]a|"
+    r"hasta nuevo aviso|est(?:oy|á|amos|án) \w+(?:ando|iendo))(?![^\W\d_])"
+    r"|(?:I'm|I am|we're|we are|is|are) \w+ing\b"
+    r"|حاليًا|حاليا|في الوقت الحالي|حتى إشعار آخر|لا يزال|لا تزال|ما زال|ما زالت"
+    r"|इन दिनों|फ़िलहाल|फिलहाल|अभी|अगली सूचना तक|रहा हूँ|रही हूँ|रहे हैं|रहा है|रही है",
+    re.IGNORECASE | re.UNICODE,
+)
+#: A state that has ended or been reached: what the newer statement says ("I finished Dune",
+#: "is back from leave", "resolved", "zu Ende gelesen", "ha vuelto", "أنهيت", "ख़त्म की").
+_FINISHED = re.compile(
+    r"(?<![^\W\d_])(?:finish(?:ed|es)|completed?|done with|is back|are back|came back|"
+    r"returned|resolved|repaired|closed|ended|over now|zu ende|fertig|abgeschlossen|beendet|"
+    r"zur[üu]ck|termin(?:é|ó|amos|aron|ado|ada)|acab(?:é|ó|ado|ada)|finaliz\w+|"
+    r"(?:ha|han|he) vuelto|volvi(?:ó|eron)|regres(?:ó|aron|ado)|cerrad[oa])(?![^\W\d_])"
+    r"|أنهيت|أنهى|أنهت|انتهى|انتهت|عاد|عادت|رجع|رجعت|أُغلق|أغلق"
+    r"|ख़त्म|खत्म|पूरा हो|पूरी हो|पूरी कर|पूरा कर|लौट|वापस आ",
+    re.IGNORECASE | re.UNICODE,
+)
+
+
+def finished_after_ongoing(new_text: str, old_text: str) -> bool:
+    """The newer statement says a state has ended or been reached, the older one that it was
+    going on: with a name or identifier both use, the newer says the thing moved on."""
+    return bool(_FINISHED.search(new_text) and _ONGOING.search(old_text))
+
+
+def moved_on(pair: _Pair) -> bool:
+    """A finished state about the thing an ongoing one was about (``finished_after_ongoing``),
+    the two tied by a name or an identifier (not by a slot alone, nor by the encoder)."""
+    rel = pair.relation
+    return (
+        (rel.shared_name or rel.shared_id)
+        and not rel.apart
+        and finished_after_ongoing(pair.unit.content, pair.old.content)
     )
 
 
