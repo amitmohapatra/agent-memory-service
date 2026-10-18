@@ -461,6 +461,40 @@ def test_a_run_counts_the_model_calls_its_uses_made() -> None:
     assert llm_counts("") == {"assist": {}, "assist_by_use": {}, "requests": {}}
 
 
+def test_an_llm_run_whose_model_was_unreachable_is_not_a_baseline(tmp_path: Path) -> None:
+    """The eval's model server killed mid-run (out of memory) turned every later use into its
+    fallback: the run measured the model-free path under the llm label."""
+
+    def llm(requests: dict[str, float] | None) -> dict:
+        run = _run(0.7, 100.0)
+        run["mode"] = run["meta"]["mode"] = "llm"
+        if requests is not None:
+            run["meta"]["llm_calls"] = {
+                "api": {"requests": {k: v for k, v in requests.items() if k == "circuit_open"}},
+                "worker": {"requests": {k: v for k, v in requests.items() if k != "circuit_open"}},
+            }
+        return run
+
+    healthy = tmp_path / "healthy.json"
+    # the model's own bad answers are measured, and one transient failure in 100 is tolerated
+    healthy.write_text(json.dumps(llm({"ok": 98.0, "invalid_output": 1.0, "exhausted": 1.0})))
+    recorded = gate.record([healthy], tmp_path / "gate.json")
+    assert gate.model_unreached(llm({"ok": 98.0, "invalid_output": 1.0, "exhausted": 1.0})) is None
+    assert gate.check(llm({"ok": 100.0}), recorded) == []
+    down = llm({"ok": 1499.0, "exhausted": 14.0, "circuit_open": 1120.0})
+    why = gate.model_unreached(down)
+    assert why and "1134 of 2633 model calls never reached the model" in why
+    assert gate.check(down, recorded) == [why]
+    assert "made no model call" in gate.check(llm({}), recorded)[0]
+    broken = tmp_path / "down.json"
+    broken.write_text(json.dumps(down))
+    with pytest.raises(SystemExit, match="never reached the model.*not a baseline"):
+        gate.record([healthy, broken], tmp_path / "gate2.json")
+    # not judged: another mode, or a run that predates the count
+    assert gate.model_unreached(_run(0.7, 100.0)) is None
+    assert gate.model_unreached(llm(None)) is None
+
+
 async def test_the_llm_stack_starts_the_service_with_the_eval_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

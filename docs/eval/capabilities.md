@@ -223,7 +223,18 @@ stack with the shipped timeout used the model 85 times and fell back 58 times (1
 circuit open); with 600 s it used it 190 times and fell back 0 times (wall 956 s → 1,078 s).
 Key, model name, llama-server slots and prompt length were all checked and were not the cause.
 `meta.llm_calls` records each process's calls by use and outcome, so a run that measured the
-model-free path says so.
+model-free path says so, and the gate holds it to that: an llm run in which more than 1 % of the
+model calls never reached the model (`exhausted`, `circuit_open`, an HTTP error; the model's own
+`invalid_output` or `empty_output` is measured, not excused) fails `gate check` and is never
+recorded as a baseline (`model_unreached`).
+
+That guard came from the next llm_core run, with the timeout fixed: 1,499 calls answered over
+2.3 hours of indexing, then 1,135 fallbacks (api 910, worker 225; 6 + 8 exhausted, the rest
+circuit open), every one after the moment the model server died. The kernel's memory-cgroup OOM killer had
+killed the gateway's llama-server (3.6 GB resident) as the indexing wait ended: the host's one
+14 GB cgroup held it, the eval's memory-api and -worker (2.3 GB each, the encoders), and another
+memory service. The model server is part of the measuring host, not of this checkout: its
+footprint is set where it is started.
 
 Before it creates anything, the script refuses to start if any of these holds:
 

@@ -61,6 +61,7 @@ from benchmark.capabilities.dataset import (
     select,
     text_for,
 )
+from benchmark.capabilities.gate import model_unreached
 from benchmark.capabilities.generate import (
     GeneratedTurn,
     aggregate,
@@ -882,6 +883,8 @@ async def run(
         ask_seconds = _now() - t_ask
         llm_calls = await service.llm_calls()
         print(f"model calls: {_llm_line(llm_calls)}", file=sys.stderr)
+        if why := model_unreached({"mode": settings.mode, "meta": {"llm_calls": llm_calls}}):
+            print(f"WARNING: {why}; this run is not a baseline", file=sys.stderr)
     finally:
         # a run leaves the service as it found it, a failed one too
         if should_purge(settings) and written:
