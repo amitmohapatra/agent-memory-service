@@ -11,12 +11,13 @@ memories carried it only when it happened to rank among the answers.
 Here every request reads the user's rules and preferences that apply to it, from the
 memories collection, in one round trip beside the ranking (a dense search in the primary
 space and a keyword search over those categories only, with the query's own vectors): a rule
-applies when the encoder puts it close to the request (``RULE_SIMILARITY``) or it shares two
-content words with it, in any language; a preference the same way at
+applies when the encoder puts it close to the request (``RULE_SIMILARITY``) or it shares a
+content word or code with it (``SHARED_STEMS``), in any language; a preference the same way at
 ``PREFERENCE_SIMILARITY``. A later rule on the same subject supersedes an earlier one
-(``_superseded``); an earlier value (ADR 0038) never
-applies. They come back as two profile sections, ``standing_rules`` and ``preferences``, in
-new conversations as in old ones, bounded (``RULES_MAX``, ``PREFERENCES_MAX``).
+(``_superseded``), what was said with an applying one comes with it; an earlier value (ADR
+0038) never applies. They come back as two profile sections, ``standing_rules`` and
+``preferences``, in new conversations as in old ones, bounded (``RULES_MAX``,
+``PREFERENCES_MAX``).
 """
 
 from __future__ import annotations
@@ -45,12 +46,16 @@ PREFERENCES_MAX: Final = 4
 #: Calibrated on the capability eval's dev split (the rules and preferences its scenarios
 #: state, against their own dev questions and every other scenario's, five languages): the
 #: primary space's query-to-statement cosines run low (own p50 0.29, others' p99 0.35); at 0.4
-#: a statement applies to 52% of its own questions and 4% of others', most of either by the
-#: two shared words. Higher floors add nothing but misses.
+#: (with two shared words) a statement applies to 52% of its own questions and 4% of others',
+#: most of either by the shared words. Higher floors add nothing but misses.
 RULE_SIMILARITY: Final = 0.4
 PREFERENCE_SIMILARITY: Final = 0.4
-#: shared content stems that make a rule apply whatever the encoder says
-SHARED_STEMS: Final = 2
+#: shared content words that make a rule apply whatever the encoder says. On the dev split
+#: (as for the floors above): one shared word applies a statement to 69.5% of its own
+#: questions and 14.9% of other scenarios', two to 49% and 3.9%. Missing a rule that applies
+#: costs more than listing one that does not (the reader judges a rule's condition), and the
+#: sections are bounded and ordered by shared words, then similarity.
+SHARED_STEMS: Final = 1
 #: two rules are about the same subject when this share of the shorter one's stems is shared
 SAME_SUBJECT: Final = 0.5
 #: the words that make a rule standing are not its subject
@@ -133,21 +138,38 @@ async def standing_blocks(
         (RULES_BLOCK, rules, RULE_SIMILARITY, RULES_MAX),
         (PREFERENCES_BLOCK, preferences, PREFERENCE_SIMILARITY, PREFERENCES_MAX),
     ):
-        chosen = [
-            (hit, stems)
+        current = [
+            (hit, _stems(_text(hit), lang), similarity)
             for hit, similarity in found
-            if not hit.payload.get("earlier_value")
-            and applies(query_stems, stems := _stems(_text(hit), lang), similarity, floor)
+            if not hit.payload.get("earlier_value") and _text(hit)
         ]
-        gone = _superseded(chosen)
-        lines = list(
-            dict.fromkeys(
-                f"- {_text(hit)}" for hit, _ in chosen if hit.record_id not in gone and _text(hit)
-            )
-        )[:most]
+        gone = _superseded([(hit, stems) for hit, stems, _ in current])
+        live = [(hit, stems, sim) for hit, stems, sim in current if hit.record_id not in gone]
+        chosen = sorted(
+            (
+                (hit, stems, sim)
+                for hit, stems, sim in live
+                if applies(query_stems, stems, sim, floor)
+            ),
+            key=lambda c: (-len(query_stems & c[1]), -c[2]),
+        )
+        # what was said with an applying statement comes with it ("I manage store 4779 at
+        # Northgate. I care about high-ROS styles."): one statement, one document (lever 1)
+        said = {_said(hit) for hit, _, _ in chosen}
+        chosen += [c for c in live if c not in chosen and _said(c[0]) in said]
+        lines = list(dict.fromkeys(f"- {_text(hit)}" for hit, _, _ in chosen))[:most]
         if lines:
             out.append(ProfileBlockView(block=block, text="\n".join(lines), version=0))
     return out
+
+
+def _said(hit: SearchHit) -> tuple:
+    """Where and when a statement was said: its source turns and its instant."""
+    refs = hit.payload.get("source_refs") or []
+    return (
+        tuple(sorted(str(r.get("source_id")) for r in refs if isinstance(r, dict))),
+        str(hit.payload.get("observed_at")),
+    )
 
 
 def _text(hit: SearchHit) -> str:

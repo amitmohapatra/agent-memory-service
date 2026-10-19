@@ -14,6 +14,7 @@ pytestmark = pytest.mark.unit
 
 
 def _hit(rid: str, text: str, category: str, day: str = "2026-10-01", **extra) -> SearchHit:
+    extra.setdefault("source_refs", [{"source_type": "message", "source_id": f"obs_{rid}"}])
     return SearchHit(
         record_id=rid,
         score=extra.pop("score", 0.1),
@@ -95,6 +96,24 @@ async def test_the_rules_that_apply_and_the_newest_of_one_subject() -> None:
     assert engine.store.filters[0].must_any["visibility_keys"] == ["user:t/u"]
     prefs = next(b for b in blocks if b.block == standing.PREFERENCES_BLOCK).text
     assert prefs == "- I manage store 4779."  # related by the encoder, not by its words
+
+
+@pytest.mark.asyncio
+async def test_what_was_said_with_an_applying_preference_comes_with_it() -> None:
+    turn = [{"source_type": "message", "source_id": "obs_t"}]
+    hits = [
+        _hit("p1", "I manage store 4779 at Northgate.", "preference", source_refs=turn),
+        _hit("p2", "I care about high-ROS styles with short WOS.", "preference", source_refs=turn),
+        _hit("p3", "I like hiking.", "preference"),
+    ]
+    blocks = await standing.standing_blocks(
+        _Engine(hits), "Which styles should I look at this week?", None, _Vectors()
+    )
+    prefs = blocks[0].text.splitlines()
+    assert prefs == [
+        "- I care about high-ROS styles with short WOS.",
+        "- I manage store 4779 at Northgate.",
+    ]
 
 
 @pytest.mark.asyncio

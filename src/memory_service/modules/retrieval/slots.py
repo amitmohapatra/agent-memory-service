@@ -21,13 +21,14 @@ nothing, or asks with no word of its own, is left alone.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Any
 
-from memory_service.domain.language import detect_language
+from memory_service.domain.language import detect_language, function_words
 from memory_service.modules.memory.replacement import _function_words, anchors
 
 
@@ -150,29 +151,70 @@ _PAST = re.compile(
     r"|(?<![\u0900-\u097f])(?:था|थी|थे)(?![\u0900-\u097f])",
     re.IGNORECASE,
 )
+#: ... unless it asks for the latest one ("What was the last PO I raised?")
+_LATEST = re.compile(
+    r"\b(?:last|latest|most\s+recent|newest|current(?:ly)?|zuletzt|letzte[nrs]?|neueste[nrs]?"
+    r"|aktuell\w*|[uú]ltim[oa]s?|reciente|actual)\b|آخر|الأحدث|आख़िरी|आखिरी|सबसे\s+नया|पिछल",
+    re.IGNORECASE,
+)
+#: a question about one thing: a singular copula ("Who is my manager?"), and no plural one
+_ONE = re.compile(
+    r"^(?!.*\b(?:are|were|sind|waren|son|eran|هم)\b)(?!.*हैं).*"
+    r"(?:\b(?:is|was|ist|war|es|era|fue)\b|'s\b|هو|هي|(?<![\u0900-\u097f])(?:है|था|थी)(?![\u0900-\u097f]))",
+    re.IGNORECASE,
+)
 _NUMBER = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)?%?(?![\w])")
 
 
 @dataclass(frozen=True)
 class Slot:
-    """What a question names (identifier values, names) and the stems it asks with."""
+    """What a question names (identifier values, names) and the words it asks with, each
+    with its stems."""
 
     ids: frozenset[str]
     names: frozenset[str]
-    asked: frozenset[str]
+    asked: tuple[frozenset[str], ...]
     lang: str
+    #: the question asks for the latest one ("What was the last PO I raised?")
+    latest: bool = False
+
+    @property
+    def anchored(self) -> bool:
+        return bool(self.ids or self.names)
+
+    @property
+    def needed(self) -> int:
+        """How many asked words an item must share: one beside what the question names; of a
+        slot that names nothing ("Who is my regional merchandise manager?"), most of them."""
+        if self.anchored or len(self.asked) < 2:
+            return 1
+        return max(2, math.ceil(0.6 * len(self.asked)))
 
     def __bool__(self) -> bool:
-        return bool((self.ids or self.names) and self.asked)
+        return bool(self.asked) and (self.anchored or len(self.asked) >= 2 or self.latest)
 
 
 @lru_cache(maxsize=1024)
 def question_slot(question: str) -> Slot:
     lang = detect_language(question)
     names, ids = question_anchors(question, lang)
-    words = _asked_words(question, lang, names)
-    asked = frozenset(stemmed_terms(words, lang)) if words else frozenset()
-    return Slot(ids=frozenset(ids), names=frozenset(names), asked=asked, lang=lang)
+    words = sorted(_asked_words(question, lang, names))
+    asked = tuple(frozenset(stemmed_terms({w}, lang)) for w in words)
+    return Slot(
+        ids=frozenset(ids),
+        names=frozenset(names),
+        asked=asked,
+        lang=lang,
+        latest=bool(_LATEST.search(question)),
+    )
+
+
+def _shares(forms: frozenset[str], stems: set[str]) -> bool:
+    """A word of the question is in an item: one of its forms is a stem of the item, or
+    begins or ends one ("count" in "recount")."""
+    return bool(forms & stems) or any(
+        len(f) >= 4 and (w.endswith(f) or w.startswith(f)) for f in forms for w in stems
+    )
 
 
 def _asked_words(question: str, lang: str, names: frozenset[str]) -> set[str]:
@@ -186,6 +228,8 @@ def _asked_words(question: str, lang: str, names: frozenset[str]) -> set[str]:
         for w in content_terms(question)
         if w not in _ASKING
         and w not in _function_words()
+        and w not in function_words(lang)
+        and not _LATEST.fullmatch(w)
         and w not in named
         and not any(ch.isdigit() for ch in w)
     }
@@ -207,8 +251,8 @@ def read(slot: Slot, text: str) -> Reading:
     unstopped = re.sub(r"(\d)([.?!؟।])(?=\s|$)", r"\1 \2", text)
     found = anchors(unstopped, slot.lang)
     ids = {value for _, value in found.ids}
-    lowered = text.lower()
-    names_all = slot.ids <= ids and all(n in lowered for n in slot.names)
+    flat = " ".join(re.sub(r"[^\w]+", " ", text.lower()).split())
+    names_all = slot.ids <= ids and all(" ".join(n.split()) in flat for n in slot.names)
     stems = stemmed_terms(content_terms(text), slot.lang)
     others = frozenset((ids - slot.ids) | {n for n in found.names if n not in slot.names})
     numbers = {
@@ -218,7 +262,7 @@ def read(slot: Slot, text: str) -> Reading:
     }
     return Reading(
         names_all=names_all,
-        asks=bool(slot.asked & stems),
+        asks=sum(_shares(forms, stems) for forms in slot.asked) >= slot.needed,
         values=frozenset(others | numbers),
         others=others,
         other_ids=frozenset(ids - slot.ids),
@@ -230,7 +274,12 @@ def latest_values(question: str, candidates: Sequence[Any], *, newest_of: Any) -
     question asks about marked an earlier value of the newest one (see the module doc).
     ``newest_of(candidate)`` is the instant a candidate was said. Order is kept."""
     slot = question_slot(question)
-    if not slot or _PAST.search(question):
+    latest = bool(_LATEST.search(question))
+    if not slot or (_PAST.search(question) and not latest):
+        return list(candidates)
+    if not slot.anchored and not latest and not _ONE.search(question):
+        # naming nothing, a question about many things ("Which forklifts are available?")
+        # has many current values
         return list(candidates)
     holders = _holders(slot, candidates)
     if len(holders) < 2:
@@ -241,7 +290,7 @@ def latest_values(question: str, candidates: Sequence[Any], *, newest_of: Any) -
         for c, reading in holders
         if c is not latest
         and str(newest_of(c)) < str(newest_of(latest))
-        and not reading.values <= latest_reading.values
+        and reading.values != latest_reading.values
     }
     if not replaced:
         return list(candidates)
@@ -279,7 +328,7 @@ def bridge_query(question: str, text: str) -> str | None:
     asks about, and names something else: that thing and the asked words ("Store 4779 is in
     Region X29" -> "Region X29 buyer"). None otherwise."""
     slot = question_slot(question)
-    if not slot:
+    if not slot or not slot.anchored:
         return None
     reading = read(slot, text)
     if not reading.names_all or reading.asks or not reading.others:

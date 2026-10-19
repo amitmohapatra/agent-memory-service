@@ -101,7 +101,7 @@ def test_a_bridge_names_the_next_thing_to_ask_about(question, evidence, expected
 def test_identifiers_match_however_they_are_spelled() -> None:
     assert names_any("The buyer for region X-29 is Priya", frozenset({"x29"}))
     assert not names_any("Region X30", frozenset({"x29"}))
-    assert question_slot("Who is the buyer for store 4779?").asked == frozenset({"buyer"})
+    assert question_slot("Who is the buyer for store 4779?").asked == (frozenset({"buyer"}),)
 
 
 class _Store:
@@ -169,3 +169,50 @@ async def test_no_bridge_no_search() -> None:
     held = [_mem("m1", "The buyer for store 4779 is Ana Ruiz.", "2026-10-01")]
     assert await engine._second_hop(routed, held, _Visibility(), {}) == held
     assert engine.store.asked == []
+
+
+@pytest.mark.parametrize(
+    ("question", "older", "newer"),
+    [
+        (
+            "Who is my regional merchandise manager?",
+            "My regional merchandise manager is Ana Ruiz.",
+            "My regional merchandise manager is Lee Chen.",
+        ),
+        (
+            "Wer ist mein regionaler Merchandise-Manager?",
+            "Mein regionaler Merchandise-Manager ist Ana Ruiz.",
+            "Mein regionaler Merchandise-Manager ist Lee Chen.",
+        ),
+        (
+            "What's the current count for aisle B-42?",
+            "Cycle count for aisle B-42: 340 units.",
+            "Recount for aisle B-42 came back at 410 units.",
+        ),
+        (
+            "What was the last PO I raised?",
+            "I just raised PO-123456 for SKU 654321.",
+            "I just raised PO-222222 for SKU 777777.",
+        ),
+        (
+            "Who is the buyer for Region K42?",
+            "The buyer for Region K42 is Omar Haddad.",
+            "Update: Lena Vogel has replaced Omar Haddad as the buyer for Region K42.",
+        ),
+    ],
+)
+def test_a_slot_of_the_users_own_and_a_replacement_naming_the_old_value(question, older, newer):
+    held = [_mem("a", older, "2026-10-01"), _mem("b", newer, "2026-10-08")]
+    got = latest_values(question, held, newest_of=_said)
+    assert [c.record_id for c in got if c.payload.get("earlier_value")] == ["a"]
+
+
+def test_a_question_about_many_things_keeps_every_current_value() -> None:
+    held = [
+        _mem("a", "Forklift #2 is out of service at the loading dock.", "2026-10-01"),
+        _mem("b", "Forklift #4 is available again at the loading dock.", "2026-10-08"),
+    ]
+    got = latest_values(
+        "Which forklifts are available for the loading dock?", held, newest_of=_said
+    )
+    assert not any(c.payload.get("earlier_value") for c in got)
