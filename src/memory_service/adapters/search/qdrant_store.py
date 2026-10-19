@@ -175,6 +175,16 @@ def _filter(flt: SearchFilter) -> models.Filter:
         must.append(models.FieldCondition(key=key, match=models.MatchAny(any=list(values))))
     for key, (start, end) in flt.within.items():
         must.append(models.FieldCondition(key=key, range=models.DatetimeRange(gte=start, lte=end)))
+    if flt.should_any:
+        # one of these: a nested filter, so it narrows ``must`` instead of widening it
+        must.append(
+            models.Filter(
+                should=[
+                    models.FieldCondition(key=key, match=models.MatchAny(any=list(values)))
+                    for key, values in flt.should_any.items()
+                ]
+            )
+        )
     must_not: list[Any] = [
         models.FieldCondition(key=k, match=models.MatchValue(value=v))
         for k, v in flt.must_not.items()

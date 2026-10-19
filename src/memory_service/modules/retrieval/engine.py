@@ -603,49 +603,52 @@ class RetrievalEngine:
         visibility: VisibilitySpecification,
         diagnostics: dict[str, Any],
     ) -> list[Candidate]:
-        """One more hop when the best evidence names what the question names but not what it
-        asks, and names something else (``slots.bridge_query``): "Who is the buyer for store
-        4779?" finds "Store 4779 is in Region X29", and asks "Region X29 buyer". Bounded: the
-        first ``SECOND_HOP_BRIDGES`` memories are read for a bridge, one keyword search of
-        ``SECOND_HOP_K`` (BM25 only, no encoder), and only memories that name the bridged
-        thing join, after the evidence they were reached from."""
-        bridges = [c for c in candidates if c.kind == "memory"][:SECOND_HOP_BRIDGES]
-        for bridge in bridges:
-            asked = slots.bridge_query(routed.query, bridge.text)
-            if not asked:
-                continue
-            vector = self.indexer.sparse.encode_query(asked)
-            if not vector.indices:
-                return candidates
-            collection, flt = self._scope("memory", visibility, None, None, None, None)
-            hits = await self.store.search_sparse(collection, vector, flt, limit=SECOND_HOP_K)
-            held = in_hand(candidates)
-            things = slots.bridged_things(routed.query, bridge.text)
-            found = [
-                replace(
-                    Candidate(
-                        record_id=h.record_id,
-                        kind="memory",
-                        text=str(h.payload.get("text", "")),
-                        score=bridge.score,
-                        retrievers=["second_hop"],
-                        payload=h.payload,
-                    ),
-                    expanded_from=bridge.record_id,
-                    expansion_edge="SECOND_HOP",
-                )
-                for h in hits
-                if h.record_id not in held
-                and not h.payload.get("earlier_value")
-                and slots.names_any(str(h.payload.get("text", "")), things)
-            ][:SECOND_HOP_ADDED]
-            found = not_in_hand(found, candidates)
-            diagnostics["second_hop"] = {"query": asked, "added": len(found)}
-            if not found:
-                return candidates
-            at = candidates.index(bridge) + 1
-            return [*candidates[:at], *found, *candidates[at:]]
-        return candidates
+        """One more hop from the strongest bridge among the first ``SECOND_HOP_BRIDGES``
+        memories (``slots.bridge``): "Who is the buyer for store 4779?" finds "Store 4779 is in
+        Region X29" and asks "Region X29 buyer"; "... the hero style this month?" finds "The
+        hero style this month is DENIM-JKT-22" and asks about DENIM-JKT-22. Bounded: one
+        keyword search of ``SECOND_HOP_K`` (BM25 only, no encoder, the reader's own scope),
+        and at most ``SECOND_HOP_ADDED`` current memories that name the bridged thing join,
+        after the memory they were reached from. One hop, never a chain."""
+        read = [
+            (way, c)
+            for c in [c for c in candidates if c.kind == "memory"][:SECOND_HOP_BRIDGES]
+            if (way := slots.bridge(routed.query, c.text)) is not None
+        ]
+        if not read:
+            return candidates
+        # the strongest bridge, the best ranked of equals
+        way, bridge = max(read, key=lambda pair: pair[0].strength)
+        vector = self.indexer.sparse.encode_query(way.query)
+        if not vector.indices:
+            return candidates
+        collection, flt = self._scope("memory", visibility, None, None, None, None)
+        hits = await self.store.search_sparse(collection, vector, flt, limit=SECOND_HOP_K)
+        held = in_hand(candidates)
+        found = [
+            replace(
+                Candidate(
+                    record_id=h.record_id,
+                    kind="memory",
+                    text=str(h.payload.get("text", "")),
+                    score=bridge.score,
+                    retrievers=["second_hop"],
+                    payload=h.payload,
+                ),
+                expanded_from=bridge.record_id,
+                expansion_edge="SECOND_HOP",
+            )
+            for h in hits
+            if h.record_id not in held
+            and not h.payload.get("earlier_value")
+            and slots.names_any(str(h.payload.get("text", "")), way.things)
+        ][:SECOND_HOP_ADDED]
+        found = not_in_hand(found, candidates)
+        diagnostics["second_hop"] = {"query": way.query, "added": len(found)}
+        if not found:
+            return candidates
+        at = candidates.index(bridge) + 1
+        return [*candidates[:at], *found, *candidates[at:]]
 
     async def _follow_replacements(
         self,
@@ -1397,7 +1400,7 @@ REPLACEMENTS_MAX = 4
 #: The second hop (``RetrievalEngine._second_hop``): on, how many of the best memories are
 #: read for a bridge, how many hits one keyword search returns, and how many join.
 SECOND_HOP = True
-SECOND_HOP_BRIDGES = 3
+SECOND_HOP_BRIDGES = 5
 SECOND_HOP_K = 8
 SECOND_HOP_ADDED = 2
 

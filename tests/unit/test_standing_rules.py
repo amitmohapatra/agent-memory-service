@@ -28,6 +28,12 @@ def _hit(rid: str, text: str, category: str, day: str = "2026-10-01", **extra) -
     )
 
 
+def _admits(flt: SearchFilter, payload: dict) -> bool:
+    must = all(payload.get(k) in v for k, v in flt.must_any.items() if k != "visibility_keys")
+    should = not flt.should_any or any(payload.get(k) in v for k, v in flt.should_any.items())
+    return must and should
+
+
 class _Space:
     name = VectorName.DENSE_ML
 
@@ -46,7 +52,7 @@ class _Store:
 
     async def search_dense(self, collection, name, vector, flt, *, limit):
         self.filters.append(flt)
-        return [h for h in self.hits if h.payload["category"] in flt.must_any["category"]]
+        return [h for h in self.hits if _admits(flt, h.payload)]
 
     async def search_sparse(self, collection, vector, flt, *, limit):
         return []
@@ -92,7 +98,10 @@ async def test_the_rules_that_apply_and_the_newest_of_one_subject() -> None:
     assert "CSV" in rules and "markdown" not in rules  # the later rule on the subject
     assert "transfer" not in rules and "Sundays" not in rules  # they do not apply
     # the store searched those categories only, within the reader's own scope
-    assert engine.store.filters[0].must_any["category"] == list(standing.RULE_CATEGORIES)
+    assert engine.store.filters[0].should_any == {
+        "category": list(standing.RULE_CATEGORIES),
+        "statement_kind": list(standing.RULE_KINDS),
+    }
     assert engine.store.filters[0].must_any["visibility_keys"] == ["user:t/u"]
     prefs = next(b for b in blocks if b.block == standing.PREFERENCES_BLOCK).text
     assert prefs == "- I manage store 4779."  # related by the encoder, not by its words

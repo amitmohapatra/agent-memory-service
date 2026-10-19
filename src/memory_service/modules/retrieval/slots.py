@@ -281,7 +281,7 @@ def latest_values(question: str, candidates: Sequence[Any], *, newest_of: Any) -
         # naming nothing, a question about many things ("Which forklifts are available?")
         # has many current values
         return list(candidates)
-    holders = _holders(slot, candidates)
+    holders = _holders(question, slot, candidates)
     if len(holders) < 2:
         return list(candidates)
     latest, latest_reading = max(holders, key=lambda h: (str(newest_of(h[0])), h[0].record_id))
@@ -310,32 +310,118 @@ def latest_values(question: str, candidates: Sequence[Any], *, newest_of: Any) -
     ]
 
 
-def _holders(slot: Slot, candidates: Sequence[Any]) -> list[tuple[Any, Reading]]:
+def _holders(question: str, slot: Slot, candidates: Sequence[Any]) -> list[tuple[Any, Reading]]:
     """The current memories that hold a value of ``slot``: they name every thing it names,
-    share a word it asks with and hold something the question does not name."""
+    share a word it asks with, hold something the question does not name, and do not qualify
+    it otherwise ("last month" for a question about this month)."""
     out: list[tuple[Any, Reading]] = []
     for c in candidates:
         if c.kind != "memory" or c.payload.get("earlier_value") or not c.payload.get("observed_at"):
             continue
         reading = read(slot, c.text)
-        if reading.names_all and reading.asks and reading.values:
+        if (
+            reading.names_all
+            and reading.asks
+            and reading.values
+            and _qualified(question, c.text) is not None
+        ):
             out.append((c, reading))
     return out
 
 
-def bridge_query(question: str, text: str) -> str | None:
-    """The question to ask next when ``text`` names what ``question`` names but not what it
-    asks about, and names something else: that thing and the asked words ("Store 4779 is in
-    Region X29" -> "Region X29 buyer"). None otherwise."""
+#: "this month" / "last month" / "next week": a qualifier that keeps two subjects of one name
+#: apart ("the hero style this month" is not last month's), in the pack languages
+_UNITS = {
+    "week": r"week|woche|semana|الأسبوع|हफ़्ते|हफ्ते|सप्ताह",
+    "month": r"month|monat|mes|الشهر|महीने",
+    "quarter": r"quarter|quartal|trimestre|الربع|तिमाही",
+    "year": r"year|jahr|año|العام|السنة|साल",
+}
+_KINDS = {
+    "this": r"this|current|diese[nmrs]?|dieses|este|esta|هذا|هذه|इस",
+    "last": r"last|previous|past|letzte[nmrs]?|vorige[nmrs]?|pasad[oa]|anterior"
+    r"|الماضي|الماضية|पिछले",
+    "next": r"next|nächste[nmrs]?|próxim[oa]|القادم|القادمة|अगले",
+}
+
+
+def time_qualifiers(text: str) -> frozenset[tuple[str, str]]:
+    """The (kind, unit) qualifiers ``text`` names: ("this", "month") for "this month",
+    "diesen Monat", "este mes", "هذا الشهر", "इस महीने"; "el mes pasado" and "الشهر الماضي"
+    are read with the unit first."""
+    out: set[tuple[str, str]] = set()
+    lowered = text.lower()
+    for kind, kinds in _KINDS.items():
+        for unit, units in _UNITS.items():
+            before = rf"(?<!\w)(?:{kinds})\s+(?:{units})(?!\w)"
+            after = rf"(?<!\w)(?:el\s+)?(?:{units})\s+(?:{kinds})(?!\w)"
+            if re.search(f"{before}|{after}", lowered):
+                out.add((kind, unit))
+    return frozenset(out)
+
+
+def _qualified(question: str, text: str) -> int | None:
+    """How ``text``'s time qualifiers agree with the question's: None when one names the same
+    unit with another kind ("last month" for "this month"), 1 when one names the question's,
+    0 otherwise."""
+    asked, said = time_qualifiers(question), time_qualifiers(text)
+    if any(u == unit and k != kind for k, u in said for kind, unit in asked):
+        return None
+    return 1 if asked & said else 0
+
+
+@dataclass(frozen=True)
+class Bridge:
+    """A memory that leads one hop further: how strongly, what to ask, and what it names."""
+
+    strength: int
+    query: str
+    things: frozenset[str]
+
+
+def bridge(question: str, text: str) -> Bridge | None:
+    """The hop ``text`` leads to for ``question``, or None.
+
+    * A question that names things: ``text`` names them but not what is asked, and names
+      something else - that thing and the asked words ("Store 4779 is in Region X29" ->
+      "Region X29 buyer").
+    * A question that names nothing: ``text`` defines two or more of its words, not all of
+      them, with an identifier - that identifier and the words it leaves ("The hero style this
+      month is DENIM-JKT-22" for "Which store has the most stock of the hero style this
+      month?" -> "DENIM-JKT-22 store most stock"). Its qualifiers keep subjects apart: "the
+      stockout hero is CROSSBODY-07" shares one word and leads nowhere, and of two that do the
+      one sharing more is followed (``strength``)."""
     slot = question_slot(question)
-    if not slot or not slot.anchored:
+    if not slot:
         return None
     reading = read(slot, text)
-    if not reading.names_all or reading.asks or not reading.others:
-        return None
-    asked = " ".join(sorted(_asked_words(question, slot.lang, slot.names)))
-    words = " ".join(_surfaces(text, reading.others)).split()
-    return " ".join(dict.fromkeys([*words, asked])).strip()
+    words = sorted(_asked_words(question, slot.lang, slot.names))
+    if slot.anchored:
+        if not reading.names_all or reading.asks or not reading.others:
+            return None
+        things = reading.other_ids or reading.others
+        rest = words
+        strength = 1
+    else:
+        stems = stemmed_terms(content_terms(text), slot.lang)
+        shared = [_shares(forms, stems) for forms in slot.asked]
+        if sum(shared) < 2 or all(shared) or not reading.other_ids:
+            return None
+        qualified = _qualified(question, text)
+        if qualified is None:
+            return None
+        things = reading.other_ids
+        rest = [w for w, hit in zip(words, shared, strict=True) if not hit]
+        strength = sum(shared) + qualified
+    said = " ".join(_surfaces(text, things)).split()
+    query = " ".join(dict.fromkeys([*said, *rest])).strip()
+    return Bridge(strength=strength, query=query, things=frozenset(things))
+
+
+def bridge_query(question: str, text: str) -> str | None:
+    """``bridge``'s question to ask next, or None."""
+    found = bridge(question, text)
+    return found.query if found else None
 
 
 def _surfaces(text: str, things: frozenset[str]) -> list[str]:
@@ -350,12 +436,8 @@ def _surfaces(text: str, things: frozenset[str]) -> list[str]:
 
 def bridged_things(question: str, text: str) -> frozenset[str]:
     """The things ``text`` names that ``question`` does not (the bridge's far end)."""
-    slot = question_slot(question)
-    if not slot:
-        return frozenset()
-    reading = read(slot, text)
-    # an identifier says which thing ("X29"); a name beside it ("Region") only what kind
-    return reading.other_ids or reading.others
+    found = bridge(question, text)
+    return found.things if found else frozenset()
 
 
 def names_any(text: str, things: frozenset[str]) -> bool:

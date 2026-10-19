@@ -38,6 +38,10 @@ PREFERENCES_BLOCK: Final = "preferences"
 #: the sections this module writes (``sections.within_budget`` keeps them before the rest)
 BLOCKS: Final = frozenset({RULES_BLOCK, PREFERENCES_BLOCK})
 RULE_CATEGORIES: Final = ("rule", "instruction")
+#: a statement the labeller read as a rule or a correction (ADR 0037) is one whatever rule
+#: extracted it: "Correction: do not create on style A (ATA is 0); use style B instead" is kept
+#: as the turn it is
+RULE_KINDS: Final = ("RULE", "CONDITIONAL_RULE", "CORRECTION")
 PREFERENCE_CATEGORIES: Final = ("preference", "attribute")
 #: how many of each a search returns, and how many are shown
 SEARCH_K: Final = 24
@@ -112,10 +116,10 @@ def _superseded(chosen: Sequence[tuple[SearchHit, set[str]]]) -> set[str]:
             shorter = min(len(sa), len(sb))
             if not shorter or len(sa & sb) / shorter < SAME_SUBJECT:
                 continue
-            older = (
-                a if str(a.payload.get("observed_at")) < str(b.payload.get("observed_at")) else b
-            )
-            out.add(older.record_id)
+            said_a, said_b = _said(a), _said(b)
+            if said_a == said_b or said_a[1] == said_b[1]:
+                continue  # one statement's forms, or two said at one instant: no order
+            out.add((a if said_a[1] < said_b[1] else b).record_id)
     return out
 
 
@@ -130,37 +134,61 @@ async def standing_blocks(
     lang = detect_language(query)
     query_stems = _stems(query, lang)
     rules, preferences = await asyncio.gather(
-        _search(engine, visibility, vectors, RULE_CATEGORIES),
-        _search(engine, visibility, vectors, PREFERENCE_CATEGORIES),
+        _search(
+            engine,
+            visibility,
+            vectors,
+            should_any={"category": list(RULE_CATEGORIES), "statement_kind": list(RULE_KINDS)},
+        ),
+        _search(engine, visibility, vectors, must_any={"category": list(PREFERENCE_CATEGORIES)}),
     )
     out: list[ProfileBlockView] = []
+    shown: set[tuple] = set()
     for block, found, floor, most in (
         (RULES_BLOCK, rules, RULE_SIMILARITY, RULES_MAX),
         (PREFERENCES_BLOCK, preferences, PREFERENCE_SIMILARITY, PREFERENCES_MAX),
     ):
-        current = [
-            (hit, _stems(_text(hit), lang), similarity)
-            for hit, similarity in found
-            if not hit.payload.get("earlier_value") and _text(hit)
-        ]
-        gone = _superseded([(hit, stems) for hit, stems, _ in current])
-        live = [(hit, stems, sim) for hit, stems, sim in current if hit.record_id not in gone]
-        chosen = sorted(
-            (
-                (hit, stems, sim)
-                for hit, stems, sim in live
-                if applies(query_stems, stems, sim, floor)
-            ),
-            key=lambda c: (-len(query_stems & c[1]), -c[2]),
-        )
-        # what was said with an applying statement comes with it ("I manage store 4779 at
-        # Northgate. I care about high-ROS styles."): one statement, one document (lever 1)
-        said = {_said(hit) for hit, _, _ in chosen}
-        chosen += [c for c in live if c not in chosen and _said(c[0]) in said]
-        lines = list(dict.fromkeys(f"- {_text(hit)}" for hit, _, _ in chosen))[:most]
+        chosen = [c for c in _choose(found, query_stems, lang, floor) if _said(c[0]) not in shown]
+        lines = _lines(chosen)[:most]
+        shown |= {_said(hit) for hit, _, _ in chosen}
         if lines:
             out.append(ProfileBlockView(block=block, text="\n".join(lines), version=0))
     return out
+
+
+def _choose(
+    found: Sequence[tuple[SearchHit, float]], query_stems: set[str], lang: str, floor: float
+) -> list[tuple[SearchHit, set[str], float]]:
+    """The current, not superseded statements that apply, best first, with what was said in
+    the same turn as each ("I manage store 4779 at Northgate. I care about high-ROS styles.")."""
+    current = [
+        (hit, _stems(_text(hit), lang), similarity)
+        for hit, similarity in found
+        if not hit.payload.get("earlier_value") and _text(hit)
+    ]
+    gone = _superseded([(hit, stems) for hit, stems, _ in current])
+    live = [c for c in current if c[0].record_id not in gone]
+    chosen = sorted(
+        (c for c in live if applies(query_stems, c[1], c[2], floor)),
+        key=lambda c: (-len(query_stems & c[1]), -c[2]),
+    )
+    said = {_said(hit) for hit, _, _ in chosen}
+    return chosen + [c for c in live if c not in chosen and _said(c[0]) in said]
+
+
+def _lines(chosen: Sequence[tuple[SearchHit, set[str], float]]) -> list[str]:
+    """One line per statement, in the order chosen, each in its fullest form: a sentence read
+    from a turn that the turn itself also brings ("... with columns: Store, SKU, Style. No
+    prose before the table.") is not listed apart, so a list or a format comes back whole."""
+    texts: dict[tuple, list[str]] = {}
+    for hit, _, _ in chosen:
+        texts.setdefault(_said(hit), []).append(_text(hit))
+    lines: list[str] = []
+    for hit, _, _ in chosen:
+        text, same = _text(hit), texts[_said(hit)]
+        if not any(text != other and text in other for other in same):
+            lines.append(f"- {text}")
+    return list(dict.fromkeys(lines))
 
 
 def _said(hit: SearchHit) -> tuple:
@@ -177,12 +205,19 @@ def _text(hit: SearchHit) -> str:
 
 
 async def _search(
-    engine: Any, visibility: Any, vectors: Any, categories: Sequence[str]
+    engine: Any,
+    visibility: Any,
+    vectors: Any,
+    *,
+    must_any: dict[str, list[str]] | None = None,
+    should_any: dict[str, list[str]] | None = None,
 ) -> list[tuple[SearchHit, float]]:
-    """The user's current memories of ``categories``, each with its dense similarity to the
+    """The user's current memories the filter admits, each with its dense similarity to the
     query (0 for one only the keyword search found), best first."""
     collection, flt = engine.memory_scope(visibility)
-    flt = flt.model_copy(update={"must_any": {**flt.must_any, "category": list(categories)}})
+    flt = flt.model_copy(
+        update={"must_any": {**flt.must_any, **(must_any or {})}, "should_any": should_any or {}}
+    )
     primary = engine.indexer.spaces.primary_space.name
     dense = (
         (primary, vectors.dense[primary])

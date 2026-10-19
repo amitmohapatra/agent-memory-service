@@ -137,9 +137,12 @@ def _subject_name(hit: SearchHit) -> str:
 #: entries and fused it fell to 0.478, below the 0.582 of the turns alone. Here every form of
 #: one statement - the same speaker's words of the same instant from the same source turns,
 #: current or earlier value alike - is one document in every arm: its rank in an arm is its
-#: best form's, the rules read all of its forms, and the form shown is the one that ranked
-#: best on its own (``statements``). The other forms ride along as its ``duplicates``.
+#: best form's, the rules read all of its forms, and the form shown is the turn itself when it
+#: is among them (it holds every reading whole), else the one that ranked best on its own
+#: (``statements``). The other forms ride along as its ``duplicates``.
 GROUP_STATEMENTS = True
+#: the category of a turn kept verbatim (ADR 0036)
+TURN = "verbatim_turn"
 
 
 def _speaker_key(principal: object) -> object:
@@ -178,9 +181,9 @@ def statement_key(payload: Mapping[str, Any]) -> tuple | None:
 
 
 def statements(pool: ArmPool) -> ArmPool:
-    """``pool`` with every statement one record (``GROUP_STATEMENTS``): the form that fused
-    best on its own stands for it, at its best form's rank in every arm, the arms' lists
-    closed up behind it."""
+    """``pool`` with every statement one record (``GROUP_STATEMENTS``): the turn as said, or
+    else the form that fused best on its own, stands for it, at its best form's rank in every
+    arm, the arms' lists closed up behind it."""
     keys = {rid: statement_key(hit.payload) for rid, hit in pool.hits.items()}
     members: dict[tuple, list[str]] = {}
     for rid, key in keys.items():
@@ -194,6 +197,12 @@ def statements(pool: ArmPool) -> ArmPool:
     forms: dict[str, list[SearchHit]] = {}
     for rids in groups:
         ordered = sorted(rids, key=lambda r: (-base[r], r))
+        # the turn as said stands for its statement when it is in hand: it holds every
+        # reading of it whole (a list of six store codes, a format's every column)
+        turn = next((r for r in ordered if pool.hits[r].payload.get("category") == TURN), None)
+        if turn is not None:
+            ordered.remove(turn)
+            ordered.insert(0, turn)
         forms[ordered[0]] = [pool.hits[r] for r in ordered]
         shown.update(dict.fromkeys(ordered, ordered[0]))
     ranks: dict[VectorName, dict[str, int]] = {}

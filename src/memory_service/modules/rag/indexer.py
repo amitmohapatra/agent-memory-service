@@ -512,6 +512,13 @@ class Indexer:
                             "visibility_keys": list(m.system_metadata.get("visibility_keys", [])),
                             "memory_type": m.memory_type.value,
                             "category": m.system_metadata.get("category"),
+                            # what the user's statement does (ADR 0037): a rule's kind puts a
+                            # turn or a correction among the standing rules (ADR 0041)
+                            **(
+                                {"statement_kind": str(kind)}
+                                if (kind := m.system_metadata.get("statement_kind"))
+                                else {}
+                            ),
                             "provider": m.system_metadata.get("provider"),
                             "derived": bool(m.system_metadata.get("source_revisions")),
                             "source_observed_to": m.system_metadata.get("source_observed_to"),
