@@ -98,6 +98,16 @@ def memory_days(payload: dict[str, Any]) -> list[Period]:
     return out
 
 
+def months_dated(payload: dict[str, Any]) -> frozenset[int]:
+    """The months (0 = January) a memory is dated in: ``memory_days``, every month of a
+    range included (all twelve for a range of a year or more)."""
+    out: set[int] = set()
+    for first, last in memory_days(payload):
+        span = (last.year - first.year) * 12 + last.month - first.month
+        out.update((first.month - 1 + k) % 12 for k in range(min(span, 11) + 1))
+    return frozenset(out)
+
+
 def within(periods: list[Period | AnyYearMonth], days: list[Period]) -> bool:
     """Whether any day range of a memory meets any period of a question."""
     for period in periods:

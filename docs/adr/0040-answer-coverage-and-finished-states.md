@@ -33,7 +33,11 @@ ADR 0038 left a state change the head reads as no contradiction unreplaced witho
    "Store 31") and one of its names ("John Doe"; in German a run of capitalised words counts
    only when marked or used by the evidence, since German capitalises nouns). A question that
    names a month is not answered by evidence that names months but never that one ("April
-   shrink" / "March shrink came in at 1.8%"). Otherwise the bundle is INSUFFICIENT with a note
+   shrink" / "March shrink came in at 1.8%"); an item whose text names no month is about the
+   month it is dated in - when it was said, or the days its relative dates resolved to - as
+   the bundle prints that date beside it. Without that, LoCoMo (no LLM, merged on main +
+   PR point 9) had 15 of 1,540 answerable questions INSUFFICIENT, each naming a month ("What
+   did James adopt in April 2022?", evidence dated April naming no month). Otherwise the bundle is INSUFFICIENT with a note
    saying what is missing; the evidence stays in the bundle. The rule only ever says "not
    answered": a question it cannot read is left to the rules before it.
    Only these value kinds: the ones the eval's dev split asks for. Money, serial numbers,

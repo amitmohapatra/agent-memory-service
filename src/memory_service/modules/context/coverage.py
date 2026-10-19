@@ -17,7 +17,11 @@ about - deterministic, in the five pack languages, and only ever saying "not ans
   a phone number or an extension, an address, a code word with a code) and names what the
   question names: every identifier ("Store 33", "L-7781") and one of its names ("John Doe").
 * **A month asked about** - a question that names a month, where the evidence names months
-  but never that one ("April shrink" / "March shrink came in at 1.8%"), is not answered.
+  but never that one ("April shrink" / "March shrink came in at 1.8%"), is not answered. An
+  item whose text names no month is about the month it is dated in (``dated``: when it was
+  said, and the days its relative dates resolved to), as the rendered bundle prints that date
+  beside it: "James adopted a puppy", said in April, answers "What did James adopt in
+  April?" though another item names June.
 
 When the evidence does not hold what was asked, the bundle is INSUFFICIENT: the evidence
 stays in the bundle (it is what the user said about the subject); the status says it does
@@ -295,21 +299,30 @@ def _value_gap(question: str, evidence: Sequence[str], lang: str) -> str | None:
     return None
 
 
-def _month_gap(question: str, evidence: Sequence[str]) -> str | None:
-    """A month asked about that the evidence, naming others, never names."""
+def _month_gap(
+    question: str, evidence: Sequence[str], dated: Sequence[frozenset[int]] = ()
+) -> str | None:
+    """A month asked about that the evidence, naming others, never names. An item whose
+    text names no month stands for the months it is dated in (``dated``, by position)."""
     wanted = months_named(question)
     if not wanted:
         return None
     named = [months_named(text) for text in evidence]
-    if any(named) and not any(m & wanted for m in named):
+    if not any(named):
+        return None
+    about = [m or (dated[i] if i < len(dated) else frozenset()) for i, m in enumerate(named)]
+    if not any(m & wanted for m in about):
         return "the evidence names other months than the one asked about"
     return None
 
 
-def unanswered(question: str, evidence: Sequence[str]) -> str | None:
-    """Why ``evidence`` does not answer ``question``, or None when it may."""
+def unanswered(
+    question: str, evidence: Sequence[str], dated: Sequence[frozenset[int]] = ()
+) -> str | None:
+    """Why ``evidence`` does not answer ``question``, or None when it may. ``dated``: the
+    months each item of ``evidence`` is dated in (0 = January), by position; optional."""
     if not evidence:
         return None
     return _value_gap(question, evidence, detect_language(question)) or _month_gap(
-        question, evidence
+        question, evidence, dated
     )
