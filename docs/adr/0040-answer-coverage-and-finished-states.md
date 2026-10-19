@@ -81,12 +81,14 @@ ADR 0038 left a state change the head reads as no contradiction unreplaced witho
   none of the 213 dev and 170 held-out non-replacement pairs marked; nothing changes on the
   held-out split.
 * Measured, no-LLM core set, isolated store, two runs paired with main 70198fa's recorded runs
-  (run ids 6d2d5e35 and 4af3172c, run date 2026-10-11), e7f1c4e: macro 0.480 (main) -> 0.644;
+  (run ids 6d2d5e35 and 4af3172c, run date 2026-10-11), 96420ef: macro 0.480 (main) -> 0.645;
   no cell below main. Abstention, new conversation 0.31 -> 0.55, same 0.15 -> 0.44 (the
   held-out split asks for amounts, serial numbers, expiry dates and a relative's name, which
   this rule does not read). False refusals on answerable questions 0.353 -> 0.337 (new),
-  0.246 -> 0.231 (same). Context p95 62.7 ms against main's 63.4 in these runs; alternating
-  A/B runs on one slice (ABBAABBA): context p95 63.2 against 66.0, search p95 42.7 against 44.8.
+  0.246 -> 0.231 (same). Context p95 53 ms against main's 63 in these runs; alternating
+  A/B runs on one slice (ABBAABBA, e7f1c4e): context p95 63.2 against 66.0, search p95 42.7
+  against 44.8. The LLM-mode gate is still to be run with the corrected harness (read-path
+  expansion was abandoned at 250 ms in every earlier LLM run).
   Same-conversation recency 0.95-0.99 in every language, at or above the pre-ADR-0036 tree's.
   Still below that tree: same-conversation update in German, Spanish and Hindi (0.83-0.89
   against 0.86-0.96), all of it one held-out scenario ("We migrated the helpdesk from Zendesk
