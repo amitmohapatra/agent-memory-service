@@ -62,6 +62,9 @@ WHEN = re.compile(
     r"|since when)\b|\b(before|after)\b",
     re.IGNORECASE,
 )
+#: the same question in the other pack languages (``periods``): "Wann ...", "¿Cuándo ...",
+#: "متى ...", "... कब ..."
+WHEN_FOREIGN = re.compile(r"(?<!\w)(wann|cuándo|متى|कब)(?!\w)", re.IGNORECASE)
 #: a memory that names a time
 TIMED = re.compile(
     r"\b(yesterday|today|tonight|tomorrow|last (night|week|weekend|month|year|summer|winter"
@@ -69,6 +72,15 @@ TIMED = re.compile(
     r"|morning)|(19|20)\d\d|january|february|march|april|may|june|july|august|september"
     r"|october|november|december|monday|tuesday|wednesday|thursday|friday|saturday|sunday"
     r"|weeks?|months?|years?|days?)\b",
+    re.IGNORECASE,
+)
+#: the same in the other pack languages: yesterday, today, last week/month/year, a month name
+TIMED_FOREIGN = re.compile(
+    r"(?<!\w)(gestern|heute|morgen|letzte[nrs]?|vor\s+\d+|ayer|hoy|mañana|pasad[oa]|hace"
+    r"|أمس|اليوم|غدا|الماضي|الماضية|منذ|कल|आज|पिछले|पहले"
+    r"|(?:19|20)\d\d|"
+    + "|".join(sorted({m for months in periods.FOREIGN_MONTHS.values() for m in months}))
+    + r")(?!\w)",
     re.IGNORECASE,
 )
 
@@ -212,13 +224,13 @@ def ranked(pool: ArmPool, query: str, now: date | None = None) -> list[tuple[str
     unit = 1.0 / (K + 1)
     best = _session_best(pool, base)
     named = _named(pool, query)
-    when = bool(WHEN.search(query))
+    when = bool(WHEN.search(query) or WHEN_FOREIGN.search(query))
     named_periods = periods.query_periods(query, now or datetime.now(UTC).date())
     scores = {}
     for rid, score in base.items():
         payloads = pool.payloads(rid)
         speaks = bool(named) and bool(pool.speakers(rid) & named)
-        timed = when and any(TIMED.search(str(p.get("text", ""))) for p in payloads)
+        timed = when and any(_timed(str(p.get("text", ""))) for p in payloads)
         dated = bool(named_periods) and any(
             periods.within(named_periods, periods.memory_days(p)) for p in payloads
         )
@@ -230,6 +242,10 @@ def ranked(pool: ArmPool, query: str, now: date | None = None) -> list[tuple[str
             + (PERIOD * unit if dated else 0.0)
         )
     return sorted(scores.items(), key=lambda item: (-item[1], item[0]))
+
+
+def _timed(text: str) -> bool:
+    return bool(TIMED.search(text) or TIMED_FOREIGN.search(text))
 
 
 def _session_best(pool: ArmPool, base: Mapping[str, float]) -> dict[str, float]:

@@ -141,3 +141,15 @@ def test_an_agent_bound_to_a_user_relays_that_users_statement() -> None:
     }
     pool = mr.statements(_pool({VectorName.BM25: ["turn", "fact"]}, hits))
     assert set(pool.hits) == {"turn"}
+
+
+def test_a_when_question_in_another_language_lifts_a_memory_that_names_a_time() -> None:
+    hits = {
+        "a": _hit("a", text="Wir haben Dune gelesen."),
+        "c": _hit("c", text="Wir haben uns letzte Woche getroffen."),
+    }
+    pool = _pool({VectorName.BM25: ["a", "c"]}, hits)
+    plain = dict(mr.ranked(pool, "Was haben wir gemacht?"))
+    when = dict(mr.ranked(pool, "Wann haben wir uns getroffen?"))
+    assert when["c"] - plain["c"] == pytest.approx(mr.TIME / (mr.K + 1))
+    assert when["a"] == pytest.approx(plain["a"])
