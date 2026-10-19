@@ -19,6 +19,8 @@ import re
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from memory_service.domain.language import detect_language
+
 Period = tuple[date, date]
 #: a month named without a year: that month of any year
 AnyYearMonth = int
@@ -215,15 +217,16 @@ def query_periods(query: str, now: date) -> list[Period | AnyYearMonth]:
     out += foreign
     days += foreign_days
     anchor = days[0] if len(set(days)) == 1 else now
-    return out + _relative(query.lower(), anchor)
+    # a month two languages spell alike ("April", "August") is read once
+    return list(dict.fromkeys([*out, *_relative(query.lower(), anchor)]))
 
 
 def _foreign(query: str) -> tuple[list[Period | AnyYearMonth], list[date]]:
     """Dates, months and years named in German, Spanish, Arabic or Hindi."""
     out: list[Period | AnyYearMonth] = []
     days: list[date] = []
-    if query.isascii():
-        return out, days
+    if detect_language(query) == "en":
+        return out, days  # English month names are read by ``_DATED`` alone
     lowered = query.lower()
     for m in _FOREIGN_MONTH.finditer(lowered):
         name = m.group(2)

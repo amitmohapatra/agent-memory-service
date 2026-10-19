@@ -40,7 +40,9 @@ BLOCKS: Final = frozenset({RULES_BLOCK, PREFERENCES_BLOCK})
 RULE_CATEGORIES: Final = ("rule", "instruction")
 #: a statement the labeller read as a rule or a correction (ADR 0037) is one whatever rule
 #: extracted it: "Correction: do not order from depot A (it is closed); use depot B instead" is kept
-#: as the turn it is
+#: as the turn it is; and so is a statement that gives an instruction it says is for every
+#: time, which the labeller leaves to a model a no-model deployment does not have ("Formatiere
+#: Berichte immer als Tabelle": ``standing_instruction``)
 RULE_KINDS: Final = ("RULE", "CONDITIONAL_RULE", "CORRECTION")
 PREFERENCE_CATEGORIES: Final = ("preference", "attribute")
 #: how many of each a search returns, and how many are shown
@@ -138,7 +140,11 @@ async def standing_blocks(
             engine,
             visibility,
             vectors,
-            should_any={"category": list(RULE_CATEGORIES), "statement_kind": list(RULE_KINDS)},
+            should_any={
+                "category": list(RULE_CATEGORIES),
+                "statement_kind": list(RULE_KINDS),
+                "standing_instruction": ["yes"],
+            },
         ),
         _search(engine, visibility, vectors, must_any={"category": list(PREFERENCE_CATEGORIES)}),
     )

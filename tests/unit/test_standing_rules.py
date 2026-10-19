@@ -101,6 +101,7 @@ async def test_the_rules_that_apply_and_the_newest_of_one_subject() -> None:
     assert engine.store.filters[0].should_any == {
         "category": list(standing.RULE_CATEGORIES),
         "statement_kind": list(standing.RULE_KINDS),
+        "standing_instruction": ["yes"],
     }
     assert engine.store.filters[0].must_any["visibility_keys"] == ["user:t/u"]
     prefs = next(b for b in blocks if b.block == standing.PREFERENCES_BLOCK).text

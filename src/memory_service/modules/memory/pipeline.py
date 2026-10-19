@@ -155,6 +155,8 @@ def statement_metadata(candidate: MemoryCandidate) -> dict[str, str]:
         out["rule_trigger"] = candidate.rule_trigger
     if candidate.rule_exception:
         out["rule_exception"] = candidate.rule_exception
+    if candidate.standing_instruction:
+        out["standing_instruction"] = "yes"
     return out
 
 

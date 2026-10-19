@@ -79,6 +79,11 @@ class MemoryCandidate(BaseModel):
         default=None,
         description="a rule's exception clause, as said: \"unless I type 'include out of stock'\"",
     )
+    standing_instruction: bool = Field(
+        default=False,
+        description="the statement gives an instruction it says is for every time (a standing "
+        "word, a recurring trigger), whether or not the labeller could decide it is a rule",
+    )
     said_by_user: bool = Field(
         default=False,
         description="the text is a user's own words (their message, decision or feedback, "

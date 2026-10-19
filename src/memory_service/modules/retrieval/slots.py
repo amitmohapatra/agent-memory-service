@@ -29,7 +29,13 @@ from functools import lru_cache
 from typing import Any
 
 from memory_service.domain.language import detect_language, function_words
-from memory_service.modules.memory.replacement import _function_words, anchors
+from memory_service.modules.memory.replacement import (
+    MAX_CHARS,
+    Anchors,
+    _function_words,
+    _marked,
+    anchors,
+)
 
 
 def content_terms(text: str) -> set[str]:
@@ -136,6 +142,16 @@ _ASKING = frozenset(
         "कैसे",
         "क्यों",
         "अभी",
+        "किस",
+        "किसे",
+        "किसका",
+        "किसकी",
+        "किसके",
+        "कौनसा",
+        "कौनसी",
+        "أي",
+        "اي",
+        "أيّ",
         "इस",
         "समय",
     ]
@@ -157,13 +173,12 @@ _LATEST = re.compile(
     r"|aktuell\w*|[uú]ltim[oa]s?|reciente|actual)\b|آخر|الأحدث|आख़िरी|आखिरी|सबसे\s+नया|पिछल",
     re.IGNORECASE,
 )
-#: a question about one thing: a singular copula ("Who is my manager?"), and no plural one
-_ONE = re.compile(
-    r"^(?!.*\b(?:are|were|sind|waren|son|eran|هم)\b)(?!.*हैं).*"
-    r"(?:\b(?:is|was|ist|war|es|era|fue)\b|'s\b|هو|هي"
-    r"|(?<![\u0900-\u097f])(?:है|था|थी)(?![\u0900-\u097f])"
-    # "Which style should I create on?", "Welchen Stil ...", "¿Qué estilo ...": one noun asked
-    r"|^\s*¿?\s*(?:which|what|welche[nmrs]?|qu[eé]|cu[aá]l)\s+[^\W\d_]+(?<![sS])\s)",
+#: a question about many things: a plural copula ("Which vans are available?", "sind", "son",
+#: "هم", "हैं") or a plural noun asked for ("What styles ...", "Which vans can I use?")
+_MANY = re.compile(
+    r"\b(?:are|were|sind|waren|son|eran|están|estaban)\b|(?<!\w)هم(?!\w)"
+    r"|(?<![\u0900-\u097f])(?:हैं|थे)(?![\u0900-\u097f])"
+    r"|^\s*¿?\s*(?:which|what)\s+[^\W\d_]+s\b",
     re.IGNORECASE,
 )
 _NUMBER = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)?%?(?![\w])")
@@ -202,6 +217,10 @@ class Slot:
 def question_slot(question: str) -> Slot:
     lang = detect_language(question)
     names, _ = question_anchors(question, lang)
+    if lang in _NOUNS_CAPITALISED:
+        # a language that capitalises its nouns: a capitalised word names a thing only when
+        # it is marked as a name or a code ("QX-410", "OSHA"); "Filiale" is a word asked with
+        names = frozenset(n for n in names if any(_marked(w) for w in n.split()))
     ids = tuple(dict.fromkeys(_ids_of(question, lang)))
     words = sorted(_asked_words(question, lang, names))
     asked = tuple(frozenset(stemmed_terms({w}, lang)) for w in words)
@@ -222,6 +241,39 @@ def _shares(forms: frozenset[str], stems: set[str]) -> bool:
     )
 
 
+_NOUNS_CAPITALISED = frozenset({"de"})
+#: determiners and auxiliaries the packs' function words leave out: never an asked word
+_MORE_FUNCTION = frozenset(
+    {
+        "dies",
+        "diese",
+        "dieser",
+        "dieses",
+        "diesen",
+        "hat",
+        "hatte",
+        "haben",
+        "wird",
+        "werden",
+        "soll",
+        "sollte",
+        "kann",
+        "este",
+        "esta",
+        "estos",
+        "estas",
+        "ha",
+        "han",
+        "tiene",
+        "does",
+        "should",
+        "could",
+        "would",
+        "can",
+    }
+)
+
+
 def _asked_words(question: str, lang: str, names: frozenset[str]) -> set[str]:
     """The question's content words but its question words, the words of what it names and
     the labels of its identifiers ("store" of "branch 512", "px-90")."""
@@ -234,6 +286,7 @@ def _asked_words(question: str, lang: str, names: frozenset[str]) -> set[str]:
         if w not in _ASKING
         and w not in _function_words()
         and w not in function_words(lang)
+        and w not in _MORE_FUNCTION
         and not _LATEST.fullmatch(w)
         and w not in named
         and not any(ch.isdigit() for ch in w)
@@ -261,15 +314,28 @@ def _id_forms(label: str, value: str) -> frozenset[str]:
     return frozenset({value, f"{label}{value}"})
 
 
-def _ids_of(text: str, lang: str) -> list[frozenset[str]]:
+def _anchors(text: str, lang: str) -> Any:
+    """``anchors`` of the whole of ``text``: a long message is read in windows of what one
+    reading takes (``replacement.MAX_CHARS``), so a name past its first window still counts."""
     unstopped = re.sub(r"(\d)([.?!؟।])(?=\s|$)", r"\1 \2", text)
-    return [_id_forms(label, value) for label, value in anchors(unstopped, lang).ids]
+    if len(unstopped) <= MAX_CHARS:
+        return anchors(unstopped, lang)
+    step = MAX_CHARS // 2
+    parts = [anchors(unstopped[i : i + MAX_CHARS], lang) for i in range(0, len(unstopped), step)]
+    return Anchors(
+        frozenset().union(*(p.names for p in parts)),
+        frozenset().union(*(p.ids for p in parts)),
+        frozenset().union(*(p.bare for p in parts)),
+    )
+
+
+def _ids_of(text: str, lang: str) -> list[frozenset[str]]:
+    return [_id_forms(label, value) for label, value in _anchors(text, lang).ids]
 
 
 def read(slot: Slot, text: str) -> Reading:
     """``text`` read against ``slot``."""
-    unstopped = re.sub(r"(\d)([.?!؟।])(?=\s|$)", r"\1 \2", text)
-    found = anchors(unstopped, slot.lang)
+    found = _anchors(text, slot.lang)
     said = [_id_forms(label, value) for label, value in found.ids]
     held = frozenset().union(*said) if said else frozenset()
     flat = " ".join(re.sub(r"[^\w]+", " ", text.lower()).split())
@@ -302,7 +368,7 @@ def latest_values(question: str, candidates: Sequence[Any], *, newest_of: Any) -
     latest = bool(_LATEST.search(question))
     if not slot or (_PAST.search(question) and not latest):
         return list(candidates)
-    if not slot.anchored and not latest and not _ONE.search(question):
+    if not slot.anchored and not latest and _MANY.search(question):
         # naming nothing, a question about many things ("Which vans are available?")
         # has many current values
         return list(candidates)

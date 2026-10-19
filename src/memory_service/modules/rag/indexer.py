@@ -519,6 +519,11 @@ class Indexer:
                                 if (kind := m.system_metadata.get("statement_kind"))
                                 else {}
                             ),
+                            **(
+                                {"standing_instruction": "yes"}
+                                if m.system_metadata.get("standing_instruction")
+                                else {}
+                            ),
                             "provider": m.system_metadata.get("provider"),
                             "derived": bool(m.system_metadata.get("source_revisions")),
                             "source_observed_to": m.system_metadata.get("source_observed_to"),
