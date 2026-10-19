@@ -21,7 +21,6 @@ nothing, or asks with no word of its own, is left alone.
 
 from __future__ import annotations
 
-import math
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -204,10 +203,9 @@ class Slot:
     @property
     def needed(self) -> int:
         """How many asked words an item must share: one beside what the question names; of a
-        slot that names nothing ("Who is my regional merchandise manager?"), most of them."""
-        if self.anchored or len(self.asked) < 2:
-            return 1
-        return max(2, math.ceil(0.6 * len(self.asked)))
+        slot that names nothing ("Who is my regional merchandise manager?"), every one - a
+        word left out may be the very thing asked about ("Riverside" in a Hindi question)."""
+        return 1 if self.anchored else len(self.asked)
 
     def __bool__(self) -> bool:
         return bool(self.asked) and (self.anchored or len(self.asked) >= 2 or self.latest)

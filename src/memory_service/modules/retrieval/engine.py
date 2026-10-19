@@ -933,14 +933,17 @@ class RetrievalEngine:
                         self.indexer.collection(base),
                         space,
                         vectors.dense[space],
-                        [c.record_id for c in group],
+                        [rid for c in group for rid in _forms_of(c)],
                     )
                     for base, group in groups.items()
                 )
             )
         for group, scores in zip(groups.values(), found, strict=True):
             for c in group:
-                c.similarity = scores.get(c.record_id)
+                # a statement is as close as its closest form (``memory_ranking.statements``):
+                # the turn shown for it is longer than the reading the question matched
+                known = [scores[rid] for rid in _forms_of(c) if rid in scores]
+                c.similarity = max(known) if known else None
 
     async def _expanded(
         self,
@@ -1188,6 +1191,13 @@ class RetrievalEngine:
                 update={"must_any": {**flt.must_any, "document_id": list(document_ids)}}
             )
         return collection, flt
+
+
+def _forms_of(candidate: Candidate) -> list[str]:
+    """The record ids of a candidate's statement: its own, then its other forms."""
+    if candidate.kind != "memory":
+        return [candidate.record_id]
+    return [candidate.record_id, *(candidate.payload.get("duplicates") or ())]
 
 
 def _with_forms(pool: memory_ranking.ArmPool, rid: str) -> dict[str, Any]:

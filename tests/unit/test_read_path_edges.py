@@ -322,3 +322,21 @@ def test_remarks_that_merely_mention_the_thing_are_no_earlier_values() -> None:
         _m("b", "Maya's blue bowl broke on the way to Lisbon, so sad.", "2026-10-01"),
     ]
     assert _earlier("What is Maya's blue bowl a reminder of?", held) == []
+
+
+def test_a_word_of_a_question_naming_nothing_is_never_left_out() -> None:
+    held = [
+        _m("a", "Riverside पंपिंग स्टेशन के गेट का कोड 5512# है।", "2026-10-01"),
+        _m("b", "Hilltop स्टेशन के गेट का कोड 7720# है।", "2026-10-02"),
+    ]
+    assert _earlier("Riverside गेट कोड", held) == []
+
+
+def test_a_statement_is_as_close_as_its_closest_form() -> None:
+    from memory_service.modules.retrieval.engine import _forms_of
+
+    turn = _m("t", "My crew starts at 10pm and we are done by 6am.", "2026-10-01")
+    turn.payload["duplicates"] = ["r"]
+    assert _forms_of(turn) == ["t", "r"]
+    chunk = Candidate(record_id="c", kind="chunk", text="x", score=1.0, retrievers=[], payload={})
+    assert _forms_of(chunk) == ["c"]
