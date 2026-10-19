@@ -216,3 +216,22 @@ def test_the_bundle_dates_each_item_by_when_it_was_said() -> None:
     out = _builder(0.4)._coverage(complete, question, shown)
     assert out.status is EvidenceStatus.INSUFFICIENT
     assert out.notes == ["the evidence names other months than the one asked about"]
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "I'm opening Store 33 tomorrow morning and need to disarm the alarm.",
+        "Öffne morgen die 33, Alarm?",
+        "Router login, quick.",
+        "Acceso al router, rápido.",
+        "Maile dem Betreuer von Lakeside.",
+    ],
+)
+def test_disarming_logging_in_and_mailing_ask_for_a_value(question: str) -> None:
+    assert asked(question)
+
+
+def test_the_post_and_signing_up_ask_for_nothing() -> None:
+    assert not asked("Did the mail come today?")
+    assert not asked("Ich muss mich bei einem neuen Zahnarzt anmelden.")

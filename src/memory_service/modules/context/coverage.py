@@ -70,7 +70,9 @@ _LATIN_ASKS: dict[Asked, tuple[str, ...]] = {
         r"tel[eé]fono",
         r"celular",
     ),
-    Asked.EMAIL: (r"e-?mail", r"emial", r"correo", r"e-?mail-?adresse"),
+    # the German verb ("Maile dem Betreuer") asks where to send it (ADR 0041); the English
+    # word is as often the post ("did the mail come?") and is left out
+    Asked.EMAIL: (r"e-?mail", r"emial", r"correo", r"e-?mail-?adresse", r"maile[nt]?|mailst"),
     Asked.SECRET: (
         r"code",
         r"c[oó]digo",
@@ -81,17 +83,26 @@ _LATIN_ASKS: dict[Asked, tuple[str, ...]] = {
         r"[^\W\d_]*(?:code|passwort|kennwort)",
         r"contrase[nñ]a",
         r"clave",
+        # disarming an alarm or logging in asks for its code or password (ADR 0041); the
+        # German "anmelden" and the Spanish "entrar" are left out: they also mean signing
+        # up somewhere and going in, which the dev split asks about answerably
+        r"alarm(?:anlage)?",
+        r"alarma",
+        r"log\s?in",
+        r"einloggen",
+        r"acceso",
+        r"iniciar\s+sesi[oó]n",
     ),
 }
 _ARABIC_ASKS: dict[Asked, tuple[str, ...]] = {
     Asked.PHONE: ("هاتف", "جوال", "موبايل", "محمول"),
     Asked.EMAIL: ("بريد إلكتروني", "بريد الإلكتروني", "بريده", "بريدها", "إيميل", "ايميل"),
-    Asked.SECRET: ("رمز", "كلمة المرور", "كلمة مرور", "كلمة السر", "كود"),
+    Asked.SECRET: ("رمز", "كلمة المرور", "كلمة مرور", "كلمة السر", "كود", "إنذار", "تسجيل الدخول"),
 }
 _DEVANAGARI_ASKS: dict[Asked, tuple[str, ...]] = {
     Asked.PHONE: ("फ़ोन", "फोन", "मोबाइल"),
     Asked.EMAIL: ("ईमेल", "ई-मेल"),
-    Asked.SECRET: ("पासवर्ड", "कोड", "पिन"),
+    Asked.SECRET: ("पासवर्ड", "कोड", "पिन", "अलार्म", "लॉग इन", "लॉगिन"),
 }
 #: A Devanagari ask word used as a verb ("फ़ोन करूँ", "ईमेल किया", "फ़ोन आया")
 _DEVANAGARI_VERB = r"(?!\s*(?:कर|किय|किए|की\b|आय|आई))"
