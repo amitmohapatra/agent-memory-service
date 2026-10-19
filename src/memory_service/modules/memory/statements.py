@@ -460,6 +460,11 @@ class _Reader:
         only = self.cues["only"].at(s, pos)
         if only is not None:
             pos = self._past_fillers(s, only.end(), end)
+        # a standing word opening the clause after another one ("From now on, always answer
+        # ..."): an instruction when what follows it is one
+        again = self.cues["standing"].at(s, pos)
+        if again is not None and self._imperative(s, again.end(), end) == "strong":
+            return "strong"
         if at is not None and at <= pos:
             return "strong"
         if self.cues["request"].at(s, pos) or self.cues["imperative"].at(s, pos):

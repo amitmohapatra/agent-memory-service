@@ -22,6 +22,7 @@ new conversations as in old ones, bounded (``RULES_MAX``, ``PREFERENCES_MAX``).
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Sequence
 from typing import Any, Final
 
@@ -83,9 +84,14 @@ _STANDING_WORDS: Final = frozenset(
 )
 
 
+#: a number or a code ("4779", "MK-220") is a shared word too: the thing it names
+_CODED = re.compile(r"(?<![\w-])[\w-]*\d[\w-]*")
+
+
 def _stems(text: str, lang: str) -> set[str]:
     words = {w for w in content_terms(text) if w not in _function_words()} - _STANDING_WORDS
-    return stemmed_terms(words, lang) - _STANDING_WORDS
+    coded = {c.lower().strip("-") for c in _CODED.findall(text) if len(c) > 1}
+    return (stemmed_terms(words, lang) - _STANDING_WORDS) | coded
 
 
 def applies(query_stems: set[str], hit_stems: set[str], similarity: float, floor: float) -> bool:
@@ -109,11 +115,11 @@ def _superseded(chosen: Sequence[tuple[SearchHit, set[str]]]) -> set[str]:
 
 
 async def standing_blocks(
-    engine: Any, query: str, visibility: Any, vectors: Any, *, shown: str = ""
+    engine: Any, query: str, visibility: Any, vectors: Any
 ) -> list[ProfileBlockView]:
     """The ``standing_rules`` and ``preferences`` sections for ``query`` (see the module
-    doc). ``shown`` is the profile text already in the bundle: a line it holds is not
-    repeated."""
+    doc). A rule the ``user`` block also lists is still listed here: this section is what
+    applies to the request, the block everything the user keeps."""
     if vectors is None:
         return []
     lang = detect_language(query)
@@ -136,9 +142,7 @@ async def standing_blocks(
         gone = _superseded(chosen)
         lines = list(
             dict.fromkeys(
-                f"- {_text(hit)}"
-                for hit, _ in chosen
-                if hit.record_id not in gone and _text(hit) and _text(hit) not in shown
+                f"- {_text(hit)}" for hit, _ in chosen if hit.record_id not in gone and _text(hit)
             )
         )[:most]
         if lines:

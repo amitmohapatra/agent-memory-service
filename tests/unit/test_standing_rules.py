@@ -98,16 +98,12 @@ async def test_the_rules_that_apply_and_the_newest_of_one_subject() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_rule_applies_by_shared_words_in_another_language_and_never_twice() -> None:
+async def test_a_rule_applies_by_shared_words_in_another_language() -> None:
     hits = [_hit("r1", "Nie einen Transfer anlegen, wenn ATA 0 ist.", "rule")]
     blocks = await standing.standing_blocks(
         _Engine(hits), "Leg einen Transfer an, ATA ist 0", None, _Vectors()
     )
     assert blocks and "Transfer" in blocks[0].text
-    shown = "- Nie einen Transfer anlegen, wenn ATA 0 ist."
-    assert not await standing.standing_blocks(
-        _Engine(hits), "Leg einen Transfer an, ATA ist 0", None, _Vectors(), shown=shown
-    )
 
 
 @pytest.mark.asyncio

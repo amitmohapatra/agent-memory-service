@@ -540,13 +540,7 @@ class ContextBuilder:
         query's own vectors."""
         standing = (
             asyncio.ensure_future(
-                standing_blocks(
-                    self.engine,
-                    query,
-                    visibility,
-                    result.query_vectors,
-                    shown="\n".join(b.text for b in pinned.profile),
-                )
+                standing_blocks(self.engine, query, visibility, result.query_vectors)
             )
             if STANDING and result.routed.needs_memories
             else None
