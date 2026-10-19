@@ -171,6 +171,25 @@ def _month(year: int, month: int) -> Period:
     return date(year, month, 1), date(year, month, calendar.monthrange(year, month)[1])
 
 
+def _named_month(
+    month: int,
+    day: str | None,
+    year: str | None,
+    out: list[Period | AnyYearMonth],
+    days: list[date],
+) -> None:
+    """A month named with a day and a year is that day, with a year that month, alone the
+    month of any year; a day is also kept in ``days`` (the anchor of a relative period)."""
+    if year and day and 1 <= int(day) <= calendar.monthrange(int(year), month)[1]:
+        on = date(int(year), month, int(day))
+        out.append((on, on))
+        days.append(on)
+    elif year:
+        out.append(_month(int(year), month))
+    else:
+        out.append(month)
+
+
 def query_periods(query: str, now: date) -> list[Period | AnyYearMonth]:
     """The periods ``query`` names; a month named without a year is that month number.
 
@@ -182,14 +201,7 @@ def query_periods(query: str, now: date) -> list[Period | AnyYearMonth]:
     for m in _DATED.finditer(query):
         month = _MONTHS[m.group(2).lower()]
         day, year = m.group(1) or m.group(3), m.group(4)
-        if year and day and 1 <= int(day) <= calendar.monthrange(int(year), month)[1]:
-            on = date(int(year), month, int(day))
-            out.append((on, on))
-            days.append(on)
-        elif year:
-            out.append(_month(int(year), month))
-        else:
-            out.append(month)
+        _named_month(month, day, year, out, days)
     out += [(date(int(y), 1, 1), date(int(y), 12, 31)) for y in _YEAR.findall(query)]
     for m in _SEASON.finditer(query):
         season, year = m.group(1).lower(), int(m.group(2))
@@ -223,14 +235,7 @@ def _foreign(query: str) -> tuple[list[Period | AnyYearMonth], list[date]]:
             and not _ARABIC_MONTH_CONTEXT.search(lowered[: m.start(2)])
         ):
             continue
-        if year and day and 1 <= int(day) <= calendar.monthrange(int(year), month)[1]:
-            on = date(int(year), month, int(day))
-            out.append((on, on))
-            days.append(on)
-        elif year:
-            out.append(_month(int(year), month))
-        else:
-            out.append(month)
+        _named_month(month, day, year, out, days)
     for m in _FOREIGN_YEAR.finditer(lowered):
         year = int(m.group(1) or m.group(2))
         if not any(isinstance(p, tuple) and p[0].year == year for p in out):
