@@ -81,6 +81,22 @@ _DOC_LOCAL = re.compile(
 )
 
 
+#: A question about what *was*, not what is (lever 3 of ADR 0041): an earlier value answers
+#: it, so the read keeps earlier values where they rank instead of after every current one.
+#: Any language: a question in another language is never routed by the English cues above,
+#: but whether it asks about the past is read in each pack language's own words.
+_HISTORY = re.compile(
+    r"\b(did \w+ use to|used to (?:be|live|work|have|drive|own|go|play|like|call)"
+    r"|previous(?:ly)?|formerly|originally|at first|in the past|before (?:that|the change"
+    r"|we switched|it changed)|old (?:one|value|number|address|supplier|name)|what was .{0,40}"
+    r"before|history of|changed over|over time|all the (?:values|changes))\b"
+    r"|\b(?:früher|vorher|ursprünglich|damals|zuvor|bisherige[nrs]?)\b"
+    r"|\b(?:antes|anteriormente|solía|solíamos|originalmente|antiguo|antigua|anterior)\b"
+    r"|سابقا|سابقًا|من قبل|في السابق|القديم|القديمة"
+    r"|पहले\s+(?:क्या|कौन|कहाँ|कितना)|पुराना|पुरानी|पुराने",
+    re.IGNORECASE,
+)
+
 _CUES = {
     "conversation": (_CONVERSATION,),
     "user_memory": (_USER_MEMORY,),
@@ -124,7 +140,11 @@ class QueryRouter:
         q = query.strip()
         ids = _ID.findall(q)
         lang = detect_language(q)
-        signals = {"identifier": bool(ids), **_cue_signals(q, english=is_english(lang))}
+        signals = {
+            "identifier": bool(ids),
+            **_cue_signals(q, english=is_english(lang)),
+            "history": bool(_HISTORY.search(q)),
+        }
         if signals["identifier"]:
             qt = QueryType.EXACT_IDENTIFIER
         elif signals["conversation"]:

@@ -925,8 +925,13 @@ class ContextBuilder:
                 continue
             if item.token_estimate > remaining:
                 continue
-            if c.kind == "memory" and c.payload.get("earlier_value"):
+            if (
+                c.kind == "memory"
+                and c.payload.get("earlier_value")
+                and not result.routed.signals.get("history")
+            ):
                 # an earlier value goes to the history section, never among current evidence
+                # - unless the question asks what was (``router._HISTORY``): then it answers
                 if len(history) >= HISTORY_MAX:
                     continue
                 history.append(item)

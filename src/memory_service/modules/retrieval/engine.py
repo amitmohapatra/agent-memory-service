@@ -456,7 +456,14 @@ class RetrievalEngine:
                 before = len(candidates)
                 # what a later statement of the same user replaced ranks after every
                 # current item (ADR 0038): still there, never in front of its replacement
-                candidates = current_first(_dedup(candidates))[:pool_limit]
+                candidates = _dedup(candidates)
+                if not routed.signals.get("history"):
+                    # a question about now: the latest value of a slot is the answer
+                    # (``latest_per_slot``), every earlier value ranks after the current ones
+                    if LATEST_PER_SLOT:
+                        candidates = latest_per_slot(candidates)
+                    candidates = current_first(candidates)
+                candidates = candidates[:pool_limit]
                 candidates = await self._validate_derived(ctx, candidates, visibility)
                 checked_derived = {c.record_id for c in candidates if is_derived(c)}
                 if before != len(candidates):
@@ -507,7 +514,11 @@ class RetrievalEngine:
                 )
                 if not at:
                     candidates = await self._follow_replacements(
-                        ctx, candidates, visibility, diagnostics
+                        ctx,
+                        candidates,
+                        visibility,
+                        diagnostics,
+                        history=bool(routed.signals.get("history")),
                     )
                 candidates = _within_selection(candidates, selected_documents, selected_kinds)
                 if observed is not None:
@@ -583,6 +594,8 @@ class RetrievalEngine:
         candidates: list[Candidate],
         visibility: VisibilitySpecification,
         diagnostics: dict[str, Any],
+        *,
+        history: bool = False,
     ) -> list[Candidate]:
         """An earlier value never comes without what replaced it (ADR 0038): the statement
         that replaced it is fetched when the search did not find it, and placed before every
@@ -620,7 +633,7 @@ class RetrievalEngine:
         if not added:
             return candidates
         diagnostics["replacements_followed"] = len(added)
-        return current_first([*candidates, *added])
+        return [*candidates, *added] if history else current_first([*candidates, *added])
 
     async def _validate_derived(
         self,
@@ -1315,6 +1328,104 @@ def _carried_by_replaced(candidates: list[Candidate]) -> list[Candidate]:
 #: replacements it adds at most per read.
 REPLACEMENT_HOPS = 2
 REPLACEMENTS_MAX = 4
+
+
+#: For a question about now, the newest of a user's current statements of one slot - the
+#: same speaker, subject and predicate, a different value - is the answer, and the older ones
+#: are earlier values (lever 3 of ADR 0041). Replacement at write time (ADR 0038) decides most
+#: of these; this is the read-time rule for a slot the writes did not tie.
+LATEST_PER_SLOT = True
+#: Predicates that name no slot: what a turn, a task or an event rule writes.
+_NO_SLOT_PREDICATES = frozenset({"said", "task", "event", "instruction", "decided"})
+#: Subjects that name no thing: deictics and pronouns the fact rule can take for one.
+_NO_SLOT_SUBJECTS = frozenset(
+    {
+        "it",
+        "this",
+        "that",
+        "these",
+        "those",
+        "there",
+        "here",
+        "he",
+        "she",
+        "they",
+        "we",
+        "i",
+        "you",
+        "one",
+        "everything",
+        "something",
+        "anything",
+        "nothing",
+        "someone",
+        "everyone",
+        "what",
+        "which",
+        "who",
+    }
+)
+
+
+def _slot(candidate: Candidate) -> tuple | None:
+    payload = candidate.payload
+    if candidate.kind != "memory" or payload.get("earlier_value") or payload.get("derived"):
+        return None
+    subject = " ".join(str(payload.get("subject") or "").lower().split())
+    predicate = str(payload.get("predicate") or "").lower()
+    owner = payload.get("owner_principal")
+    if (
+        not subject
+        or not predicate
+        or not owner
+        or not payload.get("object")
+        or not payload.get("observed_at")
+        or predicate in _NO_SLOT_PREDICATES
+        or subject in _NO_SLOT_SUBJECTS
+        or ":" in subject
+        or subject.startswith(("thr_", "run_"))
+    ):
+        return None
+    return (_speaker(owner), subject, predicate)
+
+
+def latest_per_slot(candidates: Sequence[Candidate]) -> list[Candidate]:
+    """``candidates`` with every current memory of a slot that a newer one in hand holds a
+    different value for marked an earlier value, replaced by the newest
+    (``LATEST_PER_SLOT``). Nothing else changes: order, and every other memory, as given."""
+    newest: dict[tuple, Candidate] = {}
+    for c in candidates:
+        key = _slot(c)
+        if key is not None and (
+            key not in newest
+            or str(c.payload["observed_at"]) > str(newest[key].payload["observed_at"])
+        ):
+            newest[key] = c
+    out: list[Candidate] = []
+    for c in candidates:
+        key = _slot(c)
+        latest = newest.get(key) if key is not None else None
+        if (
+            latest is not None
+            and latest is not c
+            and str(c.payload["observed_at"]) < str(latest.payload["observed_at"])
+            and _normalised(str(c.payload.get("object")))
+            != _normalised(str(latest.payload.get("object")))
+        ):
+            out.append(
+                replace(
+                    c,
+                    payload={
+                        **c.payload,
+                        "earlier_value": True,
+                        "replaced_by": latest.record_id,
+                        "replaced_in_slot": True,
+                    },
+                )
+            )
+        else:
+            out.append(c)
+    return out
 
 
 def current_first(candidates: Sequence[Candidate]) -> list[Candidate]:
