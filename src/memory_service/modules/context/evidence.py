@@ -73,7 +73,7 @@ def content_terms(text: str) -> set[str]:
 
 #: Snowball stemmers by question language (``domain.language``). The overlap rule compared
 #: surface words, so an inflection or an attached article was "no shared term": the Arabic
-#: question "انسكاب في الغرفة الخلفية" shares no word with "مسؤول الاستجابة للانسكابات".
+#: question "متى تصل الشحنة؟" shares no word with "الشحنات تأتي كل خميس".
 #: Replayed on the capability eval's dev split (no LLM, the bundles a run recorded, the items
 #: they show): 94 of 2,316 answerable new-conversation bundles that were INSUFFICIENT share a
 #: stem and no word with their evidence (62 of 2,316 in the same conversation), against 4 and

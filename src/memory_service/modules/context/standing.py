@@ -1,9 +1,9 @@
 """Standing rules and preferences that apply to a request, as profile sections (ADR 0041).
 
-A user's standing rule ("Never create a transfer when ATA is 0", "Always answer stockout
-audits as a markdown table with columns SKU, store, days out; no prose", "Nie ...", "Nunca
-...") and their stated preferences ("I care about high-ROS styles with short WOS", "I manage
-store 4779") are lasting memories (ADR 0036/0037), and they reached a new conversation only
+A user's standing rule ("Never schedule a delivery on a public holiday", "Always answer weekly
+reports as a table with columns item, branch, count; no prose", "Nie ...", "Nunca
+...") and their stated preferences ("I care about fast-moving items with low stock", "I manage
+branch 512") are lasting memories (ADR 0036/0037), and they reached a new conversation only
 through the ``user`` profile block: one bounded block of all of them, newest first, so under
 memory that is never cleared a rule said a month ago fell off its end - and the ranked
 memories carried it only when it happened to rank among the answers.
@@ -39,7 +39,7 @@ PREFERENCES_BLOCK: Final = "preferences"
 BLOCKS: Final = frozenset({RULES_BLOCK, PREFERENCES_BLOCK})
 RULE_CATEGORIES: Final = ("rule", "instruction")
 #: a statement the labeller read as a rule or a correction (ADR 0037) is one whatever rule
-#: extracted it: "Correction: do not create on style A (ATA is 0); use style B instead" is kept
+#: extracted it: "Correction: do not order from depot A (it is closed); use depot B instead" is kept
 #: as the turn it is
 RULE_KINDS: Final = ("RULE", "CONDITIONAL_RULE", "CORRECTION")
 PREFERENCE_CATEGORIES: Final = ("preference", "attribute")
@@ -93,7 +93,7 @@ _STANDING_WORDS: Final = frozenset(
 )
 
 
-#: a number or a code ("4779", "MK-220") is a shared word too: the thing it names
+#: a number or a code ("512", "PX-90") is a shared word too: the thing it names
 _CODED = re.compile(r"(?<![\w-])[\w-]*\d[\w-]*")
 
 
@@ -160,7 +160,8 @@ def _choose(
     found: Sequence[tuple[SearchHit, float]], query_stems: set[str], lang: str, floor: float
 ) -> list[tuple[SearchHit, set[str], float]]:
     """The current, not superseded statements that apply, best first, with what was said in
-    the same turn as each ("I manage store 4779 at Northgate. I care about high-ROS styles.")."""
+    the same turn as each ("I manage branch 512 in the north district. I care about
+    fast-moving items.")."""
     current = [
         (hit, _stems(_text(hit), lang), similarity)
         for hit, similarity in found

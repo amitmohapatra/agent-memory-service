@@ -604,12 +604,12 @@ class RetrievalEngine:
         diagnostics: dict[str, Any],
     ) -> list[Candidate]:
         """One more hop from the strongest bridge among the first ``SECOND_HOP_BRIDGES``
-        memories (``slots.bridge``): "Who is the buyer for store 4779?" finds "Store 4779 is in
-        Region X29" and asks "Region X29 buyer"; "... the hero style this month?" finds "The
-        hero style this month is DENIM-JKT-22" and asks about DENIM-JKT-22. Bounded: one
-        keyword search of ``SECOND_HOP_K`` (BM25 only, no encoder, the reader's own scope),
-        and at most ``SECOND_HOP_ADDED`` current memories that name the bridged thing join,
-        after the memory they were reached from. One hop, never a chain."""
+        memories (``slots.bridge``): "Who is the dispatcher for branch 512?" finds "Branch 512
+        is in District D7" and asks "District D7 dispatcher"; "... the featured item this
+        week?" finds "The featured item this week is LMP-140" and asks about LMP-140.
+        Bounded: one keyword search of ``SECOND_HOP_K`` (BM25 only, no encoder, the reader's
+        own scope), and at most ``SECOND_HOP_ADDED`` current memories that name the bridged
+        thing join, after the memory they were reached from. One hop, never a chain."""
         read = [
             (way, c)
             for c in [c for c in candidates if c.kind == "memory"][:SECOND_HOP_BRIDGES]

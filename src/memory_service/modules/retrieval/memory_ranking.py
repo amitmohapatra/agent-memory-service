@@ -198,7 +198,7 @@ def statements(pool: ArmPool) -> ArmPool:
     for rids in groups:
         ordered = sorted(rids, key=lambda r: (-base[r], r))
         # the turn as said stands for its statement when it is in hand: it holds every
-        # reading of it whole (a list of six store codes, a format's every column)
+        # reading of it whole (a list of codes, a format's every column)
         turn = next((r for r in ordered if pool.hits[r].payload.get("category") == TURN), None)
         if turn is not None:
             ordered.remove(turn)

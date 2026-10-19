@@ -2,7 +2,7 @@
 
 Memory is never cleared: a value said in many conversations over many days stays, each
 statement current in its own right unless a later one was tied to it at write (ADR 0038).
-A question about the current state ("What's the reorder point for MK-220?", "Who drives
+A question about the current state ("What's the reorder point for PX-90?", "Who drives
 van #7?") then finds three statements of the reorder point, 40, 60 and 75, and served all
 three as current. The question itself says what the slot is: the things it names (its
 identifiers and names) and the words it asks with ("reorder point"). Of the statements that
@@ -12,8 +12,8 @@ every older one with another value is an earlier value of it: still in the bundl
 history section, never among the current evidence.
 
 The other half of the question's anchors serve the second hop (``bridge_query``): evidence
-that names what the question names but not what it asks ("Store 4779 is in Region X29" for
-"Who is the buyer for store 4779?") names the thing to ask about next.
+that names what the question names but not what it asks ("Branch 512 is in District D7" for
+"Who is the dispatcher for branch 512?") names the thing to ask about next.
 
 No model. Function words and question words are never asked words; a question that names
 nothing, or asks with no word of its own, is left alone.
@@ -141,7 +141,7 @@ _ASKING = frozenset(
     ]
 )
 #: A question asked in the past tense is about an event, not about the current state ("What
-#: did Caroline research?", "Was hatte ich bestellt?"): its older statements are no earlier
+#: did Maya research?", "Was hatte ich bestellt?"): its older statements are no earlier
 #: values of anything.
 _PAST = re.compile(
     r"\b(?:did|was|were|had|used to|went|happened)\b"
@@ -160,7 +160,10 @@ _LATEST = re.compile(
 #: a question about one thing: a singular copula ("Who is my manager?"), and no plural one
 _ONE = re.compile(
     r"^(?!.*\b(?:are|were|sind|waren|son|eran|هم)\b)(?!.*हैं).*"
-    r"(?:\b(?:is|was|ist|war|es|era|fue)\b|'s\b|هو|هي|(?<![\u0900-\u097f])(?:है|था|थी)(?![\u0900-\u097f]))",
+    r"(?:\b(?:is|was|ist|war|es|era|fue)\b|'s\b|هو|هي"
+    r"|(?<![\u0900-\u097f])(?:है|था|थी)(?![\u0900-\u097f])"
+    # "Which style should I create on?", "Welchen Stil ...", "¿Qué estilo ...": one noun asked
+    r"|^\s*¿?\s*(?:which|what|welche[nmrs]?|qu[eé]|cu[aá]l)\s+[^\W\d_]+(?<![sS])\s)",
     re.IGNORECASE,
 )
 _NUMBER = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)?%?(?![\w])")
@@ -171,7 +174,8 @@ class Slot:
     """What a question names (identifier values, names) and the words it asks with, each
     with its stems."""
 
-    ids: frozenset[str]
+    #: each identifier as the spellings that name it (``_id_forms``)
+    ids: tuple[frozenset[str], ...]
     names: frozenset[str]
     asked: tuple[frozenset[str], ...]
     lang: str
@@ -197,11 +201,12 @@ class Slot:
 @lru_cache(maxsize=1024)
 def question_slot(question: str) -> Slot:
     lang = detect_language(question)
-    names, ids = question_anchors(question, lang)
+    names, _ = question_anchors(question, lang)
+    ids = tuple(dict.fromkeys(_ids_of(question, lang)))
     words = sorted(_asked_words(question, lang, names))
     asked = tuple(frozenset(stemmed_terms({w}, lang)) for w in words)
     return Slot(
-        ids=frozenset(ids),
+        ids=ids,
         names=frozenset(names),
         asked=asked,
         lang=lang,
@@ -219,7 +224,7 @@ def _shares(forms: frozenset[str], stems: set[str]) -> bool:
 
 def _asked_words(question: str, lang: str, names: frozenset[str]) -> set[str]:
     """The question's content words but its question words, the words of what it names and
-    the labels of its identifiers ("store" of "store 4779", "mk-220")."""
+    the labels of its identifiers ("store" of "branch 512", "px-90")."""
     unstopped = re.sub(r"(\d)([.?!؟।])(?=\s|$)", r"\1 \2", question)
     labels = {label.lstrip("#") for label, _ in anchors(unstopped, lang).ids if label}
     named = {w for n in names for w in n.split()} | labels
@@ -246,26 +251,46 @@ class Reading:
     other_ids: frozenset[str] = frozenset()  # of those, the identifiers
 
 
+def _id_forms(label: str, value: str) -> frozenset[str]:
+    """The spellings of one identifier that name the same thing: its value, and its label with
+    it ("van 4", "Van #4" and "van-4" are all ``van4``; "Branch 512" and
+    "Filiale 512" share ``512``)."""
+    label = label.lstrip("#").lower()
+    if not label or value.startswith(label):
+        return frozenset({value})
+    return frozenset({value, f"{label}{value}"})
+
+
+def _ids_of(text: str, lang: str) -> list[frozenset[str]]:
+    unstopped = re.sub(r"(\d)([.?!؟।])(?=\s|$)", r"\1 \2", text)
+    return [_id_forms(label, value) for label, value in anchors(unstopped, lang).ids]
+
+
 def read(slot: Slot, text: str) -> Reading:
     """``text`` read against ``slot``."""
     unstopped = re.sub(r"(\d)([.?!؟।])(?=\s|$)", r"\1 \2", text)
     found = anchors(unstopped, slot.lang)
-    ids = {value for _, value in found.ids}
+    said = [_id_forms(label, value) for label, value in found.ids]
+    held = frozenset().union(*said) if said else frozenset()
     flat = " ".join(re.sub(r"[^\w]+", " ", text.lower()).split())
-    names_all = slot.ids <= ids and all(" ".join(n.split()) in flat for n in slot.names)
+    names_all = all(forms & held for forms in slot.ids) and all(
+        " ".join(n.split()) in flat for n in slot.names
+    )
+    asked_ids = frozenset().union(*slot.ids) if slot.ids else frozenset()
+    other_ids = frozenset(max(forms, key=len) for forms in said if not forms & asked_ids)
     stems = stemmed_terms(content_terms(text), slot.lang)
-    others = frozenset((ids - slot.ids) | {n for n in found.names if n not in slot.names})
+    others = other_ids | {n for n in found.names if n not in slot.names}
     numbers = {
         n.replace(",", ".")
         for n in _NUMBER.findall(text)
-        if not any(n in value for value in slot.ids)
+        if not any(n in value for value in asked_ids)
     }
     return Reading(
         names_all=names_all,
         asks=sum(_shares(forms, stems) for forms in slot.asked) >= slot.needed,
         values=frozenset(others | numbers),
-        others=others,
-        other_ids=frozenset(ids - slot.ids),
+        others=frozenset(others),
+        other_ids=other_ids,
     )
 
 
@@ -278,7 +303,7 @@ def latest_values(question: str, candidates: Sequence[Any], *, newest_of: Any) -
     if not slot or (_PAST.search(question) and not latest):
         return list(candidates)
     if not slot.anchored and not latest and not _ONE.search(question):
-        # naming nothing, a question about many things ("Which forklifts are available?")
+        # naming nothing, a question about many things ("Which vans are available?")
         # has many current values
         return list(candidates)
     holders = _holders(question, slot, candidates)
@@ -330,7 +355,7 @@ def _holders(question: str, slot: Slot, candidates: Sequence[Any]) -> list[tuple
 
 
 #: "this month" / "last month" / "next week": a qualifier that keeps two subjects of one name
-#: apart ("the hero style this month" is not last month's), in the pack languages
+#: apart ("the featured item this week" is not last month's), in the pack languages
 _UNITS = {
     "week": r"week|woche|semana|الأسبوع|हफ़्ते|हफ्ते|सप्ताह",
     "month": r"month|monat|mes|الشهر|महीने",
@@ -383,13 +408,13 @@ def bridge(question: str, text: str) -> Bridge | None:
     """The hop ``text`` leads to for ``question``, or None.
 
     * A question that names things: ``text`` names them but not what is asked, and names
-      something else - that thing and the asked words ("Store 4779 is in Region X29" ->
-      "Region X29 buyer").
+      something else - that thing and the asked words ("Branch 512 is in District D7" ->
+      "District D7 dispatcher").
     * A question that names nothing: ``text`` defines two or more of its words, not all of
-      them, with an identifier - that identifier and the words it leaves ("The hero style this
-      month is DENIM-JKT-22" for "Which store has the most stock of the hero style this
-      month?" -> "DENIM-JKT-22 store most stock"). Its qualifiers keep subjects apart: "the
-      stockout hero is CROSSBODY-07" shares one word and leads nowhere, and of two that do the
+      them, with an identifier - that identifier and the words it leaves ("The featured item this
+      week is LMP-140" for "Which store has the most stock of the featured item this
+      week?" -> "LMP-140 store most stock"). Its qualifiers keep subjects apart: "the
+      clearance item is TBL-220" shares one word and leads nowhere, and of two that do the
       one sharing more is followed (``strength``)."""
     slot = question_slot(question)
     if not slot:
@@ -425,7 +450,7 @@ def bridge_query(question: str, text: str) -> str | None:
 
 
 def _surfaces(text: str, things: frozenset[str]) -> list[str]:
-    """How ``text`` writes each of ``things``, with the word before it ("Region X29")."""
+    """How ``text`` writes each of ``things``, with the word before it ("District D7")."""
     out: list[str] = []
     for thing in sorted(things):
         spelled = r"[-\s]?".join(map(re.escape, thing))

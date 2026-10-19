@@ -290,9 +290,9 @@ _PREFERENCE = re.compile(
     re.IGNORECASE,
 )
 #: What a user says they care about, focus on or are responsible for, in the five pack
-#: languages ("I care about high-ROS styles with short WOS", "I manage store 4779", "Mir ist
-#: eine kurze Lieferzeit wichtig", "Me importan los estilos con ROS alto", "أدير المتجر
-#: 4779", "मैं स्टोर 4779 संभालता हूँ"), and a preference stated for good without a subject
+#: languages ("I care about fast-moving items with low stock", "I manage branch 512", "Mir ist
+#: eine kurze Lieferzeit wichtig", "Me importan los artículos de alta rotación", "أدير المتجر
+#: 512", "मैं स्टोर 512 संभालता हूँ"), and a preference stated for good without a subject
 #: ("From now on, permanently prefer weekly summaries"): a lasting preference, read back for
 #: the questions it bears on (ADR 0041). Group 1..n: what it is about (the first that matched).
 _FOCUS = re.compile(

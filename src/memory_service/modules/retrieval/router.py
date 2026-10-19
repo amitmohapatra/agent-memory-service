@@ -88,7 +88,7 @@ _DOC_LOCAL = re.compile(
 _HISTORY = re.compile(
     r"\b(did \w+ use to|used to (?:be|live|work|have|drive|own|go|play|like|call)"
     r"|previous(?:ly)?|formerly|originally|at first|in the past|before (?:that|the change"
-    r"|we switched|it changed)|old (?:one|value|number|address|supplier|name)|what was .{0,40}"
+    r"|we switched|it changed)|old (?:one|value|number|address|name)|what was .{0,40}"
     r"before|history of|changed over|over time|all the (?:values|changes))\b"
     r"|\b(?:früher|vorher|ursprünglich|damals|zuvor|bisherige[nrs]?)\b"
     r"|\b(?:antes|anteriormente|solía|solíamos|originalmente|antiguo|antigua|anterior)\b"
