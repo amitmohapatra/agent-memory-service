@@ -8,6 +8,23 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- Memory that is never cleared reads right (ADR 0041). Of a user's statements of the slot a
+  question about now asks for, the newest is current and the older ones are history, in five
+  languages ("Who is my regional manager?", "What's the reorder point for PX-90?", "What was
+  the last order I raised?"); a question about what was keeps them. A bounded second hop
+  follows the evidence to the thing it names ("Branch 512 is in District D7" -> District D7's
+  dispatcher), keeping one name for two things apart by its qualifier ("this week" / "last
+  week"). The user's standing rules, corrections and preferences that apply to a request come
+  back as profile sections `standing_rules` and `preferences` in any conversation, a later rule
+  superseding an earlier one, a format rule or a list whole. A turn and what the rules read
+  from it rank as one document. Time words are read anchored to a named day, by season, and in
+  German, Spanish, Arabic and Hindi. The abstention overlap reads stems; disarming an alarm,
+  logging in and the German verb to mail ask for a value. "I care about / manage ..." is a
+  lasting preference; "From now on, always ..." is a rule. No model anywhere.
+- `make backfill` (`memory_service.tools.backfill`): brings a store an earlier build wrote up
+  to this one in place while serving - replacement across each user's conversations in event
+  time, then the index again; idempotent, resumable (`--state`), nothing deleted
+  (docs/deploy/database.md). No new setting.
 - A question asking for a phone number, an e-mail address or a code or password that no
   evidence about what it names states - "the alarm code for Store 33" when only Store 31's is
   known - or for a month the evidence never names (an item naming no month is about the month
