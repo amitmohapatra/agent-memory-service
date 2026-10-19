@@ -314,3 +314,11 @@ def test_time_words_at_their_boundaries(question, now, expected) -> None:
 def test_a_slot_needs_an_asked_word() -> None:
     assert not question_slot("D7?")
     assert not question_slot("")
+
+
+def test_remarks_that_merely_mention_the_thing_are_no_earlier_values() -> None:
+    held = [
+        _m("a", "Maya said her blue bowl is a reminder of the art class.", "2026-09-01"),
+        _m("b", "Maya's blue bowl broke on the way to Lisbon, so sad.", "2026-10-01"),
+    ]
+    assert _earlier("What is Maya's blue bowl a reminder of?", held) == []

@@ -376,12 +376,14 @@ def latest_values(question: str, candidates: Sequence[Any], *, newest_of: Any) -
     if len(holders) < 2:
         return list(candidates)
     latest, latest_reading = max(holders, key=lambda h: (str(newest_of(h[0])), h[0].record_id))
+    frame = _frame(latest.text, slot.lang, latest_reading.values)
     replaced = {
         c.record_id
         for c, reading in holders
         if c is not latest
         and str(newest_of(c)) < str(newest_of(latest))
         and reading.values != latest_reading.values
+        and _same_frame(_frame(c.text, slot.lang, reading.values), frame)
     }
     if not replaced:
         return list(candidates)
@@ -399,6 +401,25 @@ def latest_values(question: str, candidates: Sequence[Any], *, newest_of: Any) -
         else c
         for c in candidates
     ]
+
+
+#: two statements of one slot say it the same way: this share of the shorter one's words
+#: (values aside) is in the other ("The buyer for District D7 is A" / "Update: B has replaced
+#: A as the buyer for District D7"); two remarks that merely mention the thing do not
+SAME_FRAME = 0.5
+
+
+def _frame(text: str, lang: str, values: frozenset[str]) -> set[str]:
+    """A statement's content words without its values (numbers, codes, names): what it says
+    about the slot."""
+    held = {part for value in values for part in value.split()}
+    words = {w for w in content_terms(text) if w not in held and not any(c.isdigit() for c in w)}
+    return stemmed_terms(words, lang)
+
+
+def _same_frame(a: set[str], b: set[str]) -> bool:
+    shorter = min(len(a), len(b))
+    return bool(shorter) and len(a & b) / shorter >= SAME_FRAME
 
 
 def _holders(question: str, slot: Slot, candidates: Sequence[Any]) -> list[tuple[Any, Reading]]:
