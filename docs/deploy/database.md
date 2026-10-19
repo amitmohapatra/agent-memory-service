@@ -132,3 +132,34 @@ A migration runs against a live service. The rule for every revision:
    release. A `NOT NULL` column with a volatile default rewrites the table.
 4. **Test upgrade and downgrade** on a scratch database: `alembic upgrade head`,
    `alembic downgrade -1`, `alembic upgrade head`.
+
+## Upgrading a store an earlier build wrote (no clearing)
+
+Memory is never cleared, and nothing in an upgrade needs it to be. A store written before
+ADR 0038/0040/0041 holds a user's old and new statements of one thing both current, and index
+points without the `statement_kind` payload the rules section filters on. Both are read
+correctly as soon as the new build serves (the read path's latest-value rules apply to old
+and new memories alike, ADR 0041), and one command brings the stored state up to the new
+build, in place, while it serves:
+
+```bash
+make backfill BACKFILL_ARGS="--state /var/lib/memory/backfill.json"           # every user
+make backfill BACKFILL_ARGS="--state /tmp/b.json --tenant acme --user u1"     # one user
+make backfill BACKFILL_ARGS="--state /var/lib/memory/backfill.json --reindex-all"
+```
+
+* **What it does** (`memory_service.tools.backfill`): for every user, their own statements,
+  message by message in the order they were said (event time), go through the same
+  cross-conversation replacement the write path runs (ADR 0038): an older value becomes an
+  earlier value (history) or is superseded, exactly as if it had been said after the upgrade.
+  Then every memory of that user is indexed again (an upsert of the same ids, with the new
+  payload); `--reindex-all` rebuilds the whole index afterwards (`tools.reindex`).
+* **Nothing is deleted.** A replacement stays reversible (forgetting or retracting the newer
+  statement reinstates the older one).
+* **Live-safe.** One message per transaction, under the user's serialization, bumping the
+  revisions its changes touch, so no cached bundle serves a value it marked.
+* **Idempotent and resumable.** A statement already marked is not marked again; a second run
+  changes nothing. `--state` records each finished user and, for the one in progress, the
+  last message done (every `--batch`, default 50); rerun the same command to resume.
+* **Needs the NLI head** (the replacement's decider, as on the write path). Without it the
+  command only re-indexes.
