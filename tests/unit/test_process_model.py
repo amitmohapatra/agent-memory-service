@@ -242,7 +242,8 @@ def test_the_worker_is_built_as_worker_py_builds_it(
     pools = worker_pools_for(settings)
     (indexing, _), (graph, _), (chat, _), (shared, _) = pools
     assert indexing[0] is Queue.EMBEDDING and graph == [Queue.GRAPH]
-    assert chat == [Queue.CHAT_FAST, Queue.EMBEDDING] and Queue.DOCUMENT_PARSE in shared
+    short = [] if llm else [Queue.SUMMARY]  # without a model summaries are short
+    assert chat == [Queue.CHAT_FAST, Queue.EMBEDDING, *short] and Queue.DOCUMENT_PARSE in shared
     slots = [n for _, n in pools]
     total = sum(slots)
     assert total == WORKER_SLOTS[llm][cpus]

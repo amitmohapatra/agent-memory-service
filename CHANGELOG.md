@@ -110,8 +110,9 @@ each entry says which one moved. Decisions behind each change are in the
   (`TRELLIS_GROUNDING_SAMPLE`, 10 % by default) never learned a skill from them
   ([trust](docs/guide/06-trust.md)).
 - The worker runs the `chat-fast` queue and the `embedding` queue - the jobs that make a
-  memory, a document's chunks or a tool findable - on slots no parse, archive, summary or
-  graph job can take, and the `graph` queue on slots of its own, in four pools whose computing
+  memory, a document's chunks or a tool findable - on slots no parse, archive or graph job
+  (nor, with a model, a summary; without one summaries are short and take them after
+  indexing) can take, and the `graph` queue on slots of its own, in four pools whose computing
   slots come to about one per CPU (`tasks.worker_concurrency`): half are chat's (indexing's
   when no chat job waits), up to `tasks.indexing_concurrency` (2, a new setting; at most a
   quarter) indexing's, one the graph queue's and the rest every other queue's, chat and

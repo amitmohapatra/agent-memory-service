@@ -136,14 +136,16 @@ def test_the_worker_runs_every_queue_and_keeps_long_jobs_out_of_chat_and_indexin
     archive, a summary or a graph backlog never holds a slot chat or indexing needs."""
     from memory_service.ports.tasks import Queue, worker_pools
 
-    long_jobs = {q for q in Queue if q not in (Queue.CHAT_FAST, Queue.EMBEDDING)}
     for llm in (False, True):
+        # without a model summaries are short and take chat's and indexing's slots after them
+        short = [] if llm else [Queue.SUMMARY]
+        long_jobs = {q for q in Queue if q not in (Queue.CHAT_FAST, Queue.EMBEDDING, *short)}
         pools = worker_pools(4, 2, llm=llm)
         (indexing, i), (graph, g), (chat, c), (shared, s) = pools
-        assert indexing == ([Queue.EMBEDDING] if llm else [Queue.EMBEDDING, Queue.CHAT_FAST]), (
-            "with a model, indexing's slots are its own: chat jobs wait on the model"
-        )
-        assert graph == [Queue.GRAPH] and chat == [Queue.CHAT_FAST, Queue.EMBEDDING]
+        assert indexing == (
+            [Queue.EMBEDDING] if llm else [Queue.EMBEDDING, Queue.CHAT_FAST, Queue.SUMMARY]
+        ), "with a model, indexing's slots are its own: chat jobs wait on the model"
+        assert graph == [Queue.GRAPH] and chat == [Queue.CHAT_FAST, Queue.EMBEDDING, *short]
         assert shared[:2] == [Queue.CHAT_FAST, Queue.EMBEDDING], "chat, then indexing, first"
         assert (i, c, s) == (1, 2, 1) and g == (2 if llm else 1)
         assert not long_jobs & set(indexing + chat), "no long job in chat's or indexing's slots"

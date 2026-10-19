@@ -166,7 +166,8 @@ async def test_a_pools_long_jobs_never_hold_another_pools_slots(
     for n in ("g1", "g2", "g3"):
         await queue.enqueue(JobSpec(task_name="test.enrich", queue=Queue.GRAPH, payload={"n": n}))
     pools = worker_pools(concurrency=1, indexing=1)
-    assert pools[0] == ([Queue.EMBEDDING, Queue.CHAT_FAST], 1) and pools[1] == ([Queue.GRAPH], 1)
+    indexing = [Queue.EMBEDDING, Queue.CHAT_FAST, Queue.SUMMARY]  # no model: summaries are short
+    assert pools[0] == (indexing, 1) and pools[1] == ([Queue.GRAPH], 1)
     assert Queue.GRAPH not in pools[-1][0] and Queue.RECONCILE in pools[-1][0]
     worker = asyncio.create_task(queue.run_pools(pools, shutdown_grace_seconds=5))
     try:

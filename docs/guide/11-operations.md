@@ -165,14 +165,16 @@ its GIL and its event loop, and each model serves one call at a time.
 
 | Pool | Queues, first first | Slots (1 / 2 / 4 / 8 CPUs) | Why |
 |---|---|---|---|
-| chat | `chat-fast`, `embedding` | half the CPUs, at least 1 (1 / 1 / 2 / 4) | a remember's job, which a write waits for; no parse, archive, summary or graph job can take these slots, and indexing runs there only when no chat job waits |
-| indexing | `embedding`; without a model `chat-fast` first | up to `tasks.indexing_concurrency` (2), at most a quarter (1 / 1 / 1 / 2) | with a model, chat jobs wait on it and these slots stay indexing's, so a write turns findable; without one, chat jobs are short and go first, as in one pool |
+| chat | `chat-fast`, `embedding`; without a model then `summary` | half the CPUs, at least 1 (1 / 1 / 2 / 4) | a remember's job, which a write waits for; no parse, archive or graph job (nor, with a model, a summary) can take these slots, and indexing runs there only when no chat job waits |
+| indexing | `embedding`; without a model `chat-fast` first and `summary` last | up to `tasks.indexing_concurrency` (2), at most a quarter (1 / 1 / 1 / 2) | with a model, chat jobs wait on it and these slots stay indexing's, so a write turns findable; without one, chat jobs are short and go first, as in one pool |
 | graph | `graph` | with a model, half the CPUs and at least 2, on top (2 / 2 / 2 / 4); 1 without one | enrichment waits on the model; without one the index job enriches, and the slot only drains jobs queued while a model was configured |
 | shared | `chat-fast`, `embedding`, then every other queue | what is left, at least 1 (1 / 1 / 1 / 1; with a model 1 / 1 / 1 / 2) | parsing, archiving, feedback, learning, summaries |
 
 So chat and indexing share their slots by priority, chat first, as they did in one pool:
-during a burst of writes chat has them, after it indexing does. Parsing, archiving, summaries
-and a graph backlog run beside them, never in their slots. Every pool has at least one slot,
+during a burst of writes chat has them, after it indexing does. Parsing, archiving, a graph
+backlog and, with a model, summaries run beside them, never in their slots; without a model
+summaries are short (under 0.2 s at p95) and take those slots after indexing, as in one pool:
+on the shared pool's one slot the capability eval's summaries finished 11 s after main's. Every pool has at least one slot,
 so below 4 CPUs four slots compute: the bulkhead wins, and the extra slots wait their turn on a
 model. In one pool, jobs waiting on a slow model held every slot and indexing waited minutes
 behind them, and a graph backlog (an import queues thousands of enrichment jobs, which outrank
