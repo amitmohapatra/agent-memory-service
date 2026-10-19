@@ -119,6 +119,18 @@ def test_a_month_the_evidence_never_names() -> None:
     assert months_named("You may go") == frozenset()
 
 
+def test_an_item_naming_no_month_is_about_the_month_it_is_dated_in() -> None:
+    evidence = ["James adopted a puppy named Ned.", "In June James visited Canada."]
+    april, june = frozenset({3}), frozenset({5})
+    question = "What did James adopt in April 2022?"
+    assert unanswered(question, evidence)  # no dates known: only June is named
+    assert unanswered(question, evidence, [april, june]) is None
+    assert unanswered(question, evidence, [june, june])
+    # a month the text names wins over when it was said
+    march = ["March shrink at Store 12 came in at 1.8% of sales."]
+    assert unanswered("What was the shrink rate at Store 12 in April?", march, [april])
+
+
 def test_a_question_that_asks_for_no_such_value_is_not_judged() -> None:
     assert unanswered("How do I override a price at the register?", ["Use code PO-9."]) is None
     assert unanswered("What's the code?", []) is None
@@ -180,3 +192,27 @@ def test_a_german_name_run_with_a_marked_word_is_a_name() -> None:
     # a run of nouns no word of which is marked stays no name
     spill = "Ein Kanister Abflussreiniger ist umgekippt, welche Durchwahl hat der Zuständige?"
     assert unanswered(spill, ["Zuständig ist jetzt Kenji Ito, Durchwahl 233."]) is None
+
+
+def _said(text: str, observed_at: str) -> ContextItem:
+    return ContextItem.model_construct(
+        item_id="m1",
+        representation=Representation.MEMORY,
+        text=text,
+        relevance=0.6,
+        attributes={"observed_at": observed_at},
+    )
+
+
+def test_the_bundle_dates_each_item_by_when_it_was_said() -> None:
+    complete = EvidenceReport(status=EvidenceStatus.COMPLETE)
+    shown = [
+        _said("James adopted a puppy named Ned.", "2022-04-12T10:00:00+00:00"),
+        _said("In June James visited Canada.", "2022-07-02T10:00:00+00:00"),
+    ]
+    question = "What did James adopt in April 2022?"
+    assert _builder(0.4)._coverage(complete, question, shown).status is EvidenceStatus.COMPLETE
+    shown[0] = _said("James adopted a puppy named Ned.", "2022-05-12T10:00:00+00:00")
+    out = _builder(0.4)._coverage(complete, question, shown)
+    assert out.status is EvidenceStatus.INSUFFICIENT
+    assert out.notes == ["the evidence names other months than the one asked about"]

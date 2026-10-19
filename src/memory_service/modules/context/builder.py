@@ -58,6 +58,7 @@ from memory_service.modules.retrieval.engine import (
     RetrievalEngine,
     RetrievalResult,
 )
+from memory_service.modules.retrieval.periods import months_dated
 from memory_service.modules.retrieval.router import QueryRouter
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import evidence_status_total, stage_seconds
@@ -790,6 +791,27 @@ class ContextBuilder:
             and "exact" not in (c.retrievers or [])
         )
 
+    def _coverage(
+        self, report: EvidenceReport, query: str, shown: Sequence[ContextItem]
+    ) -> EvidenceReport:
+        """INSUFFICIENT when the evidence shown does not hold the value the question asks for
+        (``coverage.unanswered``, ADR 0040); each item dated by when it was said and the days
+        its relative dates name, as the bundle prints them."""
+        if (
+            not self.retrieval_cfg.abstain_when_insufficient
+            or not self.retrieval_cfg.coverage_check
+            or report.status is EvidenceStatus.INSUFFICIENT
+        ):
+            return report
+        gap = unanswered(
+            query, [i.text for i in shown], [months_dated(i.attributes) for i in shown]
+        )
+        if not gap:
+            return report
+        return report.model_copy(
+            update={"status": EvidenceStatus.INSUFFICIENT, "notes": [*report.notes, gap]}
+        )
+
     def _related_evidence(
         self,
         report: EvidenceReport,
@@ -992,19 +1014,8 @@ class ContextBuilder:
                     }
                 )
         report = self._related_evidence(report, memories, knowledge)
-        if (
-            self.retrieval_cfg.abstain_when_insufficient
-            and self.retrieval_cfg.coverage_check
-            and report.status is not EvidenceStatus.INSUFFICIENT
-        ):
-            # current evidence only: an earlier value answers nothing about now
-            gap = unanswered(
-                query, [i.text for i in (*memories, *knowledge, *graph_facts, *summaries)]
-            )
-            if gap:
-                report = report.model_copy(
-                    update={"status": EvidenceStatus.INSUFFICIENT, "notes": [*report.notes, gap]}
-                )
+        # current evidence only: an earlier value answers nothing about now
+        report = self._coverage(report, query, (*memories, *knowledge, *graph_facts, *summaries))
         if not (knowledge or memories or graph_facts or summaries or history):
             report = report.model_copy(update={"status": EvidenceStatus.INSUFFICIENT})
         # what the retriever found but this bundle does not carry (ranked out, over budget):

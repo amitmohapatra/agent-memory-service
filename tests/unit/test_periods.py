@@ -6,7 +6,12 @@ from datetime import date
 
 import pytest
 
-from memory_service.modules.retrieval.periods import memory_days, query_periods, within
+from memory_service.modules.retrieval.periods import (
+    memory_days,
+    months_dated,
+    query_periods,
+    within,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -53,3 +58,9 @@ def test_a_memory_is_about_its_day_and_the_days_it_resolved_to() -> None:
     assert within([6], days) and within([(date(2023, 6, 20), date(2023, 6, 20))], days)
     assert not within([(date(2023, 9, 1), date(2023, 9, 30))], days)
     assert memory_days({}) == []
+    assert months_dated(payload) == {5, 6}  # June (a range) and July, 0 = January
+    assert months_dated({}) == frozenset()
+    a_year = {"dated_mentions": [{"date": "2022-11-01..2023-12-31"}]}
+    assert months_dated(a_year) == frozenset(range(12))
+    over_new_year = {"dated_mentions": [{"date": "2022-12-20..2023-01-05"}]}
+    assert months_dated(over_new_year) == {11, 0}
