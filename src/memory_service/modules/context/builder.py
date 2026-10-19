@@ -46,6 +46,7 @@ from memory_service.modules.context.sections import (
     within_budget,
 )
 from memory_service.modules.context.semantic_cache import SemanticBundleCache, semantic_key
+from memory_service.modules.context.standing import standing_blocks
 from memory_service.modules.context.views import full_view, prompt_view
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
@@ -68,6 +69,10 @@ from memory_service.ports.cache import CacheProvider, CacheUnavailable
 from memory_service.ports.uow import UnitOfWorkFactory
 
 log = get_logger(__name__)
+
+
+#: Standing rules and preferences that apply to the request, as profile sections (ADR 0041).
+STANDING = True
 
 
 def _cacheable(bundle: ContextBundle) -> bool:
@@ -504,7 +509,7 @@ class ContextBuilder:
             pinned = await sections if sections is not None else Pinned()
             conversation = self._window(ctx, await recent, after=pinned.covered_to)
         with timings.stage("similarity"):
-            await self.engine.score_similarity(result)
+            await self._similarity_and_standing(query, visibility, result, pinned)
         await self._add_extras(ctx, query, tools, visibility, result, pinned, timings)
         # the engine's own stage split, plus what happened around it
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
@@ -526,6 +531,34 @@ class ContextBuilder:
                 "tools": pinned.tools,
             }
         )
+
+    async def _similarity_and_standing(
+        self, query: str, visibility: Any, result: RetrievalResult, pinned: Pinned
+    ) -> None:
+        """Score the candidates' similarity and, beside it, read the user's standing rules
+        and preferences that apply (``standing``) into the profile: one round trip, the
+        query's own vectors."""
+        standing = (
+            asyncio.ensure_future(
+                standing_blocks(
+                    self.engine,
+                    query,
+                    visibility,
+                    result.query_vectors,
+                    shown="\n".join(b.text for b in pinned.profile),
+                )
+            )
+            if STANDING and result.routed.needs_memories
+            else None
+        )
+        try:
+            await self.engine.score_similarity(result)
+        except BaseException:
+            if standing is not None:
+                standing.cancel()
+            raise
+        if standing is not None:
+            pinned.profile = [*await standing, *pinned.profile]
 
     async def _add_extras(
         self,
@@ -937,10 +970,16 @@ class ContextBuilder:
                 history.append(item)
             elif c.kind == "memory" and (
                 primary_memories < self.cfg.memories_max
-                or c.expansion_edge in {"GRAPH_EVIDENCE", "DERIVED_SOURCE", "REPLACEMENT"}
+                or c.expansion_edge
+                in {"GRAPH_EVIDENCE", "DERIVED_SOURCE", "REPLACEMENT", "SECOND_HOP"}
             ):
                 memories.append(item)
-                if c.expansion_edge not in {"GRAPH_EVIDENCE", "DERIVED_SOURCE", "REPLACEMENT"}:
+                if c.expansion_edge not in {
+                    "GRAPH_EVIDENCE",
+                    "DERIVED_SOURCE",
+                    "REPLACEMENT",
+                    "SECOND_HOP",
+                }:
                     primary_memories += 1
             elif c.kind == "fact" and len(graph_facts) < self.cfg.graph_facts_max:
                 graph_facts.append(item)

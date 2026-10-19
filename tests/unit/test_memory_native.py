@@ -451,3 +451,25 @@ async def test_moving_somewhere_is_where_the_user_lives(native, text: str, place
 )
 async def test_moving_to_something_that_is_not_a_place_is_not_a_home(native, text: str) -> None:
     assert not [c for c in await _extract(native, text) if c.predicate == "lives_in"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I care about high-ROS styles with short WOS.",
+        "I manage store 4779.",
+        "From now on, permanently prefer weekly summaries.",
+        "Mir ist eine kurze Lieferzeit wichtig.",
+        "Me importan los estilos con ROS alto.",
+        "أدير المتجر 4779.",
+        "मैं स्टोर 4779 संभालता हूँ।",
+    ],
+)
+async def test_what_a_user_cares_about_or_manages_is_a_lasting_preference(native, text):
+    found = [c for c in await native.extract(_obs(text), CTX) if c.category == "preference"]
+    assert found and found[0].lifetime is Lifetime.LONG_TERM
+
+
+@pytest.mark.parametrize("text", ["I manage to sleep well.", "Do I manage store 4779?"])
+async def test_managing_to_and_a_question_are_no_preference(native, text):
+    assert not [c for c in await native.extract(_obs(text), CTX) if c.category == "preference"]

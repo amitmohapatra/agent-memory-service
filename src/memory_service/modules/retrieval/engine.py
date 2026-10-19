@@ -32,7 +32,7 @@ from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer
-from memory_service.modules.retrieval import memory_ranking
+from memory_service.modules.retrieval import memory_ranking, slots
 from memory_service.modules.retrieval.memory_queries import plan_memory_queries
 from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
 from memory_service.observability.logging import get_logger
@@ -462,6 +462,9 @@ class RetrievalEngine:
                     # (``latest_per_slot``), every earlier value ranks after the current ones
                     if LATEST_PER_SLOT:
                         candidates = latest_per_slot(candidates)
+                        candidates = slots.latest_values(
+                            routed.query, candidates, newest_of=_said_at
+                        )
                     candidates = current_first(candidates)
                 candidates = candidates[:pool_limit]
                 candidates = await self._validate_derived(ctx, candidates, visibility)
@@ -512,6 +515,11 @@ class RetrievalEngine:
                 candidates = await self._expand_derived_sources(
                     ctx, candidates, visibility, diagnostics
                 )
+                if not at and not selected_documents and SECOND_HOP:
+                    with timings.stage("second_hop"):
+                        candidates = await self._second_hop(
+                            routed, candidates, visibility, diagnostics
+                        )
                 if not at:
                     candidates = await self._follow_replacements(
                         ctx,
@@ -587,6 +595,57 @@ class RetrievalEngine:
         additions = not_in_hand(additions, candidates)
         diagnostics["derived_sources"] = len(additions)
         return [*candidates, *additions]
+
+    async def _second_hop(
+        self,
+        routed: RoutedQuery,
+        candidates: list[Candidate],
+        visibility: VisibilitySpecification,
+        diagnostics: dict[str, Any],
+    ) -> list[Candidate]:
+        """One more hop when the best evidence names what the question names but not what it
+        asks, and names something else (``slots.bridge_query``): "Who is the buyer for store
+        4779?" finds "Store 4779 is in Region X29", and asks "Region X29 buyer". Bounded: the
+        first ``SECOND_HOP_BRIDGES`` memories are read for a bridge, one keyword search of
+        ``SECOND_HOP_K`` (BM25 only, no encoder), and only memories that name the bridged
+        thing join, after the evidence they were reached from."""
+        bridges = [c for c in candidates if c.kind == "memory"][:SECOND_HOP_BRIDGES]
+        for bridge in bridges:
+            asked = slots.bridge_query(routed.query, bridge.text)
+            if not asked:
+                continue
+            vector = self.indexer.sparse.encode_query(asked)
+            if not vector.indices:
+                return candidates
+            collection, flt = self._scope("memory", visibility, None, None, None, None)
+            hits = await self.store.search_sparse(collection, vector, flt, limit=SECOND_HOP_K)
+            held = in_hand(candidates)
+            things = slots.bridged_things(routed.query, bridge.text)
+            found = [
+                replace(
+                    Candidate(
+                        record_id=h.record_id,
+                        kind="memory",
+                        text=str(h.payload.get("text", "")),
+                        score=bridge.score,
+                        retrievers=["second_hop"],
+                        payload=h.payload,
+                    ),
+                    expanded_from=bridge.record_id,
+                    expansion_edge="SECOND_HOP",
+                )
+                for h in hits
+                if h.record_id not in held
+                and not h.payload.get("earlier_value")
+                and slots.names_any(str(h.payload.get("text", "")), things)
+            ][:SECOND_HOP_ADDED]
+            found = not_in_hand(found, candidates)
+            diagnostics["second_hop"] = {"query": asked, "added": len(found)}
+            if not found:
+                return candidates
+            at = candidates.index(bridge) + 1
+            return [*candidates[:at], *found, *candidates[at:]]
+        return candidates
 
     async def _follow_replacements(
         self,
@@ -1096,6 +1155,11 @@ class RetrievalEngine:
             late=vectors.late,
         )
 
+    def memory_scope(self, visibility: VisibilitySpecification) -> tuple[str, SearchFilter]:
+        """The memories collection and the filter a current-memory search of ``visibility``
+        applies (``modules.context.standing``)."""
+        return self._scope("memory", visibility, None, None, None, None)
+
     def _scope(
         self,
         kind: str,
@@ -1328,6 +1392,18 @@ def _carried_by_replaced(candidates: list[Candidate]) -> list[Candidate]:
 #: replacements it adds at most per read.
 REPLACEMENT_HOPS = 2
 REPLACEMENTS_MAX = 4
+
+
+#: The second hop (``RetrievalEngine._second_hop``): on, how many of the best memories are
+#: read for a bridge, how many hits one keyword search returns, and how many join.
+SECOND_HOP = True
+SECOND_HOP_BRIDGES = 3
+SECOND_HOP_K = 8
+SECOND_HOP_ADDED = 2
+
+
+def _said_at(candidate: Candidate) -> str:
+    return str(candidate.payload.get("observed_at") or "")
 
 
 #: For a question about now, the newest of a user's current statements of one slot - the

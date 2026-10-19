@@ -284,7 +284,10 @@ class ConversationBody(BaseModel):
 class ProfileBlockBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    block: str = Field(description="user, agent, workspace or <level>.<name>")
+    block: str = Field(
+        description="user, agent, workspace or <level>.<name>; standing_rules and preferences "
+        "are the user's rules and preferences that apply to this request"
+    )
     text: str = Field(description="The block's text.")
 
 

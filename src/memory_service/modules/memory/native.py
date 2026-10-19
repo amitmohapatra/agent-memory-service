@@ -289,6 +289,28 @@ _PREFERENCE = re.compile(
     r"can't stand|never use|always use|only use)\s+(.+)",
     re.IGNORECASE,
 )
+#: What a user says they care about, focus on or are responsible for, in the five pack
+#: languages ("I care about high-ROS styles with short WOS", "I manage store 4779", "Mir ist
+#: eine kurze Lieferzeit wichtig", "Me importan los estilos con ROS alto", "أدير المتجر
+#: 4779", "मैं स्टोर 4779 संभालता हूँ"), and a preference stated for good without a subject
+#: ("From now on, permanently prefer weekly summaries"): a lasting preference, read back for
+#: the questions it bears on (ADR 0041). Group 1..n: what it is about (the first that matched).
+_FOCUS = re.compile(
+    r"\b(?:i|we)\s+(?:really\s+|mostly\s+|mainly\s+|only\s+|mostly\s+)?"
+    r"(?:care\s+(?:most\s+)?about|focus\s+on|am\s+focused\s+on|'m\s+focused\s+on"
+    r"|am\s+responsible\s+for|'m\s+responsible\s+for|manage(?!\s+to\b)|oversee|look\s+after)\s+(.{3,})"
+    r"|^(?:from\s+now\s+on,?\s*)?(?:please\s+)?(?:permanently|always)\s+prefer\s+(.{3,})"
+    r"|\bmir\s+(?:ist|sind)\s+(.{3,}?)\s+(?:besonders\s+)?wichtig\b"
+    r"|\bich\s+(?:achte\s+(?:besonders\s+)?auf|leite|verwalte|betreue|bin\s+verantwortlich\s+f(?:ü|ue)r"
+    r"|bevorzuge)\s+(.{3,})"
+    r"|\bme\s+(?:importa|importan|interesa|interesan)\s+(.{3,})"
+    r"|\b(?:yo\s+)?(?:gestiono|dirijo|administro|soy\s+responsable\s+de|prefiero)\s+(.{3,})"
+    r"|(?:يهمني|أهتم\s+ب|اهتم\s+ب|أدير|ادير|أنا\s+مسؤول\s+عن|انا\s+مسؤول\s+عن|أفضّل|أفضل)\s*(.{3,})"
+    r"|मुझे\s+(.{3,}?)\s+की\s+(?:परवाह|फ़िक्र|फिक्र)"
+    r"|मेरे\s+लिए\s+(.{3,}?)\s+(?:ज़रूरी|जरूरी|अहम)\s+है"
+    r"|मैं\s+(.{3,}?)\s+(?:संभालता|संभालती|मैनेज\s+करता|मैनेज\s+करती)\s+हूँ",
+    re.IGNORECASE,
+)
 _PREF_PLEASE = re.compile(
     r"^(?:please\s+)?(always|never|don't|do not|stop|keep)\s+(.+)", re.IGNORECASE
 )
@@ -974,6 +996,19 @@ class NativeMemoryIntelligence:
                 importance=0.8,
                 confidence=0.85,
                 category="attribute",
+                **common,
+            )
+        if (m := _FOCUS.search(s)) and not is_question(s):
+            return MemoryCandidate(
+                content=s,
+                memory_type=MemoryType.PREFERENCE,
+                lifetime=Lifetime.LONG_TERM,
+                subject=user,
+                predicate="cares_about",
+                object=_clean_object(next(g for g in m.groups() if g))[:300],
+                importance=0.7,
+                confidence=0.8,
+                category="preference",
                 **common,
             )
         if m := _PREFERENCE.search(s):

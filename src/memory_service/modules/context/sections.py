@@ -44,6 +44,9 @@ CONTEXT_PROCEDURES: Final = 3
 TOOL_HINTS_MIN: Final = 5
 #: The share of the token budget the pinned sections may take, all together.
 PINNED_SHARE: Final = 0.5
+#: the profile sections ``modules.context.standing`` writes (kept first when the whole
+#: profile does not fit)
+STANDING_BLOCKS: Final = frozenset({"standing_rules", "preferences"})
 #: A summary truncated below this many tokens says too little to keep.
 SUMMARY_MIN_TOKENS: Final = 40
 #: Characters per token when a summary is cut to fit (estimate_tokens' own ratio).
@@ -115,14 +118,25 @@ def _truncated(summary: ThreadSummaryView, tokens: int) -> ThreadSummaryView | N
     return None
 
 
+def _profile_that_fits(
+    profile: list[ProfileBlockView], allowed: int
+) -> tuple[list[ProfileBlockView], int]:
+    """The whole profile when it fits, else the rules and preferences that apply to this
+    request (``STANDING_BLOCKS``) when they do, else nothing; and the tokens it takes."""
+    for blocks in (profile, [b for b in profile if b.block in STANDING_BLOCKS]):
+        if (text := profile_section(blocks)) and (cost := estimate_tokens(text)) <= allowed:
+            return blocks, cost
+    return [], 0
+
+
 def within_budget(pinned: Pinned, budget: int) -> tuple[Pinned, int]:
     """The pinned sections that fit ``PINNED_SHARE`` of the budget, in priority order, and
     the tokens they take. A section is costed as the text it renders to; one that does not
     fit is dropped, except the thread summary, which keeps its newest part."""
     allowed, used = int(budget * PINNED_SHARE), 0
     kept = Pinned(prefetched=pinned.prefetched)
-    if (text := profile_section(pinned.profile)) and (cost := estimate_tokens(text)) <= allowed:
-        kept.profile, used = pinned.profile, used + cost
+    kept.profile, cost = _profile_that_fits(pinned.profile, allowed)
+    used += cost
     if (text := summary_section(pinned.thread_summary)) and pinned.thread_summary is not None:
         cost = estimate_tokens(text)
         if used + cost <= allowed:

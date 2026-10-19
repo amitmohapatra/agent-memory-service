@@ -7854,7 +7854,7 @@
         "additionalProperties": false,
         "properties": {
           "block": {
-            "description": "user, agent, workspace or <level>.<name>",
+            "description": "user, agent, workspace or <level>.<name>; standing_rules and preferences are the user's rules and preferences that apply to this request",
             "title": "Block",
             "type": "string"
           },
