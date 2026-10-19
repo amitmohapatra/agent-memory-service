@@ -33,7 +33,16 @@
 # the stack. Teardown runs on any exit. The disk is recorded before and after.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# the harness checkout (this script's); the service runs from CAPEVAL_ROOT when set (another
+# branch measured with this harness), else from the harness checkout itself
+HARNESS="$(cd "$(dirname "$0")/../.." && pwd)"
+ROOT="$(realpath "${CAPEVAL_ROOT:-$HARNESS}")"
+# upgrade path (optional, CAPEVAL_UPGRADE_ROOT): when the command succeeds, stop the service,
+# migrate the SAME database to CAPEVAL_UPGRADE_ROOT's head, run CAPEVAL_UPGRADE_BACKFILL (a shell
+# command, run in the new checkout with the service's environment) if set, serve the same
+# database, Qdrant, Redis and OpenFGA from the new checkout, and run CAPEVAL_UPGRADE_CMD (a shell
+# command) against it - a deployed store upgraded in place
+UPGRADE_ROOT="${CAPEVAL_UPGRADE_ROOT:+$(realpath "$CAPEVAL_UPGRADE_ROOT")}"
 PY="${CAPEVAL_PY:-$ROOT/.venv/bin/python}"
 QDRANT_BIN="${QDRANT_BIN:-/var/tmp/qdrant}"
 OPENFGA_BIN="${OPENFGA_BIN:-/var/tmp/fga/openfga}"
@@ -118,7 +127,7 @@ ours() {  # pid, a marker its command line or its environment must still carry
   { tr '\0' ' ' < "/proc/$1/cmdline"; tr '\0' ' ' < "/proc/$1/environ" 2>/dev/null; } | grep -qF -- "$2"
 }
 note() { echo "$1=$2" >> "$MANIFEST"; }
-get() { grep -m1 "^$1=" "$MANIFEST" 2>/dev/null | cut -d= -f2- || true; }
+get() { grep "^$1=" "$MANIFEST" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
 
 teardown() {
   local errexit=0
@@ -245,18 +254,6 @@ ours "$(get qdrant_pid)" "$(get qdrant_marker)" || refuse "the Qdrant on :$QDRAN
 psql_ -c "create database $DB"
 note db_created "$DB"
 URL="postgresql+psycopg://$PGUSER_:$PGPASSWORD_@$PGHOST_:5432/$DB"
-SERVICE_ENV=(
-  PATH=/usr/bin:/bin HOME="$HOME" LANG=C.UTF-8 PYTHONPATH="$ROOT/src:$ROOT"
-  MEMORY__SERVICE__ENVIRONMENT=dev MEMORY__SERVICE__PORT="$API_PORT" MEMORY__SERVICE__WORKERS=1
-  MEMORY__SERVICE__LOG_JSON=false MEMORY__SERVICE__LOG_LEVEL=WARNING
-  MEMORY__AUTHENTICATION__TRUSTED_DEV_API_KEYS='["capeval-dev-key"]'
-  MEMORY__DATABASE__URL="$URL" MEMORY__DATABASE__DIRECT_URL="$URL"
-  MEMORY__CACHE__URL="redis://localhost:6379/$REDIS_DB"
-  MEMORY__BLOB__FILESYSTEM_ROOT="$WORK/blob" MEMORY__TASKS__METRICS_PORT="$METRICS_PORT"
-  MEMORY__SEARCH__QDRANT_URL="http://127.0.0.1:$QDRANT_HTTP"
-  MEMORY__SEARCH__QDRANT_GRPC_PORT="$QDRANT_GRPC"
-  MEMORY__AUTHORIZATION__OPENFGA_API_URL="http://127.0.0.1:$FGA_HTTP"
-)
 # the model gateway only when asked for (llm mode): its URL and key from the caller's env, and
 # a model-call timeout and a query-expansion deadline the gateway's model can meet
 # (benchmark/capabilities/stack_service.py: the 30 s and 250 ms constants are sized for a hosted
@@ -268,37 +265,88 @@ if [ "${CAPEVAL_GATEWAY:-0}" = 1 ]; then
   [[ "$LLM_TIMEOUT" =~ ^[0-9]+$ ]] || refuse "CAPEVAL_LLM_TIMEOUT_SECONDS '$LLM_TIMEOUT' is not a number"
   EXPANSION_MS="${CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS:-60000}"
   [[ "$EXPANSION_MS" =~ ^[0-9]+$ ]] || refuse "CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS '$EXPANSION_MS' is not a number"
-  SERVICE_ENV+=(BIFROST_URL="$BIFROST_URL" BIFROST_VIRTUAL_KEY="$BIFROST_VIRTUAL_KEY"
-    CAPEVAL_LLM_TIMEOUT_SECONDS="$LLM_TIMEOUT" CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS="$EXPANSION_MS")
-  [ -n "${CAPEVAL_WORKER_CONCURRENCY:-}" ] && SERVICE_ENV+=(MEMORY__TASKS__WORKER_CONCURRENCY="$CAPEVAL_WORKER_CONCURRENCY")
   ENTRY="from benchmark.capabilities.stack_service import main; main('api')"
   WORKER_ENTRY="from benchmark.capabilities.stack_service import main; main('worker')"
   export CAPEVAL_LLM_TIMEOUT_SECONDS="$LLM_TIMEOUT" CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS="$EXPANSION_MS"
 fi
-# migrations from WORK (no .env there), with the eval database named explicitly
-sed -e "s|^script_location = .*|script_location = $ROOT/migrations|" \
-    -e "s|^prepend_sys_path = .*|prepend_sys_path = $ROOT/src\nsqlalchemy.url = $URL|" \
-    "$ROOT/alembic.ini" > "$WORK/alembic.ini"
-(cd "$WORK" && env -i "${SERVICE_ENV[@]}" "$PY" -m alembic -c "$WORK/alembic.ini" upgrade head > "$WORK/migrate.log" 2>&1)
-(cd "$WORK" && env -i "${SERVICE_ENV[@]}" "$PY" -m memory_service.adapters.tasks.procrastinate_schema >> "$WORK/migrate.log" 2>&1) || true
+service_env() {  # root: the service's clean environment, serving that checkout's src/
+  SERVICE_ENV=(
+    PATH=/usr/bin:/bin HOME="$HOME" LANG=C.UTF-8 PYTHONPATH="$1/src:$1:$HARNESS"
+    MEMORY__SERVICE__ENVIRONMENT=dev MEMORY__SERVICE__PORT="$API_PORT" MEMORY__SERVICE__WORKERS=1
+    MEMORY__SERVICE__LOG_JSON=false MEMORY__SERVICE__LOG_LEVEL=WARNING
+    MEMORY__AUTHENTICATION__TRUSTED_DEV_API_KEYS='["capeval-dev-key"]'
+    MEMORY__DATABASE__URL="$URL" MEMORY__DATABASE__DIRECT_URL="$URL"
+    MEMORY__CACHE__URL="redis://localhost:6379/$REDIS_DB"
+    MEMORY__BLOB__FILESYSTEM_ROOT="$WORK/blob" MEMORY__TASKS__METRICS_PORT="$METRICS_PORT"
+    MEMORY__SEARCH__QDRANT_URL="http://127.0.0.1:$QDRANT_HTTP"
+    MEMORY__SEARCH__QDRANT_GRPC_PORT="$QDRANT_GRPC"
+    MEMORY__AUTHORIZATION__OPENFGA_API_URL="http://127.0.0.1:$FGA_HTTP"
+  )
+  if [ "${CAPEVAL_GATEWAY:-0}" = 1 ]; then
+    SERVICE_ENV+=(BIFROST_URL="$BIFROST_URL" BIFROST_VIRTUAL_KEY="$BIFROST_VIRTUAL_KEY"
+      CAPEVAL_LLM_TIMEOUT_SECONDS="$LLM_TIMEOUT" CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS="$EXPANSION_MS")
+    [ -n "${CAPEVAL_WORKER_CONCURRENCY:-}" ] && SERVICE_ENV+=(MEMORY__TASKS__WORKER_CONCURRENCY="$CAPEVAL_WORKER_CONCURRENCY")
+  fi
+  return 0
+}
+migrate() {  # root: the eval database to that checkout's head
+  local root=$1
+  service_env "$root"
+  # the service reads its frozen model set from ./models: the checkout's, through a link
+  ln -sfn "$root/models" "$WORK/models"
+  # migrations from WORK (no .env there), with the eval database named explicitly
+  sed -e "s|^script_location = .*|script_location = $root/migrations|" \
+      -e "s|^prepend_sys_path = .*|prepend_sys_path = $root/src\nsqlalchemy.url = $URL|" \
+      "$root/alembic.ini" > "$WORK/alembic.ini"
+  (cd "$WORK" && env -i "${SERVICE_ENV[@]}" "$PY" -m alembic -c "$WORK/alembic.ini" upgrade head >> "$WORK/migrate.log" 2>&1)
+  (cd "$WORK" && env -i "${SERVICE_ENV[@]}" "$PY" -m memory_service.adapters.tasks.procrastinate_schema >> "$WORK/migrate.log" 2>&1) || true
+}
+start_service() {  # root: that checkout's API and worker
+  local root=$1
+  service_env "$root"
+  (cd "$WORK" && exec env -i "${SERVICE_ENV[@]}" "$PY" -c "$ENTRY  # $API_MARK" >> "$WORK/api.log" 2>&1) &
+  note api_pid $!
+  (cd "$WORK" && exec env -i "${SERVICE_ENV[@]}" "$PY" -c "$WORKER_ENTRY  # $WORKER_MARK" >> "$WORK/worker.log" 2>&1) &
+  note worker_pid $!
+  wait_for "http://127.0.0.1:$API_PORT/health/ready" "$READY_SECONDS" "$(get api_pid)"
+  wait_for "http://127.0.0.1:$METRICS_PORT/metrics" "$READY_SECONDS" "$(get worker_pid)"
+  log "ready: memory on :$API_PORT ($root @ $(git -C "$root" rev-parse --short HEAD 2>/dev/null)), worker metrics on :$METRICS_PORT"
+}
 API_MARK="capeval-api-$API_PORT"
 WORKER_MARK="capeval-worker-$METRICS_PORT"
-(cd "$WORK" && exec env -i "${SERVICE_ENV[@]}" "$PY" -c "$ENTRY  # $API_MARK" > "$WORK/api.log" 2>&1) &
-note api_pid $!
 note api_marker "$API_MARK"
-(cd "$WORK" && exec env -i "${SERVICE_ENV[@]}" "$PY" -c "$WORKER_ENTRY  # $WORKER_MARK" > "$WORK/worker.log" 2>&1) &
-note worker_pid $!
 note worker_marker "$WORKER_MARK"
-wait_for "http://127.0.0.1:$API_PORT/health/ready" "$READY_SECONDS" "$(get api_pid)"
-wait_for "http://127.0.0.1:$METRICS_PORT/metrics" "$READY_SECONDS" "$(get worker_pid)"
-log "ready: memory on :$API_PORT, worker metrics on :$METRICS_PORT"
+migrate "$ROOT"
+start_service "$ROOT"
 
 export MEMORY_URL="http://127.0.0.1:$API_PORT"
 export MEMORY_WORKER_METRICS_URL="http://127.0.0.1:$METRICS_PORT/metrics"
-export CAPEVAL_ADMIN_KEY=capeval-dev-key
+export CAPEVAL_ADMIN_KEY=capeval-dev-key CAPEVAL_ROOT="$ROOT"
 unset TRELLIS_ADMIN_KEY TRELLIS_API_KEY
 set +e
 "$@"
 rc=$?
 set -e
+if [ -n "$UPGRADE_ROOT" ] && [ "$rc" = 0 ]; then
+  log "upgrade: stopping the service of $ROOT, serving the same stores from $UPGRADE_ROOT"
+  stop "$(get worker_pid)" "$WORKER_MARK"
+  stop "$(get api_pid)" "$API_MARK"
+  migrate "$UPGRADE_ROOT"
+  if [ -n "${CAPEVAL_UPGRADE_BACKFILL:-}" ]; then
+    service_env "$UPGRADE_ROOT"
+    log "upgrade: backfill: $CAPEVAL_UPGRADE_BACKFILL"
+    set +e
+    (cd "$UPGRADE_ROOT" && env -i "${SERVICE_ENV[@]}" bash -c "$CAPEVAL_UPGRADE_BACKFILL") > "$WORK/backfill.log" 2>&1
+    brc=$?
+    set -e
+    log "upgrade: backfill rc=$brc"
+    [ "$brc" = 0 ] || exit "$brc"
+  fi
+  start_service "$UPGRADE_ROOT"
+  export CAPEVAL_ROOT="$UPGRADE_ROOT" CAPEVAL_UPGRADED_FROM="$ROOT"
+  set +e
+  bash -c "${CAPEVAL_UPGRADE_CMD:?CAPEVAL_UPGRADE_ROOT needs CAPEVAL_UPGRADE_CMD}"
+  rc=$?
+  set -e
+fi
 exit "$rc"

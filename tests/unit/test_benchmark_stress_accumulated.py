@@ -21,7 +21,8 @@ def test_the_final_run_is_deterministic_and_independent_of_the_number_of_earlier
 def test_every_script_covers_every_category_and_language_with_distinct_values() -> None:
     built = sb.build(sb.MAX_PRIOR_RUNS)
     for b in built:
-        assert {q["category"] for q in b.script["queries"]} == set(sb.CATEGORIES)
+        cats = {q["category"] for q in b.script["queries"]}
+        assert cats in (set(sb.CATEGORIES), set(sb.CUSTOMER_CATEGORIES)), b.id
         for t in b.script["turns"]:
             assert len(t) == len(b.languages)
         for li in range(len(b.languages)):
@@ -41,7 +42,8 @@ def test_every_script_covers_every_category_and_language_with_distinct_values() 
             assert len(values) == n
         s = sb.scenario(b)
         assert [x.id for x in s.sessions][-1] == "run-final"
-        assert len(s.sessions) == sb.MAX_PRIOR_RUNS + 1
+        per_run = 2 if b.script.get("side_turns") else 1
+        assert len(s.sessions) == (sb.MAX_PRIOR_RUNS + 1) * per_run
 
 
 def test_expectations_take_the_final_values_and_every_other_value_as_stale() -> None:
@@ -110,3 +112,37 @@ def test_a_never_stated_question_passes_only_on_insufficient() -> None:
     assert judge(e, _items("Delia Tanaka buys for G47"), "INSUFFICIENT").passed
     j = judge(e, _items("Delia Tanaka buys for G47"), "SUFFICIENT")
     assert j.reason == "no_abstain" and j.near_served
+
+
+def test_the_upgrade_phases_split_the_runs_and_keep_the_final_thread_last() -> None:
+    b = next(x for x in sb.build(3) if x.id == "retail-allocation")
+    prior, final = sb.scenario(b, "prior"), sb.scenario(b, "final")
+    assert [x.id for x in final.sessions] == ["run-final-side", "run-final"]
+    assert all("final" not in x.id for x in prior.sessions) and len(prior.sessions) == 6
+    whole = [x.id for x in sb.scenario(b).sessions]
+    assert whole == [x.id for x in prior.sessions] + [x.id for x in final.sessions]
+
+
+def test_a_stated_list_is_sorted_and_every_member_is_required() -> None:
+    b = next(x for x in sb.build(2) if x.id == "retail-allocation")
+    zs = [b.final[f"z{i}"] for i in range(1, 7)]
+    assert zs == sorted(zs)
+    e = sb.expect(b, "zero_list", "de")
+    assert e.contains == tuple(zs) and e.texts == ("ersten sechs nach Filialcode",)
+    rule = "Liste nur Filialen mit Bestand null auf, höchstens die ersten sechs nach Filialcode."
+    full = f"Für Style {b.final['style_l']} haben diese Filialen Bestand null: {', '.join(zs)}."
+    assert judge(e, _items(rule, full), None).passed
+    partial = f"Für Style {b.final['style_l']}: {', '.join(zs[:4])}."
+    j = judge(e, _items(rule, partial), None)
+    assert j.reason == "missing" and j.missing == zs[4:]
+
+
+def test_a_correction_must_carry_its_reason_and_the_old_hero_only_as_history() -> None:
+    b = next(x for x in sb.build(2) if x.id == "retail-allocation")
+    e = sb.expect(b, "hero_correction", "en")
+    a_, b_ = b.final["hero_a"], b.final["hero_b"]
+    correction = f"Correction: do not create on {a_} because ATA is 0. Use {b_} instead."
+    assert judge(e, _items(correction), None).passed
+    assert judge(e, _items(f"Use {b_}."), None).reason == "missing"  # no reason with it
+    j = judge(e, _items(f"Use style {a_} as the hero for the allocation draft.", correction), None)
+    assert j.stale_first and j.stale_current

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import dataclasses
 import hashlib
 import json
 import os
@@ -40,7 +41,10 @@ PLACEMENTS = ("same_session", "new_session")
 
 
 def _service_rev() -> str | None:
-    root = os.environ.get("CAPEVAL_ROOT")
+    return _rev(os.environ.get("CAPEVAL_ROOT"))
+
+
+def _rev(root: str | None) -> str | None:
     if not root:
         return None
     try:
@@ -82,7 +86,14 @@ async def _ask(
             "language": case.language,
             "placement": placement,
             "question": case.text,
-            "expect": {"contains": list(e.contains), "stale": len(e.stale), "anchor": e.anchor},
+            "unknowable": e.abstain,
+            "expect": {
+                "contains": list(e.contains),
+                "texts": list(e.texts),
+                "together": [list(g) for g in e.together],
+                "stale": len(e.stale),
+                "anchor": e.anchor,
+            },
         }
         t = runner._now()
         try:
@@ -135,10 +146,17 @@ async def run(a: argparse.Namespace) -> dict[str, Any]:
     )
     today = runner.run_day(settings)
     factory = runner.default_factory(settings)
-    token, policy = await runner._tenant(settings, factory)
+    # the final phase of an upgrade path runs on the tenant the prior phase created (a new
+    # service key is issued; the writes below are made, not skipped: ``reuse`` is only for this)
+    tenant_settings = (
+        dataclasses.replace(settings, reuse=Path("upgrade-path"))
+        if a.phase == "final"
+        else settings
+    )
+    token, policy = await runner._tenant(tenant_settings, factory)
     client = factory(token)
     service = runner.Service(client, settings.worker_metrics_url)
-    work = [(b, build.scenario(b), lang) for b in built for lang in langs]
+    work = [(b, build.scenario(b, a.phase), lang) for b in built for lang in langs]
     records: list[dict[str, Any]] = []
     try:
         version = await client.version()
@@ -176,10 +194,14 @@ async def run(a: argparse.Namespace) -> dict[str, Any]:
                 records.extend(await _ask(service, w, b, case, a.timeout))
 
         t1 = runner._now()
+        if a.phase == "prior":  # the earlier runs only: nothing is asked
+            written_for_asks: list[tuple[build.Built, runner.Written]] = []
+        else:
+            written_for_asks = written
         await asyncio.gather(
             *(
                 _one(b, w, Case(w.scenario, q, p, w.language))
-                for b, w in written
+                for b, w in written_for_asks
                 for q in w.scenario.queries
                 if not a.split or q.split == a.split
                 for p in q.phrasings
@@ -193,6 +215,9 @@ async def run(a: argparse.Namespace) -> dict[str, Any]:
     records.sort(key=lambda r: (r["key"], r["placement"]))
     meta = {
         "set": "stress_accumulated",
+        "phase": a.phase,
+        "upgraded_from": os.environ.get("CAPEVAL_UPGRADED_FROM"),
+        "upgraded_from_rev": _rev(os.environ.get("CAPEVAL_UPGRADED_FROM")),
         "mode": "nollm",
         "service_version": version,
         "service_rev": _service_rev(),
@@ -243,6 +268,13 @@ def parse(argv: Sequence[str] | None = None) -> argparse.Namespace:
     p.add_argument("--probe-seconds", type=float, default=runner.PROBE_SECONDS)
     p.add_argument("--enrich-seconds", type=float, default=runner.ENRICH_SECONDS)
     p.add_argument("--settle-seconds", type=float, default=runner.SETTLE_SECONDS)
+    p.add_argument(
+        "--phase",
+        choices=build.PHASES,
+        default="all",
+        help="all: every run then the questions; prior: the earlier runs only (an upgrade "
+        "path's first step); final: the final run and the questions, on the tenant prior wrote",
+    )
     p.add_argument("--out", required=True, help="result .json (a .md summary is written beside it)")
     a = p.parse_args(argv)
     a.languages = [x.strip() for x in a.languages.split(",") if x.strip()]
@@ -256,6 +288,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    if a.phase == "prior":
+        ing = payload["meta"]["ingestion"]
+        print(
+            f"wrote {out}: prior runs only, {ing['turns']} turns, failed jobs {ing['failed_jobs']}"
+        )
+        return 0
     out.with_suffix(".md").write_text(to_markdown(payload), encoding="utf-8")
     o = payload["summary"]["overall"]
     print(

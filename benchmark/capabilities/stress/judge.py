@@ -7,7 +7,9 @@ service marks as no longer current (superseded, a fact with an end) is historica
 
 For an answerable question:
 
-* ``missing``       a group of the final run's values found in no item;
+* ``missing``       a group of the final run's values found in no item, a rule's own words
+                    (``texts``) found nowhere, or values that must stand together
+                    (``together``: the new hero and the reason) in no single item;
 * ``false_refusal`` the service said ``INSUFFICIENT``: an agent told so refuses, so this
                     fails even when the values are there;
 * ``stale_leak``    an earlier value is served wrongly, either
@@ -85,6 +87,14 @@ def judge(e: Expect, items: Sequence[Item], evidence_status: str | None) -> Judg
         p = Pattern(value, literal=normalize(value))
         if not any(p.matches(n) for _, n in norms):
             j.missing.append(value)
+    for text in e.texts:
+        p = Pattern(text, literal=normalize(text))
+        if not any(p.matches(n) for _, n in norms):
+            j.missing.append(text)
+    for group in e.together:
+        pats = _pats(group)
+        if not any(all(p.matches(n) for p in pats) for _, n in norms):
+            j.missing.append(" + ".join(group))
     cur = _pats(e.contains)
     stale = _pats(e.stale)
     anchor = _pats(e.anchor) if e.anchor else None

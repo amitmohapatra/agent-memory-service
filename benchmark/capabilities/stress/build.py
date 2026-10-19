@@ -30,7 +30,7 @@ SCRIPTS = Path(__file__).resolve().parent / "scripts.json"
 DEFAULT_SEED = "stress-v1"
 DEFAULT_PRIOR_RUNS = 6
 MAX_PRIOR_RUNS = 10
-#: the categories every script covers, in report order
+#: the categories of the core scripts (each covers all of them), in report order
 CATEGORIES = (
     "single_fact",
     "multi_hop_2",
@@ -42,9 +42,28 @@ CATEGORIES = (
     "format_rule",
     "preference",
 )
+#: the patterns of the customer's ReAct + memory TEST run that did not pass (36/46), one script
+#: (retail-allocation) covering all of them, reported as their own rows
+CUSTOMER_CATEGORIES = (
+    "list_recall",
+    "correction_new_chat",
+    "exact_format_rule",
+    "rule_vs_write",
+    "guardrail_preference",
+    "same_word_subject",
+    "unknown_entity",
+)
+ALL_CATEGORIES = CATEGORIES + CUSTOMER_CATEGORIES
 #: categories whose question a tester asked in every earlier run too (the run's own Q/A pair is
-#: part of the history); a rule, format or preference question gets a long answer, not a value
-ECHOED = frozenset(CATEGORIES) - {"standing_rule", "format_rule", "preference"}
+#: part of the history); a rule, format, preference or write request gets a long answer
+ECHOED = frozenset(ALL_CATEGORIES) - {
+    "standing_rule",
+    "format_rule",
+    "preference",
+    "exact_format_rule",
+    "rule_vs_write",
+    "guardrail_preference",
+}
 SPLITS = ("dev", "heldout")
 _LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ"  # no I, O: never read as 1, 0
 _TOKEN = re.compile(r"\{(A|D|d|w:[a-z0-9_]+)\}")
@@ -87,10 +106,10 @@ class _Drawer:
         self.taken: list[Value] = []
         self.last_names: set[str] = set()
         words: list[str] = []
-        for t in script["turns"]:
+        for t in (*script["turns"], *script.get("side_turns", ())):
             words += t
         for q in script["queries"]:
-            for texts in q["phrasings"].values():
+            for texts in (*q["phrasings"].values(), *q.get("contains_text", ())):
                 words += texts
         for ack in data["acks"]:
             words += ack
@@ -198,6 +217,14 @@ def draw_runs(
                 run[slot] = once[slot]
             else:
                 run[slot] = d.draw(slot, spec, "final" if k == 0 else f"prior-{k}")
+        # a list stated in order (stores by store code): its slots' values sorted within the run
+        groups: dict[str, list[str]] = {}
+        for slot, spec in slots.items():
+            if "sort_group" in spec:
+                groups.setdefault(spec["sort_group"], []).append(slot)
+        for members in groups.values():
+            for slot, v in zip(members, sorted(run[m] for m in members), strict=True):  # type: ignore[type-var]
+                run[slot] = v
         runs.append(run)
     return runs
 
@@ -255,6 +282,22 @@ def _values_ml(values: Sequence[Value], languages: Sequence[str]) -> dict[str, s
     return {lang: ", ".join(text_of(v, li) for v in values) for li, lang in enumerate(languages)}
 
 
+def _side(b: Built, k: int, day: int, at: str) -> Session | None:
+    """The run's other chat (``side_turns``): facts stated the same day in another thread."""
+    if not b.script.get("side_turns"):
+        return None
+    langs = b.languages
+    turns: list[Turn] = []
+    for i, t in enumerate(b.script["side_turns"]):
+        turns.append(
+            Turn("USER", {lang: fill(t[li], b.runs[k], li) for li, lang in enumerate(langs)}, 2 * i)
+        )
+        turns.append(Turn("ASSISTANT", _ml(b.acks[i % len(b.acks)], langs), 2 * i + 1))
+    hh, mm = (int(x) for x in at.split(":"))
+    name = "run-final-side" if k == 0 else f"run-prior-{k:02d}-side"
+    return Session(id=name, day=day, at=f"{hh - 1:02d}:{mm:02d}", turns=tuple(turns))
+
+
 def session(b: Built, k: int, day: int, at: str) -> Session:
     """Run ``k`` as one conversation: every statement (each acknowledged), then - in an earlier
     run - the questions the tester asked and the answers the agent gave that day."""
@@ -290,11 +333,25 @@ def session(b: Built, k: int, day: int, at: str) -> Session:
     return Session(id=name, day=day, at=at, turns=tuple(turns))
 
 
-def scenario(b: Built) -> Scenario:
+PHASES = ("all", "prior", "final")
+
+
+def scenario(b: Built, phase: str = "all") -> Scenario:
     """The script as the capability eval's scenario: the runs oldest first (``write_scenario``
-    writes them in time order, the final run last), and the final run's questions."""
+    writes them in time order, the final run last), and the final run's questions. ``phase``
+    "prior" holds the earlier runs only, "final" the final run only (the upgrade path writes
+    them with two code trees)."""
     times = run_times(len(b.runs) - 1)
-    sessions = [session(b, k, *times[k]) for k in range(len(b.runs) - 1, -1, -1)]
+    ks = {
+        "all": range(len(b.runs) - 1, -1, -1),
+        "prior": range(len(b.runs) - 1, 0, -1),
+        "final": [0],
+    }[phase]
+    sessions: list[Session] = []
+    for k in ks:
+        if side := _side(b, k, *times[k]):
+            sessions.append(side)
+        sessions.append(session(b, k, *times[k]))
     langs = b.languages
     queries = []
     for q in b.script["queries"]:
@@ -332,6 +389,10 @@ class Expect:
     anchor: tuple[str, ...] | None
     #: related facts the store does hold (abstention questions): informational
     near: tuple[str, ...]
+    #: literal words that must be in the context (a rule's own wording, in this language)
+    texts: tuple[str, ...] = ()
+    #: value sets that must be found together in one item (the new hero and its reason)
+    together: tuple[tuple[str, ...], ...] = ()
 
 
 def expect(b: Built, query_id: str, language: str) -> Expect:
@@ -355,4 +416,9 @@ def expect(b: Built, query_id: str, language: str) -> Expect:
         stale=tuple(stale),
         anchor=tuple(text_of(b.final[s], li) for s in anchor) if anchor else None,
         near=tuple(text_of(b.final[s], li) for s in q.get("near", ())),
+        texts=tuple(t[li] for t in q.get("contains_text", ())),
+        together=tuple(
+            tuple(x[1:] if x.startswith("=") else text_of(b.final[x], li) for x in group)
+            for group in q.get("together", ())
+        ),
     )

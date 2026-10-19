@@ -20,7 +20,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from benchmark.capabilities.stress.build import CATEGORIES
+from benchmark.capabilities.stress.build import ALL_CATEGORIES
 
 PLACEMENTS = ("same_session", "new_session")
 
@@ -31,8 +31,8 @@ def _rate(num: int, den: int) -> float | None:
 
 def cell(records: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     rs = list(records)
-    ans = [r for r in rs if r["category"] != "abstention"]
-    abst = [r for r in rs if r["category"] == "abstention"]
+    ans = [r for r in rs if not r.get("unknowable")]
+    abst = [r for r in rs if r.get("unknowable")]
     ok = [r for r in ans if r.get("reason") != "error"]
     return {
         "n": len(rs),
@@ -89,7 +89,7 @@ def to_markdown(payload: Mapping[str, Any]) -> str:
         "|---|---|---|---|---|---|---|---|---|---|",
     ]
     cp = s["by_category_placement"]
-    for cat in CATEGORIES:
+    for cat in ALL_CATEGORIES:
         for pl in PLACEMENTS:
             c = cp.get(f"{cat}/{pl}")
             if not c:
@@ -160,7 +160,7 @@ def compare(a: Mapping[str, Any], b: Mapping[str, Any], names: Sequence[str]) ->
             f"{_pct(y['false_refusal_rate'])} | {_pct(x['correct_refusal_rate'])} | {_pct(y['correct_refusal_rate'])} |"
         )
 
-    for cat in CATEGORIES:
+    for cat in ALL_CATEGORIES:
         for pl in PLACEMENTS:
             k = f"{cat}/{pl}"
             if k in ca and k in cb:
