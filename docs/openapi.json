@@ -2084,7 +2084,7 @@
           },
           "status": {
             "$ref": "#/components/schemas/DocumentStatus",
-            "description": "STAGED: accepted, parse job queued or running; READY: parsed and indexed, retrievable; FAILED: the parse job gave up, see last_error."
+            "description": "STAGED: accepted, its parse or index job queued or running; READY: parsed and indexed, retrievable; FAILED: the parse or index job gave up, see last_error."
           },
           "tenant_id": {
             "description": "The tenant the record belongs to.",

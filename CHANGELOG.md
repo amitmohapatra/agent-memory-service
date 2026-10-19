@@ -83,6 +83,71 @@ each entry says which one moved. Decisions behind each change are in the
   class), merge F1 0.84 (exact subject strings before: 0.13).
 
 ### Fixed
+- A document is `READY` only once it is findable. The parse job set `READY` before the index job
+  it chains had embedded a chunk, so `wait_ready` returned while `search` and `context` still
+  found nothing; with the worker busy (LLM-assisted enrichment on a slow model), the index job
+  ran seconds later and the question asked at `READY` answered "Memory holds nothing". The
+  document now stays `STAGED` through parsing and indexing, and the index job marks it `READY`
+  after the embeddings are written, before graph enrichment
+  ([documents](docs/api/documents.md)). When the index job gives up (its retries spent, or past
+  the job timeout on a large file) the document is `FAILED` with `last_error` "index failed:
+  ...", and `memory-reindex` indexes such documents, and `STAGED` ones with a parsed version,
+  and makes them `READY`.
+- The job worker's queue pool is sized for its four Procrastinate workers (two connections
+  each), and their four LISTEN connections count against `connection_budget`; with four
+  connections for all of them, pool checkouts timed out under load. Its request pool has a
+  connection for every job it runs at once, and in `staging` and `prod` a `connection_budget`
+  below what the worker needs stops it at start instead of being exceeded with a warning
+  ([database](docs/deploy/database.md)). A worker starting no
+  longer takes the jobs of one silent for 30 s (Procrastinate's default) but for 145 s
+  (`TASKS.stalled_after_seconds`, derived from the heartbeat, the 90 s a worker rides a
+  database outage out, its last try's pool timeout and the shutdown grace, plus a heartbeat of
+  margin; a worker killed with -9 waits that long too),
+  so a job no longer runs twice.
+- `/v1/verify` records no verdict on a run whose context held no evidence. Against an empty
+  context every claim is "unsupported" - one the run's own tools returned too - so the judge
+  rejected such runs, their outcome became a failure, and an agent sampled for grounding
+  (`TRELLIS_GROUNDING_SAMPLE`, 10 % by default) never learned a skill from them
+  ([trust](docs/guide/06-trust.md)).
+- The worker runs the `chat-fast` queue and the `embedding` queue - the jobs that make a
+  memory, a document's chunks or a tool findable - on slots no parse, archive or graph job
+  (nor, with a model, a summary; without one summaries are short and take them after
+  indexing) can take, and the `graph` queue on slots of its own, in four pools whose computing
+  slots come to about one per CPU (`tasks.worker_concurrency`): half are chat's (indexing's
+  when no chat job waits), up to `tasks.indexing_concurrency` (2, a new setting; at most a
+  quarter) indexing's, one the graph queue's and the rest every other queue's, chat and
+  indexing first. Chat and indexing share their slots by priority, chat first, except that
+  with a model indexing keeps its own (a chat job then waits on the model); the graph pool's
+  slots wait on the model too, and it gets half the CPUs (at least 2) on top. With a slow model, observation extraction
+  and graph enrichment held every slot, and a tool catalog published just before a question
+  waited 14 s to be searchable; and a graph backlog - an import queues thousands of enrichment
+  jobs, which outrank parsing, archiving, reconciliation and summaries - held every slot until
+  it drained ([operations](docs/guide/11-operations.md#workers-and-periodic-jobs)).
+- The job worker rides out a database that cannot do its queue statements for up to 90 s: no
+  connection free in the queue pool, a full disk or no memory, a server shutting down or
+  starting, a lost LISTEN connection (a connection lost mid-statement still ends the worker).
+  Each is retried with a growing pause, logged (`worker.db_retry`) and counted
+  (`memory_worker_db_retries_total`; `memory_worker_db_unavailable_seconds` says for how long).
+  Under memory pressure one pool timeout in a heartbeat made Procrastinate stop the worker and
+  the process exited 0, so a supervisor restarting on failure left it down; and a job-status
+  write to a full disk stopped it too. Past the 90 s, or when a pool stops on its own, it now
+  logs `worker.failed` and exits non-zero, and compose restarts it (`restart: on-failure`). A
+  log line that cannot be written is lost and counted (`memory_log_lines_dropped_total`)
+  instead of raising into the code that logged it
+  ([operations](docs/guide/11-operations.md#observability)). The API is unchanged: its
+  enqueue goes through the outbox, whose sweep dispatches what a failed enqueue missed.
+- A write is findable within seconds while the graph is enriched by a slow model. Graph
+  enrichment ran inside `memory.index` and `document.index`, and with an LLM enabled each such
+  job held a worker slot for the model's calls (up to minutes on a small CPU model): with every
+  slot taken, indexing, parsing and the other jobs waited up to six minutes, and a memory
+  remembered just before a question was not in its context. With a model, enrichment is now a
+  job of its own, `graph.enrich_memories` / `graph.enrich_document`, queued once the source is
+  indexed, on the `graph` queue below indexing, in a pool of its own - never inside the index
+  job - and never one at a time per tenant (so serialised, the capability eval's LLM run still
+  had 552 enrichment jobs queued when its questions began, and they met a graph without their
+  facts). Without a model the index job still enriches, once the source is findable: there it
+  is tens of milliseconds, and as separate jobs the capability eval's writes settled 30 s later
+  ([operations](docs/guide/11-operations.md#workers-and-periodic-jobs)).
 - Same-subject lookup: an older statement past the window of recent rows consolidation reads
   was missed when its subject was spelled with different punctuation ("forklift-4" stored,
   "forklift 4" said): the spelling variants were derived only when the subject was not

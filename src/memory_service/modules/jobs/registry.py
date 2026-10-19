@@ -3,7 +3,7 @@ API process both register them so inline/test queues can execute jobs in-process
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -11,7 +11,11 @@ from memory_service.config.constants import TASKS
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.conversation.summary import TASK_EPISODE_INDEX, TASK_SUMMARY_REFRESH
 from memory_service.modules.feedback.service import TASK_FEEDBACK_PROJECT
-from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
+from memory_service.modules.jobs.names import (
+    TASK_GRAPH_ENRICH_DOCUMENT,
+    TASK_GRAPH_ENRICH_MEMORIES,
+    TASK_MEMORY_INDEX,
+)
 from memory_service.modules.llm.cost import llm_accounting
 from memory_service.modules.memory.connections import TASK_MEMORY_CONNECT
 from memory_service.modules.memory.revisions import bump_memory_revisions
@@ -75,6 +79,21 @@ def _accounted(name: str, handler: TaskHandler) -> TaskHandler:
     return run
 
 
+def _enrichment(tenant_id: str) -> dict[str, Any]:
+    """Where a graph enrichment job runs when the deployment has a model: on the GRAPH queue,
+    in the worker's graph pool (``ports.tasks.worker_pools``), never inside the index job
+    that queued it. Enrichment asks the model, which on a slow one takes minutes; when it ran
+    inside the index jobs it held every worker slot, and indexing (what makes a write
+    findable) waited behind it. Not serialised per tenant either: one job at a time per
+    tenant, the capability eval's LLM run still had 552 enrichment jobs queued when its
+    questions began, an hour after its first write, so those questions met a graph without
+    the facts their answers join on.
+
+    Without a model it runs inside the index job, after the write is findable
+    (``register_handlers``' ``enrich``)."""
+    return {"queue": Queue.GRAPH, "tenant_id": tenant_id}
+
+
 def register_handlers(container: Container) -> None:
     if container.tasks is None:
         return
@@ -105,11 +124,58 @@ def register_handlers(container: Container) -> None:
         if ingestion is not None:
             await ingestion.parse_document(payload["tenant_id"], payload["document_id"])
 
+    #: Without a model, enrichment is rules and lookups: tens of milliseconds of the event
+    #: loop, less than a job of its own costs (an enqueue transaction, then a fetch, a start
+    #: and a finish, and the memories loaded again). As separate jobs, the capability eval's
+    #: 2496 enrichments took 210 s of the worker's loop against about 70 s inside the index
+    #: jobs, and its writes settled 30 s later than on main, chat jobs waiting meanwhile.
+    enrich_in_the_index_job = not container.settings.llm.enabled
+
+    async def enrich(spec: JobSpec, run: Callable[[Any], Awaitable[Any]]) -> None:
+        """Graph enrichment of what was just indexed, if a graph is wired: a job of its own
+        when the deployment has a model (``_enrichment``), else ``run`` it here."""
+        graph = container.services.get("graph")
+        if graph is None:
+            return
+        if enrich_in_the_index_job:
+            await run(graph)
+            return
+        async with uow_factory() as uow:
+            await uow.enqueue(spec)
+            await uow.commit()
+
     async def document_index(payload: dict[str, Any]) -> None:
-        """M6 attaches the indexer; until then the job is a no-op that keeps the chain intact."""
+        """Embed the parsed chunks, then mark the document READY (findable), then its graph
+        enrichment (``enrich``). Without an indexer attached the job only marks it."""
+        tenant_id, document_id = payload["tenant_id"], payload["document_id"]
+        version = payload.get("document_version_id")
         indexer = container.services.get("indexer")
         if indexer is not None:
-            await indexer.index_document(payload["tenant_id"], payload["document_id"])
+            await indexer.index_document(tenant_id, document_id)
+        ingestion = container.services.get("ingestion")
+        if ingestion is not None:
+            await ingestion.mark_indexed(tenant_id, document_id, version)
+        await enrich(
+            JobSpec(
+                task_name=TASK_GRAPH_ENRICH_DOCUMENT,
+                payload={"tenant_id": tenant_id, "document_id": document_id},
+                idempotency_key=f"enrich:{version}" if version else None,
+                **_enrichment(tenant_id),
+            ),
+            lambda graph: graph.enrich_document(tenant_id, document_id),
+        )
+
+    async def document_index_gave_up(payload: dict[str, Any], error: str) -> None:
+        ingestion = container.services.get("ingestion")
+        if ingestion is not None:
+            await ingestion.mark_index_failed(
+                payload["tenant_id"],
+                payload["document_id"],
+                payload.get("document_version_id"),
+                error,
+            )
+
+    async def graph_enrich_document(payload: dict[str, Any]) -> None:
         graph = container.services.get("graph")
         if graph is not None:
             await graph.enrich_document(payload["tenant_id"], payload["document_id"])
@@ -121,14 +187,26 @@ def register_handlers(container: Container) -> None:
             await feedback.project(payload["tenant_id"], payload["feedback_id"])
 
     async def memory_index(payload: dict[str, Any]) -> None:
+        """Index the memories, which makes them findable, then their graph enrichment
+        (``enrich``)."""
         tenant_id, memory_ids = payload["tenant_id"], list(payload["memory_ids"])
         indexer = container.services.get("indexer")
         if indexer is not None:
             await indexer.index_memories(tenant_id, memory_ids)
+        await _bump_for(tenant_id, memory_ids)
+        await enrich(
+            JobSpec(
+                task_name=TASK_GRAPH_ENRICH_MEMORIES,
+                payload={"tenant_id": tenant_id, "memory_ids": memory_ids},
+                **_enrichment(tenant_id),
+            ),
+            lambda graph: graph.enrich_memories(tenant_id, memory_ids),
+        )
+
+    async def graph_enrich_memories(payload: dict[str, Any]) -> None:
         graph = container.services.get("graph")
         if graph is not None:
-            await graph.enrich_memories(tenant_id, memory_ids)
-        await _bump_for(tenant_id, memory_ids)
+            await graph.enrich_memories(payload["tenant_id"], list(payload["memory_ids"]))
 
     async def _bump_for(tenant_id: str, memory_ids: Sequence[str]) -> None:
         """Move the revisions now that the memory is *findable*, not when it was written.
@@ -316,8 +394,16 @@ def register_handlers(container: Container) -> None:
     )
     queue.register(TASK_PROCESS_OBSERVATION, Queue.CHAT_FAST, process_observation, retries=5)
     queue.register("document.parse", Queue.DOCUMENT_PARSE, document_parse, retries=3)
-    queue.register("document.index", Queue.EMBEDDING, document_index, retries=5)
+    queue.register(
+        "document.index",
+        Queue.EMBEDDING,
+        document_index,
+        retries=5,
+        on_give_up=document_index_gave_up,
+    )
     queue.register(TASK_MEMORY_INDEX, Queue.EMBEDDING, memory_index, retries=5)
+    queue.register(TASK_GRAPH_ENRICH_MEMORIES, Queue.GRAPH, graph_enrich_memories, retries=5)
+    queue.register(TASK_GRAPH_ENRICH_DOCUMENT, Queue.GRAPH, graph_enrich_document, retries=5)
     queue.register(TASK_FEEDBACK_PROJECT, Queue.RECONCILE, feedback_project, retries=3)
     queue.register(TASK_MEMORY_EXPIRE, Queue.RECONCILE, memory_expire, retries=0)
     queue.register(TASK_MEMORY_FORGET, Queue.RECONCILE, memory_forget, retries=0)

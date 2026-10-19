@@ -19,6 +19,7 @@ from memory_service.observability.logging import get_logger
 
 if TYPE_CHECKING:
     from memory_service.application.container import Container
+    from memory_service.config.settings import PoolPlan
 
 log = get_logger(__name__)
 
@@ -89,10 +90,22 @@ async def _wire_cache(container: Container) -> None:
     )
 
 
+def _pool_plan(container: Container) -> PoolPlan:
+    """This process's share of the connection budget: its queue workers' and its concurrent
+    jobs' needs met, and in a deployed environment a budget below them refused
+    (``DatabaseSettings.pool_plan``)."""
+    return container.settings.database.pool_plan(
+        container.processes,
+        queue_workers=container.queue_workers,
+        jobs=container.jobs,
+        strict=container.settings.deployed,
+    )
+
+
 async def _wire_database(container: Container) -> None:
     from memory_service.adapters.db.engine import Database
 
-    plan = container.settings.database.pool_plan(container.processes)
+    plan = _pool_plan(container)
     db = Database(container.settings.database, plan)
     log.info("database.pools", processes=container.processes, per_process=plan.total)
     container.database = db
@@ -118,7 +131,7 @@ async def _wire_tasks(container: Container) -> None:
             container.settings.database.procrastinate_dsn,
             default_retries=constants.TASKS.default_retries,
             job_timeout_seconds=constants.TASKS.job_timeout_seconds,
-            max_size=container.settings.database.pool_plan(container.processes).queue_max,
+            max_size=_pool_plan(container).queue_max,
         )
         container.tasks = queue
         container.add_dependency(
@@ -621,7 +634,7 @@ def _wire_graph(container: Container) -> None:
         from memory_service.adapters.graph.postgres_store import PostgresGraphStore
 
         database = container.settings.database
-        plan = database.pool_plan(container.processes)
+        plan = _pool_plan(container)
         store = PostgresGraphStore(
             container.database.engine,
             budget_ms=container.tuning.graph.prefetch_budget_ms,

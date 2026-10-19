@@ -331,8 +331,8 @@ class TaskTuning:
     default_retries: int = 5
     job_timeout_seconds: int = 600
     periodic_reconcile_seconds: int = 300
-    #: a job whose worker stopped heartbeating for this long is re-queued
-    stalled_after_seconds: float = 120
+    #: how often a worker records that it is alive (Procrastinate's heartbeat)
+    worker_heartbeat_seconds: float = 10
     #: How long a dispatched outbox row is kept. It is a receipt once the queue owns the
     #: job, but keeping it briefly makes a relay crash debuggable; rows marked dead are
     #: never purged. Measured before this existed: 734 rows for 788 ingested turns, growing
@@ -341,6 +341,37 @@ class TaskTuning:
     #: How long ``memory_reads`` keeps who-read-what. Long enough for an annual access
     #: review with a quarter's slack; the table grows with every recall otherwise.
     read_audit_retention_days: int = 400
+    #: How long the worker rides out a database that cannot do its queue statements - no
+    #: connection free in its queue pool, a full disk, a server going away, its LISTEN
+    #: connection lost - retrying with a growing pause (``backoff``)
+    #: before it gives up and exits non-zero for its supervisor to restart it.
+    #: ``stalled_after_seconds`` is derived from it, so no worker prunes one riding it out.
+    #: A pool timeout in one heartbeat used to stop the worker.
+    worker_db_outage_seconds: float = 90
+    #: the first pause and the longest one between those retries
+    worker_db_backoff_seconds: tuple[float, float] = (0.5, 10.0)
+
+    @property
+    def stalled_after_seconds(self) -> float:
+        """A worker silent for this long is gone: a starting worker prunes it and its running
+        jobs are re-queued (``stalled_worker_timeout``), and the periodic reconcile re-queues
+        jobs whose worker stopped heartbeating. It must exceed the longest a live worker can
+        stay silent (``worker_silence_seconds``), or its jobs run twice: by a heartbeat
+        interval, 145 s. A worker killed with -9 has its jobs re-queued after that long."""
+        return self.worker_silence_seconds + self.worker_heartbeat_seconds
+
+    @property
+    def worker_silence_seconds(self) -> float:
+        """The longest a live worker can go without a heartbeat, 135 s: its last heartbeat's
+        age, the database outage it rides out, the last try of that outage, which waits a
+        pool checkout's timeout before it fails (the outage is checked after each try), then
+        the shutdown grace its running jobs get once it gives up."""
+        return (
+            self.worker_heartbeat_seconds
+            + self.worker_db_outage_seconds
+            + DATABASE.pool_timeout_seconds
+            + OVERLOAD.worker_shutdown_grace_seconds
+        )
 
 
 TASKS = TaskTuning()

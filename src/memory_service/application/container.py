@@ -32,6 +32,7 @@ from memory_service.config.registry import Registries, get_registries
 from memory_service.config.settings import Settings
 from memory_service.domain.fiscal import parse_calendar
 from memory_service.observability.logging import get_logger
+from memory_service.ports.tasks import Queue, worker_pools
 
 log = get_logger(__name__)
 
@@ -163,6 +164,18 @@ class Tuning:
         )
 
 
+def worker_pools_for(settings: Settings) -> list[tuple[list[Queue], int]]:
+    """The job worker's pools (``ports.tasks.worker_pools``) for this deployment: what
+    ``worker.py`` runs, and what its connection pools are sized for. The graph pool waits on
+    the model when the deployment has one (``settings.llm.enabled``, which
+    ``llm_assist.available`` follows); without one, enrichment computes."""
+    return worker_pools(
+        settings.tasks.worker_concurrency,
+        settings.tasks.indexing_concurrency,
+        llm=settings.llm.enabled,
+    )
+
+
 @dataclass
 class Container:
     settings: Settings
@@ -173,6 +186,12 @@ class Container:
     #: processes of this kind in one pod (the API's uvicorn workers, or 1 for the job
     #: worker): what the pod's connection budget is divided by
     processes: int = 1
+    #: Procrastinate workers this process runs on its queue pool (the job worker's pools,
+    #: ``ports.tasks.worker_pools``; 0 in the API): what the queue pool is sized for
+    queue_workers: int = 0
+    #: jobs this process runs at once (every slot of the job worker's pools,
+    #: ``worker_pools_for``; 0 in the API): the request pool is never smaller
+    jobs: int = 0
     dependencies: dict[str, Dependency] = field(default_factory=dict)
     #: Services with buffered work to finish at shutdown. Not dependencies: they are not
     #: pinged, they do not decide readiness, and they are closed *before* the dependencies
@@ -300,6 +319,21 @@ class Container:
                 log.warning("model.close_failed", model=name)
 
 
+def process_shape(settings: Settings, role: Literal["api", "worker"]) -> dict[str, int]:
+    """What a process of ``role`` sizes its connection pools for (``Container.processes``,
+    ``queue_workers``, ``jobs``): an API worker shares its pod with ``service.workers - 1``
+    others and runs no jobs; the job worker has its pod alone and runs every slot of
+    ``worker_pools_for`` at once, on one Procrastinate worker per pool."""
+    if role == "api":
+        return {"processes": settings.service.workers, "queue_workers": 0, "jobs": 0}
+    pools = worker_pools_for(settings)
+    return {
+        "processes": 1,
+        "queue_workers": len(pools),
+        "jobs": sum(slots for _, slots in pools),
+    }
+
+
 async def build_container(
     settings: Settings,
     version: str,
@@ -321,7 +355,7 @@ async def build_container(
         version=version,
         overrides=overrides,
         tuning=Tuning.resolve(overrides, settings.retail_calendar),
-        processes=settings.service.workers if role == "api" else 1,
+        **process_shape(settings, role),
     )
     await wire_adapters(container)
     return container

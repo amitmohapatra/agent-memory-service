@@ -31,12 +31,13 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 
 from memory_service.__about__ import __version__
 from memory_service.adapters.db.orm import DocumentRow, MemoryRow, ThreadRow
 from memory_service.application.container import Container, build_container
 from memory_service.config.settings import Settings
+from memory_service.modules.ingestion.service import INDEX_FAILED
 from memory_service.modules.rag.indexer import INDEXED_STATUSES, KNOWLEDGE, MEMORIES
 from memory_service.observability.logging import get_logger
 
@@ -76,8 +77,25 @@ async def rebuild_search_index(
         report.dropped = await _drop(container, indexer, tenant_id)
     await indexer.ensure_collections()
     async with container.database.session_factory() as session:
-        docs = select(DocumentRow.tenant_id, DocumentRow.document_id).where(
-            DocumentRow.status == "READY", DocumentRow.deleted_at.is_(None)
+        # READY, and parsed but not yet findable: STAGED with a current version (its index
+        # job still to run, or lost), or FAILED because its index job gave up
+        docs = select(
+            DocumentRow.tenant_id, DocumentRow.document_id, DocumentRow.current_version_id
+        ).where(
+            DocumentRow.deleted_at.is_(None),
+            or_(
+                DocumentRow.status == "READY",
+                and_(
+                    DocumentRow.current_version_id.is_not(None),
+                    or_(
+                        DocumentRow.status == "STAGED",
+                        and_(
+                            DocumentRow.status == "FAILED",
+                            DocumentRow.last_error.startswith(INDEX_FAILED),
+                        ),
+                    ),
+                ),
+            ),
         )
         mems = select(MemoryRow.tenant_id, MemoryRow.memory_id).where(
             MemoryRow.temporal_status.in_(sorted(INDEXED_STATUSES)),
@@ -93,10 +111,13 @@ async def rebuild_search_index(
         doc_rows = list((await session.execute(docs)).all())
         mem_rows = list((await session.execute(mems)).all())
         thread_rows = list((await session.execute(threads)).all())
-    for tenant, document_id in doc_rows:
+    ingestion = container.services.get("ingestion")
+    for tenant, document_id, version in doc_rows:
         try:
             report.chunks += await indexer.index_document(tenant, document_id, force=True)
             report.documents += 1
+            if ingestion is not None:  # findable now: a STAGED or FAILED one becomes READY
+                await ingestion.mark_indexed(tenant, document_id, version)
         except Exception as exc:
             report.failures.append(f"document {tenant}/{document_id}: {type(exc).__name__}: {exc}")
     by_tenant: dict[str, list[str]] = {}

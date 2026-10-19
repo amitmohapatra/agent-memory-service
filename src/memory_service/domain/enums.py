@@ -205,9 +205,9 @@ class DocumentStatus(StrEnum):
     """Where an ingested file is in its parse-and-index life: the ``status`` a document
     reports until its parse job either indexed it or gave up."""
 
-    STAGED = "STAGED"  # bytes accepted, parse job queued or running
+    STAGED = "STAGED"  # bytes accepted, parse or index job queued or running
     READY = "READY"  # parsed and indexed; retrievable
-    FAILED = "FAILED"  # the parse job gave up; ``last_error`` says why
+    FAILED = "FAILED"  # the parse or index job gave up; ``last_error`` says why
 
 
 class ArchiveStatus(StrEnum):

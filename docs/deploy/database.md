@@ -20,10 +20,26 @@ job worker's pod runs one. `DatabaseSettings.pool_plan` divides it:
 
 ```text
 per_process = connection_budget // processes          (unset: 28)
-queue       = max(2, per_process // 7)
-graph       = max(2, 2 * per_process // 7)            size ceil(g/2), overflow floor(g/2)
-main        = max(2, per_process - graph - queue)     size ceil(m/2), overflow floor(m/2)
+listeners   = the job worker's Procrastinate workers  (4; 0 in the API)
+pooled      = per_process - listeners
+queue       = max(2, pooled // 7, 2 * listeners)
+graph       = max(2, 2 * pooled // 7)                 size ceil(g/2), overflow floor(g/2)
+jobs        = the job worker's slots, every pool's     (0 in the API)
+main        = max(2, jobs, per_process - graph - queue - listeners)
+                                                      size ceil(m/2), overflow floor(m/2)
 ```
+
+The job worker runs four Procrastinate workers (one per pool: indexing, graph, chat, the rest) on
+one queue pool; each fetches, finishes, heartbeats, polls for aborts and defers periodic jobs,
+so the pool gets two connections per worker, and each worker's LISTEN connection, opened
+outside the pool, counts against the budget too. Every slot of its pools runs a job at once,
+and a job writes through the request pool, so that pool is never smaller than the slots
+(`jobs`: 4 / 4 / 5 / 8 at 1 / 2 / 4 / 8 CPUs, 5 / 5 / 6 / 12 with a model; sized from the
+budget alone, a request pool of 10 once served 17 slots). A worker pod's share is at least what that split needs
+(21 for 4 workers and 5 jobs, 31 for 12 jobs): in `staging` and `prod` a smaller budget is
+refused at start (`ConnectionBudgetError`, naming both numbers); elsewhere it is raised to
+the floor, and the worker logs a warning, once, naming both. Unset, a worker whose pools need
+more than 28 takes what they need.
 
 Unset, a process keeps the pools it had before the budget existed: requests 8 + 8, graph
 4 + 4, queue 4 (28). Overflow counts against the budget because a burst is exactly when the

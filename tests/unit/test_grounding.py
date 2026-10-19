@@ -4,10 +4,13 @@ gateway (with token accounting) and the contradiction scan over unused evidence.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from memory_service.adapters.models.nli import LexicalNLI
 from memory_service.config.constants import NLISettings
+from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import (
     ContextBundle,
     ContextItem,
@@ -16,6 +19,8 @@ from memory_service.domain.context_bundle import (
     UnusedEvidence,
 )
 from memory_service.domain.enums import EvidenceStatus, QueryType, Representation
+from memory_service.domain.feedback import FeedbackSource, FeedbackVerdict
+from memory_service.domain.grounding import ClaimReport, GroundingReport
 from memory_service.modules.context.handles import record_of
 from memory_service.modules.grounding.cascade import (
     Evidence,
@@ -25,6 +30,7 @@ from memory_service.modules.grounding.cascade import (
     record_evidence,
     resolve_citation,
 )
+from memory_service.modules.grounding.judge import judge_run
 from memory_service.modules.grounding.lexical import conflicts, coverage
 from memory_service.modules.llm.cost import llm_accounting
 from memory_service.ports.models import NLIScore
@@ -324,3 +330,77 @@ async def test_generated_rewrite_cannot_prove_itself_and_citations_keep_their_po
     by_handle = await cascade().verify_bundle(_bundle([generated, source]), claim + " [m2]")
     assert by_handle.supported == 1
     assert "model-extracted, unverified" in bundle.render()
+
+
+# --------------------------------------------------------------------------- the run's judge
+
+
+class _Feedback:
+    """The feedback service as ``judge_run`` uses it: what it was asked to submit."""
+
+    def __init__(self) -> None:
+        self.submitted: list[Any] = []
+
+    async def submit(self, uow: Any, ctx: Any, record: Any, *, trusted: bool) -> tuple[Any, Any]:
+        self.submitted.append((record, trusted))
+        return record, None
+
+
+class _Uow:
+    async def __aenter__(self) -> _Uow:
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
+
+    async def commit(self) -> None:
+        return None
+
+
+def _unsupported(evidence_count: int) -> GroundingReport:
+    claim = ClaimReport(claim="Refunded payment pay-O-1.", verdict="unsupported")
+    return GroundingReport(
+        claims=[claim],
+        unsupported=1,
+        per_claim_hallucination_rate=1.0,
+        evidence_count=evidence_count,
+    )
+
+
+async def test_a_context_with_no_evidence_is_no_verdict_on_the_run() -> None:
+    """Against an empty context every claim is unsupported - one the run's own tools returned
+    too - so a reject would only say memory held nothing, and it made the run a failure the
+    agent never learned from."""
+    feedback, uows = _Feedback(), _Uow
+    service: Any = feedback  # the stand-ins for FeedbackService and a UnitOfWorkFactory
+    factory: Any = uows
+    ctx = MemoryExecutionContext(tenant_id="acme", user_id="u1")
+    found = await judge_run(
+        service,
+        factory,
+        ctx,
+        "run_1",
+        "ctx_1",
+        "refunded pay-O-1",
+        _unsupported(0),
+        [],
+    )
+    assert found is None and feedback.submitted == []
+
+    judged = await judge_run(
+        service,
+        factory,
+        ctx,
+        "run_1",
+        "ctx_1",
+        "refunded pay-O-1",
+        _unsupported(2),
+        [],
+    )
+    [(record, trusted)] = feedback.submitted
+    assert judged == record.feedback_id and trusted
+    assert (record.target_id, record.verdict, record.source) == (
+        "run_1",
+        FeedbackVerdict.REJECT,
+        FeedbackSource.JUDGE,
+    )
