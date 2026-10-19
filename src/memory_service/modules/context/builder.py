@@ -36,6 +36,8 @@ from memory_service.domain.ids import stable_key
 from memory_service.domain.memory import unverified_representation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.service import AuthorizationService
+from memory_service.modules.context.coverage import unanswered
+from memory_service.modules.context.evidence import NO_SHARED_TERM
 from memory_service.modules.context.handles import BundleRecords, record_of
 from memory_service.modules.context.sections import (
     ContextSections,
@@ -72,6 +74,10 @@ def _cacheable(bundle: ContextBundle) -> bool:
         item.attributes.get("derived") or item.item_id.startswith("wm_") for item in bundle.memories
     )
 
+
+#: Earlier values (ADR 0038) a bundle carries at most, in its history section: enough for "what
+#: was it before", never enough to crowd the current evidence's budget.
+HISTORY_MAX = 4
 
 #: The model uses a cached bundle's content depends on. A deployment that expands queries
 #: assembles a different bundle from the same query, so it must not read another's cache.
@@ -167,6 +173,8 @@ def candidate_to_item(c: Candidate) -> ContextItem:
                 "contradicts",
                 # typed connections written by the background pass (supersedes / contradicts /
                 # relates): a caller that reads one memory can see what it was linked to
+                # a later statement of the same user replaced it (ADR 0038)
+                "earlier_value",
                 "connections",
                 "contributors",
                 "memory_type",
@@ -782,6 +790,36 @@ class ContextBuilder:
             and "exact" not in (c.retrievers or [])
         )
 
+    def _related_evidence(
+        self,
+        report: EvidenceReport,
+        memories: Sequence[ContextItem],
+        knowledge: Sequence[ContextItem],
+    ) -> EvidenceReport:
+        """A memory-only bundle that shares no word with the question but carries a current
+        memory the encoder puts close to it is evidence, not nothing (ADR 0040)."""
+        floor = self.retrieval_cfg.related_evidence_relevance
+        if (
+            floor <= 0
+            or report.status is not EvidenceStatus.INSUFFICIENT
+            or knowledge
+            or not memories
+            or NO_SHARED_TERM not in report.notes
+        ):
+            return report
+        best = max(m.relevance for m in memories)
+        if best < floor:
+            return report
+        return report.model_copy(
+            update={
+                "status": EvidenceStatus.COMPLETE,
+                "notes": [
+                    *(n for n in report.notes if n != NO_SHARED_TERM),
+                    f"no word in common with the question; a memory is related at {best:.2f}",
+                ],
+            }
+        )
+
     def _assemble(
         self,
         query: str,
@@ -796,6 +834,7 @@ class ContextBuilder:
         knowledge: list[ContextItem] = []
         graph_facts: list[ContextItem] = []
         summaries: list[ContextItem] = []
+        history: list[ContextItem] = []
         # a seed chunk travels with the companions its required evidence groups point at
         # (definition, footnote, cross-reference): either the whole unit fits the budget or
         # the seed is left out, so the bundle never carries a claim without its companion
@@ -864,12 +903,17 @@ class ContextBuilder:
                 continue
             if item.token_estimate > remaining:
                 continue
-            if c.kind == "memory" and (
+            if c.kind == "memory" and c.payload.get("earlier_value"):
+                # an earlier value goes to the history section, never among current evidence
+                if len(history) >= HISTORY_MAX:
+                    continue
+                history.append(item)
+            elif c.kind == "memory" and (
                 primary_memories < self.cfg.memories_max
-                or c.expansion_edge in {"GRAPH_EVIDENCE", "DERIVED_SOURCE"}
+                or c.expansion_edge in {"GRAPH_EVIDENCE", "DERIVED_SOURCE", "REPLACEMENT"}
             ):
                 memories.append(item)
-                if c.expansion_edge not in {"GRAPH_EVIDENCE", "DERIVED_SOURCE"}:
+                if c.expansion_edge not in {"GRAPH_EVIDENCE", "DERIVED_SOURCE", "REPLACEMENT"}:
                     primary_memories += 1
             elif c.kind == "fact" and len(graph_facts) < self.cfg.graph_facts_max:
                 graph_facts.append(item)
@@ -947,7 +991,21 @@ class ContextBuilder:
                         "notes": [*report.notes, "companion evidence exceeded the token budget"],
                     }
                 )
-        if not (knowledge or memories or graph_facts or summaries):
+        report = self._related_evidence(report, memories, knowledge)
+        if (
+            self.retrieval_cfg.abstain_when_insufficient
+            and self.retrieval_cfg.coverage_check
+            and report.status is not EvidenceStatus.INSUFFICIENT
+        ):
+            # current evidence only: an earlier value answers nothing about now
+            gap = unanswered(
+                query, [i.text for i in (*memories, *knowledge, *graph_facts, *summaries)]
+            )
+            if gap:
+                report = report.model_copy(
+                    update={"status": EvidenceStatus.INSUFFICIENT, "notes": [*report.notes, gap]}
+                )
+        if not (knowledge or memories or graph_facts or summaries or history):
             report = report.model_copy(update={"status": EvidenceStatus.INSUFFICIENT})
         # what the retriever found but this bundle does not carry (ranked out, over budget):
         # the grounding cascade checks answers against it for contradictions
@@ -976,6 +1034,7 @@ class ContextBuilder:
             knowledge=knowledge,
             graph_facts=graph_facts,
             summaries=summaries,
+            history=history,
             evidence=report,
             token_budget=budget,
             token_estimate=budget - remaining,

@@ -70,6 +70,7 @@ from memory_service.modules.feedback.votes import (
 )
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.memory.native import normalized_hash
+from memory_service.modules.memory.replacement import reinstate
 from memory_service.modules.memory.revisions import bump_memory_revisions, retract, supersede
 from memory_service.modules.memory.service import MemoryService
 from memory_service.modules.tools.service import TASK_TOOLS_LEARN
@@ -933,7 +934,12 @@ class FeedbackService:
         twins = await uow.memories.twins(memory.tenant_id, memory)
         for wrong in (memory, *twins):
             await retract(uow, wrong, now=now)
-        await self._reindex(uow, memory, *twins)
+        # what the withdrawn statement replaced in the user's other conversations holds again
+        # (ADR 0038)
+        restored = await reinstate(
+            uow, memory.tenant_id, [memory.memory_id, *(t.memory_id for t in twins)], now=now
+        )
+        await self._reindex(uow, memory, *twins, *restored)
         return FeedbackProjection(
             action=ProjectionAction.MEMORY_RETRACTED, memory_id=memory.memory_id, projected_at=now
         )

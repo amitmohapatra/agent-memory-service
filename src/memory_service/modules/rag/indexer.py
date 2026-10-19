@@ -21,7 +21,7 @@ from typing import Any
 from memory_service.domain.conversation import Thread
 from memory_service.domain.documents import Chunk, Document, DocumentNode
 from memory_service.domain.ids import content_hash
-from memory_service.domain.memory import CanonicalMemory
+from memory_service.domain.memory import CanonicalMemory, earlier_value, replaced_by
 from memory_service.domain.revisions import document_revision_keys
 from memory_service.domain.script import detect_script
 from memory_service.modules.context.summaries import abstractive_summaries, build_summaries
@@ -522,6 +522,16 @@ class Indexer:
                             # which is resident memory as soon as the memories collection
                             # keeps its payload in RAM. `current` stays: it is a filter.
                             "current": m.temporal.status.value == "CURRENT",
+                            # still current, but a later statement of the user replaced it:
+                            # ranked last and labelled (ADR 0038); only when it is one
+                            **(
+                                {
+                                    "earlier_value": True,
+                                    "replaced_by": replaced_by(m.system_metadata),
+                                }
+                                if earlier_value(m.system_metadata)
+                                else {}
+                            ),
                             **memory_time_payload(m),
                             "subject": m.subject,
                             "predicate": m.predicate,

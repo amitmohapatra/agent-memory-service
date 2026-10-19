@@ -8,6 +8,52 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- A question asking for a phone number, an e-mail address or a code or password that no
+  evidence about what it names states - "the alarm code for Store 33" when only Store 31's is
+  known - or for a month the evidence never names, is INSUFFICIENT; the evidence stays in the
+  bundle, a note says what is missing (`RetrievalSettings.coverage_check`). A memory-only
+  bundle that shares no word with the question but carries a memory at a relevance of
+  0.4 or more is no longer INSUFFICIENT (`related_evidence_relevance`). A user's "I
+  finished Dune" replaces their "I'm reading Dune at the moment" as an earlier value in all
+  five languages, whatever the NLI head reads. A message stored out of order (a model reads
+  messages in parallel) is compared with what the user said after it too: event time
+  decides which statement is newer (ADR 0040).
+- A value a user replaces in a later conversation is no longer served as current. Since a
+  user's words follow the user (ADR 0036) the old and the new statement were both current in
+  every conversation, and the same-session update and recency cells fell to 0.04 and 0.33. A
+  new statement is now compared with the user's own statements in all their conversations:
+  same thing by a shared name or identifier (two things of one kind, "bike #3" / "bike #4",
+  never), by one subject's single-valued slot read from both with two values (`lives_in`),
+  or by the multilingual encoder; the NLI head decides. At 0.9 the old statement and every
+  form of it (turn, fact, event, twins) are superseded; at 0.85, or 0.4 for a stated change
+  (a correction, a lifecycle or status cue - now also a handover or a return, in five
+  languages) about the same named thing or slot, it stays current as an **earlier value**. A
+  fact a model misread as a standing rule is compared like a fact. With the tenant's
+  `conflict_adjudication`, the model settles at most three related pairs per message that the
+  head leaves in its unsure band. Forgetting or retracting the newer statement reinstates what
+  it replaced. A failing head or model never costs the message
+  (`memory_replacement_skipped_total`; decisions in `memory_replacements_total`). Migration
+  0028 adds two partial indexes, online (ADR 0038).
+- Current and history apart in the context: an earlier value is never among the current
+  memories. It is served in a `history` section of its own (full context `history[]`, each
+  `superseded: true`; "## Earlier values (since replaced)" in the rendered context; handles
+  `h1`..), is no evidence for `/v1/verify`, and never comes without what replaced it: a search
+  that finds an earlier value brings its replacement, before it, past the relevance floor. A
+  sentence shown whole in its turn is not shown again beside it. New in the API and the SDK:
+  `ContextBundle.history`, `ContextMemory.superseded` (ADR 0038).
+- Replacement in the languages the NLI head reads weakly (ADR 0038): where the speaker lives,
+  or that they moved, is read from the words in German, Spanish, Arabic and Hindi as English's
+  rules read it, so "Ich wohne in Leeds" and "Ich bin nach Bristol gezogen" relate without a
+  model; with the tenant's `conflict_adjudication`, a stated change whose first named thing the
+  older statement names is put to the model whatever the head read ("Maria Lopez is back from
+  leave" scores 0.02 against "is on leave" in Arabic). The lexicon reads first-person "finished"
+  in Spanish ("terminé") and Arabic ("أنهيت") and German "zu Ende", and a Hindi cue matches with
+  or without the nukta ("ख़त्म" / "खत्म").
+  Without a model, a stated change that leads with a name or identifier the older statement
+  carries, and that the encoder puts at 0.5 or closer to it, marks it as an earlier value
+  whatever the head read (never a supersession).
+  In German, a single capitalised word both statements use bare (no determiner, no number
+  beside it) is a shared name ("Ich lese gerade Dune" / "Ich habe Dune zu Ende gelesen").
 - Feedback review by target (ADR 0039, amends 0028): `GET /v1/feedback?review=pending&group=target`
   lists the queue one row per target with `votes`, `thumbs_up`, `thumbs_down`, distinct
   `voters` and `latest_at`; `POST /v1/feedback/approve` and `POST /v1/feedback/dismiss` decide
@@ -148,6 +194,10 @@ each entry says which one moved. Decisions behind each change are in the
   facts). Without a model the index job still enriches, once the source is findable: there it
   is tens of milliseconds, and as separate jobs the capability eval's writes settled 30 s later
   ([operations](docs/guide/11-operations.md#workers-and-periodic-jobs)).
+- A Hindi statement that begins "आज से" ("from today": when a value took effect) was read as a
+  standing rule, stored as a lasting preference and never compared with what it replaced. It
+  is a fact now, as "from today", "ab heute", "desde hoy" and "اعتبارًا من اليوم" already were;
+  "अब से" ("from now on") still makes a rule (ADR 0038).
 - Same-subject lookup: an older statement past the window of recent rows consolidation reads
   was missed when its subject was spelled with different punctuation ("forklift-4" stored,
   "forklift 4" said): the spelling variants were derived only when the subject was not

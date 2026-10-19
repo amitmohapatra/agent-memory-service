@@ -127,7 +127,10 @@ def candidate_item(c: Candidate, *, debug: bool, text_chars: int | None = None) 
         document_id=c.payload.get("document_id"),
         page=int(page) if isinstance(page, int | float) else None,
         thread_id=c.payload.get("thread_id") if c.kind == "episode" else None,
-        superseded=True if c.kind == "memory" and c.payload.get("current") is False else None,
+        superseded=True
+        if c.kind == "memory"
+        and (c.payload.get("current") is False or c.payload.get("earlier_value"))
+        else None,
         debug={
             "score": c.score,
             "retrievers": c.retrievers,

@@ -94,6 +94,18 @@ memory_decisions_total = Counter(
     ["decision"],
     registry=REGISTRY,
 )
+memory_replacements_total = Counter(
+    "memory_replacements_total",
+    "A user's earlier statements their new one replaced across conversations, by grade "
+    "(EARLIER: still current, ranked last and labelled; SUPERSEDED: closed)",
+    ["grade"],
+    registry=REGISTRY,
+)
+memory_replacement_skipped_total = Counter(
+    "memory_replacement_skipped_total",
+    "User statements stored without the cross-conversation comparison (the NLI head busy)",
+    registry=REGISTRY,
+)
 llm_requests_total = Counter(
     "memory_llm_requests_total",
     "LLM gateway calls by use and outcome (ok, http_<status>, exhausted, circuit_open, ...)",

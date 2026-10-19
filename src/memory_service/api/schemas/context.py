@@ -195,6 +195,11 @@ class ContextMemory(BaseModel):
     relevance: float = Field(..., ge=0.0, le=1.0, description=_RELEVANCE)
     observed_at: str | None = Field(default=None, description="when it was said or learned")
     subject: str | None = Field(default=None, description="who or what it is about")
+    superseded: bool | None = Field(
+        default=None,
+        description="true for an earlier value: a later statement of the same user replaced "
+        "it (served after every current item, as what it was)",
+    )
     dates: list[DatedMentionBody] | None = Field(
         default=None, description="relative dates in the text, resolved"
     )
@@ -354,5 +359,10 @@ class ContextResponse(BaseModel):
     )
     summaries: list[ContextSummary] | None = Field(
         default=None, description="Document summaries that bear on it."
+    )
+    history: list[ContextMemory] | None = Field(
+        default=None,
+        description="Earlier values: what a later statement of the same user replaced, oldest "
+        "first, each marked superseded. Never current; kept apart from memories.",
     )
     diagnostics: dict[str, Any] | None = Field(default=None, description="only with debug")

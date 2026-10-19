@@ -101,4 +101,4 @@ or states the facts again.
   procedure, an event, a decision). Ranking sees one of the twins.
 * Facts said in different threads are consolidated per thread as before: a value corrected in a
   later conversation does not supersede the earlier one; both are current and dated. Cross-thread
-  supersession of a user's facts is a separate decision.
+  supersession of a user's facts is a separate decision, taken in ADR 0038.

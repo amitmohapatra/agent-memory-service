@@ -29,7 +29,7 @@ from memory_service.ports.cache import CacheProvider, CacheUnavailable
 #: How long a bundle's handles and evidence can be referred back to: longer than a run.
 RECORD_TTL_SECONDS: Final = 1800
 #: ``m1``, ``d12``, ...: a handle, as opposed to a record id.
-HANDLE: Final = re.compile(r"^[mfsd][1-9]\d{0,3}$")
+HANDLE: Final = re.compile(r"^[mfsdh][1-9]\d{0,3}$")
 
 
 class RecordedEvidence(BaseModel):
@@ -61,6 +61,8 @@ def record_of(bundle: ContextBundle) -> BundleRecord:
         for name in ("memories", "graph_facts", "summaries", "knowledge")
         for item in getattr(bundle, name)
     }
+    # an earlier value has a handle (forget, update) but is no evidence for a current claim
+    history = {item.item_id for item in bundle.history}
     return BundleRecord(
         bundle_id=bundle.bundle_id,
         handles=handles,
@@ -74,6 +76,7 @@ def record_of(bundle: ContextBundle) -> BundleRecord:
                 citation=handle,
             )
             for handle, item_id in handles.items()
+            if item_id not in history
         ],
         unused=[
             RecordedEvidence(item_id=u.item_id, kind=u.kind, text=u.text)
