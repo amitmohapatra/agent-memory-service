@@ -150,3 +150,21 @@ def test_the_applying_sections_are_kept_when_the_whole_profile_does_not_fit() ->
     assert kept == [rules] and cost > 0
     pinned, _ = within_budget(Pinned(profile=[rules, big]), 400)
     assert pinned.profile == [rules]
+
+
+@pytest.mark.asyncio
+async def test_a_restated_rule_or_preference_with_new_values_keeps_only_the_newest() -> None:
+    hits = [
+        _hit("a", "Never schedule anything before 06:50 on weekdays.", "rule", day="2026-09-01"),
+        _hit("b", "Never schedule anything before 06:20 on weekdays.", "rule", day="2026-10-01"),
+        _hit("p", "I manage store JN4786 Lakeshore Arcade.", "preference", day="2026-09-01"),
+        _hit("q", "I manage store ZB1871 Willow Creek Mall.", "preference", day="2026-10-01"),
+    ]
+    blocks = {
+        b.block: b.text
+        for b in await standing.standing_blocks(
+            _Engine(hits), "Schedule my store visit on weekdays", None, _Vectors()
+        )
+    }
+    assert "06:20" in blocks["standing_rules"] and "06:50" not in blocks["standing_rules"]
+    assert "ZB1871" in blocks["preferences"] and "JN4786" not in blocks["preferences"]

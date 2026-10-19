@@ -38,12 +38,12 @@ PREFERENCES_BLOCK: Final = "preferences"
 #: the sections this module writes (``sections.within_budget`` keeps them before the rest)
 BLOCKS: Final = frozenset({RULES_BLOCK, PREFERENCES_BLOCK})
 RULE_CATEGORIES: Final = ("rule", "instruction")
-#: a statement the labeller read as a rule or a correction (ADR 0037) is one whatever rule
-#: extracted it: "Correction: do not order from depot A (it is closed); use depot B instead" is kept
-#: as the turn it is; and so is a statement that gives an instruction it says is for every
+#: a statement the labeller read as a rule (ADR 0037) is one whatever rule extracted it; a
+#: correction of a fact ("Update: B replaced A as the buyer") is not, and reaches the bundle as
+#: the memory it is; and so is a statement that gives an instruction it says is for every
 #: time, which the labeller leaves to a model a no-model deployment does not have ("Formatiere
 #: Berichte immer als Tabelle": ``standing_instruction``)
-RULE_KINDS: Final = ("RULE", "CONDITIONAL_RULE", "CORRECTION")
+RULE_KINDS: Final = ("RULE", "CONDITIONAL_RULE")
 PREFERENCE_CATEGORIES: Final = ("preference", "attribute")
 #: how many of each a search returns, and how many are shown
 SEARCH_K: Final = 24
@@ -97,6 +97,19 @@ _STANDING_WORDS: Final = frozenset(
 
 #: a number or a code ("512", "PX-90") is a shared word too: the thing it names
 _CODED = re.compile(r"(?<![\w-])[\w-]*\d[\w-]*")
+
+
+def _frame(text: str, lang: str) -> set[str]:
+    """What a statement says, without what it says it about: its content words but its codes,
+    numbers and capitalised names ("I manage store JN4786 Lakeshore Arcade" and "I manage store
+    ZB1871 Willow Creek Mall" say one thing; so do two "never before 06:50 / 06:20" rules)."""
+    words = {
+        w
+        for w in content_terms(text)
+        if w not in _function_words() and not any(c.isdigit() for c in w)
+    } - _STANDING_WORDS
+    named = {m.lower() for m in re.findall(r"(?<!^)(?<![.!?]\s)\b[A-Z][\w-]*", text)}
+    return stemmed_terms(words - named, lang) - _STANDING_WORDS
 
 
 def _stems(text: str, lang: str) -> set[str]:
@@ -173,7 +186,7 @@ def _choose(
         for hit, similarity in found
         if not hit.payload.get("earlier_value") and _text(hit)
     ]
-    gone = _superseded([(hit, stems) for hit, stems, _ in current])
+    gone = _superseded([(hit, _frame(_text(hit), lang)) for hit, _, _ in current])
     live = [c for c in current if c[0].record_id not in gone]
     chosen = sorted(
         (c for c in live if applies(query_stems, c[1], c[2], floor)),
