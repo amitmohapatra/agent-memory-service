@@ -118,6 +118,11 @@ def _weighted_dominant(counts: dict[Script, int]) -> Script:
     )
 
 
+def function_words(lang: str) -> frozenset[str]:
+    """The commonest function words of a Latin-script language (empty for any other)."""
+    return _FUNCTION_WORDS.get(lang, frozenset())
+
+
 def is_english(lang: str) -> bool:
     """Whether the English rules are the right reader of text in ``lang``."""
     return lang == ENGLISH

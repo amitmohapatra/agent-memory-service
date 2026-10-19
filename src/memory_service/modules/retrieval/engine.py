@@ -746,6 +746,8 @@ class RetrievalEngine:
         pool = memory_ranking.ArmPool.of(arms)
         if not pool.hits:
             return []
+        if memory_ranking.GROUP_STATEMENTS:
+            pool = memory_ranking.statements(pool)
         # a question searched as of a moment reads "last month" from that moment
         anchor = at.as_of.date() if at is not None and at.as_of is not None else None
         ranked = memory_ranking.ranked(pool, question or search_text, anchor)
@@ -761,7 +763,7 @@ class RetrievalEngine:
                 text=str(pool.hits[rid].payload.get("text", "")),
                 score=score,
                 retrievers=sorted(name.value for name, ranks in pool.ranks.items() if rid in ranks),
-                payload=pool.hits[rid].payload,
+                payload=_with_forms(pool, rid),
             )
             for rid, score in ranked[:depth]
         ]
@@ -1106,6 +1108,15 @@ class RetrievalEngine:
                 update={"must_any": {**flt.must_any, "document_id": list(document_ids)}}
             )
         return collection, flt
+
+
+def _with_forms(pool: memory_ranking.ArmPool, rid: str) -> dict[str, Any]:
+    """The hit's payload, naming the statement's other forms as its ``duplicates``
+    (``memory_ranking.statements``), so an expansion that reaches one of them by id does not
+    bring the statement back a second time (``in_hand``)."""
+    payload = pool.hits[rid].payload
+    others = [hit.record_id for hit in pool.forms.get(rid, ())[1:]]
+    return {**payload, "duplicates": others} if others else payload
 
 
 def _observed_within(candidate: Candidate, observed: ObservedRange) -> bool:

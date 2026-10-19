@@ -19,11 +19,15 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
+
+import snowballstemmer
 
 from memory_service.config.constants import RetrievalSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ContextGraphEdge, EvidenceStatus, QueryType
+from memory_service.domain.language import detect_language, function_words
 from memory_service.domain.text import unicode_tokens
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.context.expansion import edges_to_groups, evidence_group_key
@@ -67,6 +71,57 @@ def content_terms(text: str) -> set[str]:
     return terms
 
 
+#: Snowball stemmers by question language (``domain.language``). The overlap rule compared
+#: surface words, so an inflection or an attached article was "no shared term": the Arabic
+#: question "انسكاب في الغرفة الخلفية" shares no word with "مسؤول الاستجابة للانسكابات".
+#: Replayed on the capability eval's dev split (no LLM, the bundles a run recorded, the items
+#: they show): 94 of 2,316 answerable new-conversation bundles that were INSUFFICIENT share a
+#: stem and no word with their evidence (62 of 2,316 in the same conversation), against 4 and
+#: 5 of 254 unanswerable ones. The paired runs are in ADR 0041.
+#: Latin words are also read with the English stemmer: an English product or person name in
+#: another language's question.
+_STEMMED = {
+    "en": "english",
+    "de": "german",
+    "es": "spanish",
+    "fr": "french",
+    "it": "italian",
+    "pt": "portuguese",
+    "nl": "dutch",
+    "ar": "arabic",
+    "hi": "hindi",
+    "ru": "russian",
+    "tr": "turkish",
+}
+
+
+@lru_cache(maxsize=16)
+def _stemmer(lang: str) -> Any | None:
+    name = _STEMMED.get(lang)
+    return snowballstemmer.stemmer(name) if name else None
+
+
+@lru_cache(maxsize=65536)
+def _stem(word: str, lang: str) -> str:
+    stemmer = _stemmer(lang)
+    return str(stemmer.stemWord(word)) if stemmer is not None else word
+
+
+def stemmed_terms(terms: set[str], lang: str) -> set[str]:
+    """``terms`` and their stems in ``lang`` (and in English, for a Latin word): the unit the
+    overlap rule compares, so an inflected form or an attached article still matches."""
+    out = set(terms)
+    # a function word's stem is a function word too ("meine" -> "mein"), never a topic
+    skip = function_words(lang) | function_words("en")
+    for word in terms:
+        if word in skip:
+            continue
+        out.add(_stem(word, lang))
+        if lang != "en" and word.isascii():
+            out.add(_stem(word, "en"))
+    return out
+
+
 class TermCache:
     """``content_terms`` per record id, for the life of one request.
 
@@ -80,6 +135,7 @@ class TermCache:
 
     def __init__(self) -> None:
         self._terms: dict[str, set[str]] = {}
+        self._stems: dict[tuple[str, str], set[str]] = {}
 
     def of(self, candidate: Candidate) -> set[str]:
         terms = self._terms.get(candidate.record_id)
@@ -88,11 +144,20 @@ class TermCache:
             self._terms[candidate.record_id] = terms
         return terms
 
+    def stems(self, candidate: Candidate, lang: str) -> set[str]:
+        key = (candidate.record_id, lang)
+        stems = self._stems.get(key)
+        if stems is None:
+            stems = stemmed_terms(self.of(candidate), lang)
+            self._stems[key] = stems
+        return stems
+
 
 def overlaps(
     query: str, candidates: Sequence[Candidate], *, terms: TermCache | None = None
 ) -> bool:
-    """Abstention rule: at least one evidence item shares a content term with the query."""
+    """Abstention rule: at least one evidence item shares a content term with the query, as
+    a word or as its stem in the question's language (``stemmed_terms``)."""
     cache = terms or TermCache()
     q = content_terms(query)
     if not q:
@@ -102,7 +167,12 @@ def overlaps(
         # question that asks nothing cannot be supported by evidence, and saying COMPLETE
         # about it is exactly the dishonesty the evidence report exists to prevent.
         return False
-    return any(c.kind in ("chunk", "memory", "summary") and cache.of(c) & q for c in candidates)
+    lang = detect_language(query)
+    wanted = stemmed_terms(q, lang)
+    return any(
+        c.kind in ("chunk", "memory", "summary") and cache.stems(c, lang) & wanted
+        for c in candidates
+    )
 
 
 def _conflicting_memories(candidates: Sequence[Candidate]) -> list[tuple[str, str]]:
