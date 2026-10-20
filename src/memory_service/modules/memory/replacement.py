@@ -702,10 +702,21 @@ def says_a_change(memory: CanonicalMemory) -> bool:
 def says_the_same_of_it(new_text: str, old_text: str) -> bool:
     """Two statements about one named thing say the same of it: they share a word besides
     what they name ("The buyer for Region L60 is Thea" / "Amara has replaced Thea as the
-    buyer for Region L60"), or one of them says nothing besides it."""
+    buyer for Region L60"), or, saying nothing besides it, they are the same sentence but for
+    their values ("El sitio SITE-7786 está en la zona ZN-U97" / "... ZN-V59")."""
     # each in its own language: a stored language may be another statement's misreading
     a, b = _said_of(new_text, None), _said_of(old_text, None)
-    return not a or not b or bool(a & b)
+    if a & b:
+        return True
+    return not (a or b) and _skeleton(new_text) == _skeleton(old_text)
+
+
+def _skeleton(text: str) -> frozenset[str]:
+    """A sentence's words but its values (anything with a digit) and names."""
+    found = anchors(text)
+    names = {w for name in found.names for w in name.split()}
+    words = (w.strip(".,;:!?¿¡()\"'«»“”،؛।") for w in text.lower().split())
+    return frozenset(w for w in words if w and not any(ch.isdigit() for ch in w) and w not in names)
 
 
 def related(relation: Relation, cosine: float | None) -> bool:

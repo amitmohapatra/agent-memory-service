@@ -1085,3 +1085,47 @@ async def test_a_later_statement_about_something_else_leaves_the_older_one() -> 
         _uow([newer, older]), CTX, [older], now=T1
     )
     assert out.changed == []
+
+
+@pytest.mark.parametrize(
+    ("new", "old", "same"),
+    [
+        # links of a chain: what they share is all they have in common
+        (
+            "The dispatcher for zone ZN-V59 is Esme Iwasaki.",
+            "Site SITE-7786 is in zone ZN-V59.",
+            False,
+        ),
+        (
+            "El despachador de la zona ZN-V59 es Esme Iwasaki.",
+            "El sitio SITE-7786 está en la zona ZN-V59.",
+            False,
+        ),
+        (
+            "Der Einkäufer für Region K41 ist Lena Ortiz.",
+            "Region K41 wird aus DC-Harbor-T318 beliefert.",
+            False,
+        ),
+        ("يتم تزويد المنطقة K41 من DC-Harbor-T318.", "المتجر 5128 يتبع المنطقة K41.", False),  # noqa: RUF001
+        ("रीजन K41 को DC-Harbor-T318 से माल मिलता है।", "स्टोर 5128 रीजन K41 में आता है।", False),
+        # one thing said again with another value, or a change of it
+        ("Site SITE-7786 is in zone ZN-V59.", "Site SITE-7786 is in zone ZN-U97.", True),
+        (
+            "El sitio SITE-7786 está en la zona ZN-V59.",
+            "El sitio SITE-7786 está en la zona ZN-U97.",
+            True,
+        ),
+        ("Filiale 5128 gehört zur Region K41.", "Filiale 5128 gehört zur Region Z12.", True),
+        ("المتجر 5128 يتبع المنطقة K41.", "المتجر 5128 يتبع المنطقة Z12.", True),  # noqa: RUF001
+        ("स्टोर 5128 रीजन K41 में आता है।", "स्टोर 5128 रीजन Z12 में आता है।", True),
+        (
+            "Update: Amara Uchenna has replaced Thea Cervantes as the buyer for Region L60.",
+            "The buyer for Region L60 is Thea Cervantes.",
+            True,
+        ),
+    ],
+)
+def test_two_statements_say_the_same_of_what_they_share(new, old, same):
+    from memory_service.modules.memory.replacement import says_the_same_of_it
+
+    assert says_the_same_of_it(new, old) is same
