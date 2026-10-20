@@ -139,8 +139,37 @@ Memory is never cleared, and nothing in an upgrade needs it to be. A store writt
 ADR 0038/0040/0041 holds a user's old and new statements of one thing both current, and index
 points without the `statement_kind` payload the rules section filters on. Both are read
 correctly as soon as the new build serves (the read path's latest-value rules apply to old
-and new memories alike, ADR 0041), and one command brings the stored state up to the new
-build, in place, while it serves:
+and new memories alike, ADR 0041), and the backfill brings the stored state up to the new
+build, in place, while it serves.
+
+**With compose, upgrading is: pull, then `docker compose up -d`.** Nothing else (`--build`
+because the stack builds its image from the checkout rather than pulling one):
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+`db-migrate` applies the schema first, then the API and the worker start and the one-shot
+`memory-backfill` service runs the backfill beside them
+(`python -m memory_service.tools.backfill --state /data/backfill/state.json`). The API and
+the worker do not wait for it: it is live-safe, and they serve while it runs. Its checkpoint
+lives on the `backfill` volume and records the backfill's revision (`BACKFILL_REVISION`) and
+every user finished, so:
+
+* the next `docker compose up` of the same release skips every user finished, and with none
+  left exits 0 before loading a model;
+* a release that changes what the backfill applies bumps the revision, and a checkpoint
+  from an earlier revision starts over (every user is brought up to the new rules);
+* a fresh install (no users yet) exits 0 at once;
+* a run stopped midway resumes where it stopped on the next `up`.
+
+Its result is in `docker compose logs memory-backfill` (a JSON report: users, messages,
+replaced, relabelled, standing, failures); a user that failed makes it exit 1, and the next `up` runs
+that user again.
+
+**Without compose**, run the same command after `alembic upgrade head` (`make migrate`),
+with a state file that outlives the run:
 
 ```bash
 make backfill BACKFILL_ARGS="--state /var/lib/memory/backfill.json"           # every user
@@ -154,19 +183,33 @@ make backfill BACKFILL_ARGS="--state /var/lib/memory/backfill.json --reindex-all
   earlier value (history) or is superseded, exactly as if it had been said after the upgrade.
   Then every memory of that user is indexed again (an upsert of the same ids, with the new
   payload) and its graph enrichment runs again, as the write path's index job does, so the
-  graph facts of a memory now replaced are retired with it; `--reindex-all` rebuilds the
+  graph facts of a memory now replaced are retired with it, and the user's `user` profile
+  block is composed again from what is current (the block an earlier build composed listed
+  what this one reads as replaced); `--reindex-all` rebuilds the
   whole index afterwards (`tools.reindex`).
-* **Stale rule labels are read again** (a deployment without a model only: every label
-  there came from the lexicon). A statement an earlier build stored as a rule, or a turn it
-  labelled one, that this build's lexicon reads no rule in (Hindi "आज से X संभालेंगे" is a
-  dated fact) is relabelled a fact before the replacement runs, so it is compared as a fresh
-  store would compare it (`relabelled` in the report).
+* **Each statement is read again first, as the write path reads it** (`read_again`), so
+  it is compared and served as a fresh store's would be:
+  * a sentence that gives an instruction for every time ("Setz die Auftragsnummer immer in
+    den E-Mail-Betreff ...", "Pon siempre ...", "ضع دائمًا ...") is marked a standing
+    instruction (`standing_instruction`), in every deployment: the words alone decide it.
+    An earlier build marked none, so a rule restated with a new value was two current rules
+    to the read path (`standing` in the report);
+  * in a deployment without a model (every kind there came from the lexicon and the NLI
+    head), a kind this build's labeller cannot give a statement is read again by the
+    labeller, with the head for what the lexicon leaves open: Hindi "आज से X संभालेंगे" was a
+    rule by an earlier lexicon and is a dated fact (or a correction) by this one; a rule
+    reading this build reads no rule in becomes a fact, or, when it was all its message
+    left (no turn kept beside it), the turn this build keeps in its place. A kind it can still give (the
+    lexicon's, or the one it leaves to the head) is the same head's verdict and is kept
+    (`relabelled` in the report).
 * **Nothing is deleted.** A replacement stays reversible (forgetting or retracting the newer
   statement reinstates the older one).
 * **Live-safe.** One message per transaction, under the user's serialization, bumping the
   revisions its changes touch, so no cached bundle serves a value it marked.
 * **Idempotent and resumable.** A statement already marked is not marked again; a second run
   changes nothing. `--state` records each finished user and, for the one in progress, the
-  last message done (every `--batch`, default 50); rerun the same command to resume.
+  last message done (every `--batch`, default 50); rerun the same command to resume. The
+  state also records `BACKFILL_REVISION`: a state file from another revision starts over,
+  so keeping one file across releases is safe.
 * **Needs the NLI head** (the replacement's decider, as on the write path). Without it the
   command only re-indexes.

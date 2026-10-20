@@ -558,9 +558,10 @@ def default_visibility(
     return Visibility.USER if ctx.user_id else Visibility.TENANT
 
 
-def _standing(label: Any) -> bool:
+def standing_instruction(label: Any) -> bool:
     """The sentence gives an instruction it says is for every time ("Formatiere Berichte immer
-    als Tabelle"), decided a rule or left to a model the deployment may not have (ADR 0041)."""
+    als Tabelle"), decided a rule or left to a model the deployment may not have (ADR 0041).
+    The lexicon's reading alone: a model that decides the kind keeps it."""
     return bool(getattr(label, "standing", False) and getattr(label, "instruction", None))
 
 
@@ -703,7 +704,7 @@ class NativeMemoryIntelligence:
         # the turn carries the kind of its most telling sentence ("No, our system was
         # updated. We now use /shrinkage." is a correction as a whole)
         turn_kind = most_salient(label.kind for label in labels)
-        standing = any(_standing(label) for label in labels)
+        standing = any(standing_instruction(label) for label in labels)
         out.extend(
             turn.model_copy(update={"statement_kind": turn_kind, "standing_instruction": standing})
             for turn in self._verbatim(text, observation, ctx, evidence)
@@ -927,7 +928,10 @@ class NativeMemoryIntelligence:
         if cand is None:
             return None
         return cand.model_copy(
-            update={"statement_kind": label.kind, "standing_instruction": _standing(label)}
+            update={
+                "statement_kind": label.kind,
+                "standing_instruction": standing_instruction(label),
+            }
         )
 
     def _candidate(

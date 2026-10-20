@@ -14,6 +14,11 @@ each entry says which one moved. Decisions behind each change are in the
   newest; "Only list ..." and its translations are standing rules; a question about a code no
   evidence names, of a form the store holds others of, is INSUFFICIENT (a code the user
   supplies to a request is not); the backfill retires the graph facts of what it replaced.
+- The backfill brings a store an earlier build wrote to what a fresh store holds: it marks
+  the standing instructions an earlier build never marked (a rule restated with a new value
+  was two current rules), keeps the rules the NLI head confirmed (it made them facts),
+  turns a rule reading this build reads no rule in, left alone by its message, into the turn
+  this build keeps, and composes each user's profile block again.
 
 ### Added
 - Memory that is never cleared reads right (ADR 0041). Of a user's statements of the slot a
@@ -32,7 +37,11 @@ each entry says which one moved. Decisions behind each change are in the
 - `make backfill` (`memory_service.tools.backfill`): brings a store an earlier build wrote up
   to this one in place while serving - replacement across each user's conversations in event
   time, then the index again; idempotent, resumable (`--state`), nothing deleted
-  (docs/deploy/database.md). No new setting.
+  (docs/deploy/database.md). No new setting. Compose runs it on every `up` (the one-shot
+  `memory-backfill` service, beside the API, its checkpoint on the `backfill` volume), so an
+  upgrade is pull, then `docker compose up -d --build`; the checkpoint records
+  `BACKFILL_REVISION`, and one from an earlier revision starts over. With no user left to
+  bring up it exits 0 before loading a model.
 - A question asking for a phone number, an e-mail address or a code or password that no
   evidence about what it names states - "the alarm code for Store 33" when only Store 31's is
   known - or for a month the evidence never names (an item naming no month is about the month

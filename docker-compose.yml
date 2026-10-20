@@ -262,6 +262,52 @@ services:
       db-migrate:
         condition: service_completed_successfully
 
+  # One-shot, on every `docker compose up`: brings what an earlier build stored up to this
+  # one, in place (tools/backfill.py, docs/deploy/database.md, ADR 0041), so an upgrade is
+  # "pull, then docker compose up -d" and nothing else. Live-safe: the API and the worker do
+  # NOT wait for it and serve while it runs. Its checkpoint (the `backfill` volume) records
+  # BACKFILL_REVISION and every user finished: the next `up` of the same release skips them
+  # and exits before loading a model, a release that changes the backfill's rules starts
+  # over, and on a fresh install (no users) it exits 0 at once.
+  memory-backfill:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: runtime
+    command: ["python", "-m", "memory_service.tools.backfill", "--state", "/data/backfill/state.json"]
+    env_file:
+      # the same operator settings as the API and the worker: whether a model is configured
+      # decides what the backfill reads again
+      - path: .env
+        required: false
+    environment:
+      <<: *common-env
+      # it runs beside a serving API: one math thread and two CPUs, as the worker
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+    restart: "no"
+    volumes:
+      - backfill:/data/backfill
+      - blob:/data/blob
+      - ./models:/models:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      dragonfly:
+        condition: service_healthy
+      model-fetch:
+        condition: service_completed_successfully
+      db-migrate:
+        condition: service_completed_successfully
+
   # The LLM gateway is NOT part of this stack.
   #
   # Bifrost is deployed separately and owns all outbound model traffic: provider keys, prompts
@@ -330,3 +376,4 @@ volumes:
   qdrant:
   dragonfly:
   blob:
+  backfill:
