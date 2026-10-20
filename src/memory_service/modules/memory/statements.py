@@ -92,6 +92,7 @@ _FIELDS: Final = (
     "consequent",
     "recurring",
     "deictic",
+    "occasion",
     "subject_start",
     "imperative",
     "imperative_inside",
@@ -518,6 +519,8 @@ class _Reader:
         "every time", "cada vez que", "jab bhi") or a universal obligation."""
         if shape.marker is not None or shape.leads or self._obligation(s, work, shape):
             return True
+        if shape.condition is None and self._restricted(work, shape):
+            return True  # a restriction holds for every time it applies ("Only list ...")
         return shape.condition is not None and bool(
             self.cues["recurring"].at(work, shape.condition[0])
         )
@@ -628,7 +631,20 @@ class _Reader:
             # "We never ship hazardous goods on Fridays" / "We always look forward to ...";
             # "Formatiere Berichte immer als Tabelle" after a verb the packs cannot list
             return False
+        if evidence == "strong" and self._restricted(work, shape):
+            # "Only list stores with zero on-hand", "Liste nur ...", "اذكر فقط ...": an
+            # instruction that restricts what is done - perhaps a standing one (the model tier
+            # decides; without one it joins the rules as a standing instruction)
+            return False
         return None
+
+    def _restricted(self, work: str, shape: _Shape) -> bool:
+        """The instruction's own clause restricts it ("only", "nur", "solo", "فقط", "सिर्फ़") and
+        names no single occasion ("today", "esta vez", "इस बार"): one occasion is a request."""
+        start, end = shape.main
+        return bool(self.cues["only"].search(work, start, end)) and not self.cues[
+            "occasion"
+        ].search(work, start, end)
 
     def _conditional_certainty(
         self, s: str, work: str, shape: _Shape, evidence: str

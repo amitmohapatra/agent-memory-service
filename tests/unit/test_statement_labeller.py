@@ -614,3 +614,39 @@ def test_normalised_forms_questions_and_one_off_requests(
 def test_a_second_standing_word_before_the_instruction_still_makes_a_rule(sentence, kind) -> None:
     label = Lexicon.default().label(sentence)
     assert label.kind is kind and label.decided and label.standing
+
+
+# ------------------------------------------------------------------ a restricted instruction
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Only list stores with zero on-hand, at most the first six by store code.",
+        "Liste nur Filialen mit Bestand null auf, höchstens die ersten sechs nach Filialcode.",
+        "Enumera solo tiendas con existencias cero, como máximo las primeras seis.",
+        "اذكر فقط المتاجر ذات المخزون صفر، بحد أقصى أول ستة حسب رمز المتجر.",
+        "सिर्फ़ शून्य ऑन-हैंड वाले स्टोर लिखना, ज़्यादा से ज़्यादा पहले छह।",
+    ],
+)
+def test_a_restricted_instruction_is_a_standing_rule_a_model_confirms(text):
+    label = Lexicon.default().label(text)
+    assert not label.decided and label.maybe is StatementKind.RULE and label.standing
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Only send me the summary today.",  # one occasion: a request
+        "Envía solo el resumen hoy.",
+        "Schick mir diesmal nur die Zusammenfassung.",
+        "I only drink tea.",  # restricted, but no instruction
+        "Only Maria knows the code.",
+        "We only ship on Mondays.",
+        "Ich habe nur zwei Filialen.",
+        "اذكر اسمك.",  # an instruction, not restricted
+    ],
+)
+def test_what_is_no_standing_restriction(text):
+    label = Lexicon.default().label(text)
+    assert not (label.maybe is StatementKind.RULE and label.standing), label
