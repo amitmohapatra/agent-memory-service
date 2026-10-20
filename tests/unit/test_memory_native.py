@@ -325,6 +325,17 @@ async def _consolidate(native, existing_text: str, incoming_text: str):
         ("The service costs 400 USD.", "The service costs 4000 USD.", DedupDecision.CREATE),
         ("I like verbose output.", "I don't like verbose output.", DedupDecision.CREATE),
         ("We decided to use Postgres.", "We decided to ship on Friday.", DedupDecision.CREATE),
+        # a code differs (and the number they share does not make them one statement)
+        (
+            "Always put the work order number in the email subject, prefixed with WO-E3.",
+            "Always put the work order number in the email subject, prefixed with WO-K3.",
+            DedupDecision.CREATE,
+        ),
+        (
+            "Reorder PX-90 when stock drops.",
+            "Reorder PX-91 when stock drops.",
+            DedupDecision.CREATE,
+        ),
     ],
 )
 async def test_consolidation_decisions(native, existing, incoming, decision) -> None:

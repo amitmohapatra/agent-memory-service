@@ -99,8 +99,17 @@ def _level(block: str) -> str:
 
 
 def template(memories: Sequence[CanonicalMemory]) -> str:
-    """A line per memory, newest first, bounded: the ``user`` block without a model."""
-    lines = list(dict.fromkeys(f"- {' '.join(m.content.split())}" for m in memories))
+    """A line per memory, newest first, bounded: the ``user`` block without a model. A rule
+    restated with new values ("... prefixed with WO-K3" after "... prefixed with WO-E3") is
+    listed once, as said last, as the ``standing_rules`` section lists it (ADR 0041)."""
+    from memory_service.modules.context.standing import restated_rules
+
+    gone = restated_rules(memories)
+    lines = list(
+        dict.fromkeys(
+            f"- {' '.join(m.content.split())}" for m in memories if m.memory_id not in gone
+        )
+    )
     return _bounded(lines)
 
 

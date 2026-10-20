@@ -85,3 +85,43 @@ def test_the_extractive_summary_rolls_forward_and_drops_the_oldest_lines() -> No
     assert later.splitlines() == ["user: Order paper.", "assistant: Done.", "user: And pens?"]
     long = rolled(later, [_message(i, f"line {i} " + "x" * 150) for i in range(4, 40)])
     assert len(long) <= SUMMARY_MAX_CHARS and "user: Order paper." not in long
+
+
+def _rule(content: str, day: int, category: str = "rule") -> CanonicalMemory:
+    m = _memory(content)
+    return m.model_copy(
+        update={
+            "system_metadata": {"category": category},
+            "temporal": m.temporal.model_copy(
+                update={"observed_at": datetime(2026, 10, day, tzinfo=UTC)}
+            ),
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    ("older", "newer"),
+    [
+        (
+            "Always put the work order number in the email subject, prefixed with WO-E3.",
+            "Always put the work order number in the email subject, prefixed with WO-K3.",
+        ),
+        (
+            "ضع دائمًا رقم أمر العمل في عنوان البريد مسبوقًا بـ WO-E3.",  # noqa: RUF001
+            "ضع دائمًا رقم أمر العمل في عنوان البريد مسبوقًا بـ WO-K3.",  # noqa: RUF001
+        ),
+        (
+            "Setz die Auftragsnummer immer in den E-Mail-Betreff, mit dem Präfix WO-E3.",
+            "Setz die Auftragsnummer immer in den E-Mail-Betreff, mit dem Präfix WO-K3.",
+        ),
+    ],
+)
+def test_a_rule_restated_with_new_values_is_listed_once_as_said_last(older, newer) -> None:
+    block = template([_rule(newer, 17), _rule(older, 10), _rule("Never book Sundays.", 12)])
+    assert block == f"- {newer}\n- Never book Sundays."
+
+
+def test_facts_that_say_the_same_of_different_things_all_stay() -> None:
+    a = _rule("I have a meeting with Ana on Monday.", 10, category="fact")
+    b = _rule("I have a meeting with Bob on Tuesday.", 12, category="fact")
+    assert template([b, a]).count("\n") == 1

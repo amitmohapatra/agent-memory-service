@@ -122,6 +122,28 @@ def applies(query_stems: set[str], hit_stems: set[str], similarity: float, floor
     return similarity >= floor or len(query_stems & hit_stems) >= SHARED_STEMS
 
 
+def restated_rules(memories: Sequence[Any]) -> set[str]:
+    """The ids of the rules (``RULE_CATEGORIES``) of ``memories`` that a later rule on the
+    same subject supersedes (``SAME_SUBJECT`` of the shorter one's words, codes, numbers and
+    names aside): a rule restated with new values keeps only its newest form."""
+    rules = [
+        (m, _frame(m.content, detect_language(m.content)))
+        for m in memories
+        if (m.system_metadata or {}).get("category") in RULE_CATEGORIES
+    ]
+    out: set[str] = set()
+    for i, (a, fa) in enumerate(rules):
+        for b, fb in rules[i + 1 :]:
+            shorter = min(len(fa), len(fb))
+            if not shorter or len(fa & fb) / shorter < SAME_SUBJECT:
+                continue
+            when_a, when_b = a.temporal.observed_at, b.temporal.observed_at
+            if when_a == when_b:
+                continue  # said at one instant: no order
+            out.add((a if when_a < when_b else b).memory_id)
+    return out
+
+
 def _superseded(chosen: Sequence[tuple[SearchHit, set[str]]]) -> set[str]:
     """The rules a later one on the same subject supersedes: of two that share
     ``SAME_SUBJECT`` of the shorter one's stems, the earlier said."""

@@ -118,6 +118,17 @@ def numbers(text: str) -> set[str]:
     return {normalise_number(n) for n in _NUMBER.findall(text)}
 
 
+_CODE = re.compile(r"(?<![\w-])(?=[\w-]*[^\W\d_])(?=[\w-]*\d)\w[\w-]*\w(?![\w-])")
+
+
+def figures(text: str) -> set[str]:
+    """The numbers ``text`` states and the codes it names (letters and digits: "WO-K3",
+    "PX-90"): two statements that differ in one are never one statement, however alike
+    their words ("prefixed with WO-K3" / "prefixed with WO-E3" share the number 3)."""
+    codes = {re.sub(r"[^0-9a-z]", "", m.group().lower()) for m in _CODE.finditer(text)}
+    return numbers(text) | {f"#{c}" for c in codes}
+
+
 def has_negation(text: str) -> bool:
     words = set(re.findall(r"[a-z']+", text.lower()))
     return bool(words & _NEGATION) or "n't" in text.lower()
@@ -1216,7 +1227,7 @@ class NativeMemoryIntelligence:
             )
         c_hash = normalized_hash(candidate.content)
         c_tokens = tokens(candidate.content)
-        c_numbers = numbers(candidate.content)
+        c_numbers = figures(candidate.content)
         c_neg = has_negation(candidate.content)
         c_obj = _clean_object(candidate.object or "")
         generated = unverified_representation(
@@ -1345,7 +1356,7 @@ class NativeMemoryIntelligence:
             # still be asked about them below
             apart = pairs[mem.memory_id].apart
             if sim >= self.cfg.dedup_lexical_threshold and not apart:
-                if numbers(mem.content) != c_numbers or has_negation(mem.content) != c_neg:
+                if figures(mem.content) != c_numbers or has_negation(mem.content) != c_neg:
                     continue
                 decision = DedupDecision.MERGE if c_tokens - m_tokens else DedupDecision.REINFORCE
                 outcome = ConsolidationOutcome(
@@ -1360,7 +1371,7 @@ class NativeMemoryIntelligence:
                 continue
             if (
                 adjudicating
-                and numbers(mem.content) == c_numbers
+                and figures(mem.content) == c_numbers
                 and has_negation(mem.content) == c_neg
             ):
                 askable.append((mem, sim))
@@ -1385,7 +1396,7 @@ class NativeMemoryIntelligence:
             for mem, other in zip(dense_band, others, strict=True):
                 cos = sum(a * b for a, b in zip(dense, other, strict=True))
                 if cos >= self.cfg.dedup_dense_threshold and (
-                    numbers(mem.content) == c_numbers and has_negation(mem.content) == c_neg
+                    figures(mem.content) == c_numbers and has_negation(mem.content) == c_neg
                 ):
                     outcome = ConsolidationOutcome(
                         decision=DedupDecision.MERGE,
@@ -1472,7 +1483,7 @@ class NativeMemoryIntelligence:
         failure or a 'different' verdict keeps the native outcome."""
         if not self.assist.wants("conflict_adjudication"):
             return native
-        if numbers(mem.content) != numbers(candidate.content) or has_negation(
+        if figures(mem.content) != figures(candidate.content) or has_negation(
             mem.content
         ) != has_negation(candidate.content):
             return native
