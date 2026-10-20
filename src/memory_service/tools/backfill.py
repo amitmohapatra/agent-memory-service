@@ -1,6 +1,12 @@
 """Bring memory an earlier build wrote up to this one, in place and while serving (ADR 0041).
 
-Production memory is never cleared, and an earlier build left two things this one reads:
+Production memory is never cleared, and an earlier build left three things this one reads:
+
+* **labels it reads otherwise** (``read_again``). Each statement is read again first, as the
+  write path reads it: a sentence that gives an instruction for every time is marked a
+  standing instruction (an earlier build marked none, and the read path then took a rule
+  restated with a new value for two current rules), and, in a deployment without a model, a
+  kind this build's labeller cannot give it is read again by the labeller.
 
 * **values replaced across conversations that were never marked.** A store written before
   ADR 0038 (or before 0040's out-of-order rule) holds a user's old and new statements of one
@@ -9,8 +15,8 @@ Production memory is never cleared, and an earlier build left two things this on
   through the same replacement the write path runs (``CrossConversationReplacement.run``): an
   older value becomes an earlier value (history) or is superseded, exactly as if it had been
   said after this build shipped. Nothing is deleted, and a replacement stays reversible.
-* **index points without the payload this build filters on** (``statement_kind``, the
-  rule channel of ``context.standing``). Every memory of the users it read is indexed again
+* **index points without the payload this build filters on** (``statement_kind`` and
+  ``standing_instruction``, the rule channel of ``context.standing``). Every memory of the users it read is indexed again
   (``Indexer.index_memories``: an upsert of the same ids); ``--reindex-all`` re-indexes the
   whole store with ``tools.reindex`` instead.
 
@@ -72,6 +78,7 @@ class BackfillReport:
     indexed: int = 0
     skipped_users: int = 0
     relabelled: int = 0
+    standing: int = 0
     failures: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -82,6 +89,7 @@ class BackfillReport:
             "indexed": self.indexed,
             "skipped_users": self.skipped_users,
             "relabelled": self.relabelled,
+            "standing": self.standing,
             "failures": self.failures,
         }
 
@@ -201,46 +209,82 @@ async def _statements(
     return out
 
 
-_RULE_KINDS = ("RULE", "CONDITIONAL_RULE")
-
-
 def without_a_model(container: Any) -> bool:
     """The deployment has no model (``LLMSettings.base_url`` unset): every statement kind it
-    stored came from the lexicon, so this build's lexicon may read them again."""
+    stored came from the lexicon and the NLI head, so this build's may read them again."""
     settings = getattr(container, "settings", None)
     llm = getattr(settings, "llm", None)
     return llm is not None and not getattr(llm, "base_url", None)
 
 
-def relabelled(memory: CanonicalMemory) -> CanonicalMemory | None:
-    """``memory`` as this build's lexicon reads it, when an earlier build's lexicon stored it
-    as a rule (a rule reading, or a turn labelled one) and this one reads no rule in it
-    (Hindi "आज से X संभालेंगे" is a dated fact, ADR 0040): a fact, which the replacement then
-    compares as a fresh store would. None when nothing changes."""
-    from memory_service.modules.memory.replacement import misread_rule
+async def read_again(
+    memory: CanonicalMemory, labeller: Any, *, relabel: bool
+) -> CanonicalMemory | None:
+    """``memory`` with what this build's write path reads in its words where an earlier
+    build stored otherwise; None when nothing changes. Only a statement the labeller labelled
+    (``statement_kind``: a turn, or what was read from one sentence of it) is read again.
+
+    * **A standing instruction** (every deployment: the words alone decide it, a model never
+      does): a sentence that gives an instruction it says is for every time ("Setz die
+      Auftragsnummer immer in den E-Mail-Betreff ...", "أضف دائمًا ... في نسخة") is marked
+      ``standing_instruction`` as this build marks it on the write path, so the read path
+      treats it as a rule (the rules section, a rule restated with a new value) whatever kind
+      the labeller left it. An earlier build never marked one.
+    * **A kind this build's labeller cannot give it** (``relabel``: a deployment without a
+      model, where every kind came from the lexicon and the NLI head): read again by the
+      labeller, with the NLI head for what its lexicon leaves open, as the write path reads
+      it (Hindi "आज से X संभालेंगे" was a rule by an earlier lexicon and is a dated fact or a
+      correction by this one, ADR 0040). A kind it can still give (the lexicon's, or the
+      kind it leaves to the head) is the same head's verdict and is kept. A rule reading this
+      build reads no rule in becomes a fact.
+    """
+    from memory_service.modules.memory.native import split_sentences, standing_instruction
+    from memory_service.modules.memory.statements import RULE_KINDS, most_salient
 
     meta = memory.system_metadata
-    reading = meta.get("category") == "rule"
-    turn = meta.get("category") == "verbatim_turn" and meta.get("statement_kind") in _RULE_KINDS
-    if not (reading or turn) or not misread_rule(memory):
+    stored = meta.get("statement_kind")
+    if not stored:
         return None
-    fixed = {k: v for k, v in meta.items() if k != "standing_instruction"}
-    fixed["statement_kind"] = "FACT"
-    if reading:
-        fixed["category"] = "fact"
+    sentences = split_sentences(memory.content) or [memory.content]
+    lexical = [labeller.lexicon.label(s) for s in sentences]
+    fixed = dict(meta)
+    if relabel:
+        possible = {x.kind for x in lexical} | {
+            x.maybe for x in lexical if not x.decided and x.maybe is not None
+        }
+        if stored not in {k.value for k in possible if k is not None}:
+            kind = most_salient(label.kind for label in await labeller.label(sentences))
+            if kind is not None and kind.value != stored:
+                fixed["statement_kind"] = kind.value
+                if meta.get("category") == "rule" and kind not in RULE_KINDS:
+                    fixed["category"] = "fact"
+                    fixed.pop("standing_instruction", None)
+    if any(standing_instruction(x) for x in lexical):
+        fixed["standing_instruction"] = "yes"
+    if fixed == meta:
+        return None
     return memory.model_copy(update={"system_metadata": fixed})
 
 
 async def _relabel(
-    uow: Any, memories: list[CanonicalMemory], report: BackfillReport
+    uow: Any,
+    memories: list[CanonicalMemory],
+    report: BackfillReport,
+    labeller: Any,
+    *,
+    relabel: bool,
 ) -> list[CanonicalMemory]:
-    """``memories`` with every stale rule label read again (``relabelled``), stored."""
+    """``memories`` read again (``read_again``), the changed ones stored."""
     out = []
     for memory in memories:
-        fixed = relabelled(memory)
+        fixed = await read_again(memory, labeller, relabel=relabel)
         if fixed is not None:
             await uow.memories.update(fixed)
-            report.relabelled += 1
+            before, after = memory.system_metadata, fixed.system_metadata
+            if before.get("statement_kind") != after.get("statement_kind"):
+                report.relabelled += 1
+            if before.get("standing_instruction") != after.get("standing_instruction"):
+                report.standing += 1
         out.append(fixed or memory)
     return out
 
@@ -274,33 +318,38 @@ async def backfill_user(
     memories indexed and their graph enrichment run again (which retires the graph facts of
     the memories now replaced)."""
     from memory_service.modules.memory.pipeline import bump_memory_revisions
+    from memory_service.modules.memory.statements import StatementLabeller
 
     pipeline = container.services["observation_pipeline"]
     replacement = pipeline.replacement
+    replacing = replacement is not None and replacement.enabled
     relabel = without_a_model(container)
+    # the write path's labeller (the lexicon, and the NLI head for what it leaves open)
+    labeller = getattr(pipeline.provider, "labeller", None) or StatementLabeller()
     user_id = principal.removeprefix("user:")
     ctx = MemoryExecutionContext(tenant_id=tenant, user_id=user_id, workspace_id=workspace)
     after = checkpoint.resume_after(tenant, principal)
     statements = await _statements(container, tenant, principal, after)
     touched: set[str] = {m.memory_id for m in statements}
     for n, said in enumerate(messages(statements), start=1):
-        if replacement is not None and replacement.enabled:
-            async with container.services["uow_factory"]() as uow:
-                await uow.serialize(f"memory-user:{tenant}:{principal}")
-                current = [
-                    m
-                    for m in await uow.memories.get_many(tenant, [m.memory_id for m in said])
-                    if m.temporal.status is TemporalStatus.CURRENT and m.deleted_at is None
-                ]
-                if relabel:
-                    current = await _relabel(uow, current, report)
-                if current:
-                    outcome = await replacement.run(uow, ctx, current, now=datetime.now(UTC))
-                    if outcome.changed:
-                        report.replaced += len(outcome.changed)
-                        touched |= {m.memory_id for m in outcome.changed}
-                        await bump_memory_revisions(uow, outcome.changed)
-                await uow.commit()
+        async with container.services["uow_factory"]() as uow:
+            await uow.serialize(f"memory-user:{tenant}:{principal}")
+            current = [
+                m
+                for m in await uow.memories.get_many(tenant, [m.memory_id for m in said])
+                if m.temporal.status is TemporalStatus.CURRENT and m.deleted_at is None
+            ]
+            read = await _relabel(uow, current, report, labeller, relabel=relabel and replacing)
+            changed = [m for m, before in zip(read, current, strict=True) if m is not before]
+            if changed:
+                await bump_memory_revisions(uow, changed)
+            if read and replacement is not None and replacing:
+                outcome = await replacement.run(uow, ctx, read, now=datetime.now(UTC))
+                if outcome.changed:
+                    report.replaced += len(outcome.changed)
+                    touched |= {m.memory_id for m in outcome.changed}
+                    await bump_memory_revisions(uow, outcome.changed)
+            await uow.commit()
         report.messages += 1
         if n % batch == 0:
             checkpoint.progress(tenant, principal, said[0].temporal.observed_at.isoformat())

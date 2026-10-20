@@ -165,7 +165,7 @@ every user finished, so:
 * a run stopped midway resumes where it stopped on the next `up`.
 
 Its result is in `docker compose logs memory-backfill` (a JSON report: users, messages,
-replaced, relabelled, failures); a user that failed makes it exit 1, and the next `up` runs
+replaced, relabelled, standing, failures); a user that failed makes it exit 1, and the next `up` runs
 that user again.
 
 **Without compose**, run the same command after `alembic upgrade head` (`make migrate`),
@@ -185,11 +185,20 @@ make backfill BACKFILL_ARGS="--state /var/lib/memory/backfill.json --reindex-all
   payload) and its graph enrichment runs again, as the write path's index job does, so the
   graph facts of a memory now replaced are retired with it; `--reindex-all` rebuilds the
   whole index afterwards (`tools.reindex`).
-* **Stale rule labels are read again** (a deployment without a model only: every label
-  there came from the lexicon). A statement an earlier build stored as a rule, or a turn it
-  labelled one, that this build's lexicon reads no rule in (Hindi "आज से X संभालेंगे" is a
-  dated fact) is relabelled a fact before the replacement runs, so it is compared as a fresh
-  store would compare it (`relabelled` in the report).
+* **Each statement is read again first, as the write path reads it** (`read_again`), so
+  it is compared and served as a fresh store's would be:
+  * a sentence that gives an instruction for every time ("Setz die Auftragsnummer immer in
+    den E-Mail-Betreff ...", "Pon siempre ...", "ضع دائمًا ...") is marked a standing
+    instruction (`standing_instruction`), in every deployment: the words alone decide it.
+    An earlier build marked none, so a rule restated with a new value was two current rules
+    to the read path (`standing` in the report);
+  * in a deployment without a model (every kind there came from the lexicon and the NLI
+    head), a kind this build's labeller cannot give a statement is read again by the
+    labeller, with the head for what the lexicon leaves open: Hindi "आज से X संभालेंगे" was a
+    rule by an earlier lexicon and is a dated fact (or a correction) by this one; a rule
+    reading this build reads no rule in becomes a fact. A kind it can still give (the
+    lexicon's, or the one it leaves to the head) is the same head's verdict and is kept
+    (`relabelled` in the report).
 * **Nothing is deleted.** A replacement stays reversible (forgetting or retracting the newer
   statement reinstates the older one).
 * **Live-safe.** One message per transaction, under the user's serialization, bumping the

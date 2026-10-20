@@ -205,6 +205,16 @@ def _stored(content: str, **meta):
     )
 
 
+def _read_again(memory, *, relabel: bool = True):
+    import asyncio
+
+    from memory_service.modules.memory.statements import StatementLabeller
+    from memory_service.tools.backfill import read_again
+
+    # the lexicon alone: the head is not loaded in a unit test
+    return asyncio.run(read_again(memory, StatementLabeller(), relabel=relabel))
+
+
 @pytest.mark.parametrize(
     "meta",
     [
@@ -213,9 +223,9 @@ def _stored(content: str, **meta):
     ],
 )
 def test_a_rule_label_this_lexicon_no_longer_reads_becomes_a_fact(meta):
-    from memory_service.tools.backfill import relabelled
-
-    fixed = relabelled(_stored("आज से ऑन-कॉल पेजर Ugo Mbeki की जगह Zora Zabala संभालेंगे।", **meta))
+    """An earlier lexicon read Hindi "आज से X संभालेंगे" as a rule; this one reads a dated
+    fact (or, by the head, a correction): never a rule."""
+    fixed = _read_again(_stored("आज से ऑन-कॉल पेजर Ugo Mbeki की जगह Zora Zabala संभालेंगे।", **meta))
     assert fixed is not None
     assert fixed.system_metadata["statement_kind"] == "FACT"
     assert "standing_instruction" not in fixed.system_metadata
@@ -229,19 +239,51 @@ def test_a_rule_label_this_lexicon_no_longer_reads_becomes_a_fact(meta):
     [
         (
             "Always answer stock audits as a markdown table.",
-            {"category": "rule", "statement_kind": "RULE"},
+            {"category": "rule", "statement_kind": "RULE", "standing_instruction": "yes"},
         ),
         (
             "Never book deliveries on Sundays.",
-            {"category": "verbatim_turn", "statement_kind": "RULE"},
+            {"category": "verbatim_turn", "statement_kind": "RULE", "standing_instruction": "yes"},
         ),
         ("Our hero style is SL641114.", {"category": "verbatim_turn", "statement_kind": "FACT"}),
+        # a rule the head confirmed where the lexicon left one open: the same head's verdict
+        # now, kept (an earlier backfill made it a fact and lost it from the rules)
+        (
+            "Setz die Auftragsnummer immer in den E-Mail-Betreff, mit dem Präfix WO-E3.",
+            {"category": "verbatim_turn", "statement_kind": "RULE", "standing_instruction": "yes"},
+        ),
+        # no label at all: not a statement the labeller read
+        ("Setz die Auftragsnummer immer in den E-Mail-Betreff.", {"category": "summary"}),
     ],
 )
-def test_a_rule_this_lexicon_reads_or_a_fact_is_left_alone(content, meta):
-    from memory_service.tools.backfill import relabelled
+def test_what_this_build_reads_the_same_is_left_alone(content, meta):
+    assert _read_again(_stored(content, **meta)) is None
 
-    assert relabelled(_stored(content, **meta)) is None
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "Setz die Auftragsnummer immer in den E-Mail-Betreff, mit dem Präfix WO-E3.",
+        "Pon siempre el número de orden de trabajo en el asunto del correo, con el prefijo WO-E3.",
+        "ضع دائمًا رقم أمر العمل في عنوان البريد مسبوقًا بـ WO-E3.",
+        "Always quote amounts in NOK.",
+        "ईमेल सब्जेक्ट में वर्क ऑर्डर नंबर हमेशा WO-E3 प्रीफ़िक्स के साथ डालना।",
+    ],
+)
+@pytest.mark.parametrize("kind", ["FACT", "RULE"])
+@pytest.mark.parametrize("relabel", [True, False])
+def test_a_standing_instruction_an_earlier_build_did_not_mark_is_marked(content, kind, relabel):
+    """The write path marks a sentence that gives an instruction for every time
+    (``standing_instruction``) from its words alone, in any deployment and whatever kind the
+    labeller left it; an earlier build stored none, and the read path then took a rule
+    restated with a new code for two current statements."""
+    fixed = _read_again(
+        _stored(content, category="verbatim_turn", statement_kind=kind), relabel=relabel
+    )
+    assert fixed is not None and fixed.system_metadata["standing_instruction"] == "yes"
+    decided_rule = content.startswith(("Always", "ईमेल"))  # the lexicon decides these
+    expected = "RULE" if relabel and decided_rule else kind
+    assert fixed.system_metadata["statement_kind"] == expected
 
 
 def test_only_a_deployment_without_a_model_relabels():
