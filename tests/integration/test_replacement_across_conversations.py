@@ -533,17 +533,20 @@ CHAIN = {
 }
 
 
+@pytest.mark.parametrize("score", [0.5, 0.99])
 @pytest.mark.parametrize("lang", sorted(CHAIN))
 async def test_statements_about_one_thing_that_say_different_things_all_stay_current(
-    container, uow_factory, lang
+    container, uow_factory, lang, score
 ):
     """Each link of a chain names the thing the next one names (the region, the DC); none
     replaces another, so the store's region and the region's buyer both come back current.
-    The head reads every pair as a weak contradiction (0.5): only "a changed value" could
-    mark one, and the digits of the codes the links share or name are no changed value. A
-    tenant's model, when allowed, reads them as unrelated."""
+    The head reads every pair as a contradiction, weak (0.5: only "a changed value" could
+    mark one, and the digits of the codes the links share or name are no changed value) or
+    strong (0.99, as the trained head reads "La tienda 5128 pertenece a la Región K41" against
+    "La Región K41 se abastece desde ..."): two links say different things of what they share,
+    so they are never compared. A tenant's model, when allowed, reads them as unrelated."""
     _scripted(
-        container, 0.5, always=True, assist=TenantModel("unrelated") if _MODE["assist"] else None
+        container, score, always=True, assist=TenantModel("unrelated") if _MODE["assist"] else None
     )
     *links, asked = CHAIN[lang]
     for link in links:

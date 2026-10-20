@@ -609,6 +609,73 @@ class Decision:
     reason: str
 
 
+def _said_of(text: str, lang: str | None) -> set[str]:
+    """What ``text`` says, without what it names: its content words but its identifiers'
+    labels and values, its names, and any word with a digit, as stems in its language."""
+    from memory_service.domain.language import detect_language, function_words
+    from memory_service.modules.context.evidence import content_terms, stemmed_terms
+
+    lang = lang or detect_language(text)
+    found = anchors(text, lang)
+    named = {w for label, value in found.ids for w in (*label.lstrip("#").split(), value)}
+    named |= {w for name in found.names for w in name.split()}
+    # the word right before a code or a number labels it ("المنطقة G10", "रीजन G10"), and a
+    # code's own parts are its name ("DC-Foxhollow-E910")
+    named |= {m.group(1).lower() for m in re.finditer(r"(\S+)\s+(?=[\w-]*\d)", text)}
+    named |= {
+        part.lower() for code in re.findall(r"[\w-]*\d[\w-]*", text) for part in code.split("-")
+    }
+    named |= _function_words() | function_words(lang)
+    words = {
+        w
+        for w in content_terms(text)
+        if w not in named and not any(ch.isdigit() for ch in w) and len(w) > 1
+    }
+    return stemmed_terms(words, lang) - named
+
+
+def _slot_relation(
+    relation: Relation,
+    unit: CanonicalMemory,
+    old: CanonicalMemory,
+    new_slots: Slots | None,
+    old_slots: dict[Any, Slots],
+) -> Relation:
+    """``relation``, or one subject's single-valued slot with another value when the readings
+    or the words say so: the same thing, whatever else the anchors say."""
+    if (
+        new_slots and any(slot_changed(new_slots, old_slots.get(src, {})) for src in _sources(old))
+    ) or slot_changed(spoken_slots(unit.content), spoken_slots(old.content)):
+        return Relation(
+            shared_name=relation.shared_name,
+            shared_id=relation.shared_id,
+            apart=False,
+            value_changed=True,
+            shared_slot=True,
+        )
+    return relation
+
+
+def _links(new: CanonicalMemory, old: CanonicalMemory) -> bool:
+    """Two links of a chain, not two values of one thing: what they share is the subject of
+    at most one of them ("Store 6474 belongs to Region G10" / "Region G10 is replenished
+    from DC-Foxhollow-E910") and they say nothing alike of it - unless a finished state
+    follows an ongoing one ("I'm reading Dune" / "I finished Dune")."""
+    if leads_with_shared(new, old) and leads_with_shared(old, new):
+        return False  # one subject: "Forklift #4 is in the shop" / "... is back in service"
+    if finished_after_ongoing(new.content, old.content):
+        return False
+    return not says_the_same_of_it(new.content, old.content, new.lang)
+
+
+def says_the_same_of_it(new_text: str, old_text: str, lang: str | None = None) -> bool:
+    """Two statements about one named thing say the same of it: they share a word besides
+    what they name ("The buyer for Region L60 is Thea" / "Amara has replaced Thea as the
+    buyer for Region L60"), or one of them says nothing besides it."""
+    a, b = _said_of(new_text, lang), _said_of(old_text, lang)
+    return not a or not b or bool(a & b)
+
+
 def related(relation: Relation, cosine: float | None) -> bool:
     """Worth asking the NLI head about."""
     if relation.apart:
@@ -1016,24 +1083,16 @@ class CrossConversationReplacement:
             for old in earlier:
                 if old.temporal.observed_at > unit.temporal.observed_at:
                     continue  # a statement replaces only what was said before it
-                relation = relate(
-                    mine, anchors(old.content, old.lang or None), unit.content, old.content
+                relation = _slot_relation(
+                    relate(mine, anchors(old.content, old.lang or None), unit.content, old.content),
+                    unit,
+                    old,
+                    new_slots,
+                    old_slots,
                 )
-                if (
-                    new_slots
-                    and any(
-                        slot_changed(new_slots, old_slots.get(src, {})) for src in _sources(old)
-                    )
-                ) or slot_changed(spoken_slots(unit.content), spoken_slots(old.content)):
-                    # one subject's single-valued slot, another value: the same thing
-                    relation = Relation(
-                        shared_name=relation.shared_name,
-                        shared_id=relation.shared_id,
-                        apart=False,
-                        value_changed=True,
-                        shared_slot=True,
-                    )
                 if relation.apart:
+                    continue
+                if relation.anchored and not relation.shared_slot and _links(unit, old):
                     continue
                 pair = _Pair(unit, old, relation)
                 if relation.anchored:
