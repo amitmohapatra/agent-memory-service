@@ -13,7 +13,7 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 from memory_service.config import constants
 from memory_service.config.constants import (
@@ -319,7 +319,15 @@ class Container:
                 log.warning("model.close_failed", model=name)
 
 
-def process_shape(settings: Settings, role: Literal["api", "worker"]) -> dict[str, int]:
+class ProcessShape(TypedDict):
+    """The connection-pool sizing fields of ``Container`` a process of one role sets."""
+
+    processes: int
+    queue_workers: int
+    jobs: int
+
+
+def process_shape(settings: Settings, role: Literal["api", "worker"]) -> ProcessShape:
     """What a process of ``role`` sizes its connection pools for (``Container.processes``,
     ``queue_workers``, ``jobs``): an API worker shares its pod with ``service.workers - 1``
     others and runs no jobs; the job worker has its pod alone and runs every slot of

@@ -278,7 +278,7 @@ async def _main(args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "backfill").strip().splitlines()[0])
     parser.add_argument("--state", default=None, help="checkpoint file: resume where a run stopped")
     parser.add_argument("--tenant", default=None)
     parser.add_argument("--user", default=None, help="one user id (with --tenant)")

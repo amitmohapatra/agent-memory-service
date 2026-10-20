@@ -619,7 +619,7 @@ def decide(
         return Decision(Grade.SUPERSEDED, c, f"contradiction {c:.2f}")
     if c >= t.earlier:
         return Decision(Grade.EARLIER, c, f"contradiction {c:.2f}")
-    change = sorted({k.value for k in kinds if k in CHANGE_KINDS})
+    change = sorted({k.value for k in kinds if k is not None and k in CHANGE_KINDS})
     if relation.value_changed:
         change.append("a changed value")
     if change and relation.anchored and c >= t.change:
