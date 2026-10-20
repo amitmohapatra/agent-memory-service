@@ -61,6 +61,7 @@ class BackfillReport:
     replaced: int = 0
     indexed: int = 0
     skipped_users: int = 0
+    relabelled: int = 0
     failures: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -70,6 +71,7 @@ class BackfillReport:
             "replaced": self.replaced,
             "indexed": self.indexed,
             "skipped_users": self.skipped_users,
+            "relabelled": self.relabelled,
             "failures": self.failures,
         }
 
@@ -172,6 +174,36 @@ async def _statements(
     return out
 
 
+_RULE_KINDS = ("RULE", "CONDITIONAL_RULE")
+
+
+def without_a_model(container: Any) -> bool:
+    """The deployment has no model (``LLMSettings.base_url`` unset): every statement kind it
+    stored came from the lexicon, so this build's lexicon may read them again."""
+    settings = getattr(container, "settings", None)
+    llm = getattr(settings, "llm", None)
+    return llm is not None and not getattr(llm, "base_url", None)
+
+
+def relabelled(memory: CanonicalMemory) -> CanonicalMemory | None:
+    """``memory`` as this build's lexicon reads it, when an earlier build's lexicon stored it
+    as a rule (a rule reading, or a turn labelled one) and this one reads no rule in it
+    (Hindi "आज से X संभालेंगे" is a dated fact, ADR 0040): a fact, which the replacement then
+    compares as a fresh store would. None when nothing changes."""
+    from memory_service.modules.memory.replacement import misread_rule
+
+    meta = memory.system_metadata
+    reading = meta.get("category") == "rule"
+    turn = meta.get("category") == "verbatim_turn" and meta.get("statement_kind") in _RULE_KINDS
+    if not (reading or turn) or not misread_rule(memory):
+        return None
+    fixed = {k: v for k, v in meta.items() if k != "standing_instruction"}
+    fixed["statement_kind"] = "FACT"
+    if reading:
+        fixed["category"] = "fact"
+    return memory.model_copy(update={"system_metadata": fixed})
+
+
 async def backfill_user(
     container: Any,
     tenant: str,
@@ -189,6 +221,7 @@ async def backfill_user(
 
     pipeline = container.services["observation_pipeline"]
     replacement = pipeline.replacement
+    relabel = without_a_model(container)
     user_id = principal.removeprefix("user:")
     ctx = MemoryExecutionContext(tenant_id=tenant, user_id=user_id, workspace_id=workspace)
     after = checkpoint.resume_after(tenant, principal)
@@ -203,6 +236,12 @@ async def backfill_user(
                     for m in await uow.memories.get_many(tenant, [m.memory_id for m in said])
                     if m.temporal.status is TemporalStatus.CURRENT and m.deleted_at is None
                 ]
+                if relabel:
+                    for i, m in enumerate(current):
+                        if (fixed := relabelled(m)) is not None:
+                            await uow.memories.update(fixed)
+                            current[i] = fixed
+                            report.relabelled += 1
                 if current:
                     outcome = await replacement.run(uow, ctx, current, now=datetime.now(UTC))
                     if outcome.changed:
