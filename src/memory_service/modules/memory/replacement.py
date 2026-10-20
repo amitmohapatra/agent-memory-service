@@ -668,11 +668,36 @@ def _links(new: CanonicalMemory, old: CanonicalMemory) -> bool:
     # one subject, and the newer statement says it changed ("Forklift #4 is in the shop" /
     # "... is back in service"); two facts about one subject are two links ("Region K41 is
     # replenished from DC-Harbor-T318" / "The buyer for Region K41 is Lena Ortiz")
-    kind = statement_kind_of(new.system_metadata)
-    return not (
-        (kind is None or kind in CHANGE_KINDS)  # unlabelled: it may say a change
-        and leads_with_shared(new, old)
-        and leads_with_shared(old, new)
+    return not (says_a_change(new) and leads_with_shared(new, old) and leads_with_shared(old, new))
+
+
+_CHANGE_CUES = (
+    "correction",
+    "correction_weak",
+    "replacement",
+    "lifecycle",
+    "lifecycle_weak",
+    "status",
+    "status_weak",
+)
+
+
+@lru_cache(maxsize=1)
+def _lexicon() -> Any:
+    from memory_service.modules.memory.statements import Lexicon
+
+    return Lexicon.default()
+
+
+def says_a_change(memory: CanonicalMemory) -> bool:
+    """The statement says something changed: its label (CORRECTION, LIFECYCLE, STATUS), no
+    label at all, or a word the lexicon reads as one ("ended", "is back", "now")."""
+    kind = statement_kind_of(memory.system_metadata)
+    if kind is None or kind in CHANGE_KINDS:
+        return True
+    reader = _lexicon().reader(memory.content)
+    return any(
+        cue in reader.cues and reader.cues[cue].search(memory.content) for cue in _CHANGE_CUES
     )
 
 
@@ -680,7 +705,8 @@ def says_the_same_of_it(new_text: str, old_text: str, lang: str | None = None) -
     """Two statements about one named thing say the same of it: they share a word besides
     what they name ("The buyer for Region L60 is Thea" / "Amara has replaced Thea as the
     buyer for Region L60"), or one of them says nothing besides it."""
-    a, b = _said_of(new_text, lang), _said_of(old_text, lang)
+    # each in its own language: a stored language may be another statement's misreading
+    a, b = _said_of(new_text, None), _said_of(old_text, None)
     return not a or not b or bool(a & b)
 
 
