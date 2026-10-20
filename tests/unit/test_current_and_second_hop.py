@@ -216,3 +216,39 @@ def test_a_question_about_many_things_keeps_every_current_value() -> None:
         "Which forklifts are available for the loading dock?", held, newest_of=_said
     )
     assert not any(c.payload.get("earlier_value") for c in got)
+
+
+# ------------------------------------------------------------------ a list below the floor
+
+LISTS = {
+    "en": ("Which are the pilot branches?", "The pilot branches are {}."),
+    "de": ("Welche sind die Pilotfilialen?", "Die Pilotfilialen sind {}."),
+    "es": ("¿Cuáles son las sucursales piloto?", "Las sucursales piloto son {}."),
+    "ar": ("ما هي الفروع التجريبية؟", "الفروع التجريبية هي {}."),  # noqa: RUF001
+    "hi": ("पायलट शाखाएँ कौन सी हैं?", "पायलट शाखाएँ {} हैं।"),
+}
+
+
+@pytest.mark.parametrize("size", [3, 6, 10, 20, 40])
+@pytest.mark.parametrize("lang", sorted(LISTS))
+def test_a_list_that_answers_the_question_is_one(lang, size):
+    from memory_service.modules.retrieval import slots
+
+    asked, said = LISTS[lang]
+    text = said.format(", ".join(f"BR-{700 + n}" for n in range(size)))
+    assert slots.answers_as_list(slots.question_slot(asked), text)
+
+
+@pytest.mark.parametrize(
+    ("asked", "text"),
+    [
+        ("Which are the pilot branches?", "The pilot branches are BR-700, BR-701."),  # two
+        ("Which are the pilot branches?", "The closed branches are BR-700, BR-701, BR-702."),
+        ("Which stores stock RT335327?", "Stores stock XN494339 at 1641, 4307 and 4610."),
+        ("Which are the pilot branches?", "Pilot week starts on 3, 4 or 5 May."),  # no branches
+    ],
+)
+def test_what_is_no_list_answering_the_question(asked, text):
+    from memory_service.modules.retrieval import slots
+
+    assert not slots.answers_as_list(slots.question_slot(asked), text)

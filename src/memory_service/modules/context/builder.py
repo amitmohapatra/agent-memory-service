@@ -53,6 +53,7 @@ from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import model_calls_allowed
 from memory_service.modules.memory.ephemeral import EphemeralMemory
+from memory_service.modules.retrieval import slots
 from memory_service.modules.retrieval.engine import (
     UNUSED_MAX,
     Candidate,
@@ -806,16 +807,21 @@ class ContextBuilder:
             self.cfg.conversation_token_budget,
         )
 
-    def _below_floor(self, c: Candidate) -> bool:
+    def _below_floor(self, c: Candidate, slot: slots.Slot | None = None) -> bool:
         """A ranked item whose similarity to the question is under the floor is not packed:
         a fusion score always fills the budget, relevant or not. Exact hits, expansion and
         graph companions and items with no similarity (graph facts, working memory) are
-        judged by what brought them in, not by this."""
+        judged by what brought them in, not by this; so is a memory that is a list answering
+        the question (``slots.answers_as_list``): a long list sits far from its question in
+        the encoder's space, however plainly it answers it."""
         return (
             c.similarity is not None
             and c.similarity < self.engine.relevance_floor
             and c.expanded_from is None
             and "exact" not in (c.retrievers or [])
+            and not (
+                c.kind == "memory" and slot is not None and slots.answers_as_list(slot, c.text)
+            )
         )
 
     def _coverage(
@@ -922,10 +928,11 @@ class ContextBuilder:
             return out
 
         below_floor = 0
+        slot = slots.question_slot(query)
         for c, item in items:
             if c.record_id in included_ids:
                 continue
-            if self._below_floor(c):
+            if self._below_floor(c, slot):
                 below_floor += 1
                 continue
             if c.kind == "chunk" and len(knowledge) < self.cfg.knowledge_max:

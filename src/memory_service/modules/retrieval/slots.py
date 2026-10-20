@@ -34,6 +34,7 @@ from memory_service.modules.memory.replacement import (
     _function_words,
     _marked,
     anchors,
+    numbers,
 )
 
 
@@ -148,6 +149,8 @@ _ASKING = frozenset(
         "किसके",
         "कौनसा",
         "कौनसी",
+        "सा",
+        "सी",
         "أي",
         "اي",
         "أيّ",
@@ -329,6 +332,27 @@ def _anchors(text: str, lang: str) -> Any:
 
 def _ids_of(text: str, lang: str) -> list[frozenset[str]]:
     return [_id_forms(label, value) for label, value in _anchors(text, lang).ids]
+
+
+#: an item holding at least this many values of its own (codes, numbers, names) is a list
+LIST_VALUES = 3
+
+
+def answers_as_list(slot: Slot, text: str) -> bool:
+    """``text`` is a list that answers the question: it names everything ``slot`` names, says
+    every word the question asks with (as a word or a stem, ``_shares``) and holds at least
+    ``LIST_VALUES`` values ("Las sucursales piloto son BR-700, ..., BR-709"). The encoder puts
+    a long list far from its question however plainly it answers it."""
+    if not slot.asked:
+        return False
+    stems = stemmed_terms(content_terms(text), slot.lang)
+    if not all(_shares(forms, stems) for forms in slot.asked):
+        return False
+    if not read(slot, text).names_all:
+        return False
+    found = _anchors(text, slot.lang)
+    held = {value for _, value in found.ids} | (found.names - slot.names)
+    return max(len(held), len(numbers(text))) >= LIST_VALUES
 
 
 def read(slot: Slot, text: str) -> Reading:

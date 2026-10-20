@@ -144,7 +144,7 @@ build, in place, while it serves:
 
 ```bash
 make backfill BACKFILL_ARGS="--state /var/lib/memory/backfill.json"           # every user
-make backfill BACKFILL_ARGS="--state /tmp/b.json --tenant acme --user u1"     # one user
+python -m memory_service.tools.backfill --state /tmp/b.json --tenant acme --user u1  # one user
 make backfill BACKFILL_ARGS="--state /var/lib/memory/backfill.json --reindex-all"
 ```
 
