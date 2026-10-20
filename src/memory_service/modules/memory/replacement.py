@@ -657,15 +657,23 @@ def _slot_relation(
 
 
 def _links(new: CanonicalMemory, old: CanonicalMemory) -> bool:
-    """Two links of a chain, not two values of one thing: what they share is the subject of
-    at most one of them ("Store 6474 belongs to Region G10" / "Region G10 is replenished
-    from DC-Foxhollow-E910") and they say nothing alike of it - unless a finished state
-    follows an ongoing one ("I'm reading Dune" / "I finished Dune")."""
-    if leads_with_shared(new, old) and leads_with_shared(old, new):
-        return False  # one subject: "Forklift #4 is in the shop" / "... is back in service"
+    """Two links of a chain, not two values of one thing: they say nothing alike of what they
+    share ("Store 6474 belongs to Region G10" / "Region G10 is replenished from
+    DC-Foxhollow-E910") - unless a finished state follows an ongoing one ("I'm reading Dune"
+    / "I finished Dune"), or the newer one says the subject both lead with changed."""
+    if says_the_same_of_it(new.content, old.content, new.lang):
+        return False
     if finished_after_ongoing(new.content, old.content):
         return False
-    return not says_the_same_of_it(new.content, old.content, new.lang)
+    # one subject, and the newer statement says it changed ("Forklift #4 is in the shop" /
+    # "... is back in service"); two facts about one subject are two links ("Region K41 is
+    # replenished from DC-Harbor-T318" / "The buyer for Region K41 is Lena Ortiz")
+    kind = statement_kind_of(new.system_metadata)
+    return not (
+        (kind is None or kind in CHANGE_KINDS)  # unlabelled: it may say a change
+        and leads_with_shared(new, old)
+        and leads_with_shared(old, new)
+    )
 
 
 def says_the_same_of_it(new_text: str, old_text: str, lang: str | None = None) -> bool:

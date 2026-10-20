@@ -204,6 +204,35 @@ def relabelled(memory: CanonicalMemory) -> CanonicalMemory | None:
     return memory.model_copy(update={"system_metadata": fixed})
 
 
+async def _relabel(
+    uow: Any, memories: list[CanonicalMemory], report: BackfillReport
+) -> list[CanonicalMemory]:
+    """``memories`` with every stale rule label read again (``relabelled``), stored."""
+    out = []
+    for memory in memories:
+        fixed = relabelled(memory)
+        if fixed is not None:
+            await uow.memories.update(fixed)
+            report.relabelled += 1
+        out.append(fixed or memory)
+    return out
+
+
+async def _index_again(
+    container: Any, tenant: str, ids: Sequence[str], report: BackfillReport
+) -> None:
+    """``ids`` indexed again and their graph enrichment run again, as the write path's index
+    job does: a memory no longer current takes its graph facts with it ("mentions" of an old
+    value would come back as current)."""
+    indexer = container.services["indexer"]
+    graph = container.services.get("graph")
+    for start in range(0, len(ids), 200):
+        chunk = list(ids[start : start + 200])
+        report.indexed += await indexer.index_memories(tenant, chunk)
+        if graph is not None:
+            await graph.enrich_memories(tenant, chunk)
+
+
 async def backfill_user(
     container: Any,
     tenant: str,
@@ -237,11 +266,7 @@ async def backfill_user(
                     if m.temporal.status is TemporalStatus.CURRENT and m.deleted_at is None
                 ]
                 if relabel:
-                    for i, m in enumerate(current):
-                        if (fixed := relabelled(m)) is not None:
-                            await uow.memories.update(fixed)
-                            current[i] = fixed
-                            report.relabelled += 1
+                    current = await _relabel(uow, current, report)
                 if current:
                     outcome = await replacement.run(uow, ctx, current, now=datetime.now(UTC))
                     if outcome.changed:
@@ -252,16 +277,7 @@ async def backfill_user(
         report.messages += 1
         if n % batch == 0:
             checkpoint.progress(tenant, principal, said[0].temporal.observed_at.isoformat())
-    indexer = container.services["indexer"]
-    graph = container.services.get("graph")
-    ids = sorted(touched)
-    for start in range(0, len(ids), 200):
-        chunk = ids[start : start + 200]
-        report.indexed += await indexer.index_memories(tenant, chunk)
-        if graph is not None:
-            # as the write path's index job does: a memory no longer current takes its graph
-            # facts with it ("mentions" of an old value would come back as current)
-            await graph.enrich_memories(tenant, chunk)
+    await _index_again(container, tenant, sorted(touched), report)
     checkpoint.finish(tenant, principal)
     report.users += 1
 
