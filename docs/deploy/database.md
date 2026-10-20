@@ -198,7 +198,8 @@ make backfill BACKFILL_ARGS="--state /var/lib/memory/backfill.json --reindex-all
     head), a kind this build's labeller cannot give a statement is read again by the
     labeller, with the head for what the lexicon leaves open: Hindi "आज से X संभालेंगे" was a
     rule by an earlier lexicon and is a dated fact (or a correction) by this one; a rule
-    reading this build reads no rule in becomes a fact. A kind it can still give (the
+    reading this build reads no rule in becomes a fact, or, when it was all its message
+    left (no turn kept beside it), the turn this build keeps in its place. A kind it can still give (the
     lexicon's, or the one it leaves to the head) is the same head's verdict and is kept
     (`relabelled` in the report).
 * **Nothing is deleted.** A replacement stays reversible (forgetting or retracting the newer

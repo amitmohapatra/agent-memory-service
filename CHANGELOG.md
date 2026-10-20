@@ -13,6 +13,11 @@ each entry says which one moved. Decisions behind each change are in the
   replace one another; a rule restated with a new code is stored, listed once and ranked
   newest; "Only list ..." and its translations are standing rules; a question about a code no
   evidence names is INSUFFICIENT; the backfill retires the graph facts of what it replaced.
+- The backfill brings a store an earlier build wrote to what a fresh store holds: it marks
+  the standing instructions an earlier build never marked (a rule restated with a new value
+  was two current rules), keeps the rules the NLI head confirmed (it made them facts),
+  turns a rule reading this build reads no rule in, left alone by its message, into the turn
+  this build keeps, and composes each user's profile block again.
 
 ### Added
 - Memory that is never cleared reads right (ADR 0041). Of a user's statements of the slot a

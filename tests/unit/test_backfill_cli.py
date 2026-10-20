@@ -205,14 +205,16 @@ def _stored(content: str, **meta):
     )
 
 
-def _read_again(memory, *, relabel: bool = True):
+def _read_again(memory, *, relabel: bool = True, turn_kept: bool = True):
     import asyncio
 
     from memory_service.modules.memory.statements import StatementLabeller
     from memory_service.tools.backfill import read_again
 
     # the lexicon alone: the head is not loaded in a unit test
-    return asyncio.run(read_again(memory, StatementLabeller(), relabel=relabel))
+    return asyncio.run(
+        read_again(memory, StatementLabeller(), relabel=relabel, turn_kept=turn_kept)
+    )
 
 
 @pytest.mark.parametrize(
@@ -232,6 +234,28 @@ def test_a_rule_label_this_lexicon_no_longer_reads_becomes_a_fact(meta):
     assert fixed.system_metadata["category"] == (
         "fact" if meta["category"] == "rule" else meta["category"]
     )
+
+
+def test_a_rule_reading_that_was_all_its_message_left_becomes_the_turn():
+    """An earlier build kept no turn beside a lasting reading in the same words. This build
+    reads no rule in them and keeps the turn: the reading becomes that turn, which the
+    replacement compares (a rule reading is a preference, which it never compares)."""
+    from memory_service.domain.enums import MemoryType
+
+    said = "आज से ऑन-कॉल पेजर Ugo Mbeki की जगह Zora Zabala संभालेंगे।"
+    reading = _stored(said, category="rule", statement_kind="RULE").model_copy(
+        update={"memory_type": MemoryType.PREFERENCE, "predicate": "rule", "object": said}
+    )
+    turn = _read_again(reading, turn_kept=False)
+    assert turn is not None and turn.content == said
+    assert turn.memory_type is MemoryType.OBSERVATION
+    assert (turn.predicate, turn.object) == ("said", None)
+    assert turn.system_metadata["category"] == "verbatim_turn"
+    assert turn.system_metadata["statement_kind"] == "FACT"
+    # beside a kept turn, it stays a reading (a fact)
+    kept = _read_again(reading, turn_kept=True)
+    assert kept is not None and kept.memory_type is MemoryType.PREFERENCE
+    assert kept.system_metadata["category"] == "fact"
 
 
 @pytest.mark.parametrize(

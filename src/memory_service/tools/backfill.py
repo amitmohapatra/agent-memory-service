@@ -53,7 +53,7 @@ from sqlalchemy import select
 from memory_service.__about__ import __version__
 from memory_service.adapters.db.orm import MemoryRow
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import TemporalStatus, Visibility
+from memory_service.domain.enums import MemoryType, TemporalStatus, Visibility
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.observability.logging import get_logger
 
@@ -218,7 +218,7 @@ def without_a_model(container: Any) -> bool:
 
 
 async def read_again(
-    memory: CanonicalMemory, labeller: Any, *, relabel: bool
+    memory: CanonicalMemory, labeller: Any, *, relabel: bool, turn_kept: bool = True
 ) -> CanonicalMemory | None:
     """``memory`` with what this build's write path reads in its words where an earlier
     build stored otherwise; None when nothing changes. Only a statement the labeller labelled
@@ -236,7 +236,10 @@ async def read_again(
       it (Hindi "आज से X संभालेंगे" was a rule by an earlier lexicon and is a dated fact or a
       correction by this one, ADR 0040). A kind it can still give (the lexicon's, or the
       kind it leaves to the head) is the same head's verdict and is kept. A rule reading this
-      build reads no rule in becomes a fact.
+      build reads no rule in becomes a fact; and when it is all its message left
+      (``turn_kept`` False: an earlier build kept no turn beside a lasting reading in the
+      same words), it becomes the turn this build keeps in its place, compared and replaced
+      as one (a rule reading is a preference, which the replacement never compares).
     """
     from memory_service.modules.memory.native import split_sentences, standing_instruction
 
@@ -246,15 +249,30 @@ async def read_again(
     sentences = split_sentences(memory.content) or [memory.content]
     lexical = [labeller.lexicon.label(s) for s in sentences]
     fixed = dict(meta)
+    fields: dict[str, Any] = {}
     if relabel:
         fixed |= await _kind_again(meta, sentences, lexical, labeller)
         if fixed.get("category") != "rule" and meta.get("category") == "rule":
             fixed.pop("standing_instruction", None)
+            if not turn_kept:
+                fixed["category"] = "verbatim_turn"
+                fields = dict(_AS_A_TURN)
     if any(standing_instruction(x) for x in lexical):
         fixed["standing_instruction"] = "yes"
     if fixed == meta:
         return None
-    return memory.model_copy(update={"system_metadata": fixed})
+    return memory.model_copy(update={**fields, "system_metadata": fixed})
+
+
+#: what the write path stores for a turn it keeps verbatim (``NativeMemoryIntelligence.
+#: _verbatim``): what a rule reading of a whole turn becomes when this build reads no rule in it
+_AS_A_TURN: dict[str, Any] = {
+    "memory_type": MemoryType.OBSERVATION,
+    "predicate": "said",
+    "object": None,
+    "importance": 0.25,
+    "confidence": 0.99,
+}
 
 
 async def _kind_again(
@@ -287,8 +305,9 @@ async def _relabel(
 ) -> list[CanonicalMemory]:
     """``memories`` read again (``read_again``), the changed ones stored."""
     out = []
+    turn_kept = any(m.system_metadata.get("category") == "verbatim_turn" for m in memories)
     for memory in memories:
-        fixed = await read_again(memory, labeller, relabel=relabel)
+        fixed = await read_again(memory, labeller, relabel=relabel, turn_kept=turn_kept)
         if fixed is not None:
             await uow.memories.update(fixed)
             before, after = memory.system_metadata, fixed.system_metadata
