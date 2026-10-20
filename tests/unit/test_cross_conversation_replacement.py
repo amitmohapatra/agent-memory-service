@@ -1151,3 +1151,49 @@ def test_the_same_labelled_code_still_ties_them():
     old = "The buyer for Region L60 is Thea Cervantes."
     relation = relate(anchors(new, "en"), anchors(old, "en"), new, old)
     assert relation.anchored and not relation.apart
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "lang"),
+    [
+        (
+            "Users log IT tickets in Zendesk.",
+            "We moved the help desk from Zendesk to Freshservice last month.",
+            "en",
+        ),
+        (
+            "يسجّل المستخدمون تذاكر تقنية المعلومات في Zendesk.",
+            "نقلنا مكتب الدعم من Zendesk إلى Freshservice الشهر الماضي.",
+            "ar",
+        ),
+    ],
+)
+def test_a_statement_that_names_nothing_of_its_own_is_no_link_of_a_chain(old, new, lang):
+    """The older names nothing the newer does not: the newer says what became of it, so the
+    pair goes to the head, it is not the next link of a chain."""
+    from memory_service.modules.memory.replacement import _links
+
+    facts = {"category": "fact", "statement_kind": "FACT"}
+    older = _memory(old, at=T0, source="msg_a", lang=lang, system_metadata=facts)
+    newer = _memory(new, at=T1, source="msg_b", lang=lang, system_metadata=facts)
+    assert not _links(newer, older)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "lang"),
+    [
+        (
+            "Site SITE-7786 is in zone ZN-V59.",
+            "The dispatcher for zone ZN-V59 is Esme Iwasaki.",
+            "en",
+        ),
+        ("المتجر 5128 يتبع المنطقة K41.", "يتم تزويد المنطقة K41 من DC-Harbor-T318.", "ar"),  # noqa: RUF001
+    ],
+)
+def test_an_older_link_that_names_a_thing_of_its_own_stays_a_link(old, new, lang):
+    from memory_service.modules.memory.replacement import _links
+
+    facts = {"category": "fact", "statement_kind": "FACT"}
+    older = _memory(old, at=T0, source="msg_a", lang=lang, system_metadata=facts)
+    newer = _memory(new, at=T1, source="msg_b", lang=lang, system_metadata=facts)
+    assert _links(newer, older)

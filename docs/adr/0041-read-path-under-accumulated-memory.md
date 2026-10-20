@@ -104,7 +104,9 @@ now read.
       DC-Foxhollow-E910" (the trained head read the pair at 0.99 contradiction). The digits of
       a code are no "changed value" either (`replacement._changed`). A change of one subject
       ("Forklift #4 is in the shop" / "... is back in service") and a finished state after an
-      ongoing one are still compared.
+      ongoing one are still compared, and so is a pair whose older statement names nothing
+      the newer does not ("Users log IT tickets in Zendesk" / "We moved the help desk from
+      Zendesk to Freshservice"): the newer says what became of it.
     * *A restricted instruction is a standing rule a model confirms* (`statements._restricted`,
       the `only` and new `occasion` cues): "Only list stores with zero on-hand" and its four
       translations; "Only send me the summary today" names one occasion and stays a request.
@@ -115,8 +117,11 @@ now read.
       (`engine.restated_rules_first`, over the payload's rule kind; facts are left to the slot
       rules).
     * *A code nothing names*: a code (letters and digits, at least 4 characters) the question
-      names that no evidence names, however written, makes the bundle INSUFFICIENT
-      (`coverage._unknown_code`).
+      names that nothing the retriever found names, however written, while it found other
+      codes of the same form (letters and digits in the same places: "ZZ421722" /
+      "RT335327"), makes the bundle INSUFFICIENT (`coverage._unknown_code`). A code of a form
+      the store holds none of is a value the user supplies to a request ("Write the service
+      report for WO-4120" under a report rule) and refuses nothing.
     * *A list below the relevance floor*: a memory that names what the question names, says
       every asked word and holds at least three values of its own is packed whatever its
       cosine (`slots.answers_as_list`).

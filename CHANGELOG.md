@@ -12,7 +12,8 @@ each entry says which one moved. Decisions behind each change are in the
   code ("Store 6474 belongs to Region G10" / "Region G10 is replenished from ...") no longer
   replace one another; a rule restated with a new code is stored, listed once and ranked
   newest; "Only list ..." and its translations are standing rules; a question about a code no
-  evidence names is INSUFFICIENT; the backfill retires the graph facts of what it replaced.
+  evidence names, of a form the store holds others of, is INSUFFICIENT (a code the user
+  supplies to a request is not); the backfill retires the graph facts of what it replaced.
 - The backfill brings a store an earlier build wrote to what a fresh store holds: it marks
   the standing instructions an earlier build never marked (a rule restated with a new value
   was two current rules), keeps the rules the NLI head confirmed (it made them facts),
