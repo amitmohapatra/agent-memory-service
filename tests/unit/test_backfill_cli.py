@@ -96,3 +96,82 @@ def test_the_container_is_closed_when_the_run_raises(wired, monkeypatch):
     with pytest.raises(RuntimeError):
         _run(monkeypatch)
     assert container.closed
+
+
+# ------------------------------------------------------------------ stale rule labels
+
+
+def _stored(content: str, **meta):
+    from datetime import UTC, datetime
+
+    from memory_service.domain.enums import MemoryType
+    from memory_service.domain.memory import CanonicalMemory
+
+    return CanonicalMemory.model_validate(
+        {
+            "tenant_id": "acme",
+            "content": content,
+            "memory_type": MemoryType.USER,
+            "lifetime": "LONG_TERM",
+            "visibility": "USER",
+            "scope": {"level": "USER", "tenant_id": "acme", "user_id": "u1"},
+            "owner_principal": "user:u1",
+            "normalized_hash": content,
+            "temporal": {"observed_at": datetime.now(UTC)},
+            "evidence": [
+                {"source_type": "message", "source_id": "msg_1", "observed_at": datetime.now(UTC)}
+            ],
+            "system_metadata": meta,
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "meta",
+    [
+        {"category": "rule", "statement_kind": "RULE", "standing_instruction": "yes"},
+        {"category": "verbatim_turn", "statement_kind": "RULE"},
+    ],
+)
+def test_a_rule_label_this_lexicon_no_longer_reads_becomes_a_fact(meta):
+    from memory_service.tools.backfill import relabelled
+
+    fixed = relabelled(_stored("आज से ऑन-कॉल पेजर Ugo Mbeki की जगह Zora Zabala संभालेंगे।", **meta))
+    assert fixed is not None
+    assert fixed.system_metadata["statement_kind"] == "FACT"
+    assert "standing_instruction" not in fixed.system_metadata
+    assert fixed.system_metadata["category"] == (
+        "fact" if meta["category"] == "rule" else meta["category"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("content", "meta"),
+    [
+        (
+            "Always answer stock audits as a markdown table.",
+            {"category": "rule", "statement_kind": "RULE"},
+        ),
+        (
+            "Never book deliveries on Sundays.",
+            {"category": "verbatim_turn", "statement_kind": "RULE"},
+        ),
+        ("Our hero style is SL641114.", {"category": "verbatim_turn", "statement_kind": "FACT"}),
+    ],
+)
+def test_a_rule_this_lexicon_reads_or_a_fact_is_left_alone(content, meta):
+    from memory_service.tools.backfill import relabelled
+
+    assert relabelled(_stored(content, **meta)) is None
+
+
+def test_only_a_deployment_without_a_model_relabels():
+    from types import SimpleNamespace
+
+    from memory_service.tools.backfill import without_a_model
+
+    def container(url):
+        return SimpleNamespace(settings=SimpleNamespace(llm=SimpleNamespace(base_url=url)))
+
+    assert without_a_model(container(None)) and not without_a_model(container("http://gw/v1"))
+    assert not without_a_model(SimpleNamespace())

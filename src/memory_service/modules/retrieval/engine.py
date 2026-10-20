@@ -462,6 +462,7 @@ class RetrievalEngine:
                     # (``latest_per_slot``), every earlier value ranks after the current ones
                     if LATEST_PER_SLOT:
                         candidates = latest_per_slot(candidates)
+                        candidates = restated_rules_first(candidates)
                         candidates = slots.latest_values(
                             routed.query, candidates, newest_of=_said_at
                         )
@@ -1515,6 +1516,44 @@ def latest_per_slot(candidates: Sequence[Candidate]) -> list[Candidate]:
         else:
             out.append(c)
     return out
+
+
+def restated_rules_first(candidates: Sequence[Candidate]) -> list[Candidate]:
+    """``candidates`` with every current rule that a newer rule in hand restates with new
+    values ("... prefixed with WO-E3" by "... prefixed with WO-K3") marked an earlier value of
+    it, as a restated preference or fact is. Order kept. Read on the request path, so only
+    statements that say exactly the same thing values aside (``standing.frame_of``) are
+    compared, and only those are read for a rule (``standing.restated``)."""
+    from memory_service.modules.context.standing import frame_of, is_rule, restated
+
+    groups: dict[frozenset[str], list[Candidate]] = {}
+    for c in candidates:
+        if (
+            c.kind == "memory"
+            and not c.payload.get("earlier_value")
+            and is_rule(
+                {
+                    "category": c.payload.get("category"),
+                    "statement_kind": c.payload.get("statement_kind"),
+                    "standing_instruction": c.payload.get("standing_instruction"),
+                }
+            )
+        ):
+            key = frame_of(c.text)
+            if key:
+                groups.setdefault(key, []).append(c)
+    gone: set[str] = set()
+    for same in groups.values():
+        if len(same) > 1:
+            gone |= restated((c.record_id, c.text, c.payload.get("observed_at")) for c in same)
+    if not gone:
+        return list(candidates)
+    return [
+        replace(c, payload={**c.payload, "earlier_value": True, "replaced_in_slot": True})
+        if c.record_id in gone
+        else c
+        for c in candidates
+    ]
 
 
 def current_first(candidates: Sequence[Candidate]) -> list[Candidate]:

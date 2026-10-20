@@ -61,6 +61,7 @@ class BackfillReport:
     replaced: int = 0
     indexed: int = 0
     skipped_users: int = 0
+    relabelled: int = 0
     failures: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -70,6 +71,7 @@ class BackfillReport:
             "replaced": self.replaced,
             "indexed": self.indexed,
             "skipped_users": self.skipped_users,
+            "relabelled": self.relabelled,
             "failures": self.failures,
         }
 
@@ -172,6 +174,65 @@ async def _statements(
     return out
 
 
+_RULE_KINDS = ("RULE", "CONDITIONAL_RULE")
+
+
+def without_a_model(container: Any) -> bool:
+    """The deployment has no model (``LLMSettings.base_url`` unset): every statement kind it
+    stored came from the lexicon, so this build's lexicon may read them again."""
+    settings = getattr(container, "settings", None)
+    llm = getattr(settings, "llm", None)
+    return llm is not None and not getattr(llm, "base_url", None)
+
+
+def relabelled(memory: CanonicalMemory) -> CanonicalMemory | None:
+    """``memory`` as this build's lexicon reads it, when an earlier build's lexicon stored it
+    as a rule (a rule reading, or a turn labelled one) and this one reads no rule in it
+    (Hindi "आज से X संभालेंगे" is a dated fact, ADR 0040): a fact, which the replacement then
+    compares as a fresh store would. None when nothing changes."""
+    from memory_service.modules.memory.replacement import misread_rule
+
+    meta = memory.system_metadata
+    reading = meta.get("category") == "rule"
+    turn = meta.get("category") == "verbatim_turn" and meta.get("statement_kind") in _RULE_KINDS
+    if not (reading or turn) or not misread_rule(memory):
+        return None
+    fixed = {k: v for k, v in meta.items() if k != "standing_instruction"}
+    fixed["statement_kind"] = "FACT"
+    if reading:
+        fixed["category"] = "fact"
+    return memory.model_copy(update={"system_metadata": fixed})
+
+
+async def _relabel(
+    uow: Any, memories: list[CanonicalMemory], report: BackfillReport
+) -> list[CanonicalMemory]:
+    """``memories`` with every stale rule label read again (``relabelled``), stored."""
+    out = []
+    for memory in memories:
+        fixed = relabelled(memory)
+        if fixed is not None:
+            await uow.memories.update(fixed)
+            report.relabelled += 1
+        out.append(fixed or memory)
+    return out
+
+
+async def _index_again(
+    container: Any, tenant: str, ids: Sequence[str], report: BackfillReport
+) -> None:
+    """``ids`` indexed again and their graph enrichment run again, as the write path's index
+    job does: a memory no longer current takes its graph facts with it ("mentions" of an old
+    value would come back as current)."""
+    indexer = container.services["indexer"]
+    graph = container.services.get("graph")
+    for start in range(0, len(ids), 200):
+        chunk = list(ids[start : start + 200])
+        report.indexed += await indexer.index_memories(tenant, chunk)
+        if graph is not None:
+            await graph.enrich_memories(tenant, chunk)
+
+
 async def backfill_user(
     container: Any,
     tenant: str,
@@ -183,11 +244,13 @@ async def backfill_user(
     batch: int = BATCH,
 ) -> None:
     """One user: every message of theirs through the replacement, oldest first, then their
-    memories indexed again."""
+    memories indexed and their graph enrichment run again (which retires the graph facts of
+    the memories now replaced)."""
     from memory_service.modules.memory.pipeline import bump_memory_revisions
 
     pipeline = container.services["observation_pipeline"]
     replacement = pipeline.replacement
+    relabel = without_a_model(container)
     user_id = principal.removeprefix("user:")
     ctx = MemoryExecutionContext(tenant_id=tenant, user_id=user_id, workspace_id=workspace)
     after = checkpoint.resume_after(tenant, principal)
@@ -202,6 +265,8 @@ async def backfill_user(
                     for m in await uow.memories.get_many(tenant, [m.memory_id for m in said])
                     if m.temporal.status is TemporalStatus.CURRENT and m.deleted_at is None
                 ]
+                if relabel:
+                    current = await _relabel(uow, current, report)
                 if current:
                     outcome = await replacement.run(uow, ctx, current, now=datetime.now(UTC))
                     if outcome.changed:
@@ -212,10 +277,7 @@ async def backfill_user(
         report.messages += 1
         if n % batch == 0:
             checkpoint.progress(tenant, principal, said[0].temporal.observed_at.isoformat())
-    indexer = container.services["indexer"]
-    ids = sorted(touched)
-    for start in range(0, len(ids), 200):
-        report.indexed += await indexer.index_memories(tenant, ids[start : start + 200])
+    await _index_again(container, tenant, sorted(touched), report)
     checkpoint.finish(tenant, principal)
     report.users += 1
 

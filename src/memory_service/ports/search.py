@@ -198,6 +198,8 @@ PAYLOAD_FIELDS: tuple[str, ...] = (
     "section_path",
     "source_refs",
     "source_observed_to",
+    "standing_instruction",
+    "statement_kind",
     "status",
     "subject",
     "tenant_id",

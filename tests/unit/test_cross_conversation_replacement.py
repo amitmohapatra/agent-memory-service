@@ -1085,3 +1085,115 @@ async def test_a_later_statement_about_something_else_leaves_the_older_one() -> 
         _uow([newer, older]), CTX, [older], now=T1
     )
     assert out.changed == []
+
+
+@pytest.mark.parametrize(
+    ("new", "old", "same"),
+    [
+        # links of a chain: what they share is all they have in common
+        (
+            "The dispatcher for zone ZN-V59 is Esme Iwasaki.",
+            "Site SITE-7786 is in zone ZN-V59.",
+            False,
+        ),
+        (
+            "El despachador de la zona ZN-V59 es Esme Iwasaki.",
+            "El sitio SITE-7786 está en la zona ZN-V59.",
+            False,
+        ),
+        (
+            "Der Einkäufer für Region K41 ist Lena Ortiz.",
+            "Region K41 wird aus DC-Harbor-T318 beliefert.",
+            False,
+        ),
+        ("يتم تزويد المنطقة K41 من DC-Harbor-T318.", "المتجر 5128 يتبع المنطقة K41.", False),  # noqa: RUF001
+        ("रीजन K41 को DC-Harbor-T318 से माल मिलता है।", "स्टोर 5128 रीजन K41 में आता है।", False),
+        # one thing said again with another value, or a change of it
+        ("Site SITE-7786 is in zone ZN-V59.", "Site SITE-7786 is in zone ZN-U97.", True),
+        (
+            "El sitio SITE-7786 está en la zona ZN-V59.",
+            "El sitio SITE-7786 está en la zona ZN-U97.",
+            True,
+        ),
+        ("Filiale 5128 gehört zur Region K41.", "Filiale 5128 gehört zur Region Z12.", True),
+        ("المتجر 5128 يتبع المنطقة K41.", "المتجر 5128 يتبع المنطقة Z12.", True),  # noqa: RUF001
+        ("स्टोर 5128 रीजन K41 में आता है।", "स्टोर 5128 रीजन Z12 में आता है।", True),
+        (
+            "Update: Amara Uchenna has replaced Thea Cervantes as the buyer for Region L60.",
+            "The buyer for Region L60 is Thea Cervantes.",
+            True,
+        ),
+    ],
+)
+def test_two_statements_say_the_same_of_what_they_share(new, old, same):
+    from memory_service.modules.memory.replacement import says_the_same_of_it
+
+    assert says_the_same_of_it(new, old) is same
+
+
+@pytest.mark.parametrize(
+    "old",
+    ["Store 6474 belongs to Region G10.", "The buyer for Region G10 is Catalina Mbeki."],
+)
+def test_a_label_before_a_code_ties_no_two_statements(old):
+    """ "Region" labels L60 and G10, it names nothing both are about: an update about Region
+    L60 is apart from statements about Region G10."""
+    from memory_service.modules.memory.replacement import anchors, relate
+
+    new = "Update: Amara Uchenna has replaced Thea Cervantes as the buyer for Region L60."
+    assert relate(anchors(new, "en"), anchors(old, "en"), new, old).apart
+
+
+def test_the_same_labelled_code_still_ties_them():
+    from memory_service.modules.memory.replacement import anchors, relate
+
+    new = "Update: Amara Uchenna has replaced Thea Cervantes as the buyer for Region L60."
+    old = "The buyer for Region L60 is Thea Cervantes."
+    relation = relate(anchors(new, "en"), anchors(old, "en"), new, old)
+    assert relation.anchored and not relation.apart
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "lang"),
+    [
+        (
+            "Users log IT tickets in Zendesk.",
+            "We moved the help desk from Zendesk to Freshservice last month.",
+            "en",
+        ),
+        (
+            "يسجّل المستخدمون تذاكر تقنية المعلومات في Zendesk.",
+            "نقلنا مكتب الدعم من Zendesk إلى Freshservice الشهر الماضي.",
+            "ar",
+        ),
+    ],
+)
+def test_a_statement_that_names_nothing_of_its_own_is_no_link_of_a_chain(old, new, lang):
+    """The older names nothing the newer does not: the newer says what became of it, so the
+    pair goes to the head, it is not the next link of a chain."""
+    from memory_service.modules.memory.replacement import _links
+
+    facts = {"category": "fact", "statement_kind": "FACT"}
+    older = _memory(old, at=T0, source="msg_a", lang=lang, system_metadata=facts)
+    newer = _memory(new, at=T1, source="msg_b", lang=lang, system_metadata=facts)
+    assert not _links(newer, older)
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "lang"),
+    [
+        (
+            "Site SITE-7786 is in zone ZN-V59.",
+            "The dispatcher for zone ZN-V59 is Esme Iwasaki.",
+            "en",
+        ),
+        ("المتجر 5128 يتبع المنطقة K41.", "يتم تزويد المنطقة K41 من DC-Harbor-T318.", "ar"),  # noqa: RUF001
+    ],
+)
+def test_an_older_link_that_names_a_thing_of_its_own_stays_a_link(old, new, lang):
+    from memory_service.modules.memory.replacement import _links
+
+    facts = {"category": "fact", "statement_kind": "FACT"}
+    older = _memory(old, at=T0, source="msg_a", lang=lang, system_metadata=facts)
+    newer = _memory(new, at=T1, source="msg_b", lang=lang, system_metadata=facts)
+    assert _links(newer, older)

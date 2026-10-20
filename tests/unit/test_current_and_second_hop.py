@@ -252,3 +252,45 @@ def test_what_is_no_list_answering_the_question(asked, text):
     from memory_service.modules.retrieval import slots
 
     assert not slots.answers_as_list(slots.question_slot(asked), text)
+
+
+# ------------------------------------------------------------------ a rule restated
+
+
+@pytest.mark.parametrize(
+    ("older", "newer"),
+    [
+        (
+            "Always put the work order number in the email subject, prefixed with WO-E3.",
+            "Always put the work order number in the email subject, prefixed with WO-K3.",
+        ),
+        (
+            "فضّل دائمًا EJ159063 لمسودات النقص. لا تعتمد أي مسودة نهائيًا أبدًا.",  # noqa: RUF001
+            "فضّل دائمًا LE219684 لمسودات النقص. لا تعتمد أي مسودة نهائيًا أبدًا.",  # noqa: RUF001
+        ),
+        (
+            "Pon siempre el número de orden de trabajo en el asunto, con el prefijo WO-E3.",
+            "Pon siempre el número de orden de trabajo en el asunto, con el prefijo WO-K3.",
+        ),
+    ],
+)
+def test_a_rule_restated_with_new_values_leaves_the_older_an_earlier_value(older, newer):
+    from memory_service.modules.retrieval.engine import restated_rules_first
+
+    held = [
+        _mem("old", older, "2026-10-10", category="verbatim_turn", standing_instruction="yes"),
+        _mem("new", newer, "2026-10-17", category="verbatim_turn", statement_kind="RULE"),
+        _mem("fact", "Our hero style this month is SL641114.", "2026-10-09"),
+    ]
+    out = {c.record_id: bool(c.payload.get("earlier_value")) for c in restated_rules_first(held)}
+    assert out == {"old": True, "new": False, "fact": False}
+
+
+def test_facts_restated_are_left_to_the_slot_rules():
+    from memory_service.modules.retrieval.engine import restated_rules_first
+
+    held = [
+        _mem("a", "Our hero style this month is XP932108.", "2026-10-10", statement_kind="FACT"),
+        _mem("b", "Our hero style this month is SL641114.", "2026-10-17", statement_kind="FACT"),
+    ]
+    assert not any(c.payload.get("earlier_value") for c in restated_rules_first(held))

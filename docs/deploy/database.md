@@ -153,7 +153,14 @@ make backfill BACKFILL_ARGS="--state /var/lib/memory/backfill.json --reindex-all
   cross-conversation replacement the write path runs (ADR 0038): an older value becomes an
   earlier value (history) or is superseded, exactly as if it had been said after the upgrade.
   Then every memory of that user is indexed again (an upsert of the same ids, with the new
-  payload); `--reindex-all` rebuilds the whole index afterwards (`tools.reindex`).
+  payload) and its graph enrichment runs again, as the write path's index job does, so the
+  graph facts of a memory now replaced are retired with it; `--reindex-all` rebuilds the
+  whole index afterwards (`tools.reindex`).
+* **Stale rule labels are read again** (a deployment without a model only: every label
+  there came from the lexicon). A statement an earlier build stored as a rule, or a turn it
+  labelled one, that this build's lexicon reads no rule in (Hindi "आज से X संभालेंगे" is a
+  dated fact) is relabelled a fact before the replacement runs, so it is compared as a fresh
+  store would compare it (`relabelled` in the report).
 * **Nothing is deleted.** A replacement stays reversible (forgetting or retracting the newer
   statement reinstates the older one).
 * **Live-safe.** One message per transaction, under the user's serialization, bumping the

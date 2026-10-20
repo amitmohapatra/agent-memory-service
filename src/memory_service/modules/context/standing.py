@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any, Final
 
 from memory_service.domain.context_bundle import ProfileBlockView
@@ -120,6 +120,50 @@ def _stems(text: str, lang: str) -> set[str]:
 
 def applies(query_stems: set[str], hit_stems: set[str], similarity: float, floor: float) -> bool:
     return similarity >= floor or len(query_stems & hit_stems) >= SHARED_STEMS
+
+
+def is_rule(fields: Any) -> bool:
+    """A memory's payload or system metadata says it is a rule: its category
+    (``RULE_CATEGORIES``), the labeller's kind (``RULE_KINDS``), or a standing instruction a
+    model would confirm (``standing_instruction``) - a turn kept verbatim carries its own."""
+    return bool(
+        fields.get("category") in RULE_CATEGORIES
+        or str(fields.get("statement_kind") or "") in RULE_KINDS
+        or fields.get("standing_instruction") in (True, "yes")
+    )
+
+
+def frame_of(text: str) -> frozenset[str]:
+    """What ``text`` says, values aside (``_frame``), in its own language."""
+    return frozenset(_frame(text, detect_language(text)))
+
+
+def restated_rules(memories: Sequence[Any]) -> set[str]:
+    """The ids of the rules (``is_rule``) of ``memories`` that a later rule on the same
+    subject supersedes (``SAME_SUBJECT`` of the shorter one's words, codes, numbers and names
+    aside): a rule restated with new values keeps only its newest form."""
+    return restated(
+        (m.memory_id, m.content, m.temporal.observed_at)
+        for m in memories
+        if is_rule(m.system_metadata or {})
+    )
+
+
+def restated(rules: Iterable[tuple[str, str, Any]]) -> set[str]:
+    """Of (id, text, said at) rules, those a later one restates with new values."""
+    framed = [
+        (rid, _frame(text, detect_language(text)), when)
+        for rid, text, when in rules
+        if text and when is not None
+    ]
+    out: set[str] = set()
+    for i, (a, fa, when_a) in enumerate(framed):
+        for b, fb, when_b in framed[i + 1 :]:
+            shorter = min(len(fa), len(fb))
+            if not shorter or len(fa & fb) / shorter < SAME_SUBJECT or str(when_a) == str(when_b):
+                continue  # another subject, or said at one instant: no order
+            out.add(a if str(when_a) < str(when_b) else b)
+    return out
 
 
 def _superseded(chosen: Sequence[tuple[SearchHit, set[str]]]) -> set[str]:

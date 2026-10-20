@@ -528,11 +528,21 @@ class Relation:
         return self.shared_name or self.shared_id or self.shared_slot
 
 
+def _code_labels(text: str) -> set[str]:
+    """The words right before a code or a number in ``text``, lower-cased."""
+    return {m.group(1).lower() for m in re.finditer(r"(\S+)\s+(?=[\w-]*\d)", text)}
+
+
 def relate(new: Anchors, old: Anchors, new_text: str = "", old_text: str = "") -> Relation:
     shared_values = {v for _, v in new.ids} & {v for _, v in old.ids}
     clashing = _clashing(new, old)
     label_words = {w for label in clashing for w in label.lstrip("#").split()}
-    common = _common_names(new.names, old.names) | (new.bare & old.bare)
+    # a capitalised word right before a code labels it ("Region G10"), it names nothing:
+    # "Region" shared by "... Region L60" and "... Region G10" ties no two statements
+    labels = _code_labels(new_text) | _code_labels(old_text)
+    common = {
+        n for n in _common_names(new.names, old.names) | (new.bare & old.bare) if n not in labels
+    }
     rescuing = {n for n in common if not (set(n.split()) & label_words)}
     named = bool(common) and (not clashing or bool(rescuing))
     anchored = named or bool(shared_values)
@@ -540,7 +550,9 @@ def relate(new: Anchors, old: Anchors, new_text: str = "", old_text: str = "") -
         shared_name=named,
         shared_id=bool(shared_values),
         apart=bool(clashing) and not shared_values and not rescuing,
-        value_changed=anchored and bool(new_text and old_text) and _changed(new_text, old_text),
+        value_changed=anchored
+        and bool(new_text and old_text)
+        and _changed(new_text, old_text, new.ids | old.ids),
     )
 
 
@@ -572,8 +584,19 @@ def _common_names(a: frozenset[str], b: frozenset[str]) -> set[str]:
     return out
 
 
-def _changed(new_text: str, old_text: str) -> bool:
-    a, b = numbers(new_text), numbers(old_text)
+def _changed(new_text: str, old_text: str, ids: frozenset[tuple[str, str]] = frozenset()) -> bool:
+    """Each statement states a number the other does not: a value that changed. The digits of
+    a code either names (letters and digits: "G10", "DC-Foxhollow-E910", "PX-90") are no
+    value: "Store 6474 belongs to Region G10" and "Region G10 is replenished from
+    DC-Foxhollow-E910" share G10 and say two things about it, while "closes at 9" / "at 10"
+    and "80 units" / "120 units" are changed amounts."""
+    named = {
+        run
+        for _, value in ids
+        if any(ch.isalpha() for ch in value)
+        for run in re.findall(r"\d+", value)
+    }
+    a, b = numbers(new_text) - named, numbers(old_text) - named
     return bool(a - b) and bool(b - a)
 
 
@@ -594,6 +617,139 @@ class Decision:
     grade: Grade | None
     score: float
     reason: str
+
+
+def _said_of(text: str, lang: str | None) -> set[str]:
+    """What ``text`` says, without what it names: its content words but its identifiers'
+    labels and values, its names, and any word with a digit, as stems in its language."""
+    from memory_service.domain.language import detect_language, function_words
+    from memory_service.modules.context.evidence import content_terms, stemmed_terms
+
+    lang = lang or detect_language(text)
+    found = anchors(text, lang)
+    named = {w for label, value in found.ids for w in (*label.lstrip("#").split(), value)}
+    named |= {
+        w
+        for name in found.names
+        # German capitalises its nouns: a capitalised word names a thing only when marked as
+        # a name ("Mein Vermieter ist ..." says "Vermieter" of what it names)
+        if lang != "de" or any(_marked(word) for word in name.split())
+        for w in name.split()
+    }
+    # the word right before a code or a number labels it ("المنطقة G10", "रीजन G10"), and a
+    # code's own parts are its name ("DC-Foxhollow-E910")
+    named |= _code_labels(text)
+    named |= {
+        part.lower() for code in re.findall(r"[\w-]*\d[\w-]*", text) for part in code.split("-")
+    }
+    named |= _function_words() | function_words(lang)
+    words = {
+        w
+        for w in content_terms(text)
+        if w not in named and not any(ch.isdigit() for ch in w) and len(w) > 1
+    }
+    return stemmed_terms(words, lang) - named
+
+
+def _slot_relation(
+    relation: Relation,
+    unit: CanonicalMemory,
+    old: CanonicalMemory,
+    new_slots: Slots | None,
+    old_slots: dict[Any, Slots],
+) -> Relation:
+    """``relation``, or one subject's single-valued slot with another value when the readings
+    or the words say so: the same thing, whatever else the anchors say."""
+    if (
+        new_slots and any(slot_changed(new_slots, old_slots.get(src, {})) for src in _sources(old))
+    ) or slot_changed(spoken_slots(unit.content), spoken_slots(old.content)):
+        return Relation(
+            shared_name=relation.shared_name,
+            shared_id=relation.shared_id,
+            apart=False,
+            value_changed=True,
+            shared_slot=True,
+        )
+    return relation
+
+
+def _links(new: CanonicalMemory, old: CanonicalMemory) -> bool:
+    """Two links of a chain, not two values of one thing: two plain facts that say nothing
+    alike of what they share ("Store 6474 belongs to Region G10" / "Region G10 is
+    replenished from DC-Foxhollow-E910"; "Region K41 wird aus ... beliefert" / "Der
+    Einkäufer für Region K41 ist ..."). A statement that says something changed ("Hiro now
+    covers site 9154 instead of Valentina", "Korrektur: ... nimm stattdessen ...") and a
+    finished state after an ongoing one are always compared."""
+    if says_a_change(new) or finished_after_ongoing(new.content, old.content):
+        return False
+    if not _names_its_own(old, new):
+        # the older names nothing the newer does not: the newer says what became of it
+        # ("Users log IT tickets in Zendesk" / "We moved the help desk from Zendesk to
+        # Freshservice"), not the next link of a chain
+        return False
+    return not says_the_same_of_it(new.content, old.content)
+
+
+def _names_its_own(old: CanonicalMemory, new: CanonicalMemory) -> bool:
+    """``old`` names a thing (a name or a code) that ``new`` does not name."""
+    mine = anchors(old.content, old.lang or None)
+    theirs = anchors(new.content, new.lang or None)
+    own = {n for n in mine.names if not _common_names(frozenset({n}), theirs.names)}
+    own |= {v for _, v in mine.ids} - {v for _, v in theirs.ids}
+    return bool(own - _code_labels(old.content))
+
+
+_CHANGE_CUES = (
+    "correction_start",
+    "correction",
+    "correction_weak",
+    "replacement",
+    "lifecycle",
+    "lifecycle_weak",
+    "status",
+    "status_weak",
+)
+
+
+@lru_cache(maxsize=1)
+def _lexicon() -> Any:
+    from memory_service.modules.memory.statements import Lexicon
+
+    return Lexicon.default()
+
+
+def says_a_change(memory: CanonicalMemory) -> bool:
+    """The statement may say something changed: any label but FACT (a correction, a change
+    of state, a rule that replaces a way of doing), no label at all, or, labelled a fact, a
+    word the lexicon reads as a change ("ended", "is back", "now", "instead of")."""
+    kind = statement_kind_of(memory.system_metadata)
+    if kind is not StatementKind.FACT:
+        # a change, a rule ("We dropped X; Y handles it from now on"), or no label at all
+        return True
+    reader = _lexicon().reader(memory.content)
+    return any(
+        cue in reader.cues and reader.cues[cue].search(memory.content) for cue in _CHANGE_CUES
+    )
+
+
+def says_the_same_of_it(new_text: str, old_text: str) -> bool:
+    """Two statements about one named thing say the same of it: they share a word besides
+    what they name ("The buyer for Region L60 is Thea" / "Amara has replaced Thea as the
+    buyer for Region L60"), or, saying nothing besides it, they are the same sentence but for
+    their values ("El sitio SITE-7786 está en la zona ZN-U97" / "... ZN-V59")."""
+    # each in its own language: a stored language may be another statement's misreading
+    a, b = _said_of(new_text, None), _said_of(old_text, None)
+    if a & b:
+        return True
+    return not (a or b) and _skeleton(new_text) == _skeleton(old_text)
+
+
+def _skeleton(text: str) -> frozenset[str]:
+    """A sentence's words but its values (anything with a digit) and names."""
+    found = anchors(text)
+    names = {w for name in found.names for w in name.split()}
+    words = (w.strip(".,;:!?¿¡()\"'«»“”،؛।") for w in text.lower().split())
+    return frozenset(w for w in words if w and not any(ch.isdigit() for ch in w) and w not in names)
 
 
 def related(relation: Relation, cosine: float | None) -> bool:
@@ -1003,24 +1159,16 @@ class CrossConversationReplacement:
             for old in earlier:
                 if old.temporal.observed_at > unit.temporal.observed_at:
                     continue  # a statement replaces only what was said before it
-                relation = relate(
-                    mine, anchors(old.content, old.lang or None), unit.content, old.content
+                relation = _slot_relation(
+                    relate(mine, anchors(old.content, old.lang or None), unit.content, old.content),
+                    unit,
+                    old,
+                    new_slots,
+                    old_slots,
                 )
-                if (
-                    new_slots
-                    and any(
-                        slot_changed(new_slots, old_slots.get(src, {})) for src in _sources(old)
-                    )
-                ) or slot_changed(spoken_slots(unit.content), spoken_slots(old.content)):
-                    # one subject's single-valued slot, another value: the same thing
-                    relation = Relation(
-                        shared_name=relation.shared_name,
-                        shared_id=relation.shared_id,
-                        apart=False,
-                        value_changed=True,
-                        shared_slot=True,
-                    )
                 if relation.apart:
+                    continue
+                if relation.anchored and not relation.shared_slot and _links(unit, old):
                     continue
                 pair = _Pair(unit, old, relation)
                 if relation.anchored:

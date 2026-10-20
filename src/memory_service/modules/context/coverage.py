@@ -328,12 +328,56 @@ def _month_gap(
 
 
 def unanswered(
-    question: str, evidence: Sequence[str], dated: Sequence[frozenset[int]] = ()
+    question: str,
+    evidence: Sequence[str],
+    dated: Sequence[frozenset[int]] = (),
+    *,
+    retrieved: Sequence[str] = (),
 ) -> str | None:
     """Why ``evidence`` does not answer ``question``, or None when it may. ``dated``: the
-    months each item of ``evidence`` is dated in (0 = January), by position; optional."""
+    months each item of ``evidence`` is dated in (0 = January), by position; optional.
+    ``retrieved``: everything the retriever found, shown or not (a code it names is known)."""
     if not evidence:
         return None
-    return _value_gap(question, evidence, detect_language(question)) or _month_gap(
-        question, evidence, dated
+    return (
+        _unknown_code(question, [*evidence, *retrieved])
+        or _value_gap(question, evidence, detect_language(question))
+        or _month_gap(question, evidence, dated)
     )
+
+
+#: a code: letters and digits in one token of at least this many characters ("ZZ421722",
+#: "SITE-9154", "PX-90"); a word or a bare number is no code
+CODE_MIN = 4
+_CODE = re.compile(r"(?<![\w-])(?=[\w-]*[A-Za-z])(?=[\w-]*\d)[A-Za-z0-9][\w-]*[A-Za-z0-9](?![\w-])")
+
+
+def _code_form(token: str) -> str:
+    return re.sub(r"[^0-9a-z]", "", token.lower())
+
+
+def _shape(form: str) -> str:
+    """What kind of code ``form`` is: its letters and digits as classes ("zz421722" and
+    "rt335327" are both "aa999999")."""
+    return re.sub(r"\d", "9", re.sub(r"[a-z]", "a", form))
+
+
+def _codes(text: str) -> set[str]:
+    return {form for m in _CODE.finditer(text) if len(form := _code_form(m.group())) >= CODE_MIN}
+
+
+def _unknown_code(question: str, evidence: Sequence[str]) -> str | None:
+    """A code the question names that nothing the retriever found names, however written
+    ("PX-90", "PX90", "px 90"), while what it found names other codes of its kind: the store
+    knows things of that kind and this one is not among them (ADR 0041). A code of a kind the
+    store holds none of is a value the user supplies to a request ("Write the service report
+    for WO-4120" under a report rule), not an unknown thing; one found but not shown is a
+    retrieval miss."""
+    codes = _codes(question)
+    if not codes:
+        return None
+    said = " ".join(_code_form(t) for t in evidence for t in re.split(r"\s+", t))
+    flat = _code_form(" ".join(evidence))
+    kinds = {_shape(c) for t in evidence for c in _codes(t)}
+    missing = sorted(c for c in codes if c not in flat and c not in said and _shape(c) in kinds)
+    return f"no evidence names {', '.join(missing)}" if missing else None

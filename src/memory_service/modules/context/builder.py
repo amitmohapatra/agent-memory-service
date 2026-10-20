@@ -825,7 +825,11 @@ class ContextBuilder:
         )
 
     def _coverage(
-        self, report: EvidenceReport, query: str, shown: Sequence[ContextItem]
+        self,
+        report: EvidenceReport,
+        query: str,
+        shown: Sequence[ContextItem],
+        retrieved: Sequence[str] = (),
     ) -> EvidenceReport:
         """INSUFFICIENT when the evidence shown does not hold the value the question asks for
         (``coverage.unanswered``, ADR 0040); each item dated by when it was said and the days
@@ -837,7 +841,10 @@ class ContextBuilder:
         ):
             return report
         gap = unanswered(
-            query, [i.text for i in shown], [months_dated(i.attributes) for i in shown]
+            query,
+            [i.text for i in shown],
+            [months_dated(i.attributes) for i in shown],
+            retrieved=retrieved,
         )
         if not gap:
             return report
@@ -1060,7 +1067,12 @@ class ContextBuilder:
                 )
         report = self._related_evidence(report, memories, knowledge)
         # current evidence only: an earlier value answers nothing about now
-        report = self._coverage(report, query, (*memories, *knowledge, *graph_facts, *summaries))
+        report = self._coverage(
+            report,
+            query,
+            (*memories, *knowledge, *graph_facts, *summaries),
+            retrieved=[c.text for c in result.candidates],
+        )
         if not (knowledge or memories or graph_facts or summaries or history):
             report = report.model_copy(update={"status": EvidenceStatus.INSUFFICIENT})
         # what the retriever found but this bundle does not carry (ranked out, over budget):

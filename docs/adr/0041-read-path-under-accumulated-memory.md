@@ -96,6 +96,38 @@ now read.
    disarming an alarm, logging in and the German verb to mail as asking for a code, a password
    or an address.
 
+10. **Follow-up: what accumulated memory showed after the first release.**
+    * *Links of a chain are not values of one thing* (`replacement._links`). Two statements
+      that share a name or code are not compared when what they share is the subject of at
+      most one of them and they say nothing alike of it, values, labels and function words
+      aside: "Store 6474 belongs to Region G10" / "Region G10 is replenished from
+      DC-Foxhollow-E910" (the trained head read the pair at 0.99 contradiction). The digits of
+      a code are no "changed value" either (`replacement._changed`). A change of one subject
+      ("Forklift #4 is in the shop" / "... is back in service") and a finished state after an
+      ongoing one are still compared, and so is a pair whose older statement names nothing
+      the newer does not ("Users log IT tickets in Zendesk" / "We moved the help desk from
+      Zendesk to Freshservice"): the newer says what became of it.
+    * *A restricted instruction is a standing rule a model confirms* (`statements._restricted`,
+      the `only` and new `occasion` cues): "Only list stores with zero on-hand" and its four
+      translations; "Only send me the summary today" names one occasion and stays a request.
+    * *A rule restated with new values keeps only its newest form*: consolidation compares the
+      codes a statement names (`native.figures`), so "... prefixed with WO-K3" is not merged
+      into "... prefixed with WO-E3"; the user profile block lists a restated rule once
+      (`standing.restated_rules`), and the ranking marks the older forms earlier values
+      (`engine.restated_rules_first`, over the payload's rule kind; facts are left to the slot
+      rules).
+    * *A code nothing names*: a code (letters and digits, at least 4 characters) the question
+      names that nothing the retriever found names, however written, while it found other
+      codes of the same form (letters and digits in the same places: "ZZ421722" /
+      "RT335327"), makes the bundle INSUFFICIENT (`coverage._unknown_code`). A code of a form
+      the store holds none of is a value the user supplies to a request ("Write the service
+      report for WO-4120" under a report rule) and refuses nothing.
+    * *A list below the relevance floor*: a memory that names what the question names, says
+      every asked word and holds at least three values of its own is packed whatever its
+      cosine (`slots.answers_as_list`).
+    * *The backfill runs the graph enrichment the write path's index job runs*, so a replaced
+      memory's graph facts ("mentions" of an old value) are retired with it.
+
 ## What was measured and left out
 
 All on the capability eval's dev split, replaying the bundles a no-LLM run recorded (b7 =

@@ -28,7 +28,7 @@ from memory_service.modules.memory.replacement import CrossConversationReplaceme
 from memory_service.ports.models import NLIScore
 from tests.integration.test_feedback_projection import _admin, _submit
 from tests.integration.test_memory import _memories, _observe
-from tests.integration.test_statements_follow_the_user import _chat, _recalled, _say
+from tests.integration.test_statements_follow_the_user import _chat, _context, _recalled, _say
 
 pytestmark = pytest.mark.integration
 
@@ -490,3 +490,68 @@ async def test_an_earlier_value_found_alone_brings_its_replacement(container, uo
     bundle = await _full(container, _chat(), "Who is our main supplier of shipping crates?")
     assert new in [m["text"] for m in bundle.get("memories", [])]
     assert old in [m["text"] for m in bundle.get("history", [])]
+
+
+# ------------------------------------------------------------------ a chain of hops
+
+CHAIN = {
+    "en": (
+        "Store 5128 belongs to Region K41.",
+        "The buyer for Region K41 is Lena Ortiz.",
+        "Region K41 is replenished from DC-Harbor-T318.",
+        "The inbound lead at DC-Harbor-T318 is Omar Haddad.",
+        "Who is the buyer for store 5128?",
+    ),
+    "de": (
+        "Filiale 5128 gehört zur Region K41.",
+        "Der Einkäufer für Region K41 ist Lena Ortiz.",
+        "Region K41 wird aus DC-Harbor-T318 beliefert.",
+        "Die Wareneingangsleitung in DC-Harbor-T318 hat Omar Haddad.",
+        "Wer ist der Einkäufer für Filiale 5128?",
+    ),
+    "es": (
+        "La tienda 5128 pertenece a la Región K41.",
+        "El comprador de la Región K41 es Lena Ortiz.",
+        "La Región K41 se abastece desde DC-Harbor-T318.",
+        "El responsable de recepción en DC-Harbor-T318 es Omar Haddad.",
+        "¿Quién es el comprador de la tienda 5128?",
+    ),
+    "ar": (
+        "المتجر 5128 يتبع المنطقة K41.",
+        "المشتري للمنطقة K41 هو Lena Ortiz.",
+        "يتم تزويد المنطقة K41 من DC-Harbor-T318.",
+        "مسؤول الاستلام في DC-Harbor-T318 هو Omar Haddad.",
+        "من هو المشتري للمتجر 5128؟",
+    ),
+    "hi": (
+        "स्टोर 5128 रीजन K41 में आता है।",
+        "रीजन K41 के बायर Lena Ortiz हैं।",
+        "रीजन K41 को DC-Harbor-T318 से माल मिलता है।",
+        "DC-Harbor-T318 में इनबाउंड लीड Omar Haddad हैं।",
+        "स्टोर 5128 के बायर कौन हैं?",
+    ),
+}
+
+
+@pytest.mark.parametrize("score", [0.5, 0.99])
+@pytest.mark.parametrize("lang", sorted(CHAIN))
+async def test_statements_about_one_thing_that_say_different_things_all_stay_current(
+    container, uow_factory, lang, score
+):
+    """Each link of a chain names the thing the next one names (the region, the DC); none
+    replaces another, so the store's region and the region's buyer both come back current.
+    The head reads every pair as a contradiction, weak (0.5: only "a changed value" could
+    mark one, and the digits of the codes the links share or name are no changed value) or
+    strong (0.99, as the trained head reads "La tienda 5128 pertenece a la Región K41" against
+    "La Región K41 se abastece desde ..."): two links say different things of what they share,
+    so they are never compared. A tenant's model, when allowed, reads them as unrelated."""
+    _scripted(
+        container, score, always=True, assist=TenantModel("unrelated") if _MODE["assist"] else None
+    )
+    *links, asked = CHAIN[lang]
+    for link in links:
+        await _say(container, uow_factory, _chat(), link)
+    bundle = await _context(container, _chat(), asked)
+    current = "\n".join(m.text for m in bundle.memories)
+    assert "K41" in current and "Lena Ortiz" in current, current
+    assert not any("K41" in item.text for item in bundle.history), [i.text for i in bundle.history]
