@@ -328,14 +328,19 @@ def _month_gap(
 
 
 def unanswered(
-    question: str, evidence: Sequence[str], dated: Sequence[frozenset[int]] = ()
+    question: str,
+    evidence: Sequence[str],
+    dated: Sequence[frozenset[int]] = (),
+    *,
+    retrieved: Sequence[str] = (),
 ) -> str | None:
     """Why ``evidence`` does not answer ``question``, or None when it may. ``dated``: the
-    months each item of ``evidence`` is dated in (0 = January), by position; optional."""
+    months each item of ``evidence`` is dated in (0 = January), by position; optional.
+    ``retrieved``: everything the retriever found, shown or not (a code it names is known)."""
     if not evidence:
         return None
     return (
-        _unknown_code(question, evidence)
+        _unknown_code(question, [*evidence, *retrieved])
         or _value_gap(question, evidence, detect_language(question))
         or _month_gap(question, evidence, dated)
     )
@@ -352,8 +357,9 @@ def _code_form(token: str) -> str:
 
 
 def _unknown_code(question: str, evidence: Sequence[str]) -> str | None:
-    """A code the question names that no item of the evidence names, however written
-    ("PX-90", "PX90", "px 90"): the evidence is about something else (ADR 0041)."""
+    """A code the question names that nothing the retriever found names, however written
+    ("PX-90", "PX90", "px 90"): the store knows nothing of it (ADR 0041). One found but not
+    shown is a retrieval miss, not an unknown thing."""
     codes = {
         _code_form(m.group())
         for m in _CODE.finditer(question)

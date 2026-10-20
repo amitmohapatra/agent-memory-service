@@ -267,3 +267,11 @@ def test_a_code_no_evidence_names_is_unanswered(question):
 )
 def test_a_code_the_evidence_names_however_written_is_answered(question, item):
     assert unanswered(question, [item]) is None
+
+
+def test_a_code_found_but_not_shown_is_a_miss_not_an_unknown_thing():
+    question = "Who is the dispatcher for site SITE-7786?"
+    shown = ["The technician for site SITE-2860 is Zeno Borisova."]
+    assert unanswered(question, shown) == "no evidence names site7786"
+    found = ["Site SITE-7786 is in zone ZN-V59."]
+    assert unanswered(question, shown, retrieved=found) is None
