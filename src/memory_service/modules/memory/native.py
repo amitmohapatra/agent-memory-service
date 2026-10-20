@@ -289,26 +289,26 @@ _PREFERENCE = re.compile(
     r"can't stand|never use|always use|only use)\s+(.+)",
     re.IGNORECASE,
 )
-#: What a user says they care about, focus on or are responsible for, in the five pack
-#: languages ("I care about fast-moving items with low stock", "I manage branch 512", "Mir ist
-#: eine kurze Lieferzeit wichtig", "Me importan los artículos de alta rotación", "أدير المتجر
-#: 512", "मैं स्टोर 512 संभालता हूँ"), and a preference stated for good without a subject
-#: ("From now on, permanently prefer weekly summaries"): a lasting preference, read back for
-#: the questions it bears on (ADR 0041). Group 1..n: what it is about (the first that matched).
+#: What a user says they care about or focus on, in the five pack languages ("I care about
+#: fast-moving items with low stock", "Mir ist eine kurze Lieferzeit wichtig", "Me importan los
+#: artículos de alta rotación", "يهمني ...", "मुझे ... की परवाह"), and a preference stated for
+#: good without a subject ("From now on, permanently prefer weekly summaries"): a lasting
+#: preference, read back for the questions it bears on (ADR 0041). Group 1..n: what it is about
+#: (the first that matched). What a user manages or simply prefers ("I manage store 512",
+#: "Prefiero las alertas por Slack") is not read here: it is one value of a slot that changes
+#: (a role, a choice), and a lasting preference is never replaced (ADR 0038 compares
+#: statements), so every earlier store or channel would stay current; the turn keeps it.
 _FOCUS = re.compile(
     r"\b(?:i|we)\s+(?:really\s+|mostly\s+|mainly\s+|only\s+|mostly\s+)?"
     r"(?:care\s+(?:most\s+)?about|focus\s+on|am\s+focused\s+on|'m\s+focused\s+on"
-    r"|am\s+responsible\s+for|'m\s+responsible\s+for|manage(?!\s+to\b)|oversee|look\s+after)\s+(.{3,})"
+    r")\s+(.{3,})"
     r"|^(?:from\s+now\s+on,?\s*)?(?:please\s+)?(?:permanently|always)\s+prefer\s+(.{3,})"
     r"|\bmir\s+(?:ist|sind)\s+(.{3,}?)\s+(?:besonders\s+)?wichtig\b"
-    r"|\bich\s+(?:achte\s+(?:besonders\s+)?auf|leite|verwalte|betreue|bin\s+verantwortlich\s+f(?:ü|ue)r"
-    r"|bevorzuge)\s+(.{3,})"
+    r"|\bich\s+achte\s+(?:besonders\s+)?auf\s+(.{3,})"
     r"|\bme\s+(?:importa|importan|interesa|interesan)\s+(.{3,})"
-    r"|\b(?:yo\s+)?(?:gestiono|dirijo|administro|soy\s+responsable\s+de|prefiero)\s+(.{3,})"
-    r"|(?:يهمني|أهتم\s+ب|اهتم\s+ب|أدير|ادير|أنا\s+مسؤول\s+عن|انا\s+مسؤول\s+عن|أفضّل|أفضل)\s*(.{3,})"
+    r"|(?:يهمني|أهتم\s+ب|اهتم\s+ب)\s*(.{3,})"
     r"|मुझे\s+(.{3,}?)\s+की\s+(?:परवाह|फ़िक्र|फिक्र)"
-    r"|मेरे\s+लिए\s+(.{3,}?)\s+(?:ज़रूरी|जरूरी|अहम)\s+है"
-    r"|मैं\s+(.{3,}?)\s+(?:संभालता|संभालती|मैनेज\s+करता|मैनेज\s+करती)\s+हूँ",
+    r"|मेरे\s+लिए\s+(.{3,}?)\s+(?:ज़रूरी|जरूरी|अहम)\s+है",
     re.IGNORECASE,
 )
 _PREF_PLEASE = re.compile(

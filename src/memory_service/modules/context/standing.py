@@ -2,11 +2,11 @@
 
 A user's standing rule ("Never schedule a delivery on a public holiday", "Always answer weekly
 reports as a table with columns item, branch, count; no prose", "Nie ...", "Nunca
-...") and their stated preferences ("I care about fast-moving items with low stock", "I manage
-branch 512") are lasting memories (ADR 0036/0037), and they reached a new conversation only
-through the ``user`` profile block: one bounded block of all of them, newest first, so under
-memory that is never cleared a rule said a month ago fell off its end - and the ranked
-memories carried it only when it happened to rank among the answers.
+...") and their stated preferences ("I care about fast-moving items with low stock", "Mir ist
+eine kurze Lieferzeit wichtig") are lasting memories (ADR 0036/0037), and they reached a new
+conversation only through the ``user`` profile block: one bounded block of all of them,
+newest first, so under memory that is never cleared a rule said a month ago fell off its
+end - and the ranked memories carried it only when it happened to rank among the answers.
 
 Here every request reads the user's rules and preferences that apply to it, from the
 memories collection, in one round trip beside the ranking (a dense search in the primary

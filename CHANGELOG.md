@@ -19,8 +19,8 @@ each entry says which one moved. Decisions behind each change are in the
   superseding an earlier one, a format rule or a list whole. A turn and what the rules read
   from it rank as one document. Time words are read anchored to a named day, by season, and in
   German, Spanish, Arabic and Hindi. The abstention overlap reads stems; disarming an alarm,
-  logging in and the German verb to mail ask for a value. "I care about / manage ..." is a
-  lasting preference; "From now on, always ..." is a rule. No model anywhere.
+  logging in and the German verb to mail ask for a value. "I care about ..." is a
+  lasting preference ("I manage ..." stays a statement a later one replaces); "From now on, always ..." is a rule. No model anywhere.
 - `make backfill` (`memory_service.tools.backfill`): brings a store an earlier build wrote up
   to this one in place while serving - replacement across each user's conversations in event
   time, then the index again; idempotent, resumable (`--state`), nothing deleted

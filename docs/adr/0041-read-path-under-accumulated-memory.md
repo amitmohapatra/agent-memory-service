@@ -18,7 +18,7 @@ their conversations. Testers of the deployed service found five failures, all on
   table with columns ..., no prose") were not applied in a new chat: they reached it only
   through the `user` profile block, one bounded block of everything, newest first, so a rule
   said weeks ago fell off its end;
-* a stated preference ("I care about high-ROS styles with short WOS", "I manage store X") was
+* a stated preference ("I care about high-ROS styles with short WOS") was
   not applied - the extraction rules did not read it as one;
 * answers came from loosely related memory, and the no-LLM retrieval benchmarks sat at
   LoCoMo source recall@10 0.807 (main 70198fa) with a turn and the facts read from it ranked as
@@ -76,9 +76,12 @@ now read.
    with it; an earlier value never applies. They come back as two profile sections,
    `standing_rules` and `preferences` (at most 6 and 4 lines), in any conversation, and are
    kept when the whole profile does not fit the pinned share.
-7. **What the extraction reads.** "I care about / focus on / manage / am responsible for ...",
-   "permanently prefer ..." and their German, Spanish, Arabic and Hindi forms are lasting
-   preferences; "From now on, always answer ..." (a standing word opening the clause after
+7. **What the extraction reads.** "I care about / focus on ...", "permanently prefer ..." and
+   their German, Spanish, Arabic and Hindi forms are lasting preferences. What a user manages
+   or simply prefers ("I manage store X", "Prefiero las alertas por X") is not: it is one value
+   of a slot that changes, a lasting preference is never replaced (ADR 0038 compares
+   statements), and read as one it kept every earlier store and channel current
+   (stress_accumulated `preference` fell 8 points below the candidate); the turn keeps it; "From now on, always answer ..." (a standing word opening the clause after
    another one) is a rule when what follows is an instruction.
 8. **Upgrading a store an earlier build wrote** (`tools.backfill`, `make backfill`, documented
    in `docs/deploy/database.md`). For every user, their statements message by message in event

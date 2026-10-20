@@ -38,7 +38,7 @@ async def test_rules_and_preferences_that_apply_come_back_in_a_new_chat(containe
         "out; no prose.",
     )
     await _say(container, uow_factory, _chat(), "Never book deliveries on Sundays.")
-    await _say(container, uow_factory, _chat(), "I manage store 4779 in the north region.")
+    await _say(container, uow_factory, _chat(), "I care about fast-moving items at store 4779.")
     bundle = await _context(container, _chat(), "Run the stockout audits for store 4779.")
     rules = _block(bundle, "standing_rules")
     assert "markdown table" in rules and "Sundays" not in rules
