@@ -16,7 +16,9 @@
 
 `docker compose up -d` on a fresh checkout reaches a working service with no manual steps
 (`docker-compose.yml`): it fetches the model weights, applies both database schemas, then
-starts the API and the worker.
+starts the API and the worker, and beside them brings any memory an earlier build stored up
+to this one (`memory-backfill`). Upgrading is the same command after a pull (`git pull`, then
+`docker compose up -d --build`).
 
 ```mermaid
 flowchart LR
@@ -29,6 +31,7 @@ flowchart LR
   PG & QD & DF & MF & MIG --> API["memory-api :8080<br/>(healthcheck start_period 600 s)"]
   FGA -.->|started| API
   PG & QD & DF & MF & MIG --> WK["memory-worker<br/>(2 CPUs, one math thread)"]
+  PG & QD & DF & MF & MIG --> BF["memory-backfill<br/>(one-shot, beside the API)"]
   subgraph profiles[Optional profiles]
     VAL["memory-validate (validation)"]
     OT["otel-collector, prometheus (observability)"]
@@ -44,6 +47,7 @@ flowchart LR
 | `model-fetch` | one-shot: the frozen model set into `./models` | about 1 GB the first time, skipped afterwards |
 | `db-migrate` | one-shot: Alembic, then Procrastinate's own schema | `tools/ensure_queue_schema.py` — neither schema is created on boot |
 | `memory-api` | the HTTP service | `start_period: 600s`: loading the models takes minutes on a cold start, and without it the stack reported unhealthy while it was still legitimately loading (ADR 0019 context recorded ~6 minutes) |
+| `memory-backfill` | one-shot: `tools/backfill.py` brings memory an earlier build stored up to this one, while the API serves | its checkpoint is the `backfill` volume: the next `up` of the same release skips every user finished and exits before loading a model; a release that changes the backfill (`BACKFILL_REVISION`) starts over; nothing waits for it ([deploy/database.md](../deploy/database.md#upgrading-a-store-an-earlier-build-wrote-no-clearing)) |
 | `memory-worker` | background jobs | `cpus: '2'`, `OMP_NUM_THREADS=1`: ingestion must not bid for the cores the query path is measured on |
 | `memory-validate` | profile `validation`: runs `make validate` against the real services with the repository bind-mounted | chapter 12 |
 | `otel-collector`, `prometheus` | profile `observability` | `deploy/otel/collector.yaml`, `deploy/prometheus.yml` |
@@ -262,7 +266,11 @@ fingerprint changes — an encoder, a graph file, the key layout (`mk2`, `mk3` i
 0026) — and until `--prune` runs the previous generation keeps serving, so a rollback is a
 revert of the build ([MULTILINGUAL-RUNTIME.md](../MULTILINGUAL-RUNTIME.md#moving-an-existing-tenant-the-reindex-path)).
 
-**Backfills.** A tenant that opts into `memory_restatement` restates earlier turns with
+**Backfills.** After an upgrade, `tools/backfill.py` brings the memory an earlier build stored
+up to the new one, in place and while serving: compose runs it on every `up`
+(`memory-backfill`), elsewhere `make backfill BACKFILL_ARGS="--state <file>"`
+([deploy/database.md](../deploy/database.md#upgrading-a-store-an-earlier-build-wrote-no-clearing)).
+A tenant that opts into `memory_restatement` restates earlier turns with
 `python -m memory_service.tools.restate --tenant <id> [--limit N] [--force]` (ADR 0027).
 
 ---

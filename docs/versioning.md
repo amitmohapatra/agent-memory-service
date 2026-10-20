@@ -43,13 +43,22 @@ There is no deprecation window promised before 1.0: read the CHANGELOG before up
 
 ## Upgrading the service
 
+With the compose stack, an upgrade is **pull, then `docker compose up -d`** (`git pull`,
+`docker compose up -d --build`: the stack builds its image from the checkout): the one-shot
+`db-migrate` and `memory-backfill` services do steps 1 and 2 below on their own, and the
+backfill runs while the new build serves ([deploy/database.md](deploy/database.md#upgrading-a-store-an-earlier-build-wrote-no-clearing)).
+Elsewhere:
+
 1. **Migrate first**: `alembic upgrade head` (`make migrate`, or the compose `db-migrate`
    step). Migrations take a lock with a short timeout and fail rather than queue behind a long
    transaction; retry them ([deploy/database.md](deploy/database.md)). CI runs every migration
    up, down to the base and up again.
-2. **Re-index after a model change**: a new encoder or key layout is a new collection, never a
+2. **Bring the stored memory up to the new build**: `make backfill BACKFILL_ARGS="--state
+   <file>"` while it serves (live-safe, resumable; a state file from an earlier release
+   starts over).
+3. **Re-index after a model change**: a new encoder or key layout is a new collection, never a
    mixed one. `make reindex` builds it from PostgreSQL ([deploy/search.md](deploy/search.md)).
-3. **Then roll the API and the worker together.** Every task name the API enqueues must have a
+4. **Then roll the API and the worker together.** Every task name the API enqueues must have a
    handler in the worker's registry (`tests/unit/test_job_registration.py`).
 
 ## Which versions work together

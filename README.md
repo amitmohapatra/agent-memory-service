@@ -65,6 +65,10 @@ unless a request names another (`bind(tenant_id=...)`). There is deliberately no
 in the stack: without `BIFROST_URL` the service runs complete, with no model call
 ([chapter 8](docs/guide/08-models.md)).
 
+To upgrade, pull and run the same command (`git pull`, then `docker compose up -d --build`):
+the schema is migrated first, and the memory an earlier build stored is brought up to the new
+one while the service serves ([deploy/database.md](docs/deploy/database.md#upgrading-a-store-an-earlier-build-wrote-no-clearing)).
+
 To work on the service rather than run it:
 
 ```bash

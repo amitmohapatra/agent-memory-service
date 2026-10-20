@@ -94,8 +94,9 @@ ENV PATH="/opt/venv/bin:$PATH"
 # takes its ownership from the image, and this path did not exist in the image — so Docker
 # created it root-owned, the process runs as nobody, and every archive write failed with
 # PermissionError. Measured on a running stack: archive.stage_message failed 112 times and
-# retried until each job went dead, with nothing wrong in the code at all.
-RUN mkdir -p /data/blob && chown -R nobody:nogroup /data
+# retried until each job went dead, with nothing wrong in the code at all. /data/backfill is
+# the compose `memory-backfill` checkpoint's volume, for the same reason.
+RUN mkdir -p /data/blob /data/backfill && chown -R nobody:nogroup /data
 
 # How the image spends the CPUs it is given.
 #

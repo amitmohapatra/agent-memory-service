@@ -139,8 +139,37 @@ Memory is never cleared, and nothing in an upgrade needs it to be. A store writt
 ADR 0038/0040/0041 holds a user's old and new statements of one thing both current, and index
 points without the `statement_kind` payload the rules section filters on. Both are read
 correctly as soon as the new build serves (the read path's latest-value rules apply to old
-and new memories alike, ADR 0041), and one command brings the stored state up to the new
-build, in place, while it serves:
+and new memories alike, ADR 0041), and the backfill brings the stored state up to the new
+build, in place, while it serves.
+
+**With compose, upgrading is: pull, then `docker compose up -d`.** Nothing else (`--build`
+because the stack builds its image from the checkout rather than pulling one):
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+`db-migrate` applies the schema first, then the API and the worker start and the one-shot
+`memory-backfill` service runs the backfill beside them
+(`python -m memory_service.tools.backfill --state /data/backfill/state.json`). The API and
+the worker do not wait for it: it is live-safe, and they serve while it runs. Its checkpoint
+lives on the `backfill` volume and records the backfill's revision (`BACKFILL_REVISION`) and
+every user finished, so:
+
+* the next `docker compose up` of the same release skips every user finished, and with none
+  left exits 0 before loading a model;
+* a release that changes what the backfill applies bumps the revision, and a checkpoint
+  from an earlier revision starts over (every user is brought up to the new rules);
+* a fresh install (no users yet) exits 0 at once;
+* a run stopped midway resumes where it stopped on the next `up`.
+
+Its result is in `docker compose logs memory-backfill` (a JSON report: users, messages,
+replaced, relabelled, failures); a user that failed makes it exit 1, and the next `up` runs
+that user again.
+
+**Without compose**, run the same command after `alembic upgrade head` (`make migrate`),
+with a state file that outlives the run:
 
 ```bash
 make backfill BACKFILL_ARGS="--state /var/lib/memory/backfill.json"           # every user
@@ -167,6 +196,8 @@ make backfill BACKFILL_ARGS="--state /var/lib/memory/backfill.json --reindex-all
   revisions its changes touch, so no cached bundle serves a value it marked.
 * **Idempotent and resumable.** A statement already marked is not marked again; a second run
   changes nothing. `--state` records each finished user and, for the one in progress, the
-  last message done (every `--batch`, default 50); rerun the same command to resume.
+  last message done (every `--batch`, default 50); rerun the same command to resume. The
+  state also records `BACKFILL_REVISION`: a state file from another revision starts over,
+  so keeping one file across releases is safe.
 * **Needs the NLI head** (the replacement's decider, as on the write path). Without it the
   command only re-indexes.

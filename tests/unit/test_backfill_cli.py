@@ -28,7 +28,11 @@ def wired(monkeypatch):
     seen: dict = {}
 
     async def build(settings, version):
+        seen["built"] = True
         return container
+
+    async def pending(settings, *, state, tenant, user):
+        return (1, 1)
 
     async def run(container_, **kwargs):
         seen.update(kwargs)
@@ -42,6 +46,7 @@ def wired(monkeypatch):
     monkeypatch.setattr(app, "build_container", build)
     monkeypatch.setattr(registry, "register_handlers", lambda c: None)
     monkeypatch.setattr(module, "backfill", run)
+    monkeypatch.setattr(module, "pending_users", pending)
     return container, seen
 
 
@@ -57,7 +62,7 @@ def test_arguments_reach_the_run_and_the_report_is_printed(wired, monkeypatch, c
         monkeypatch, "--state", str(state), "--tenant", "acme", "--user", "u1", "--batch", "7"
     )
     assert code == 0 and container.closed
-    assert seen == {"state": state, "tenant": "acme", "user": "u1", "batch": 7}
+    assert seen == {"built": True, "state": state, "tenant": "acme", "user": "u1", "batch": 7}
     assert json.loads(capsys.readouterr().out)["failures"] == []
 
 
@@ -96,6 +101,80 @@ def test_the_container_is_closed_when_the_run_raises(wired, monkeypatch):
     with pytest.raises(RuntimeError):
         _run(monkeypatch)
     assert container.closed
+
+
+def test_with_no_user_left_it_exits_0_before_loading_a_model(wired, monkeypatch, capsys):
+    """A fresh install (no user), or every user finished at this revision: compose runs the
+    backfill on every ``up``, and it must not load the models to find there is nothing."""
+    _, seen = wired
+
+    async def nobody(settings, *, state, tenant, user):
+        return (3, 0)
+
+    monkeypatch.setattr(module, "pending_users", nobody)
+    assert _run(monkeypatch, "--state", "/nonexistent/state.json") == 0
+    assert "built" not in seen and "state" not in seen
+    report = json.loads(capsys.readouterr().out)
+    assert report["users"] == 0 and report["skipped_users"] == 3 and report["failures"] == []
+
+
+def test_reindex_all_runs_even_with_no_user_left(wired, monkeypatch, capsys):
+    _, seen = wired
+
+    async def nobody(settings, *, state, tenant, user):
+        return (0, 0)
+
+    async def rebuild(container_, tenant_id=None):
+        return BackfillReport()
+
+    import memory_service.tools.reindex as reindex
+
+    monkeypatch.setattr(module, "pending_users", nobody)
+    monkeypatch.setattr(reindex, "rebuild_search_index", rebuild)
+    assert _run(monkeypatch, "--reindex-all") == 0
+    assert seen["built"]
+    capsys.readouterr()
+
+
+# ------------------------------------------------------------------ the checkpoint's revision
+
+
+def test_a_state_from_another_revision_starts_over(tmp_path):
+    from memory_service.tools.backfill import BACKFILL_REVISION, Checkpoint
+
+    state = tmp_path / "state.json"
+    old = Checkpoint(state, revision=BACKFILL_REVISION - 1)
+    old.finish("acme", "user:u1")
+    old.progress("acme", "user:u2", "2026-10-01T00:00:00+00:00")
+    reread = Checkpoint(state)
+    assert not reread.finished("acme", "user:u1")
+    assert reread.resume_after("acme", "user:u2") is None
+    reread.finish("acme", "user:u3")
+    assert json.loads(state.read_text()) == {
+        "revision": BACKFILL_REVISION,
+        "done": [["acme", "user:u3"]],
+        "current": None,
+    }
+
+
+def test_a_state_written_before_revisions_were_recorded_starts_over(tmp_path):
+    from memory_service.tools.backfill import Checkpoint
+
+    state = tmp_path / "state.json"
+    state.write_text(json.dumps({"done": [["acme", "user:u1"]], "current": None}))
+    assert not Checkpoint(state).finished("acme", "user:u1")
+
+
+def test_a_state_from_this_revision_skips_the_users_it_finished(tmp_path):
+    from memory_service.tools.backfill import Checkpoint
+
+    state = tmp_path / "nested" / "state.json"  # a directory not made yet (a fresh volume)
+    first = Checkpoint(state)
+    first.finish("acme", "user:u1")
+    first.progress("acme", "user:u2", "2026-10-01T00:00:00+00:00")
+    again = Checkpoint(state)
+    assert again.finished("acme", "user:u1") and not again.finished("acme", "user:u2")
+    assert again.resume_after("acme", "user:u2") == "2026-10-01T00:00:00+00:00"
 
 
 # ------------------------------------------------------------------ stale rule labels

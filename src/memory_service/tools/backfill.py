@@ -19,7 +19,12 @@ write path takes, each one bumping the revisions its changes touch (so no cached
 serves a value it marked). Idempotent: a statement already marked is not marked again, and
 a second run changes nothing. Resumable: ``--state FILE`` records every user finished and,
 for the user in progress, the instant of the last message done; a run stopped anywhere
-continues from there. Batched: ``--batch`` messages between checkpoints.
+continues from there. Batched: ``--batch`` messages between checkpoints. Versioned: the state
+records ``BACKFILL_REVISION``, and a state an earlier revision left starts over (a release that
+changes what the backfill applies must reach the users an earlier one finished). Cheap when
+there is nothing to do: with no user left to bring up (a fresh install, or every user finished
+at this revision) it exits before loading a model, which is what lets compose run it on every
+``docker compose up`` (the ``memory-backfill`` service).
 
     uv run python -m memory_service.tools.backfill --state /var/lib/memory/backfill.json \\
         [--tenant acme] [--user u1] [--batch 50] [--reindex-all]
@@ -48,6 +53,11 @@ from memory_service.observability.logging import get_logger
 
 log = get_logger(__name__)
 
+#: The rules a backfill applies, as one number. Bump it whenever they change (what the
+#: replacement decides, a label read again, what is indexed or enriched): a ``--state`` file
+#: records it, and one from another revision starts over instead of skipping every user an
+#: earlier revision finished.
+BACKFILL_REVISION = 1
 #: messages between two checkpoints of ``--state``
 BATCH = 50
 #: a user's statements read per query (oldest first)
@@ -77,14 +87,29 @@ class BackfillReport:
 
 
 class Checkpoint:
-    """``--state``: the users finished, and the user in progress with the instant of the last
-    message done. Written atomically (a file beside it, then renamed)."""
+    """``--state``: the revision of the rules applied, the users finished, and the user in
+    progress with the instant of the last message done. Written atomically (a file beside it,
+    then renamed). A state from another revision (or none: written before revisions were
+    recorded) is a run of other rules: this one starts over."""
 
-    def __init__(self, path: Path | None) -> None:
+    def __init__(self, path: Path | None, revision: int = BACKFILL_REVISION) -> None:
         self.path = path
-        self.data: dict[str, Any] = {"done": [], "current": None}
+        self.revision = revision
+        self.data: dict[str, Any] = self._empty()
         if path is not None and path.exists():
-            self.data = json.loads(path.read_text())
+            stored = json.loads(path.read_text())
+            if stored.get("revision") == revision:
+                self.data = stored
+            else:
+                log.info(
+                    "backfill.state_restarted",
+                    state=str(path),
+                    stored_revision=stored.get("revision"),
+                    revision=revision,
+                )
+
+    def _empty(self) -> dict[str, Any]:
+        return {"revision": self.revision, "done": [], "current": None}
 
     def finished(self, tenant: str, principal: str) -> bool:
         return [tenant, principal] in self.data["done"]
@@ -107,6 +132,7 @@ class Checkpoint:
     def _write(self) -> None:
         if self.path is None:
             return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         part = self.path.with_suffix(self.path.suffix + ".part")
         part.write_text(json.dumps(self.data))
         part.replace(self.path)
@@ -131,11 +157,12 @@ def messages(statements: Sequence[CanonicalMemory]) -> list[list[CanonicalMemory
 
 
 async def users(
-    container: Any, tenant: str | None, user: str | None
+    database: Any, tenant: str | None, user: str | None
 ) -> list[tuple[str, str, str | None]]:
     """``(tenant, owner principal, workspace)`` of every user with current statements of
-    their own, in a fixed order."""
-    async with container.database.session_factory() as session:
+    their own, in a fixed order. ``database``: anything with a ``session_factory`` (the
+    container's, or a bare ``Database`` before any model is loaded)."""
+    async with database.session_factory() as session:
         q = (
             select(MemoryRow.tenant_id, MemoryRow.owner_principal, MemoryRow.workspace_id)
             .where(
@@ -292,7 +319,7 @@ async def backfill(
 ) -> BackfillReport:
     report = BackfillReport()
     checkpoint = Checkpoint(state)
-    for t, principal, workspace in await users(container, tenant, user):
+    for t, principal, workspace in await users(container.database, tenant, user):
         if checkpoint.finished(t, principal):
             report.skipped_users += 1
             continue
@@ -313,17 +340,42 @@ async def backfill(
     return report
 
 
+async def pending_users(
+    settings: Any, *, state: Path | None, tenant: str | None, user: str | None
+) -> tuple[int, int]:
+    """``(users, of them not finished at this revision)``, read with a bare database
+    connection: the models the backfill needs are loaded only when one is left."""
+    from memory_service.adapters.db.engine import Database
+
+    database = Database(settings.database)
+    try:
+        found = await users(database, tenant, user)
+    finally:
+        await database.close()
+    checkpoint = Checkpoint(state)
+    return len(found), sum(1 for t, p, _ in found if not checkpoint.finished(t, p))
+
+
 async def _main(args: argparse.Namespace) -> int:
     from memory_service.application.container import build_container
     from memory_service.config.settings import Settings
     from memory_service.modules.jobs.registry import register_handlers
 
-    container = await build_container(Settings(), __version__)
+    settings = Settings()
+    state = Path(args.state) if args.state else None
+    if not args.reindex_all:
+        found, left = await pending_users(settings, state=state, tenant=args.tenant, user=args.user)
+        if not left:
+            # a fresh install, or every user finished at this revision: nothing to load
+            report = BackfillReport(skipped_users=found)
+            sys.stdout.write(json.dumps(report.as_dict(), indent=2) + "\n")
+            return 0
+    container = await build_container(settings, __version__)
     register_handlers(container)
     try:
         report = await backfill(
             container,
-            state=Path(args.state) if args.state else None,
+            state=state,
             tenant=args.tenant,
             user=args.user,
             batch=args.batch,

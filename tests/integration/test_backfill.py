@@ -190,3 +190,52 @@ async def test_the_graph_facts_of_what_it_replaced_are_retired(container, uow_fa
         memories = await uow.memories.get_many(u1.tenant_id, enriched)
     replaced = [m for m in memories if m.content == SAID[0]]
     assert replaced and all(m.memory_id in enriched for m in replaced)
+
+
+async def test_a_state_from_an_earlier_revision_runs_every_user_again(
+    container, uow_factory, tmp_path
+):
+    """A release that changes what the backfill applies bumps ``BACKFILL_REVISION``: the
+    state file a run of the earlier revision left must not skip the users it finished."""
+    from memory_service.tools.backfill import BACKFILL_REVISION
+
+    _old_build(container)
+    for text in SAID:
+        await _say(container, uow_factory, _chat("u1"), text)
+    _this_build(container)
+    state = tmp_path / "backfill.json"
+    first = await backfill(container, state=state)
+    assert first.users >= 1 and json.loads(state.read_text())["revision"] == BACKFILL_REVISION
+    # the same revision: every user it finished is skipped
+    same = await backfill(container, state=state)
+    assert same.users == 0 and same.skipped_users == first.users
+    # the state an earlier revision wrote: every user runs again (and, idempotent, changes
+    # nothing more)
+    stored = json.loads(state.read_text())
+    state.write_text(json.dumps({**stored, "revision": BACKFILL_REVISION - 1}))
+    again = await backfill(container, state=state)
+    assert again.users == first.users and again.skipped_users == 0
+    assert again.replaced == 0 and not again.failures
+
+
+def test_an_empty_store_exits_0_without_loading_a_model(monkeypatch, tmp_path, capsys):
+    """A fresh install: compose runs the backfill before any user exists. It reads the store
+    with a bare connection, finds nobody and exits 0 - no container, no model."""
+    import sys
+
+    import memory_service.application.container as app
+    from memory_service.tools import backfill as module
+    from tests.conftest import DB_URL
+
+    async def no_container(*args, **kwargs):
+        raise AssertionError("nothing to do: no model may be loaded")
+
+    monkeypatch.setattr(app, "build_container", no_container)
+    monkeypatch.setenv("MEMORY__DATABASE__URL", DB_URL)
+    state = tmp_path / "volume" / "state.json"
+    monkeypatch.setattr(
+        sys, "argv", ["backfill", "--state", str(state), "--tenant", "a-tenant-nobody-wrote"]
+    )
+    assert module.main() == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["users"] == 0 and report["skipped_users"] == 0 and not report["failures"]

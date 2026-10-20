@@ -31,7 +31,11 @@ each entry says which one moved. Decisions behind each change are in the
 - `make backfill` (`memory_service.tools.backfill`): brings a store an earlier build wrote up
   to this one in place while serving - replacement across each user's conversations in event
   time, then the index again; idempotent, resumable (`--state`), nothing deleted
-  (docs/deploy/database.md). No new setting.
+  (docs/deploy/database.md). No new setting. Compose runs it on every `up` (the one-shot
+  `memory-backfill` service, beside the API, its checkpoint on the `backfill` volume), so an
+  upgrade is pull, then `docker compose up -d --build`; the checkpoint records
+  `BACKFILL_REVISION`, and one from an earlier revision starts over. With no user left to
+  bring up it exits 0 before loading a model.
 - A question asking for a phone number, an e-mail address or a code or password that no
   evidence about what it names states - "the alarm code for Store 33" when only Store 31's is
   known - or for a month the evidence never names (an item naming no month is about the month

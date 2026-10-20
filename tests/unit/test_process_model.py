@@ -140,6 +140,42 @@ def _compose_service(name: str) -> str:
     return "\n".join(lines[start:end])
 
 
+def test_compose_brings_an_earlier_store_up_on_its_own_and_never_holds_the_service() -> None:
+    """``docker compose up -d`` is the whole upgrade: a one-shot ``memory-backfill`` runs the
+    backfill after the schema and the models are in place and the stores are healthy, keeps
+    its checkpoint on a volume of its own, and is not restarted; the API and the worker do
+    not wait for it (it is live-safe, and they serve while it runs)."""
+    import yaml  # PyYAML: installed with the dev tools (pre-commit) and the models extra
+
+    compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
+    services = compose["services"]
+    backfill = services["memory-backfill"]
+    assert backfill["build"] == services["db-migrate"]["build"], "the same runtime image"
+    assert backfill["command"] == [
+        "python",
+        "-m",
+        "memory_service.tools.backfill",
+        "--state",
+        "/data/backfill/state.json",
+    ]
+    assert backfill["restart"] == "no"
+    assert "backfill:/data/backfill" in backfill["volumes"]
+    assert "backfill" in compose["volumes"]
+    assert "/data/backfill" in (ROOT / "deploy" / "Dockerfile").read_text(), (
+        "a named volume on a path the image lacks is root-owned; the image runs as nobody"
+    )
+    depends = backfill["depends_on"]
+    for one_shot in ("db-migrate", "model-fetch"):
+        assert depends[one_shot] == {"condition": "service_completed_successfully"}, one_shot
+    for store in ("postgres", "qdrant", "dragonfly"):
+        assert depends[store] == {"condition": "service_healthy"}, store
+    env = backfill["environment"]
+    for key, value in services["memory-api"]["environment"].items():
+        assert env[key] == value, f"{key}: the stores the API serves are the ones it backfills"
+    for serving in ("memory-api", "memory-worker"):
+        assert "memory-backfill" not in services[serving].get("depends_on", {}), serving
+
+
 def test_ingestion_cannot_take_the_cores_the_query_path_is_measured_on() -> None:
     worker = _compose_service("memory-worker")
     assert "cpus: '2'" in worker and 'OMP_NUM_THREADS: "1"' in worker
