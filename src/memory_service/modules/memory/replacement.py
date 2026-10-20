@@ -540,7 +540,9 @@ def relate(new: Anchors, old: Anchors, new_text: str = "", old_text: str = "") -
         shared_name=named,
         shared_id=bool(shared_values),
         apart=bool(clashing) and not shared_values and not rescuing,
-        value_changed=anchored and bool(new_text and old_text) and _changed(new_text, old_text),
+        value_changed=anchored
+        and bool(new_text and old_text)
+        and _changed(new_text, old_text, new.ids | old.ids),
     )
 
 
@@ -572,8 +574,19 @@ def _common_names(a: frozenset[str], b: frozenset[str]) -> set[str]:
     return out
 
 
-def _changed(new_text: str, old_text: str) -> bool:
-    a, b = numbers(new_text), numbers(old_text)
+def _changed(new_text: str, old_text: str, ids: frozenset[tuple[str, str]] = frozenset()) -> bool:
+    """Each statement states a number the other does not: a value that changed. The digits of
+    a code either names (letters and digits: "G10", "DC-Foxhollow-E910", "PX-90") are no
+    value: "Store 6474 belongs to Region G10" and "Region G10 is replenished from
+    DC-Foxhollow-E910" share G10 and say two things about it, while "closes at 9" / "at 10"
+    and "80 units" / "120 units" are changed amounts."""
+    named = {
+        run
+        for _, value in ids
+        if any(ch.isalpha() for ch in value)
+        for run in re.findall(r"\d+", value)
+    }
+    a, b = numbers(new_text) - named, numbers(old_text) - named
     return bool(a - b) and bool(b - a)
 
 

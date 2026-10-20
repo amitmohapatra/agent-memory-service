@@ -163,3 +163,30 @@ async def test_a_user_with_thousands_of_memories(container, uow_factory):
     assert report.indexed == 2000
     # every aisle has its own bin: no statement replaced another
     assert report.replaced == 0
+
+
+async def test_the_graph_facts_of_what_it_replaced_are_retired(container, uow_factory):
+    """The write path's index job enriches what it indexed, and enrichment retires the facts
+    of a memory no longer current; the backfill does the same for every memory it touched."""
+    _old_build(container)
+    u1 = _chat("u1")
+    for text in SAID:
+        await _say(container, uow_factory, _chat("u1"), text)
+    _this_build(container)
+    graph = container.services["graph"]
+    enriched: list[str] = []
+    real = graph.enrich_memories
+
+    async def recording(tenant_id, memory_ids):
+        enriched.extend(memory_ids)
+        return await real(tenant_id, memory_ids)
+
+    graph.enrich_memories = recording
+    try:
+        await backfill(container)
+    finally:
+        graph.enrich_memories = real
+    async with uow_factory() as uow:
+        memories = await uow.memories.get_many(u1.tenant_id, enriched)
+    replaced = [m for m in memories if m.content == SAID[0]]
+    assert replaced and all(m.memory_id in enriched for m in replaced)

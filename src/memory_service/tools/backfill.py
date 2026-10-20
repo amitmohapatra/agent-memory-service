@@ -183,7 +183,8 @@ async def backfill_user(
     batch: int = BATCH,
 ) -> None:
     """One user: every message of theirs through the replacement, oldest first, then their
-    memories indexed again."""
+    memories indexed and their graph enrichment run again (which retires the graph facts of
+    the memories now replaced)."""
     from memory_service.modules.memory.pipeline import bump_memory_revisions
 
     pipeline = container.services["observation_pipeline"]
@@ -213,9 +214,15 @@ async def backfill_user(
         if n % batch == 0:
             checkpoint.progress(tenant, principal, said[0].temporal.observed_at.isoformat())
     indexer = container.services["indexer"]
+    graph = container.services.get("graph")
     ids = sorted(touched)
     for start in range(0, len(ids), 200):
-        report.indexed += await indexer.index_memories(tenant, ids[start : start + 200])
+        chunk = ids[start : start + 200]
+        report.indexed += await indexer.index_memories(tenant, chunk)
+        if graph is not None:
+            # as the write path's index job does: a memory no longer current takes its graph
+            # facts with it ("mentions" of an old value would come back as current)
+            await graph.enrich_memories(tenant, chunk)
     checkpoint.finish(tenant, principal)
     report.users += 1
 
