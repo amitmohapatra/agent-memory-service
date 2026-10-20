@@ -21,13 +21,18 @@ from memory_service.domain.enums import QueryType, Representation
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.domain.ids import content_hash
 from memory_service.domain.learning import standing_factor
-from memory_service.domain.memory import CanonicalMemory, unverified_representation
+from memory_service.domain.memory import (
+    CanonicalMemory,
+    earlier_value,
+    replaced_by,
+    unverified_representation,
+)
 from memory_service.domain.script import Script, detect_script
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer
-from memory_service.modules.retrieval import memory_ranking
+from memory_service.modules.retrieval import memory_ranking, slots
 from memory_service.modules.retrieval.memory_queries import plan_memory_queries
 from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
 from memory_service.observability.logging import get_logger
@@ -140,6 +145,11 @@ def memory_candidate(memory: CanonicalMemory, *, retriever: str, score: float) -
             "derived": bool(memory.system_metadata.get("source_revisions")),
             "source_observed_to": memory.system_metadata.get("source_observed_to"),
             "temporal_status": memory.temporal.status.value,
+            **(
+                {"earlier_value": True, "replaced_by": replaced_by(memory.system_metadata)}
+                if earlier_value(memory.system_metadata)
+                else {}
+            ),
             "subject": memory.subject,
             "predicate": memory.predicate,
             "object": memory.object,
@@ -444,7 +454,19 @@ class RetrievalEngine:
                     pool_limit = max(pool_limit, derived_k(limit))
                     diagnostics["memory_recall_k"] = limit
                 before = len(candidates)
-                candidates = _dedup(candidates)[:pool_limit]
+                # what a later statement of the same user replaced ranks after every
+                # current item (ADR 0038): still there, never in front of its replacement
+                candidates = _dedup(candidates)
+                if not routed.signals.get("history"):
+                    # a question about now: the latest value of a slot is the answer
+                    # (``latest_per_slot``), every earlier value ranks after the current ones
+                    if LATEST_PER_SLOT:
+                        candidates = latest_per_slot(candidates)
+                        candidates = slots.latest_values(
+                            routed.query, candidates, newest_of=_said_at
+                        )
+                    candidates = current_first(candidates)
+                candidates = candidates[:pool_limit]
                 candidates = await self._validate_derived(ctx, candidates, visibility)
                 checked_derived = {c.record_id for c in candidates if is_derived(c)}
                 if before != len(candidates):
@@ -493,6 +515,19 @@ class RetrievalEngine:
                 candidates = await self._expand_derived_sources(
                     ctx, candidates, visibility, diagnostics
                 )
+                if not at and not selected_documents and SECOND_HOP:
+                    with timings.stage("second_hop"):
+                        candidates = await self._second_hop(
+                            routed, candidates, visibility, diagnostics
+                        )
+                if not at:
+                    candidates = await self._follow_replacements(
+                        ctx,
+                        candidates,
+                        visibility,
+                        diagnostics,
+                        history=bool(routed.signals.get("history")),
+                    )
                 candidates = _within_selection(candidates, selected_documents, selected_kinds)
                 if observed is not None:
                     candidates = [c for c in candidates if _observed_within(c, observed)]
@@ -560,6 +595,107 @@ class RetrievalEngine:
         additions = not_in_hand(additions, candidates)
         diagnostics["derived_sources"] = len(additions)
         return [*candidates, *additions]
+
+    async def _second_hop(
+        self,
+        routed: RoutedQuery,
+        candidates: list[Candidate],
+        visibility: VisibilitySpecification,
+        diagnostics: dict[str, Any],
+    ) -> list[Candidate]:
+        """One more hop from the strongest bridge among the first ``SECOND_HOP_BRIDGES``
+        memories (``slots.bridge``): "Who is the dispatcher for branch 512?" finds "Branch 512
+        is in District D7" and asks "District D7 dispatcher"; "... the featured item this
+        week?" finds "The featured item this week is LMP-140" and asks about LMP-140.
+        Bounded: one keyword search of ``SECOND_HOP_K`` (BM25 only, no encoder, the reader's
+        own scope), and at most ``SECOND_HOP_ADDED`` current memories that name the bridged
+        thing join, after the memory they were reached from. One hop, never a chain."""
+        read = [
+            (way, c)
+            for c in [c for c in candidates if c.kind == "memory"][:SECOND_HOP_BRIDGES]
+            if (way := slots.bridge(routed.query, c.text)) is not None
+        ]
+        if not read:
+            return candidates
+        # the strongest bridge, the best ranked of equals
+        way, bridge = max(read, key=lambda pair: pair[0].strength)
+        vector = self.indexer.sparse.encode_query(way.query)
+        if not vector.indices:
+            return candidates
+        collection, flt = self._scope("memory", visibility, None, None, None, None)
+        hits = await self.store.search_sparse(collection, vector, flt, limit=SECOND_HOP_K)
+        held = in_hand(candidates)
+        found = [
+            replace(
+                Candidate(
+                    record_id=h.record_id,
+                    kind="memory",
+                    text=str(h.payload.get("text", "")),
+                    score=bridge.score,
+                    retrievers=["second_hop"],
+                    payload=h.payload,
+                ),
+                expanded_from=bridge.record_id,
+                expansion_edge="SECOND_HOP",
+            )
+            for h in hits
+            if h.record_id not in held
+            and not h.payload.get("earlier_value")
+            and slots.names_any(str(h.payload.get("text", "")), way.things)
+        ][:SECOND_HOP_ADDED]
+        found = not_in_hand(found, candidates)
+        diagnostics["second_hop"] = {"query": way.query, "added": len(found)}
+        if not found:
+            return candidates
+        at = candidates.index(bridge) + 1
+        return [*candidates[:at], *found, *candidates[at:]]
+
+    async def _follow_replacements(
+        self,
+        ctx: MemoryExecutionContext,
+        candidates: list[Candidate],
+        visibility: VisibilitySpecification,
+        diagnostics: dict[str, Any],
+        *,
+        history: bool = False,
+    ) -> list[Candidate]:
+        """An earlier value never comes without what replaced it (ADR 0038): the statement
+        that replaced it is fetched when the search did not find it, and placed before every
+        earlier value. A chain (A replaced by B, B by C) is followed to its current end, at
+        most ``REPLACEMENT_HOPS`` reads, each one batched; a replacement the reader may not
+        see, or that is no longer current, is not added."""
+        candidates = _carried_by_replaced(candidates)
+        added: list[Candidate] = []
+        frontier = candidates
+        for _ in range(REPLACEMENT_HOPS):
+            present = in_hand([*candidates, *added])
+            wanted: dict[str, Candidate] = {}
+            for c in frontier:
+                newer = c.payload.get("replaced_by") if c.payload.get("earlier_value") else None
+                if newer and newer not in present and len(wanted) < REPLACEMENTS_MAX:
+                    wanted.setdefault(str(newer), c)
+            if not wanted:
+                break
+            async with self.uow_factory() as uow:
+                found = await uow.memories.get_many(ctx.tenant_id, list(wanted))
+            hop = [
+                replace(
+                    memory_candidate(m, retriever="replacement", score=wanted[m.memory_id].score),
+                    expanded_from=wanted[m.memory_id].record_id,
+                    expansion_edge="REPLACEMENT",
+                )
+                for m in found
+                if m.temporal.status.value == "CURRENT"
+                and m.deleted_at is None
+                and visibility.allows(m.tenant_id, m.system_metadata.get("visibility_keys", []))
+            ]
+            hop = not_in_hand(hop, [*candidates, *added])
+            added += hop
+            frontier = hop
+        if not added:
+            return candidates
+        diagnostics["replacements_followed"] = len(added)
+        return [*candidates, *added] if history else current_first([*candidates, *added])
 
     async def _validate_derived(
         self,
@@ -685,6 +821,8 @@ class RetrievalEngine:
         pool = memory_ranking.ArmPool.of(arms)
         if not pool.hits:
             return []
+        if memory_ranking.GROUP_STATEMENTS:
+            pool = memory_ranking.statements(pool)
         # a question searched as of a moment reads "last month" from that moment
         anchor = at.as_of.date() if at is not None and at.as_of is not None else None
         ranked = memory_ranking.ranked(pool, question or search_text, anchor)
@@ -700,7 +838,7 @@ class RetrievalEngine:
                 text=str(pool.hits[rid].payload.get("text", "")),
                 score=score,
                 retrievers=sorted(name.value for name, ranks in pool.ranks.items() if rid in ranks),
-                payload=pool.hits[rid].payload,
+                payload=_with_forms(pool, rid),
             )
             for rid, score in ranked[:depth]
         ]
@@ -795,14 +933,17 @@ class RetrievalEngine:
                         self.indexer.collection(base),
                         space,
                         vectors.dense[space],
-                        [c.record_id for c in group],
+                        [rid for c in group for rid in _forms_of(c)],
                     )
                     for base, group in groups.items()
                 )
             )
         for group, scores in zip(groups.values(), found, strict=True):
             for c in group:
-                c.similarity = scores.get(c.record_id)
+                # a statement is as close as its closest form (``memory_ranking.statements``):
+                # the turn shown for it is longer than the reading the question matched
+                known = [scores[rid] for rid in _forms_of(c) if rid in scores]
+                c.similarity = max(known) if known else None
 
     async def _expanded(
         self,
@@ -1020,6 +1161,11 @@ class RetrievalEngine:
             late=vectors.late,
         )
 
+    def memory_scope(self, visibility: VisibilitySpecification) -> tuple[str, SearchFilter]:
+        """The memories collection and the filter a current-memory search of ``visibility``
+        applies (``modules.context.standing``)."""
+        return self._scope("memory", visibility, None, None, None, None)
+
     def _scope(
         self,
         kind: str,
@@ -1045,6 +1191,22 @@ class RetrievalEngine:
                 update={"must_any": {**flt.must_any, "document_id": list(document_ids)}}
             )
         return collection, flt
+
+
+def _forms_of(candidate: Candidate) -> list[str]:
+    """The record ids of a candidate's statement: its own, then its other forms."""
+    if candidate.kind != "memory":
+        return [candidate.record_id]
+    return [candidate.record_id, *(candidate.payload.get("duplicates") or ())]
+
+
+def _with_forms(pool: memory_ranking.ArmPool, rid: str) -> dict[str, Any]:
+    """The hit's payload, naming the statement's other forms as its ``duplicates``
+    (``memory_ranking.statements``), so an expansion that reaches one of them by id does not
+    bring the statement back a second time (``in_hand``)."""
+    payload = pool.hits[rid].payload
+    others = [hit.record_id for hit in pool.forms.get(rid, ())[1:]]
+    return {**payload, "duplicates": others} if others else payload
 
 
 def _observed_within(candidate: Candidate, observed: ObservedRange) -> bool:
@@ -1220,6 +1382,149 @@ def _twin_key(candidate: Candidate) -> tuple | None:
         content_hash(candidate.text) if candidate.text else None
     )
     return (_twin_context(_dedup_context(candidate)), digest) if digest else None
+
+
+def _carried_by_replaced(candidates: list[Candidate]) -> list[Candidate]:
+    """A replacement the search found itself travels with the earlier value it replaced, as
+    one found through it would: the relevance floor never drops it while the old value is
+    served."""
+    replaced = {
+        str(c.payload["replaced_by"]): c.record_id
+        for c in candidates
+        if c.payload.get("earlier_value") and c.payload.get("replaced_by")
+    }
+    return [
+        replace(c, expanded_from=replaced[c.record_id], expansion_edge="REPLACEMENT")
+        if c.record_id in replaced and c.expanded_from is None
+        else c
+        for c in candidates
+    ]
+
+
+#: Reads ``_follow_replacements`` makes at most per request (one per link of a chain), and the
+#: replacements it adds at most per read.
+REPLACEMENT_HOPS = 2
+REPLACEMENTS_MAX = 4
+
+
+#: The second hop (``RetrievalEngine._second_hop``): on, how many of the best memories are
+#: read for a bridge, how many hits one keyword search returns, and how many join.
+SECOND_HOP = True
+SECOND_HOP_BRIDGES = 5
+SECOND_HOP_K = 8
+SECOND_HOP_ADDED = 2
+
+
+def _said_at(candidate: Candidate) -> str:
+    return str(candidate.payload.get("observed_at") or "")
+
+
+#: For a question about now, the newest of a user's current statements of one slot - the
+#: same speaker, subject and predicate, a different value - is the answer, and the older ones
+#: are earlier values (lever 3 of ADR 0041). Replacement at write time (ADR 0038) decides most
+#: of these; this is the read-time rule for a slot the writes did not tie.
+LATEST_PER_SLOT = True
+#: Predicates that name no slot: what a turn, a task or an event rule writes.
+_NO_SLOT_PREDICATES = frozenset({"said", "task", "event", "instruction", "decided"})
+#: Subjects that name no thing: deictics and pronouns the fact rule can take for one.
+_NO_SLOT_SUBJECTS = frozenset(
+    {
+        "it",
+        "this",
+        "that",
+        "these",
+        "those",
+        "there",
+        "here",
+        "he",
+        "she",
+        "they",
+        "we",
+        "i",
+        "you",
+        "one",
+        "everything",
+        "something",
+        "anything",
+        "nothing",
+        "someone",
+        "everyone",
+        "what",
+        "which",
+        "who",
+    }
+)
+
+
+def _slot(candidate: Candidate) -> tuple | None:
+    payload = candidate.payload
+    if candidate.kind != "memory" or payload.get("earlier_value") or payload.get("derived"):
+        return None
+    subject = " ".join(str(payload.get("subject") or "").lower().split())
+    predicate = str(payload.get("predicate") or "").lower()
+    owner = payload.get("owner_principal")
+    if (
+        not subject
+        or not predicate
+        or not owner
+        or not payload.get("object")
+        or not payload.get("observed_at")
+        or predicate in _NO_SLOT_PREDICATES
+        or subject in _NO_SLOT_SUBJECTS
+        or ":" in subject
+        or subject.startswith(("thr_", "run_"))
+    ):
+        return None
+    return (_speaker(owner), subject, predicate)
+
+
+def latest_per_slot(candidates: Sequence[Candidate]) -> list[Candidate]:
+    """``candidates`` with every current memory of a slot that a newer one in hand holds a
+    different value for marked an earlier value, replaced by the newest
+    (``LATEST_PER_SLOT``). Nothing else changes: order, and every other memory, as given."""
+    newest: dict[tuple, Candidate] = {}
+    for c in candidates:
+        key = _slot(c)
+        if key is not None and (
+            key not in newest
+            or str(c.payload["observed_at"]) > str(newest[key].payload["observed_at"])
+        ):
+            newest[key] = c
+    out: list[Candidate] = []
+    for c in candidates:
+        key = _slot(c)
+        latest = newest.get(key) if key is not None else None
+        if (
+            latest is not None
+            and latest is not c
+            and str(c.payload["observed_at"]) < str(latest.payload["observed_at"])
+            and _normalised(str(c.payload.get("object")))
+            != _normalised(str(latest.payload.get("object")))
+        ):
+            out.append(
+                replace(
+                    c,
+                    payload={
+                        **c.payload,
+                        "earlier_value": True,
+                        "replaced_by": latest.record_id,
+                        "replaced_in_slot": True,
+                    },
+                )
+            )
+        else:
+            out.append(c)
+    return out
+
+
+def current_first(candidates: Sequence[Candidate]) -> list[Candidate]:
+    """``candidates`` with every earlier value (``payload["earlier_value"]``: a later
+    statement of the same user replaced it, ADR 0038) moved behind the current ones, each
+    group in its own order."""
+    earlier = [c for c in candidates if c.payload.get("earlier_value")]
+    if not earlier:
+        return list(candidates)
+    return [c for c in candidates if not c.payload.get("earlier_value")] + earlier
 
 
 def in_hand(candidates: Sequence[Candidate]) -> set[str]:

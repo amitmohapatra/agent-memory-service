@@ -35,7 +35,7 @@ vendor: ## Refresh the vendored copy of bifrost-sdk (generated; never edit it in
 
 .PHONY: help setup models models-all dev-up dev-down migrate lint format typecheck unit integration contract-test e2e security-test \
         performance-test failure-test eval bench-retrieval bench-advanced bench-memory bench-embedding bench-storage \
-        load-test bench-model-throughput bench-context-latency bench-locomo bench-locomo-prepare bench-locomo-source bench-rerank-offline bench-runtime-retrieval bench-budget bench-external bench-external-prepare gates gates-network validate verify verify-fresh verify-quick smoke openapi reindex examples docs-check clean
+        load-test bench-model-throughput bench-context-latency bench-locomo bench-locomo-prepare bench-locomo-source bench-rerank-offline bench-runtime-retrieval bench-budget bench-external bench-external-prepare gates gates-network validate verify verify-fresh verify-quick smoke openapi reindex backfill examples docs-check clean
 
 help: ## Show targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -500,6 +500,11 @@ reindex: ## Rebuild the search index from PostgreSQL (add --drop for a full rebu
 	$(PY) python -m memory_service.tools.reindex $(REINDEX_ARGS)
 
 REINDEX_ARGS ?=
+
+backfill: ## Bring a store an earlier build wrote up to this one, in place (docs/deploy/database.md)
+	$(PY) python -m memory_service.tools.backfill $(BACKFILL_ARGS)
+
+BACKFILL_ARGS ?=
 REINDEX_DB ?= $(BENCH_DB_HOST)/memory
 REINDEX_QDRANT ?= $(BENCH_QDRANT_URL)
 

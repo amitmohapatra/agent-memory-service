@@ -70,7 +70,7 @@ covers the connection budget, PgBouncer and online migrations.
 | `MEMORY__DATABASE__URL` | `postgresql+psycopg://memory:memory@localhost:5432/memory` | `postgresql+psycopg://memory:<password>@pgbouncer:6432/memory` | no | the request path's connection; may be a transaction-mode PgBouncer |
 | `MEMORY__DATABASE__DIRECT_URL` | unset | `postgresql+psycopg://memory:<password>@postgres:5432/memory` | yes: `URL` | PostgreSQL itself, for the job queue (LISTEN/NOTIFY, job locks), the graph traversal and migrations |
 | `MEMORY__DATABASE__TRANSACTION_POOLER` | `false` | `true` | no | `true` when `URL` is a transaction-mode pooler: no server-side prepared statements, no session parameters at connect |
-| `MEMORY__DATABASE__CONNECTION_BUDGET` | unset | `84` | yes: 28 per process | connections one pod may open, all processes and pools together (at least 6). Each process takes `budget // processes` and splits it 4:2:1 between requests, the graph traversal and the queue |
+| `MEMORY__DATABASE__CONNECTION_BUDGET` | unset | `84` | yes: 28 per process | connections one pod may open, all processes and pools together (at least 6). Each process takes `budget // processes` and splits it 4:2:1 between requests, the graph traversal and the queue; the job worker needs at least a request connection per job and two queue connections per pool, and in `staging`/`prod` refuses to start below that |
 
 ## Cache
 
@@ -82,7 +82,8 @@ covers the connection budget, PgBouncer and online migrations.
 
 | Variable | Default | Example | Auto | What it does |
 |---|---|---|---|---|
-| `MEMORY__TASKS__WORKER_CONCURRENCY` | auto | `4` | yes: one per available CPU, 1-8 | jobs one worker process runs at once, 1-8 |
+| `MEMORY__TASKS__WORKER_CONCURRENCY` | auto | `4` | yes: one per available CPU, 1-8 | jobs that compute one worker process runs at once, 1-8: half are chat's (indexing's when no chat job waits), up to `MEMORY__TASKS__INDEXING_CONCURRENCY` (at most a quarter) its indexing pool's, one its graph pool's and the rest its shared pool's (each pool at least one); with a model, the graph pool's slots wait on it and come on top, half as many |
+| `MEMORY__TASKS__INDEXING_CONCURRENCY` | `2` | `2` | no | of `MEMORY__TASKS__WORKER_CONCURRENCY`, at most this many slots (and never more than a quarter) for the indexing pool, the `embedding` queue's own: the jobs that make a write findable, which a slow model's jobs cannot hold (1-8) |
 | `MEMORY__TASKS__METRICS_PORT` | `9464` | `9464` | no | where the job worker serves its Prometheus series and healthcheck (1-65535). It cannot be switched off from the environment |
 
 ## Authentication

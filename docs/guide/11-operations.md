@@ -159,14 +159,39 @@ re-measure on a real corpus).
 Every job is registered in one place, `modules/jobs/registry.py`, and every enqueued task name
 must have a handler there (`tests/unit/test_job_registration.py`). Jobs run on named queues;
 interactive work is prioritised over indexing, summaries and imports (`QUEUE_PRIORITY` in
-`ports/tasks.py`).
+`ports/tasks.py`). The worker runs four pools (`worker_pools`), whose slots that compute come
+to about one per CPU (`tasks.worker_concurrency`): every job of the process shares its CPUs,
+its GIL and its event loop, and each model serves one call at a time.
+
+| Pool | Queues, first first | Slots (1 / 2 / 4 / 8 CPUs) | Why |
+|---|---|---|---|
+| chat | `chat-fast`, `embedding`; without a model then `summary` | half the CPUs, at least 1 (1 / 1 / 2 / 4) | a remember's job, which a write waits for; no parse, archive or graph job (nor, with a model, a summary) can take these slots, and indexing runs there only when no chat job waits |
+| indexing | `embedding`; without a model `chat-fast` first and `summary` last | up to `tasks.indexing_concurrency` (2), at most a quarter (1 / 1 / 1 / 2) | with a model, chat jobs wait on it and these slots stay indexing's, so a write turns findable; without one, chat jobs are short and go first, as in one pool |
+| graph | `graph` | with a model, half the CPUs and at least 2, on top (2 / 2 / 2 / 4); 1 without one | enrichment waits on the model; without one the index job enriches, and the slot only drains jobs queued while a model was configured |
+| shared | `chat-fast`, `embedding`, then every other queue | what is left, at least 1 (1 / 1 / 1 / 1; with a model 1 / 1 / 1 / 2) | parsing, archiving, feedback, learning, summaries |
+
+So chat and indexing share their slots by priority, chat first, as they did in one pool:
+during a burst of writes chat has them, after it indexing does. Parsing, archiving, a graph
+backlog and, with a model, summaries run beside them, never in their slots; without a model
+summaries are short (under 0.2 s at p95) and take those slots after indexing, as in one pool:
+on the shared pool's one slot the capability eval's summaries finished 11 s after main's. Every pool has at least one slot,
+so below 4 CPUs four slots compute: the bulkhead wins, and the extra slots wait their turn on a
+model. In one pool, jobs waiting on a slow model held every slot and indexing waited minutes
+behind them, and a graph backlog (an import queues thousands of enrichment jobs, which outrank
+parsing, archiving, reconciliation and summaries) held every slot until it drained. With pools
+that kept chat and indexing apart (a chat slot of its own, 2 indexing slots, as many graph
+slots as CPUs), the capability eval's writes, which wait for their `memory.process_observation`
+jobs, took 340 s instead of 230 s on 4 CPUs. Each pool keeps one listening connection outside
+the queue pool.
 
 | Job | Queue | Triggered by | Retries | Does |
 |---|---|---|---|---|
 | `memory.process_observation` | `chat-fast` | each message | 5 | the memory pipeline (chapter 10) |
-| `memory.index` | `embedding` | every memory change | 5 | index or remove, enrich the graph, bump revisions, queue a profile refresh |
+| `memory.index` | `embedding` | every memory change | 5 | index or remove, bump revisions, queue a profile refresh; the graph enrichment, queued with a model and run here without one |
+| `graph.enrich_memories` | `graph` | `memory.index`, with a model | 5 | the memories' entities and relations |
 | `document.parse` | `document-parse` | upload | 3 | parse, hierarchy, chunks, Document Context Graph |
-| `document.index` | `embedding` | parse | 5 | index chunks and summaries, enrich the graph |
+| `document.index` | `embedding` | parse | 5 | index chunks and summaries, mark the document `READY`, then the graph enrichment (queued with a model, run here without one); when it gives up, the document is `FAILED` ("index failed: ...") for `memory-reindex` to finish |
+| `graph.enrich_document` | `graph` | `document.index`, with a model | 5 | the document's entities and relations |
 | `archive.stage_message` | `archive` | each message, 60 s coalesced per thread | 10 | compress, upload, verify, manifest (ADR 0006) |
 | `feedback.project` | `reconcile` | an applied verdict | 3 | apply it (chapter 6) |
 | `summary.refresh` | `summary` | every 20 messages | 3 | the thread's durable summary, then its searchable episode |
@@ -180,7 +205,7 @@ flowchart TB
     OS["periodic.outbox_sweep<br/>re-dispatch outbox rows the fast path missed"]
   end
   subgraph five[Every 5 minutes]
-    RC["periodic.reconcile: outbox sweep, archive repair,<br/>re-queue jobs whose worker stopped heartbeating (120 s)"]
+    RC["periodic.reconcile: outbox sweep, archive repair,<br/>re-queue jobs whose worker stopped heartbeating (145 s)"]
     PQ["periodic.profile_queries: due standing questions"]
     PL["periodic.prefetch_learn: what pulls teach the push"]
     TL["periodic.tools_learn: procedures and procedural edges"]
@@ -272,9 +297,26 @@ way with several workers, the banner says the series are one worker's share
 `memory_queue_depth` and `memory_queue_oldest_lag_seconds` per queue,
 `memory_outbox_backlog`, `memory_jobs_failed_terminal` per queue, `memory_worker_running_jobs`
 and `memory_worker_last_sample_timestamp_seconds` (sampled every 15 s; a stale value is a
-worker that cannot reach its database). The compose healthcheck reads that port. On SIGTERM
-the worker stops fetching, gives running jobs 30 s, then aborts and releases the rest for a
-retry; compose's `stop_grace_period` for it is 45 s.
+worker that cannot reach its database), `memory_worker_db_retries_total` per operation
+(`query`, `listen`) and `memory_worker_db_unavailable_seconds`. The compose healthcheck reads
+that port. On SIGTERM the worker stops fetching, gives running jobs 30 s, then aborts and
+releases the rest for a retry; compose's `stop_grace_period` for it is 45 s. A database that
+cannot do a queue statement - no connection free in the queue pool, a full disk or no memory
+(SQLSTATE class 53), a server shutting down or starting (57P01-57P03), the LISTEN
+connection lost - is ridden out for 90 s (`TASKS.worker_db_outage_seconds`): each retry is
+logged (`worker.db_retry`) and counted, after a pause growing from 0.5 s to 10 s, and the
+gauge says for how long. Those statements did not take effect (never ran, or rolled back), so a retry
+never applies one twice. A connection lost mid-statement is not retried (whether it committed
+is unknown): the worker exits non-zero. A worker starting prunes only workers silent for 145 s
+(`TASKS.stalled_after_seconds`, derived: a heartbeat's 10 s + the 90 s outage + the 5 s its last
+try waits for a pool connection + the 30 s shutdown grace, and a heartbeat's 10 s of margin),
+so it never takes the jobs of one that is riding an outage out; the price is that the jobs of a
+worker killed with -9 are re-queued after 145 s, not 30 s. Past 90 s (`worker.db_unavailable`), or when one of its pools
+stops on its own, the worker logs `worker.failed` and exits non-zero for its supervisor to
+restart it (compose: `restart: on-failure`). One pool timeout in a heartbeat, or one job-status
+write to a full disk, used to stop it, and the process exited as if asked to. A log line that
+cannot be written (stdout's disk full) is lost and counted (`memory_log_lines_dropped_total`),
+never raised into the code that logged it.
 
 **Overload.** A read (GET, `/v1/context`, `/v1/recall`, `/v1/tools/hints`) that runs past
 5 s, a write past 15 s, `/v1/verify` past 15 s is answered `504` `TIMEOUT` (retryable);

@@ -21,7 +21,7 @@ from typing import Any
 from memory_service.domain.conversation import Thread
 from memory_service.domain.documents import Chunk, Document, DocumentNode
 from memory_service.domain.ids import content_hash
-from memory_service.domain.memory import CanonicalMemory
+from memory_service.domain.memory import CanonicalMemory, earlier_value, replaced_by
 from memory_service.domain.revisions import document_revision_keys
 from memory_service.domain.script import detect_script
 from memory_service.modules.context.summaries import abstractive_summaries, build_summaries
@@ -512,6 +512,18 @@ class Indexer:
                             "visibility_keys": list(m.system_metadata.get("visibility_keys", [])),
                             "memory_type": m.memory_type.value,
                             "category": m.system_metadata.get("category"),
+                            # what the user's statement does (ADR 0037): a rule's kind puts a
+                            # turn or a correction among the standing rules (ADR 0041)
+                            **(
+                                {"statement_kind": str(kind)}
+                                if (kind := m.system_metadata.get("statement_kind"))
+                                else {}
+                            ),
+                            **(
+                                {"standing_instruction": "yes"}
+                                if m.system_metadata.get("standing_instruction")
+                                else {}
+                            ),
                             "provider": m.system_metadata.get("provider"),
                             "derived": bool(m.system_metadata.get("source_revisions")),
                             "source_observed_to": m.system_metadata.get("source_observed_to"),
@@ -522,6 +534,16 @@ class Indexer:
                             # which is resident memory as soon as the memories collection
                             # keeps its payload in RAM. `current` stays: it is a filter.
                             "current": m.temporal.status.value == "CURRENT",
+                            # still current, but a later statement of the user replaced it:
+                            # ranked last and labelled (ADR 0038); only when it is one
+                            **(
+                                {
+                                    "earlier_value": True,
+                                    "replaced_by": replaced_by(m.system_metadata),
+                                }
+                                if earlier_value(m.system_metadata)
+                                else {}
+                            ),
                             **memory_time_payload(m),
                             "subject": m.subject,
                             "predicate": m.predicate,

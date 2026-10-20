@@ -641,6 +641,25 @@ class MemoryRow(Base):
             postgresql_where=text("deleted_at IS NULL"),
         ),
         Index("ix_memories_tenant_subject", "tenant_id", "subject", "predicate"),
+        # a user's current statements in all their conversations, newest first: what a new
+        # statement is compared with (``statements_of``, ADR 0038, migration 0028)
+        Index(
+            "ix_memories_owner_statements",
+            "tenant_id",
+            "owner_principal",
+            text("observed_at DESC"),
+            postgresql_where=text(
+                "deleted_at IS NULL AND temporal_status = 'CURRENT' AND visibility = 'USER'"
+            ),
+        ),
+        # what a statement replaced, to reinstate it when the statement goes
+        # (``replaced_by_any``)
+        Index(
+            "ix_memories_replaced_by",
+            "tenant_id",
+            text("((system_metadata -> 'replaced_by') ->> 'memory_id')"),
+            postgresql_where=text("system_metadata ? 'replaced_by'"),
+        ),
         # the candidate read's case-insensitive subject match (migration 0027)
         Index(
             "ix_memories_scope_subject_lower",

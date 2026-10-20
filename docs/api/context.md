@@ -99,9 +99,19 @@ bundle.conversation, bundle.thread_summary, bundle.profile, bundle.skills, bundl
 bundle.missing_evidence, bundle.insufficient  # evidence_status == "INSUFFICIENT"
 ```
 
+**An earlier value is history, apart from the current evidence.** When a later statement of
+the same user replaced a memory in another of their conversations and the service was not sure
+enough to close it (ADR 0038), the memory is not among `memories`: it is in `history`
+(`format="full"`, oldest first, each `"superseded": true`, at most four) and under "## Earlier
+values (since replaced)" in `rendered`, after the current memories, with handles `h1`, `h2`...
+It is no evidence for `/v1/verify`. It never comes alone: the statement that replaced it is in
+`memories`, even when the search found only the old one. A memory the service was sure about is
+closed and served only by a temporal read. A `search` result that is an earlier value carries
+`"superseded": true`.
+
 **Nothing is shown twice.** A memory whose every source is a message the recent conversation
-already shows, and a `mentions` fact whose object the shown text already names, are left out
-of both forms. They stay in the bundle the service keeps under `bundle_id`, so `/v1/verify` and
+already shows, a sentence read out of a turn that is shown whole, and a `mentions` fact whose
+object the shown text (the history included) already names, are left out of both forms. They stay in the bundle the service keeps under `bundle_id`, so `/v1/verify` and
 the handles still see them.
 
 The pinned sections — profile, thread summary, learned skills ([skills.md](skills.md)), tool hints, in that order — open

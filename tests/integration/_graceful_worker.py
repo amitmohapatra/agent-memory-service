@@ -1,8 +1,8 @@
 """A Procrastinate worker that runs one slow job and is stopped with SIGTERM mid-job.
 
-Spawned by tests/integration/test_procrastinate_queue.py: the production worker installs
-the signal handlers and a shutdown grace (``memory_service.worker``), and this is that call
-around a job whose length the test chooses."""
+Spawned by tests/integration/test_procrastinate_queue.py: the production worker runs its
+pools with the signal handlers and a shutdown grace (``memory_service.worker``), and this is
+that call - two pools, the job in one of them - around a job whose length the test chooses."""
 
 from __future__ import annotations
 
@@ -23,10 +23,8 @@ async def main(dsn: str, seconds: float, grace: float, marker: str) -> None:
         Path(marker).write_text("finished")
 
     queue.register("test.slow", Queue.CHAT_FAST, slow)
-    await queue.run_worker(
-        [Queue.CHAT_FAST],
-        concurrency=1,
-        wait=True,
+    await queue.run_pools(
+        [([Queue.EMBEDDING], 1), ([Queue.CHAT_FAST], 1)],
         install_signal_handlers=True,
         shutdown_grace_seconds=grace,
     )

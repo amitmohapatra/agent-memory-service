@@ -172,6 +172,175 @@ def test_a_pod_budget_is_split_and_never_exceeded(budget: int, processes: int) -
     assert plan.main_size + plan.main_overflow >= plan.graph_size + plan.graph_overflow
 
 
+@pytest.mark.parametrize("budget", [None, 6, 28, 84])
+def test_the_job_worker_has_queue_connections_for_each_of_its_pools(budget: int | None) -> None:
+    """The worker runs one Procrastinate worker per pool on one queue pool: two pooled
+    connections each (fetch and finishes; heartbeat, abort poll, deferrer) and a LISTEN each
+    outside the pool, all counted against the budget. Four for all three made its pool
+    checkouts time out under load."""
+    from memory_service.config.settings import worker_connection_floor
+    from memory_service.ports.tasks import WORKER_POOL_COUNT, worker_pools
+
+    assert len(worker_pools(4, 2)) == WORKER_POOL_COUNT
+    database = Settings(_env_file=None, database={"connection_budget": budget}).database
+    plan = database.pool_plan(1, queue_workers=WORKER_POOL_COUNT)
+    assert plan.queue_max >= 2 * WORKER_POOL_COUNT
+    assert plan.listeners == WORKER_POOL_COUNT
+    share = 28 if budget is None else max(6, budget)
+    assert plan.total <= max(share, worker_connection_floor(WORKER_POOL_COUNT))
+    assert database.pool_plan(1).listeners == 0, "the API listens for nothing"
+
+
+def test_a_budget_below_the_workers_floor_is_raised_with_a_warning() -> None:
+    """The worker cannot run its pools on fewer than 4 + 3 per queue worker connections: it
+    takes them, and says so naming both numbers rather than exceeding the budget silently."""
+    from structlog.testing import capture_logs
+
+    from memory_service.config.settings import worker_connection_floor
+    from memory_service.ports.tasks import WORKER_POOL_COUNT
+
+    floor = worker_connection_floor(WORKER_POOL_COUNT)
+    database = Settings(_env_file=None, database={"connection_budget": 7}).database
+    with capture_logs() as logs:
+        for _ in range(3):  # one plan per pool the worker opens
+            plan = database.pool_plan(1, queue_workers=WORKER_POOL_COUNT)
+    assert plan.total == floor == 17
+    [warned] = [e for e in logs if e["event"] == "database.connection_budget_below_worker_floor"]
+    assert (warned["per_process"], warned["worker_floor"]) == (7, floor), "once, both numbers"
+    with capture_logs() as quiet:
+        database.pool_plan(1)  # the API's floor is the budget's own
+    assert not quiet
+
+
+#: The job worker's slots at 1/2/4/8 CPUs, without a model and with one: the slots that
+#: compute stay about one per CPU (every pool keeps at least one); only the graph pool's, which
+#: wait on the model, come on top. Main had one pool of 1/2/4/8.
+WORKER_SLOTS = {False: {1: 4, 2: 4, 4: 5, 8: 8}, True: {1: 5, 2: 5, 4: 6, 8: 12}}
+
+
+@pytest.mark.parametrize("llm", [False, True])
+@pytest.mark.parametrize("budget", [None, 84])
+@pytest.mark.parametrize("cpus", [1, 2, 4, 8])
+def test_the_worker_is_built_as_worker_py_builds_it(
+    cpus: int, budget: int | None, llm: bool
+) -> None:
+    """The pools ``worker.py`` runs (``worker_pools_for``) and the connection pools its
+    container opens (``process_shape``, then the wiring's ``_pool_plan``), built the same way:
+    the slot total, chat's own slots, and a request pool with a connection for every job
+    running at once. With 17 slots on a request pool of 10, jobs waited for connections."""
+    from memory_service.adapters.wiring import _pool_plan
+    from memory_service.application.container import Container, process_shape, worker_pools_for
+    from memory_service.config.settings import worker_connection_floor
+    from memory_service.ports.tasks import Queue
+
+    settings = Settings(
+        _env_file=None,
+        tasks={"worker_concurrency": cpus},
+        database={"connection_budget": budget},
+        bifrost_url="http://gateway.invalid" if llm else None,
+    )
+    pools = worker_pools_for(settings)
+    (indexing, _), (graph, _), (chat, _), (shared, _) = pools
+    assert indexing[0] is Queue.EMBEDDING and graph == [Queue.GRAPH]
+    short = [] if llm else [Queue.SUMMARY]  # without a model summaries are short
+    assert chat == [Queue.CHAT_FAST, Queue.EMBEDDING, *short] and Queue.DOCUMENT_PARSE in shared
+    slots = [n for _, n in pools]
+    total = sum(slots)
+    assert total == WORKER_SLOTS[llm][cpus]
+    assert slots[2] == max(1, cpus // 2), "half the CPUs are chat's own"
+    computing = total - (slots[1] if llm else 0)
+    # about one per CPU: four pools of at least one slot each, so 4 below 4 CPUs, and at 4
+    # the shared pool's one slot is the fifth
+    assert computing <= max(len(pools), cpus + 1)
+
+    container = Container(settings=settings, version="test", **process_shape(settings, "worker"))
+    assert (container.jobs, container.queue_workers) == (total, len(pools))
+    plan = _pool_plan(container)
+    assert plan.main_size + plan.main_overflow >= total, "a request connection per job"
+    assert plan.queue_max >= 2 * len(pools) and plan.listeners == len(pools)
+    if budget is None:  # 28, or what the pools need when that is more
+        floor = worker_connection_floor(len(pools), total)
+        assert plan.total == max(28, floor)
+    else:
+        assert plan.total <= budget, "84 covers the worker at every size"
+
+    api = Container(settings=settings, version="test", **process_shape(settings, "api"))
+    assert (api.queue_workers, api.jobs) == (0, 0), "the API runs no jobs"
+
+
+async def test_worker_main_runs_the_pools_its_container_was_sized_for(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``worker.main`` itself, not a copy of it: the container it builds is the worker's
+    (``role="worker"``), sized for exactly the pools it then runs, and those pools follow
+    the deployment's settings - ``MEMORY__TASKS__INDEXING_CONCURRENCY`` included, which was
+    a hard-coded constant. Only the stores are left out (a container with nothing wired)."""
+    from memory_service import worker
+    from memory_service.application.container import Container, process_shape, worker_pools_for
+    from memory_service.ports.tasks import Queue
+
+    monkeypatch.setenv("MEMORY__TASKS__WORKER_CONCURRENCY", "8")
+    monkeypatch.setenv("MEMORY__TASKS__INDEXING_CONCURRENCY", "1")
+    settings = Settings(_env_file=None, bifrost_url=None)
+    assert (settings.tasks.worker_concurrency, settings.tasks.indexing_concurrency) == (8, 1)
+    built: dict[str, Any] = {}
+
+    class Tasks:
+        async def run_pools(self, pools: list[tuple[list[Queue], int]], **options: Any) -> None:
+            built["pools"], built["options"] = pools, options
+
+    async def build_container(settings: Settings, version: str, *, role: Any) -> Container:
+        built["role"] = role
+        container = Container(settings=settings, version=version, **process_shape(settings, role))
+        container.tasks = Tasks()
+        built["container"] = container
+        return container
+
+    monkeypatch.setattr(worker, "get_settings", lambda: settings)
+    monkeypatch.setattr(worker, "configure_logging", lambda *a, **k: None)
+    monkeypatch.setattr(worker, "build_container", build_container)
+    monkeypatch.setattr(settings.tasks, "metrics_port", None)
+    await worker.main()
+
+    pools, container = built["pools"], built["container"]
+    assert built["role"] == "worker"
+    assert pools == worker_pools_for(settings)
+    [(_, indexing)] = [(q, n) for q, n in pools if q[0] is Queue.EMBEDDING]
+    assert indexing == 1, "the indexing pool follows MEMORY__TASKS__INDEXING_CONCURRENCY"
+    assert container.jobs == sum(slots for _, slots in pools) == 8
+    assert container.queue_workers == len(pools)
+    assert built["options"]["install_signal_handlers"] is True
+    assert container.closing, "the worker closes its container on the way out"
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_a_budget_below_the_workers_floor_fails_where_deployed(environment: str) -> None:
+    """A deployed worker refuses a budget below what its pools need rather than open more
+    connections than the operator budgeted for; elsewhere it takes them, with a warning
+    (``test_a_budget_below_the_workers_floor_is_raised_with_a_warning``)."""
+    from memory_service.adapters.wiring import _pool_plan
+    from memory_service.application.container import Container, process_shape
+    from memory_service.config.settings import ConnectionBudgetError, worker_connection_floor
+
+    def worker(environment: str, budget: int) -> Container:
+        settings = Settings(
+            _env_file=None,
+            service={"environment": environment},
+            tasks={"worker_concurrency": 4},
+            database={"connection_budget": budget},
+            bifrost_url=None,
+        )
+        return Container(settings=settings, version="test", **process_shape(settings, "worker"))
+
+    deployed = worker(environment, 20)
+    floor = worker_connection_floor(deployed.queue_workers, deployed.jobs)
+    assert (deployed.jobs, floor) == (5, 21)
+    with pytest.raises(ConnectionBudgetError, match="connection_budget=20 .* needs 21"):
+        _pool_plan(deployed)
+    assert _pool_plan(worker(environment, 21)).total <= 21, "a budget that fits is kept"
+    assert _pool_plan(worker("dev", 20)).total == 21, "elsewhere: raised, with a warning"
+
+
 def test_the_compose_app_goes_through_pgbouncer_and_the_queue_does_not() -> None:
     """Transaction pooling breaks LISTEN/NOTIFY and session parameters, so the request path
     goes through PgBouncer and the session work (queue, graph traversal, migrations) direct."""

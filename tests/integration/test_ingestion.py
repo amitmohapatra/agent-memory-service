@@ -134,7 +134,9 @@ async def test_blob_outage_keeps_staged_bytes_and_fails_job(
         await ingestion.parse_document("acme", ack.document_id)
     async with uow_factory() as uow:
         doc = await uow.documents.get("acme", ack.document_id)
-        assert doc.system_metadata["status"] == "READY"  # parsed content is durable
+        # parsed content is durable; READY waits for the index job, which this test never runs
+        assert doc.current_version_id and await uow.documents.list_chunks("acme", ack.document_id)
+        assert doc.system_metadata["status"] == "STAGED"
         assert doc.archive_status is ArchiveStatus.STAGED
         assert await uow.documents.staged_bytes("acme", ack.document_id) is not None
     container.blob.available = True

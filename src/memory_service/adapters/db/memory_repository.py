@@ -383,6 +383,50 @@ class SqlMemoryRepository:
             if sources & {(ev.source_type, ev.source_id) for ev in twin.evidence}
         ]
 
+    async def statements_of(
+        self,
+        tenant_id: str,
+        owner_principal: str,
+        *,
+        before: datetime,
+        limit: int,
+        after: datetime | None = None,
+    ) -> list[CanonicalMemory]:
+        rows = (
+            await self.s.scalars(
+                select(MemoryRow)
+                .where(
+                    MemoryRow.tenant_id == tenant_id,
+                    MemoryRow.owner_principal == owner_principal,
+                    MemoryRow.deleted_at.is_(None),
+                    MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
+                    MemoryRow.visibility == Visibility.USER.value,
+                    MemoryRow.observed_at <= before,
+                    *([MemoryRow.observed_at > after] if after is not None else []),
+                )
+                .order_by(MemoryRow.observed_at.desc())
+                .limit(limit)
+            )
+        ).all()
+        return [_to_domain(r) for r in rows]
+
+    async def replaced_by_any(
+        self, tenant_id: str, memory_ids: Sequence[str]
+    ) -> list[CanonicalMemory]:
+        if not memory_ids:
+            return []
+        newer = MemoryRow.system_metadata["replaced_by"]["memory_id"].astext
+        rows = (
+            await self.s.scalars(
+                select(MemoryRow).where(
+                    MemoryRow.tenant_id == tenant_id,
+                    MemoryRow.system_metadata.has_key("replaced_by"),
+                    newer.in_(list(memory_ids)),
+                )
+            )
+        ).all()
+        return [_to_domain(r) for r in rows]
+
     async def candidates(
         self,
         tenant_id: str,

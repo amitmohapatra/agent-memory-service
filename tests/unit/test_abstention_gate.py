@@ -141,3 +141,25 @@ def test_a_question_word_is_never_a_name_even_when_the_evidence_capitalises_it()
     ]
     assert unsupported_subject("What was the camping trip like?", evidence) is None
     assert unsupported_subject("When did Melanie go camping?", evidence) is None
+
+
+@pytest.mark.parametrize(
+    ("query", "evidence"),
+    [
+        # an attached article and a plural: no surface word in common, one stem
+        (
+            "انسكاب في الغرفة الخلفية — من المسؤول؟",
+            "مسؤول الاستجابة للانسكابات الآن هو Kenji Ito، التحويلة 233.",
+        ),
+        ("Who delivers on weekends?", "The weekend delivery is done by Acme."),
+    ],
+    ids=["arabic-article-and-plural", "english-inflection"],
+)
+def test_an_inflected_form_of_the_same_word_overlaps(query: str, evidence: str) -> None:
+    assert not content_terms(query) & content_terms(evidence)
+    assert overlaps(query, [_C(evidence)]) is True
+
+
+def test_stemming_does_not_make_unrelated_words_overlap() -> None:
+    assert overlaps("Wie heißt meine Schwester?", [_C("Mein Bruder Tom wohnt in Denver.")]) is False
+    assert overlaps("what is the population of Ulaanbaatar", CORPUS) is False

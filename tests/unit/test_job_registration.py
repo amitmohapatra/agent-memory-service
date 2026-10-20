@@ -127,3 +127,37 @@ def test_the_outbox_sweep_is_scheduled_not_merely_registered() -> None:
     )
     # Every minute: this is the floor on how late a missed write can become a memory.
     assert 'Queue.RECONCILE, outbox_sweep, cron="* * * * *"' in source
+
+
+def test_the_worker_runs_every_queue_and_keeps_long_jobs_out_of_chat_and_indexing() -> None:
+    """Chat and indexing on slots of their own (``worker_pools``), which they share by
+    priority, chat first; graph enrichment on slots of its own; every other queue in the
+    shared pool, after chat and indexing. A queue in no pool is never worked, and a parse, an
+    archive, a summary or a graph backlog never holds a slot chat or indexing needs."""
+    from memory_service.ports.tasks import Queue, worker_pools
+
+    for llm in (False, True):
+        # without a model summaries are short and take chat's and indexing's slots after them
+        short = [] if llm else [Queue.SUMMARY]
+        long_jobs = {q for q in Queue if q not in (Queue.CHAT_FAST, Queue.EMBEDDING, *short)}
+        pools = worker_pools(4, 2, llm=llm)
+        (indexing, i), (graph, g), (chat, c), (shared, s) = pools
+        assert indexing == (
+            [Queue.EMBEDDING] if llm else [Queue.EMBEDDING, Queue.CHAT_FAST, Queue.SUMMARY]
+        ), "with a model, indexing's slots are its own: chat jobs wait on the model"
+        assert graph == [Queue.GRAPH] and chat == [Queue.CHAT_FAST, Queue.EMBEDDING, *short]
+        assert shared[:2] == [Queue.CHAT_FAST, Queue.EMBEDDING], "chat, then indexing, first"
+        assert (i, c, s) == (1, 2, 1) and g == (2 if llm else 1)
+        assert not long_jobs & set(indexing + chat), "no long job in chat's or indexing's slots"
+        listed = {q for queues, _ in pools for q in queues}
+        assert listed == set(Queue), "every queue is worked"
+        assert sorted(q for q in shared if q in long_jobs) == sorted(long_jobs - {Queue.GRAPH})
+    for cpus in range(1, 9):
+        for llm in (False, True):
+            embedding, graph, chat, shared = (slots for _, slots in worker_pools(cpus, 2, llm=llm))
+            assert min(embedding, graph, chat, shared) >= 1, "every pool is worked"
+            assert chat == max(1, cpus // 2), "half the CPUs are chat's own"
+            assert embedding <= max(1, cpus // 4) and embedding <= 2
+            computing = chat + embedding + shared + (0 if llm else graph)
+            assert computing <= max(4, cpus + 1), "the slots that compute, about one per CPU"
+            assert graph == (max(2, cpus // 2) if llm else 1), "more only to wait on a model"

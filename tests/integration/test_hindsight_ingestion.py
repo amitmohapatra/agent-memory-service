@@ -42,11 +42,16 @@ async def test_sdk_ingest_recall_replay_forget_and_cross_user_isolation(containe
             )
             engine = container.services["retrieval"]
             result = await engine.retrieve(U1, "Who postponed the dashboard?", kinds=("memory",))
-            assert generated.memory_id in {c.record_id for c in result.candidates}
+            # one statement, one document (ADR 0041): the fact may ride as a form of its turn
+            assert any(
+                generated.memory_id in (c.record_id, *c.payload.get("duplicates", ()))
+                for c in result.candidates
+            )
             from memory_service.modules.context.builder import candidate_to_item
             from tests.unit.test_bundle_rendering import _bundle
 
-            candidate = next(c for c in result.candidates if c.record_id == generated.memory_id)
+            exact = await engine.retrieve(U1, f"show {generated.memory_id}")
+            candidate = next(c for c in exact.candidates if c.record_id == generated.memory_id)
             item = candidate_to_item(candidate)
             assert item.attributes["category"] == "contextual_fact"
             assert item.attributes["provider"] == "hindsight"

@@ -19,6 +19,7 @@ from memory_service.observability.logging import get_logger
 
 if TYPE_CHECKING:
     from memory_service.application.container import Container
+    from memory_service.config.settings import PoolPlan
 
 log = get_logger(__name__)
 
@@ -89,10 +90,22 @@ async def _wire_cache(container: Container) -> None:
     )
 
 
+def _pool_plan(container: Container) -> PoolPlan:
+    """This process's share of the connection budget: its queue workers' and its concurrent
+    jobs' needs met, and in a deployed environment a budget below them refused
+    (``DatabaseSettings.pool_plan``)."""
+    return container.settings.database.pool_plan(
+        container.processes,
+        queue_workers=container.queue_workers,
+        jobs=container.jobs,
+        strict=container.settings.deployed,
+    )
+
+
 async def _wire_database(container: Container) -> None:
     from memory_service.adapters.db.engine import Database
 
-    plan = container.settings.database.pool_plan(container.processes)
+    plan = _pool_plan(container)
     db = Database(container.settings.database, plan)
     log.info("database.pools", processes=container.processes, per_process=plan.total)
     container.database = db
@@ -118,7 +131,7 @@ async def _wire_tasks(container: Container) -> None:
             container.settings.database.procrastinate_dsn,
             default_retries=constants.TASKS.default_retries,
             job_timeout_seconds=constants.TASKS.job_timeout_seconds,
-            max_size=container.settings.database.pool_plan(container.processes).queue_max,
+            max_size=_pool_plan(container).queue_max,
         )
         container.tasks = queue
         container.add_dependency(
@@ -357,6 +370,17 @@ def _wire_models(container: Container) -> None:
     _wire_late(container)
 
 
+def _multilingual_encoder(container: Container) -> Any:
+    """The multilingual dense space's encoder (``dense_ml``), else the primary one."""
+    from memory_service.ports.search import VectorName
+
+    spaces = getattr(container, "dense_spaces", None)
+    for space in getattr(spaces, "spaces", ()):
+        if space.name is VectorName.DENSE_ML:
+            return space.encoder
+    return container.embedding
+
+
 def _wire_late(container: Container) -> None:
     """The late-interaction arm (ADR 0025). The real graph must load; the stand-in is chosen
     only by an override, and the hash embedding implies it, so a hermetic container runs the
@@ -522,6 +546,7 @@ def _wire_memory(container: Container) -> None:
     from memory_service.modules.memory.native import NativeMemoryIntelligence
     from memory_service.modules.memory.pipeline import ObservationPipeline
     from memory_service.modules.memory.reflection import ReflectionService
+    from memory_service.modules.memory.replacement import CrossConversationReplacement
     from memory_service.modules.memory.service import MemoryService
     from memory_service.modules.memory.statements import StatementLabeller
     from memory_service.modules.memory.subjects import SubjectMatcher
@@ -560,6 +585,13 @@ def _wire_memory(container: Container) -> None:
         gate=AdmissionGate(cfg),
         assist=container.services["llm_assist"],
         subjects=subjects,
+        # a user's later statement against their earlier ones in any conversation (ADR
+        # 0038): the grounding cascade's NLI head decides, the multilingual encoder relates
+        replacement=CrossConversationReplacement(
+            container.nli,
+            _multilingual_encoder(container),
+            assist=container.services["llm_assist"],
+        ),
     )
     container.services["memory"] = MemoryService(
         container.services["authz"], fiscal=container.tuning.memory_intelligence.fiscal_calendar
@@ -621,7 +653,7 @@ def _wire_graph(container: Container) -> None:
         from memory_service.adapters.graph.postgres_store import PostgresGraphStore
 
         database = container.settings.database
-        plan = database.pool_plan(container.processes)
+        plan = _pool_plan(container)
         store = PostgresGraphStore(
             container.database.engine,
             budget_ms=container.tuning.graph.prefetch_budget_ms,

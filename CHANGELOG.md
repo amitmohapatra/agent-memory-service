@@ -8,6 +8,70 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- Memory that is never cleared reads right (ADR 0041). Of a user's statements of the slot a
+  question about now asks for, the newest is current and the older ones are history, in five
+  languages ("Who is my regional manager?", "What's the reorder point for PX-90?", "What was
+  the last order I raised?"); a question about what was keeps them. A bounded second hop
+  follows the evidence to the thing it names ("Branch 512 is in District D7" -> District D7's
+  dispatcher), keeping one name for two things apart by its qualifier ("this week" / "last
+  week"). The user's standing rules, corrections and preferences that apply to a request come
+  back as profile sections `standing_rules` and `preferences` in any conversation, a later rule
+  superseding an earlier one, a format rule or a list whole. A turn and what the rules read
+  from it rank as one document. Time words are read anchored to a named day, by season, and in
+  German, Spanish, Arabic and Hindi. The abstention overlap reads stems; disarming an alarm,
+  logging in and the German verb to mail ask for a value. "I care about ..." is a
+  lasting preference ("I manage ..." stays a statement a later one replaces); "From now on, always ..." is a rule. No model anywhere.
+- `make backfill` (`memory_service.tools.backfill`): brings a store an earlier build wrote up
+  to this one in place while serving - replacement across each user's conversations in event
+  time, then the index again; idempotent, resumable (`--state`), nothing deleted
+  (docs/deploy/database.md). No new setting.
+- A question asking for a phone number, an e-mail address or a code or password that no
+  evidence about what it names states - "the alarm code for Store 33" when only Store 31's is
+  known - or for a month the evidence never names (an item naming no month is about the month
+  it was said in, or its relative dates name), is INSUFFICIENT; the evidence stays in the
+  bundle, a note says what is missing (`RetrievalSettings.coverage_check`). A memory-only
+  bundle that shares no word with the question but carries a memory at a relevance of
+  0.4 or more is no longer INSUFFICIENT (`related_evidence_relevance`). A user's "I
+  finished Dune" replaces their "I'm reading Dune at the moment" as an earlier value in all
+  five languages, whatever the NLI head reads. A message stored out of order (a model reads
+  messages in parallel) is compared with what the user said after it too: event time
+  decides which statement is newer (ADR 0040).
+- A value a user replaces in a later conversation is no longer served as current. Since a
+  user's words follow the user (ADR 0036) the old and the new statement were both current in
+  every conversation, and the same-session update and recency cells fell to 0.04 and 0.33. A
+  new statement is now compared with the user's own statements in all their conversations:
+  same thing by a shared name or identifier (two things of one kind, "bike #3" / "bike #4",
+  never), by one subject's single-valued slot read from both with two values (`lives_in`),
+  or by the multilingual encoder; the NLI head decides. At 0.9 the old statement and every
+  form of it (turn, fact, event, twins) are superseded; at 0.85, or 0.4 for a stated change
+  (a correction, a lifecycle or status cue - now also a handover or a return, in five
+  languages) about the same named thing or slot, it stays current as an **earlier value**. A
+  fact a model misread as a standing rule is compared like a fact. With the tenant's
+  `conflict_adjudication`, the model settles at most three related pairs per message that the
+  head leaves in its unsure band. Forgetting or retracting the newer statement reinstates what
+  it replaced. A failing head or model never costs the message
+  (`memory_replacement_skipped_total`; decisions in `memory_replacements_total`). Migration
+  0028 adds two partial indexes, online (ADR 0038).
+- Current and history apart in the context: an earlier value is never among the current
+  memories. It is served in a `history` section of its own (full context `history[]`, each
+  `superseded: true`; "## Earlier values (since replaced)" in the rendered context; handles
+  `h1`..), is no evidence for `/v1/verify`, and never comes without what replaced it: a search
+  that finds an earlier value brings its replacement, before it, past the relevance floor. A
+  sentence shown whole in its turn is not shown again beside it. New in the API and the SDK:
+  `ContextBundle.history`, `ContextMemory.superseded` (ADR 0038).
+- Replacement in the languages the NLI head reads weakly (ADR 0038): where the speaker lives,
+  or that they moved, is read from the words in German, Spanish, Arabic and Hindi as English's
+  rules read it, so "Ich wohne in Leeds" and "Ich bin nach Bristol gezogen" relate without a
+  model; with the tenant's `conflict_adjudication`, a stated change whose first named thing the
+  older statement names is put to the model whatever the head read ("Maria Lopez is back from
+  leave" scores 0.02 against "is on leave" in Arabic). The lexicon reads first-person "finished"
+  in Spanish ("terminé") and Arabic ("أنهيت") and German "zu Ende", and a Hindi cue matches with
+  or without the nukta ("ख़त्म" / "खत्म").
+  Without a model, a stated change that leads with a name or identifier the older statement
+  carries, and that the encoder puts at 0.5 or closer to it, marks it as an earlier value
+  whatever the head read (never a supersession).
+  In German, a single capitalised word both statements use bare (no determiner, no number
+  beside it) is a shared name ("Ich lese gerade Dune" / "Ich habe Dune zu Ende gelesen").
 - Feedback review by target (ADR 0039, amends 0028): `GET /v1/feedback?review=pending&group=target`
   lists the queue one row per target with `votes`, `thumbs_up`, `thumbs_down`, distinct
   `voters` and `latest_at`; `POST /v1/feedback/approve` and `POST /v1/feedback/dismiss` decide
@@ -83,6 +147,75 @@ each entry says which one moved. Decisions behind each change are in the
   class), merge F1 0.84 (exact subject strings before: 0.13).
 
 ### Fixed
+- A document is `READY` only once it is findable. The parse job set `READY` before the index job
+  it chains had embedded a chunk, so `wait_ready` returned while `search` and `context` still
+  found nothing; with the worker busy (LLM-assisted enrichment on a slow model), the index job
+  ran seconds later and the question asked at `READY` answered "Memory holds nothing". The
+  document now stays `STAGED` through parsing and indexing, and the index job marks it `READY`
+  after the embeddings are written, before graph enrichment
+  ([documents](docs/api/documents.md)). When the index job gives up (its retries spent, or past
+  the job timeout on a large file) the document is `FAILED` with `last_error` "index failed:
+  ...", and `memory-reindex` indexes such documents, and `STAGED` ones with a parsed version,
+  and makes them `READY`.
+- The job worker's queue pool is sized for its four Procrastinate workers (two connections
+  each), and their four LISTEN connections count against `connection_budget`; with four
+  connections for all of them, pool checkouts timed out under load. Its request pool has a
+  connection for every job it runs at once, and in `staging` and `prod` a `connection_budget`
+  below what the worker needs stops it at start instead of being exceeded with a warning
+  ([database](docs/deploy/database.md)). A worker starting no
+  longer takes the jobs of one silent for 30 s (Procrastinate's default) but for 145 s
+  (`TASKS.stalled_after_seconds`, derived from the heartbeat, the 90 s a worker rides a
+  database outage out, its last try's pool timeout and the shutdown grace, plus a heartbeat of
+  margin; a worker killed with -9 waits that long too),
+  so a job no longer runs twice.
+- `/v1/verify` records no verdict on a run whose context held no evidence. Against an empty
+  context every claim is "unsupported" - one the run's own tools returned too - so the judge
+  rejected such runs, their outcome became a failure, and an agent sampled for grounding
+  (`TRELLIS_GROUNDING_SAMPLE`, 10 % by default) never learned a skill from them
+  ([trust](docs/guide/06-trust.md)).
+- The worker runs the `chat-fast` queue and the `embedding` queue - the jobs that make a
+  memory, a document's chunks or a tool findable - on slots no parse, archive or graph job
+  (nor, with a model, a summary; without one summaries are short and take them after
+  indexing) can take, and the `graph` queue on slots of its own, in four pools whose computing
+  slots come to about one per CPU (`tasks.worker_concurrency`): half are chat's (indexing's
+  when no chat job waits), up to `tasks.indexing_concurrency` (2, a new setting; at most a
+  quarter) indexing's, one the graph queue's and the rest every other queue's, chat and
+  indexing first. Chat and indexing share their slots by priority, chat first, except that
+  with a model indexing keeps its own (a chat job then waits on the model); the graph pool's
+  slots wait on the model too, and it gets half the CPUs (at least 2) on top. With a slow model, observation extraction
+  and graph enrichment held every slot, and a tool catalog published just before a question
+  waited 14 s to be searchable; and a graph backlog - an import queues thousands of enrichment
+  jobs, which outrank parsing, archiving, reconciliation and summaries - held every slot until
+  it drained ([operations](docs/guide/11-operations.md#workers-and-periodic-jobs)).
+- The job worker rides out a database that cannot do its queue statements for up to 90 s: no
+  connection free in the queue pool, a full disk or no memory, a server shutting down or
+  starting, a lost LISTEN connection (a connection lost mid-statement still ends the worker).
+  Each is retried with a growing pause, logged (`worker.db_retry`) and counted
+  (`memory_worker_db_retries_total`; `memory_worker_db_unavailable_seconds` says for how long).
+  Under memory pressure one pool timeout in a heartbeat made Procrastinate stop the worker and
+  the process exited 0, so a supervisor restarting on failure left it down; and a job-status
+  write to a full disk stopped it too. Past the 90 s, or when a pool stops on its own, it now
+  logs `worker.failed` and exits non-zero, and compose restarts it (`restart: on-failure`). A
+  log line that cannot be written is lost and counted (`memory_log_lines_dropped_total`)
+  instead of raising into the code that logged it
+  ([operations](docs/guide/11-operations.md#observability)). The API is unchanged: its
+  enqueue goes through the outbox, whose sweep dispatches what a failed enqueue missed.
+- A write is findable within seconds while the graph is enriched by a slow model. Graph
+  enrichment ran inside `memory.index` and `document.index`, and with an LLM enabled each such
+  job held a worker slot for the model's calls (up to minutes on a small CPU model): with every
+  slot taken, indexing, parsing and the other jobs waited up to six minutes, and a memory
+  remembered just before a question was not in its context. With a model, enrichment is now a
+  job of its own, `graph.enrich_memories` / `graph.enrich_document`, queued once the source is
+  indexed, on the `graph` queue below indexing, in a pool of its own - never inside the index
+  job - and never one at a time per tenant (so serialised, the capability eval's LLM run still
+  had 552 enrichment jobs queued when its questions began, and they met a graph without their
+  facts). Without a model the index job still enriches, once the source is findable: there it
+  is tens of milliseconds, and as separate jobs the capability eval's writes settled 30 s later
+  ([operations](docs/guide/11-operations.md#workers-and-periodic-jobs)).
+- A Hindi statement that begins "आज से" ("from today": when a value took effect) was read as a
+  standing rule, stored as a lasting preference and never compared with what it replaced. It
+  is a fact now, as "from today", "ab heute", "desde hoy" and "اعتبارًا من اليوم" already were;
+  "अब से" ("from now on") still makes a rule (ADR 0038).
 - Same-subject lookup: an older statement past the window of recent rows consolidation reads
   was missed when its subject was spelled with different punctuation ("forklift-4" stored,
   "forklift 4" said): the spelling variants were derived only when the subject was not

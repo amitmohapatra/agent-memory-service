@@ -81,3 +81,75 @@ def test_a_memory_in_the_period_the_question_names_is_lifted() -> None:
     assert june_q["j"] - plain["j"] == pytest.approx(mr.PERIOD * unit)
     assert june_q["t"] - plain["t"] == pytest.approx(mr.PERIOD * unit)
     assert june_q["x"] == pytest.approx(plain["x"])
+
+
+def _form(
+    rid: str, *, source: str, text: str = "", owner: str = "user:caroline", **extra
+) -> SearchHit:
+    payload = {
+        "text": text or rid,
+        "subject": extra.pop("subject", owner),
+        "owner_principal": owner,
+        "observed_at": "2023-05-08T13:56:00+00:00",
+        "source_refs": [{"source_type": "message", "source_id": source}],
+        **extra,
+    }
+    return SearchHit(record_id=rid, score=1.0, retriever=Retriever.FUSION, payload=payload)
+
+
+def test_a_turn_and_what_was_read_from_it_are_one_document() -> None:
+    hits = {
+        "turn": _form("turn", source="obs_1", text="I painted a sunrise. It took all week."),
+        "fact": _form("fact", source="obs_1", text="I painted a sunrise.", subject="sunrise"),
+        "other": _form("other", source="obs_2"),
+    }
+    pool = mr.statements(
+        _pool(
+            {VectorName.BM25: ["other", "turn", "fact"], VectorName.DENSE_EN: ["fact", "other"]},
+            hits,
+        )
+    )
+    # the fact fused best on its own and stands for the statement, at its best rank in each arm
+    assert set(pool.hits) == {"fact", "other"}
+    assert pool.ranks[VectorName.BM25] == {"other": 1, "fact": 2}
+    assert pool.ranks[VectorName.DENSE_EN] == {"fact": 1, "other": 2}
+    assert [h.record_id for h in pool.forms["fact"]] == ["fact", "turn"]
+    # the rules read every form: the turn names its speaker, the fact what it is about
+    assert pool.speakers("fact") == {"caroline", "sunrise"}
+    named = dict(mr.ranked(pool, "What did Caroline paint?"))
+    plain = dict(mr.ranked(pool, "What was painted?"))
+    assert named["fact"] - plain["fact"] == pytest.approx(mr.SPEAKER / (mr.K + 1))
+
+
+def test_forms_of_different_turns_speakers_or_values_stay_apart() -> None:
+    hits = {
+        "a": _form("a", source="obs_1"),
+        "b": _form("b", source="obs_2"),
+        "c": _form("c", source="obs_1", owner="user:melanie"),
+        "d": _form("d", source="obs_1", earlier_value=True),
+        "e": _form("e", source="obs_1", derived=True),
+        "f": SearchHit(record_id="f", score=1.0, retriever=Retriever.FUSION, payload={"text": "f"}),
+    }
+    pool = _pool({VectorName.BM25: list(hits)}, hits)
+    assert mr.statements(pool) is pool
+
+
+def test_an_agent_bound_to_a_user_relays_that_users_statement() -> None:
+    hits = {
+        "turn": _form("turn", source="obs_1", owner="user:u1"),
+        "fact": _form("fact", source="obs_1", owner="agent:u1/harness"),
+    }
+    pool = mr.statements(_pool({VectorName.BM25: ["turn", "fact"]}, hits))
+    assert set(pool.hits) == {"turn"}
+
+
+def test_a_when_question_in_another_language_lifts_a_memory_that_names_a_time() -> None:
+    hits = {
+        "a": _hit("a", text="Wir haben Dune gelesen."),
+        "c": _hit("c", text="Wir haben uns letzte Woche getroffen."),
+    }
+    pool = _pool({VectorName.BM25: ["a", "c"]}, hits)
+    plain = dict(mr.ranked(pool, "Was haben wir gemacht?"))
+    when = dict(mr.ranked(pool, "Wann haben wir uns getroffen?"))
+    assert when["c"] - plain["c"] == pytest.approx(mr.TIME / (mr.K + 1))
+    assert when["a"] == pytest.approx(plain["a"])

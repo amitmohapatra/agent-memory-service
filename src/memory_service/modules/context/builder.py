@@ -36,6 +36,8 @@ from memory_service.domain.ids import stable_key
 from memory_service.domain.memory import unverified_representation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.service import AuthorizationService
+from memory_service.modules.context.coverage import unanswered
+from memory_service.modules.context.evidence import NO_SHARED_TERM
 from memory_service.modules.context.handles import BundleRecords, record_of
 from memory_service.modules.context.sections import (
     ContextSections,
@@ -44,18 +46,21 @@ from memory_service.modules.context.sections import (
     within_budget,
 )
 from memory_service.modules.context.semantic_cache import SemanticBundleCache, semantic_key
+from memory_service.modules.context.standing import standing_blocks
 from memory_service.modules.context.views import full_view, prompt_view
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import model_calls_allowed
 from memory_service.modules.memory.ephemeral import EphemeralMemory
+from memory_service.modules.retrieval import slots
 from memory_service.modules.retrieval.engine import (
     UNUSED_MAX,
     Candidate,
     RetrievalEngine,
     RetrievalResult,
 )
+from memory_service.modules.retrieval.periods import months_dated
 from memory_service.modules.retrieval.router import QueryRouter
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import evidence_status_total, stage_seconds
@@ -67,11 +72,19 @@ from memory_service.ports.uow import UnitOfWorkFactory
 log = get_logger(__name__)
 
 
+#: Standing rules and preferences that apply to the request, as profile sections (ADR 0041).
+STANDING = True
+
+
 def _cacheable(bundle: ContextBundle) -> bool:
     return not any(
         item.attributes.get("derived") or item.item_id.startswith("wm_") for item in bundle.memories
     )
 
+
+#: Earlier values (ADR 0038) a bundle carries at most, in its history section: enough for "what
+#: was it before", never enough to crowd the current evidence's budget.
+HISTORY_MAX = 4
 
 #: The model uses a cached bundle's content depends on. A deployment that expands queries
 #: assembles a different bundle from the same query, so it must not read another's cache.
@@ -167,6 +180,8 @@ def candidate_to_item(c: Candidate) -> ContextItem:
                 "contradicts",
                 # typed connections written by the background pass (supersedes / contradicts /
                 # relates): a caller that reads one memory can see what it was linked to
+                # a later statement of the same user replaced it (ADR 0038)
+                "earlier_value",
                 "connections",
                 "contributors",
                 "memory_type",
@@ -495,7 +510,7 @@ class ContextBuilder:
             pinned = await sections if sections is not None else Pinned()
             conversation = self._window(ctx, await recent, after=pinned.covered_to)
         with timings.stage("similarity"):
-            await self.engine.score_similarity(result)
+            await self._similarity_and_standing(query, visibility, result, pinned)
         await self._add_extras(ctx, query, tools, visibility, result, pinned, timings)
         # the engine's own stage split, plus what happened around it
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
@@ -517,6 +532,28 @@ class ContextBuilder:
                 "tools": pinned.tools,
             }
         )
+
+    async def _similarity_and_standing(
+        self, query: str, visibility: Any, result: RetrievalResult, pinned: Pinned
+    ) -> None:
+        """Score the candidates' similarity and, beside it, read the user's standing rules
+        and preferences that apply (``standing``) into the profile: one round trip, the
+        query's own vectors."""
+        standing = (
+            asyncio.ensure_future(
+                standing_blocks(self.engine, query, visibility, result.query_vectors)
+            )
+            if STANDING and result.routed.needs_memories
+            else None
+        )
+        try:
+            await self.engine.score_similarity(result)
+        except BaseException:
+            if standing is not None:
+                standing.cancel()
+            raise
+        if standing is not None:
+            pinned.profile = [*await standing, *pinned.profile]
 
     async def _add_extras(
         self,
@@ -770,16 +807,72 @@ class ContextBuilder:
             self.cfg.conversation_token_budget,
         )
 
-    def _below_floor(self, c: Candidate) -> bool:
+    def _below_floor(self, c: Candidate, slot: slots.Slot | None = None) -> bool:
         """A ranked item whose similarity to the question is under the floor is not packed:
         a fusion score always fills the budget, relevant or not. Exact hits, expansion and
         graph companions and items with no similarity (graph facts, working memory) are
-        judged by what brought them in, not by this."""
+        judged by what brought them in, not by this; so is a memory that is a list answering
+        the question (``slots.answers_as_list``): a long list sits far from its question in
+        the encoder's space, however plainly it answers it."""
         return (
             c.similarity is not None
             and c.similarity < self.engine.relevance_floor
             and c.expanded_from is None
             and "exact" not in (c.retrievers or [])
+            and not (
+                c.kind == "memory" and slot is not None and slots.answers_as_list(slot, c.text)
+            )
+        )
+
+    def _coverage(
+        self, report: EvidenceReport, query: str, shown: Sequence[ContextItem]
+    ) -> EvidenceReport:
+        """INSUFFICIENT when the evidence shown does not hold the value the question asks for
+        (``coverage.unanswered``, ADR 0040); each item dated by when it was said and the days
+        its relative dates name, as the bundle prints them."""
+        if (
+            not self.retrieval_cfg.abstain_when_insufficient
+            or not self.retrieval_cfg.coverage_check
+            or report.status is EvidenceStatus.INSUFFICIENT
+        ):
+            return report
+        gap = unanswered(
+            query, [i.text for i in shown], [months_dated(i.attributes) for i in shown]
+        )
+        if not gap:
+            return report
+        return report.model_copy(
+            update={"status": EvidenceStatus.INSUFFICIENT, "notes": [*report.notes, gap]}
+        )
+
+    def _related_evidence(
+        self,
+        report: EvidenceReport,
+        memories: Sequence[ContextItem],
+        knowledge: Sequence[ContextItem],
+    ) -> EvidenceReport:
+        """A memory-only bundle that shares no word with the question but carries a current
+        memory the encoder puts close to it is evidence, not nothing (ADR 0040)."""
+        floor = self.retrieval_cfg.related_evidence_relevance
+        if (
+            floor <= 0
+            or report.status is not EvidenceStatus.INSUFFICIENT
+            or knowledge
+            or not memories
+            or NO_SHARED_TERM not in report.notes
+        ):
+            return report
+        best = max(m.relevance for m in memories)
+        if best < floor:
+            return report
+        return report.model_copy(
+            update={
+                "status": EvidenceStatus.COMPLETE,
+                "notes": [
+                    *(n for n in report.notes if n != NO_SHARED_TERM),
+                    f"no word in common with the question; a memory is related at {best:.2f}",
+                ],
+            }
         )
 
     def _assemble(
@@ -796,6 +889,7 @@ class ContextBuilder:
         knowledge: list[ContextItem] = []
         graph_facts: list[ContextItem] = []
         summaries: list[ContextItem] = []
+        history: list[ContextItem] = []
         # a seed chunk travels with the companions its required evidence groups point at
         # (definition, footnote, cross-reference): either the whole unit fits the budget or
         # the seed is left out, so the bundle never carries a claim without its companion
@@ -834,10 +928,11 @@ class ContextBuilder:
             return out
 
         below_floor = 0
+        slot = slots.question_slot(query)
         for c, item in items:
             if c.record_id in included_ids:
                 continue
-            if self._below_floor(c):
+            if self._below_floor(c, slot):
                 below_floor += 1
                 continue
             if c.kind == "chunk" and len(knowledge) < self.cfg.knowledge_max:
@@ -864,12 +959,28 @@ class ContextBuilder:
                 continue
             if item.token_estimate > remaining:
                 continue
-            if c.kind == "memory" and (
+            if (
+                c.kind == "memory"
+                and c.payload.get("earlier_value")
+                and not result.routed.signals.get("history")
+            ):
+                # an earlier value goes to the history section, never among current evidence
+                # - unless the question asks what was (``router._HISTORY``): then it answers
+                if len(history) >= HISTORY_MAX:
+                    continue
+                history.append(item)
+            elif c.kind == "memory" and (
                 primary_memories < self.cfg.memories_max
-                or c.expansion_edge in {"GRAPH_EVIDENCE", "DERIVED_SOURCE"}
+                or c.expansion_edge
+                in {"GRAPH_EVIDENCE", "DERIVED_SOURCE", "REPLACEMENT", "SECOND_HOP"}
             ):
                 memories.append(item)
-                if c.expansion_edge not in {"GRAPH_EVIDENCE", "DERIVED_SOURCE"}:
+                if c.expansion_edge not in {
+                    "GRAPH_EVIDENCE",
+                    "DERIVED_SOURCE",
+                    "REPLACEMENT",
+                    "SECOND_HOP",
+                }:
                     primary_memories += 1
             elif c.kind == "fact" and len(graph_facts) < self.cfg.graph_facts_max:
                 graph_facts.append(item)
@@ -947,7 +1058,10 @@ class ContextBuilder:
                         "notes": [*report.notes, "companion evidence exceeded the token budget"],
                     }
                 )
-        if not (knowledge or memories or graph_facts or summaries):
+        report = self._related_evidence(report, memories, knowledge)
+        # current evidence only: an earlier value answers nothing about now
+        report = self._coverage(report, query, (*memories, *knowledge, *graph_facts, *summaries))
+        if not (knowledge or memories or graph_facts or summaries or history):
             report = report.model_copy(update={"status": EvidenceStatus.INSUFFICIENT})
         # what the retriever found but this bundle does not carry (ranked out, over budget):
         # the grounding cascade checks answers against it for contradictions
@@ -976,6 +1090,7 @@ class ContextBuilder:
             knowledge=knowledge,
             graph_facts=graph_facts,
             summaries=summaries,
+            history=history,
             evidence=report,
             token_budget=budget,
             token_estimate=budget - remaining,

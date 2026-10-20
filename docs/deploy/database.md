@@ -20,10 +20,26 @@ job worker's pod runs one. `DatabaseSettings.pool_plan` divides it:
 
 ```text
 per_process = connection_budget // processes          (unset: 28)
-queue       = max(2, per_process // 7)
-graph       = max(2, 2 * per_process // 7)            size ceil(g/2), overflow floor(g/2)
-main        = max(2, per_process - graph - queue)     size ceil(m/2), overflow floor(m/2)
+listeners   = the job worker's Procrastinate workers  (4; 0 in the API)
+pooled      = per_process - listeners
+queue       = max(2, pooled // 7, 2 * listeners)
+graph       = max(2, 2 * pooled // 7)                 size ceil(g/2), overflow floor(g/2)
+jobs        = the job worker's slots, every pool's     (0 in the API)
+main        = max(2, jobs, per_process - graph - queue - listeners)
+                                                      size ceil(m/2), overflow floor(m/2)
 ```
+
+The job worker runs four Procrastinate workers (one per pool: indexing, graph, chat, the rest) on
+one queue pool; each fetches, finishes, heartbeats, polls for aborts and defers periodic jobs,
+so the pool gets two connections per worker, and each worker's LISTEN connection, opened
+outside the pool, counts against the budget too. Every slot of its pools runs a job at once,
+and a job writes through the request pool, so that pool is never smaller than the slots
+(`jobs`: 4 / 4 / 5 / 8 at 1 / 2 / 4 / 8 CPUs, 5 / 5 / 6 / 12 with a model; sized from the
+budget alone, a request pool of 10 once served 17 slots). A worker pod's share is at least what that split needs
+(21 for 4 workers and 5 jobs, 31 for 12 jobs): in `staging` and `prod` a smaller budget is
+refused at start (`ConnectionBudgetError`, naming both numbers); elsewhere it is raised to
+the floor, and the worker logs a warning, once, naming both. Unset, a worker whose pools need
+more than 28 takes what they need.
 
 Unset, a process keeps the pools it had before the budget existed: requests 8 + 8, graph
 4 + 4, queue 4 (28). Overflow counts against the budget because a burst is exactly when the
@@ -116,3 +132,34 @@ A migration runs against a live service. The rule for every revision:
    release. A `NOT NULL` column with a volatile default rewrites the table.
 4. **Test upgrade and downgrade** on a scratch database: `alembic upgrade head`,
    `alembic downgrade -1`, `alembic upgrade head`.
+
+## Upgrading a store an earlier build wrote (no clearing)
+
+Memory is never cleared, and nothing in an upgrade needs it to be. A store written before
+ADR 0038/0040/0041 holds a user's old and new statements of one thing both current, and index
+points without the `statement_kind` payload the rules section filters on. Both are read
+correctly as soon as the new build serves (the read path's latest-value rules apply to old
+and new memories alike, ADR 0041), and one command brings the stored state up to the new
+build, in place, while it serves:
+
+```bash
+make backfill BACKFILL_ARGS="--state /var/lib/memory/backfill.json"           # every user
+python -m memory_service.tools.backfill --state /tmp/b.json --tenant acme --user u1  # one user
+make backfill BACKFILL_ARGS="--state /var/lib/memory/backfill.json --reindex-all"
+```
+
+* **What it does** (`memory_service.tools.backfill`): for every user, their own statements,
+  message by message in the order they were said (event time), go through the same
+  cross-conversation replacement the write path runs (ADR 0038): an older value becomes an
+  earlier value (history) or is superseded, exactly as if it had been said after the upgrade.
+  Then every memory of that user is indexed again (an upsert of the same ids, with the new
+  payload); `--reindex-all` rebuilds the whole index afterwards (`tools.reindex`).
+* **Nothing is deleted.** A replacement stays reversible (forgetting or retracting the newer
+  statement reinstates the older one).
+* **Live-safe.** One message per transaction, under the user's serialization, bumping the
+  revisions its changes touch, so no cached bundle serves a value it marked.
+* **Idempotent and resumable.** A statement already marked is not marked again; a second run
+  changes nothing. `--state` records each finished user and, for the one in progress, the
+  last message done (every `--batch`, default 50); rerun the same command to resume.
+* **Needs the NLI head** (the replacement's decider, as on the write path). Without it the
+  command only re-indexes.

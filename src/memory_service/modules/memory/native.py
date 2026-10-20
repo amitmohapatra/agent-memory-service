@@ -289,6 +289,28 @@ _PREFERENCE = re.compile(
     r"can't stand|never use|always use|only use)\s+(.+)",
     re.IGNORECASE,
 )
+#: What a user says they care about or focus on, in the five pack languages ("I care about
+#: fast-moving items with low stock", "Mir ist eine kurze Lieferzeit wichtig", "Me importan los
+#: artículos de alta rotación", "يهمني ...", "मुझे ... की परवाह"), and a preference stated for
+#: good without a subject ("From now on, permanently prefer weekly summaries"): a lasting
+#: preference, read back for the questions it bears on (ADR 0041). Group 1..n: what it is about
+#: (the first that matched). What a user manages or simply prefers ("I manage store 512",
+#: "Prefiero las alertas por Slack") is not read here: it is one value of a slot that changes
+#: (a role, a choice), and a lasting preference is never replaced (ADR 0038 compares
+#: statements), so every earlier store or channel would stay current; the turn keeps it.
+_FOCUS = re.compile(
+    r"\b(?:i|we)\s+(?:really\s+|mostly\s+|mainly\s+|only\s+|mostly\s+)?"
+    r"(?:care\s+(?:most\s+)?about|focus\s+on|am\s+focused\s+on|'m\s+focused\s+on"
+    r")\s+(.{3,})"
+    r"|^(?:from\s+now\s+on,?\s*)?(?:please\s+)?(?:permanently|always)\s+prefer\s+(.{3,})"
+    r"|\bmir\s+(?:ist|sind)\s+(.{3,}?)\s+(?:besonders\s+)?wichtig\b"
+    r"|\bich\s+achte\s+(?:besonders\s+)?auf\s+(.{3,})"
+    r"|\bme\s+(?:importa|importan|interesa|interesan)\s+(.{3,})"
+    r"|(?:يهمني|أهتم\s+ب|اهتم\s+ب)\s*(.{3,})"
+    r"|मुझे\s+(.{3,}?)\s+की\s+(?:परवाह|फ़िक्र|फिक्र)"
+    r"|मेरे\s+लिए\s+(.{3,}?)\s+(?:ज़रूरी|जरूरी|अहम)\s+है",
+    re.IGNORECASE,
+)
 _PREF_PLEASE = re.compile(
     r"^(?:please\s+)?(always|never|don't|do not|stop|keep)\s+(.+)", re.IGNORECASE
 )
@@ -525,6 +547,12 @@ def default_visibility(
     return Visibility.USER if ctx.user_id else Visibility.TENANT
 
 
+def _standing(label: Any) -> bool:
+    """The sentence gives an instruction it says is for every time ("Formatiere Berichte immer
+    als Tabelle"), decided a rule or left to a model the deployment may not have (ADR 0041)."""
+    return bool(getattr(label, "standing", False) and getattr(label, "instruction", None))
+
+
 class NativeMemoryIntelligence:
     """Rule-based provider. ``embedding`` (optional) adds a dense-similarity dedup signal."""
 
@@ -664,8 +692,9 @@ class NativeMemoryIntelligence:
         # the turn carries the kind of its most telling sentence ("No, our system was
         # updated. We now use /shrinkage." is a correction as a whole)
         turn_kind = most_salient(label.kind for label in labels)
+        standing = any(_standing(label) for label in labels)
         out.extend(
-            turn.model_copy(update={"statement_kind": turn_kind})
+            turn.model_copy(update={"statement_kind": turn_kind, "standing_instruction": standing})
             for turn in self._verbatim(text, observation, ctx, evidence)
             if normalized_hash(turn.content) not in held
         )
@@ -886,7 +915,9 @@ class NativeMemoryIntelligence:
         cand = self._candidate(s, ctx, evidence, kind=kind, label=label)
         if cand is None:
             return None
-        return cand.model_copy(update={"statement_kind": label.kind})
+        return cand.model_copy(
+            update={"statement_kind": label.kind, "standing_instruction": _standing(label)}
+        )
 
     def _candidate(
         self,
@@ -974,6 +1005,19 @@ class NativeMemoryIntelligence:
                 importance=0.8,
                 confidence=0.85,
                 category="attribute",
+                **common,
+            )
+        if (m := _FOCUS.search(s)) and not is_question(s):
+            return MemoryCandidate(
+                content=s,
+                memory_type=MemoryType.PREFERENCE,
+                lifetime=Lifetime.LONG_TERM,
+                subject=user,
+                predicate="cares_about",
+                object=_clean_object(next(g for g in m.groups() if g))[:300],
+                importance=0.7,
+                confidence=0.8,
+                category="preference",
                 **common,
             )
         if m := _PREFERENCE.search(s):

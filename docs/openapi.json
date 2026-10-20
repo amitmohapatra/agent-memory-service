@@ -1281,6 +1281,18 @@
             "description": "who or what it is about",
             "title": "Subject"
           },
+          "superseded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "true for an earlier value: a later statement of the same user replaced it (served after every current item, as what it was)",
+            "title": "Superseded"
+          },
           "text": {
             "description": "The memory, as the model reads it.",
             "title": "Text",
@@ -1538,6 +1550,21 @@
             ],
             "description": "Knowledge-graph facts that bear on it.",
             "title": "Graph Facts"
+          },
+          "history": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ContextMemory"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Earlier values: what a later statement of the same user replaced, oldest first, each marked superseded. Never current; kept apart from memories.",
+            "title": "History"
           },
           "knowledge": {
             "anyOf": [
@@ -2084,7 +2111,7 @@
           },
           "status": {
             "$ref": "#/components/schemas/DocumentStatus",
-            "description": "STAGED: accepted, parse job queued or running; READY: parsed and indexed, retrievable; FAILED: the parse job gave up, see last_error."
+            "description": "STAGED: accepted, its parse or index job queued or running; READY: parsed and indexed, retrievable; FAILED: the parse or index job gave up, see last_error."
           },
           "tenant_id": {
             "description": "The tenant the record belongs to.",
@@ -7827,7 +7854,7 @@
         "additionalProperties": false,
         "properties": {
           "block": {
-            "description": "user, agent, workspace or <level>.<name>",
+            "description": "user, agent, workspace or <level>.<name>; standing_rules and preferences are the user's rules and preferences that apply to this request",
             "title": "Block",
             "type": "string"
           },

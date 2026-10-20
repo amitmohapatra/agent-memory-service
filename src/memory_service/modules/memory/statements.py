@@ -112,6 +112,10 @@ _AFTER: Final = rf"(?![{_LETTER}])"
 _AR_MARKS: Final = "[\u064b-\u0652\u0670\u0640]*"
 _AR_LETTER: Final = re.compile("([\u0621-\u064a])")
 _AR_STRIP: Final = re.compile("[\u064b-\u0652\u0670\u0640]")
+#: Hindi is written with and without the nukta (ख़त्म / खत्म, ज़रूरी / जरूरी): a consonant of a
+#: pack entry matches either way. Outside a character class only.
+_HI_NUKTA: Final = "\u093c"
+_HI_CONSONANT: Final = re.compile(r"(\[[^\]]*\])|([\u0915-\u0939])")
 #: A clause ends at punctuation - but not at the comma inside "1,000" or the colon in "9:30".
 _CLAUSE_BREAK: Final = re.compile(r"(?<!\d)[,:]|[,:](?!\d)|[;\u2014\u2013()\u060c\u061b]|\s-\s")
 _QUESTION_MARK: Final = re.compile("[?\uff1f\u061f][\"'\u201d\u2019)\\]]*\\s*$")
@@ -130,13 +134,16 @@ def normalise(sentence: str) -> str:
 def _compile_term(
     term: str, lang: str, clitics: Sequence[str], enclitics: Sequence[str] = ()
 ) -> str:
-    """One pack entry as a pattern: a space matches any whitespace; in Arabic every letter
-    may carry a diacritic and the word may carry a clitic the pack names before it (wa-,
-    al-, bi-) and an enclitic after it (-ni "me", -i of the feminine imperative, -u of the
-    plural)."""
+    """One pack entry as a pattern: a space matches any whitespace; in Hindi a consonant
+    matches with or without its nukta; in Arabic every letter may carry a diacritic and the
+    word may carry a clitic the pack names before it (wa-, al-, bi-) and an enclitic after it
+    (-ni "me", -i of the feminine imperative, -u of the plural)."""
     term = term.replace(" ", r"\s+")
     if lang == "ar":
         term = _AR_LETTER.sub(lambda m: m.group(1) + _AR_MARKS, _AR_STRIP.sub("", term))
+    if lang == "hi":
+        term = unicodedata.normalize("NFKC", term).replace(_HI_NUKTA, "")
+        term = _HI_CONSONANT.sub(lambda m: m.group(1) or m.group(2) + _HI_NUKTA + "?", term)
     prefix = f"(?:{'|'.join(sorted(clitics, key=len, reverse=True))})?" if clitics else ""
     suffix = f"(?:{'|'.join(sorted(enclitics, key=len, reverse=True))})?" if enclitics else ""
     return f"{prefix}(?:{term}){suffix}"
@@ -453,6 +460,11 @@ class _Reader:
         only = self.cues["only"].at(s, pos)
         if only is not None:
             pos = self._past_fillers(s, only.end(), end)
+        # a standing word opening the clause after another one ("From now on, always answer
+        # ..."): an instruction when what follows it is one
+        again = self.cues["standing"].at(s, pos)
+        if again is not None and self._imperative(s, again.end(), end) == "strong":
+            return "strong"
         if at is not None and at <= pos:
             return "strong"
         if self.cues["request"].at(s, pos) or self.cues["imperative"].at(s, pos):

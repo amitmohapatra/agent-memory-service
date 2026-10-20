@@ -94,6 +94,18 @@ memory_decisions_total = Counter(
     ["decision"],
     registry=REGISTRY,
 )
+memory_replacements_total = Counter(
+    "memory_replacements_total",
+    "A user's earlier statements their new one replaced across conversations, by grade "
+    "(EARLIER: still current, ranked last and labelled; SUPERSEDED: closed)",
+    ["grade"],
+    registry=REGISTRY,
+)
+memory_replacement_skipped_total = Counter(
+    "memory_replacement_skipped_total",
+    "User statements stored without the cross-conversation comparison (the NLI head busy)",
+    registry=REGISTRY,
+)
 llm_requests_total = Counter(
     "memory_llm_requests_total",
     "LLM gateway calls by use and outcome (ok, http_<status>, exhausted, circuit_open, ...)",
@@ -196,6 +208,24 @@ jobs_failed_terminal = Gauge(
 worker_last_sample_timestamp = Gauge(
     "memory_worker_last_sample_timestamp_seconds",
     "When the worker last read its queue gauges; a stale value is a stuck worker",
+    registry=REGISTRY,
+)
+worker_db_retries_total = Counter(
+    "memory_worker_db_retries_total",
+    "Queue operations the worker retried because the database could not do them (no "
+    "connection free in its pool, a full disk, a server going away), by operation",
+    ["operation"],
+    registry=REGISTRY,
+)
+worker_db_unavailable_seconds = Gauge(
+    "memory_worker_db_unavailable_seconds",
+    "How long the worker's database has been out of reach, while it retries (0 once it "
+    "answers again); the worker exits non-zero at TASKS.worker_db_outage_seconds",
+    registry=REGISTRY,
+)
+log_lines_dropped_total = Counter(
+    "memory_log_lines_dropped_total",
+    "Log lines that could not be written (stdout gone, its disk full); the process goes on",
     registry=REGISTRY,
 )
 worker_running_jobs = Gauge(

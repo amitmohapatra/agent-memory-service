@@ -451,3 +451,41 @@ async def test_moving_somewhere_is_where_the_user_lives(native, text: str, place
 )
 async def test_moving_to_something_that_is_not_a_place_is_not_a_home(native, text: str) -> None:
     assert not [c for c in await _extract(native, text) if c.predicate == "lives_in"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I care about high-ROS styles with short WOS.",
+        "From now on, permanently prefer weekly summaries.",
+        "Mir ist eine kurze Lieferzeit wichtig.",
+        "Me importan los estilos con ROS alto.",
+        "يهمني المخزون المنخفض.",
+        "मुझे कम स्टॉक की परवाह है।",
+    ],
+)
+async def test_what_a_user_cares_about_is_a_lasting_preference(native, text):
+    found = [c for c in await native.extract(_obs(text), CTX) if c.category == "preference"]
+    assert found and found[0].lifetime is Lifetime.LONG_TERM
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I manage to sleep well.",
+        "Do I care about store 4779?",
+        # what one manages or simply prefers changes (a role, a choice): kept as the turn,
+        # which a later one replaces (ADR 0038); a lasting preference would never be replaced
+        "I manage store 4779.",
+        "Ich leite die Filiale 4779.",
+        "Dirijo la tienda 4779.",
+        "Prefiero las alertas por Slack y trabajo con la hora de Lisboa.",
+        "أدير المتجر 4779.",
+        "मैं स्टोर 4779 संभालता हूँ।",
+    ],
+)
+async def test_managing_preferring_and_a_question_are_no_lasting_preference(native, text):
+    found = await native.extract(_obs(text), CTX)
+    assert not [c for c in found if c.category == "preference" and c.predicate == "cares_about"]
+    if "?" not in text:
+        assert [c for c in found if c.category == "verbatim_turn"]

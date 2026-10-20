@@ -346,7 +346,7 @@ deterministic header (document, section path, page, entities, and for a footnote
 that cites it) prepended, while the original text is kept for display. The structural links between parts of one document — parent, next,
 footnote, cross-reference, definition — form the **Document Context Graph**, which is not the
 same thing as the knowledge graph of chapter 5. A document is `STAGED` until its parse job
-indexes it (`READY`) or gives up (`FAILED`).
+and the index job it chains have made it findable (`READY`), or the parse gives up (`FAILED`).
 
 ---
 

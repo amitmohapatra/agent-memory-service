@@ -601,3 +601,16 @@ def test_normalised_forms_questions_and_one_off_requests(
     text: str, kind: StatementKind | None
 ) -> None:
     assert _kind(text) is kind, text
+
+
+@pytest.mark.parametrize(
+    ("sentence", "kind"),
+    [
+        ("From now on, always answer stockout audits as a CSV.", StatementKind.RULE),
+        ("From now on, never create transfers when ATA is 0.", StatementKind.CONDITIONAL_RULE),
+        ("A partir de ahora, siempre responde con una tabla.", StatementKind.RULE),
+    ],
+)
+def test_a_second_standing_word_before_the_instruction_still_makes_a_rule(sentence, kind) -> None:
+    label = Lexicon.default().label(sentence)
+    assert label.kind is kind and label.decided and label.standing

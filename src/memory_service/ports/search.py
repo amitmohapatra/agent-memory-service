@@ -110,6 +110,9 @@ class SearchFilter(BaseModel):
     must: dict[str, str | int | bool] = Field(default_factory=dict)
     must_any: dict[str, list[str]] = Field(default_factory=dict)
     must_not: dict[str, str | int | bool] = Field(default_factory=dict)
+    #: at least one of these entries matches (each any of its list): one field or another
+    #: ("category" in the rule categories, or "statement_kind" a rule's)
+    should_any: dict[str, list[str]] = Field(default_factory=dict)
     #: field -> (from, to) instants, either bound open; a record without the field is out
     within: dict[str, tuple[datetime | None, datetime | None]] = Field(default_factory=dict)
 
@@ -179,6 +182,8 @@ PAYLOAD_FIELDS: tuple[str, ...] = (
     "current",
     "dated_mentions",
     "derived",
+    "earlier_value",
+    "replaced_by",
     "document_id",
     "kind",
     "memory_type",
