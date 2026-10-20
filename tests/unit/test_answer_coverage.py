@@ -235,3 +235,35 @@ def test_disarming_logging_in_and_mailing_ask_for_a_value(question: str) -> None
 def test_the_post_and_signing_up_ask_for_nothing() -> None:
     assert not asked("Did the mail come today?")
     assert not asked("Ich muss mich bei einem neuen Zahnarzt anmelden.")
+
+
+# ------------------------------------------------------------------ a code nothing names
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What is the DC stock and ATA for style ZZ421722?",
+        "Wie hoch sind Lagerbestand und ATA für Style ZZ421722?",
+        "¿Cuál es el stock en el centro y el ATA del estilo ZZ421722?",
+        "ما المخزون في مركز التوزيع وATA للموديل ZZ421722؟",  # noqa: RUF001
+        "स्टाइल ZZ421722 का DC स्टॉक और ATA क्या है?",
+    ],
+)
+def test_a_code_no_evidence_names_is_unanswered(question):
+    evidence = ["For style RT335327 these stores have zero on-hand: 1641, 4307, 4610."]
+    assert unanswered(question, evidence) == "no evidence names zz421722"
+
+
+@pytest.mark.parametrize(
+    ("question", "item"),
+    [
+        ("What is the reorder point for PX-90?", "The reorder point for PX90 is 120 units."),
+        ("What is the reorder point for px90?", "Reorder point for PX-90: 120 units."),
+        ("Who covers site SITE-9154 now?", "Hiro Abernathy now covers site SITE-9154."),
+        ("What happened in 2023?", "We opened the Leeds store."),  # a year is no code
+        ("Is B2 open?", "Aisle B2 is open."),  # too short to be a code
+    ],
+)
+def test_a_code_the_evidence_names_however_written_is_answered(question, item):
+    assert unanswered(question, [item]) is None

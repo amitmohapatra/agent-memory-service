@@ -334,6 +334,34 @@ def unanswered(
     months each item of ``evidence`` is dated in (0 = January), by position; optional."""
     if not evidence:
         return None
-    return _value_gap(question, evidence, detect_language(question)) or _month_gap(
-        question, evidence, dated
+    return (
+        _unknown_code(question, evidence)
+        or _value_gap(question, evidence, detect_language(question))
+        or _month_gap(question, evidence, dated)
     )
+
+
+#: a code: letters and digits in one token of at least this many characters ("ZZ421722",
+#: "SITE-9154", "PX-90"); a word or a bare number is no code
+CODE_MIN = 4
+_CODE = re.compile(r"(?<![\w-])(?=[\w-]*[A-Za-z])(?=[\w-]*\d)[A-Za-z0-9][\w-]*[A-Za-z0-9](?![\w-])")
+
+
+def _code_form(token: str) -> str:
+    return re.sub(r"[^0-9a-z]", "", token.lower())
+
+
+def _unknown_code(question: str, evidence: Sequence[str]) -> str | None:
+    """A code the question names that no item of the evidence names, however written
+    ("PX-90", "PX90", "px 90"): the evidence is about something else (ADR 0041)."""
+    codes = {
+        _code_form(m.group())
+        for m in _CODE.finditer(question)
+        if len(_code_form(m.group())) >= CODE_MIN
+    }
+    if not codes:
+        return None
+    said = " ".join(_code_form(t) for t in evidence for t in re.split(r"\s+", t))
+    flat = _code_form(" ".join(evidence))
+    missing = sorted(c for c in codes if c not in flat and c not in said)
+    return f"no evidence names {', '.join(missing)}" if missing else None
