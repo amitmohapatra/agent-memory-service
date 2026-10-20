@@ -1129,3 +1129,25 @@ def test_two_statements_say_the_same_of_what_they_share(new, old, same):
     from memory_service.modules.memory.replacement import says_the_same_of_it
 
     assert says_the_same_of_it(new, old) is same
+
+
+@pytest.mark.parametrize(
+    "old",
+    ["Store 6474 belongs to Region G10.", "The buyer for Region G10 is Catalina Mbeki."],
+)
+def test_a_label_before_a_code_ties_no_two_statements(old):
+    """ "Region" labels L60 and G10, it names nothing both are about: an update about Region
+    L60 is apart from statements about Region G10."""
+    from memory_service.modules.memory.replacement import anchors, relate
+
+    new = "Update: Amara Uchenna has replaced Thea Cervantes as the buyer for Region L60."
+    assert relate(anchors(new, "en"), anchors(old, "en"), new, old).apart
+
+
+def test_the_same_labelled_code_still_ties_them():
+    from memory_service.modules.memory.replacement import anchors, relate
+
+    new = "Update: Amara Uchenna has replaced Thea Cervantes as the buyer for Region L60."
+    old = "The buyer for Region L60 is Thea Cervantes."
+    relation = relate(anchors(new, "en"), anchors(old, "en"), new, old)
+    assert relation.anchored and not relation.apart

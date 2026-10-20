@@ -528,11 +528,21 @@ class Relation:
         return self.shared_name or self.shared_id or self.shared_slot
 
 
+def _code_labels(text: str) -> set[str]:
+    """The words right before a code or a number in ``text``, lower-cased."""
+    return {m.group(1).lower() for m in re.finditer(r"(\S+)\s+(?=[\w-]*\d)", text)}
+
+
 def relate(new: Anchors, old: Anchors, new_text: str = "", old_text: str = "") -> Relation:
     shared_values = {v for _, v in new.ids} & {v for _, v in old.ids}
     clashing = _clashing(new, old)
     label_words = {w for label in clashing for w in label.lstrip("#").split()}
-    common = _common_names(new.names, old.names) | (new.bare & old.bare)
+    # a capitalised word right before a code labels it ("Region G10"), it names nothing:
+    # "Region" shared by "... Region L60" and "... Region G10" ties no two statements
+    labels = _code_labels(new_text) | _code_labels(old_text)
+    common = {
+        n for n in _common_names(new.names, old.names) | (new.bare & old.bare) if n not in labels
+    }
     rescuing = {n for n in common if not (set(n.split()) & label_words)}
     named = bool(common) and (not clashing or bool(rescuing))
     anchored = named or bool(shared_values)
@@ -628,7 +638,7 @@ def _said_of(text: str, lang: str | None) -> set[str]:
     }
     # the word right before a code or a number labels it ("المنطقة G10", "रीजन G10"), and a
     # code's own parts are its name ("DC-Foxhollow-E910")
-    named |= {m.group(1).lower() for m in re.finditer(r"(\S+)\s+(?=[\w-]*\d)", text)}
+    named |= _code_labels(text)
     named |= {
         part.lower() for code in re.findall(r"[\w-]*\d[\w-]*", text) for part in code.split("-")
     }
