@@ -7,6 +7,13 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Fixed
+- Accumulated memory (ADR 0041, decision 10): statements that are links of a chain about one
+  code ("Store 6474 belongs to Region G10" / "Region G10 is replenished from ...") no longer
+  replace one another; a rule restated with a new code is stored, listed once and ranked
+  newest; "Only list ..." and its translations are standing rules; a question about a code no
+  evidence names is INSUFFICIENT; the backfill retires the graph facts of what it replaced.
+
 ### Added
 - Memory that is never cleared reads right (ADR 0041). Of a user's statements of the slot a
   question about now asks for, the newest is current and the older ones are history, in five
