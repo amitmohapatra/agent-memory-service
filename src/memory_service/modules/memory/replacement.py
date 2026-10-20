@@ -657,21 +657,19 @@ def _slot_relation(
 
 
 def _links(new: CanonicalMemory, old: CanonicalMemory) -> bool:
-    """Two links of a chain, not two values of one thing: they say nothing alike of what they
-    share ("Store 6474 belongs to Region G10" / "Region G10 is replenished from
-    DC-Foxhollow-E910") - unless a finished state follows an ongoing one ("I'm reading Dune"
-    / "I finished Dune"), or the newer one says the subject both lead with changed."""
-    if says_the_same_of_it(new.content, old.content, new.lang):
+    """Two links of a chain, not two values of one thing: two plain facts that say nothing
+    alike of what they share ("Store 6474 belongs to Region G10" / "Region G10 is
+    replenished from DC-Foxhollow-E910"; "Region K41 wird aus ... beliefert" / "Der
+    Einkäufer für Region K41 ist ..."). A statement that says something changed ("Hiro now
+    covers site 9154 instead of Valentina", "Korrektur: ... nimm stattdessen ...") and a
+    finished state after an ongoing one are always compared."""
+    if says_a_change(new) or finished_after_ongoing(new.content, old.content):
         return False
-    if finished_after_ongoing(new.content, old.content):
-        return False
-    # one subject, and the newer statement says it changed ("Forklift #4 is in the shop" /
-    # "... is back in service"); two facts about one subject are two links ("Region K41 is
-    # replenished from DC-Harbor-T318" / "The buyer for Region K41 is Lena Ortiz")
-    return not (says_a_change(new) and leads_with_shared(new, old) and leads_with_shared(old, new))
+    return not says_the_same_of_it(new.content, old.content)
 
 
 _CHANGE_CUES = (
+    "correction_start",
     "correction",
     "correction_weak",
     "replacement",
@@ -701,7 +699,7 @@ def says_a_change(memory: CanonicalMemory) -> bool:
     )
 
 
-def says_the_same_of_it(new_text: str, old_text: str, lang: str | None = None) -> bool:
+def says_the_same_of_it(new_text: str, old_text: str) -> bool:
     """Two statements about one named thing say the same of it: they share a word besides
     what they name ("The buyer for Region L60 is Thea" / "Amara has replaced Thea as the
     buyer for Region L60"), or one of them says nothing besides it."""
