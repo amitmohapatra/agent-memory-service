@@ -183,7 +183,9 @@ make backfill BACKFILL_ARGS="--state /var/lib/memory/backfill.json --reindex-all
   earlier value (history) or is superseded, exactly as if it had been said after the upgrade.
   Then every memory of that user is indexed again (an upsert of the same ids, with the new
   payload) and its graph enrichment runs again, as the write path's index job does, so the
-  graph facts of a memory now replaced are retired with it; `--reindex-all` rebuilds the
+  graph facts of a memory now replaced are retired with it, and the user's `user` profile
+  block is composed again from what is current (the block an earlier build composed listed
+  what this one reads as replaced); `--reindex-all` rebuilds the
   whole index afterwards (`tools.reindex`).
 * **Each statement is read again first, as the write path reads it** (`read_again`), so
   it is compared and served as a fresh store's would be:

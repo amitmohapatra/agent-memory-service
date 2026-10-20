@@ -315,6 +315,15 @@ async def _index_again(
             await graph.enrich_memories(tenant, chunk)
 
 
+async def _compose_again(container: Any, tenant: str, user_id: str) -> None:
+    """The user's ``user`` profile block composed again, as the write path's profile job
+    composes it: the block an earlier build composed lists what this one now reads as
+    replaced, or a rule restated with a new value twice."""
+    profile = container.services.get("profile")
+    if profile is not None:
+        await profile.refresh_user(tenant, user_id)
+
+
 async def _replace(
     uow: Any, replacement: Any, ctx: MemoryExecutionContext, said: list[Any], report: Any
 ) -> list[CanonicalMemory]:
@@ -338,7 +347,7 @@ async def backfill_user(
 ) -> None:
     """One user: every message of theirs through the replacement, oldest first, then their
     memories indexed and their graph enrichment run again (which retires the graph facts of
-    the memories now replaced)."""
+    the memories now replaced), and their ``user`` profile block composed again."""
     from memory_service.modules.memory.pipeline import bump_memory_revisions
     from memory_service.modules.memory.statements import StatementLabeller
 
@@ -374,6 +383,7 @@ async def backfill_user(
         if n % batch == 0:
             checkpoint.progress(tenant, principal, said[0].temporal.observed_at.isoformat())
     await _index_again(container, tenant, sorted(touched), report)
+    await _compose_again(container, tenant, user_id)
     checkpoint.finish(tenant, principal)
     report.users += 1
 

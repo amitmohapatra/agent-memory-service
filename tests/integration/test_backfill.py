@@ -239,3 +239,26 @@ def test_an_empty_store_exits_0_without_loading_a_model(monkeypatch, tmp_path, c
     assert module.main() == 0
     report = json.loads(capsys.readouterr().out)
     assert report["users"] == 0 and report["skipped_users"] == 0 and not report["failures"]
+
+
+async def test_the_user_block_is_composed_again(container, uow_factory):
+    """The ``user`` block an earlier build composed is composed again from what is current
+    after the replacement."""
+    _old_build(container)
+    for text in SAID:
+        await _say(container, uow_factory, _chat("u1"), text)
+    _this_build(container)
+    profile = container.services["profile"]
+    refreshed: list[tuple[str, str]] = []
+    real = profile.refresh_user
+
+    async def recording(tenant_id, user_id):
+        refreshed.append((tenant_id, user_id))
+        return await real(tenant_id, user_id)
+
+    profile.refresh_user = recording
+    try:
+        await backfill(container, user="u1")
+    finally:
+        profile.refresh_user = real
+    assert refreshed == [("acme", "u1")]
