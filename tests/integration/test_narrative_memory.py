@@ -37,7 +37,13 @@ async def test_narrative_units_are_indexed_scoped_replay_safe_and_forgettable(
         assert len(await _memories(uow_factory, U1, container)) == len(memories)
         engine = container.services["retrieval"]
         result = await engine.retrieve(U1, "Who postponed the dashboard?", kinds=("memory",))
-        selected = next(c for c in result.candidates if c.record_id == dashboard.memory_id)
+        # one statement, one document (ADR 0041): the unit may ride as a form of its turn
+        assert any(
+            dashboard.memory_id in (c.record_id, *c.payload.get("duplicates", ()))
+            for c in result.candidates
+        )
+        selected = (await engine.retrieve(U1, f"show {dashboard.memory_id}")).candidates[0]
+        assert selected.record_id == dashboard.memory_id
         assert candidate_to_item(selected).evidence == dashboard.evidence
         assert dashboard.evidence[0].source_id == ack.observation_id
         assert (await engine.retrieve(U2, f"show {dashboard.memory_id}")).candidates == []

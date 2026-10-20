@@ -54,8 +54,9 @@ now read.
 4. **The current value of a slot** (`slots.latest_values`). The question says what the slot
    is: the things it names (identifiers, names) and the words it asks with. Of the current
    statements that name every one of those things, share an asked word (one beside what the
-   question names; most of them for a slot that names nothing, "Who is my regional
-   merchandise manager?") and hold a value of their own, the newest is current and every older
+   question names; every one for a slot that names nothing, "Who is my regional
+   merchandise manager?") and hold a value of their own, and say the slot the same way (half
+   of the shorter one's words, values aside: `SAME_FRAME`), the newest is current and every older
    one whose values differ is an earlier value of it: history section, never the answer. Not
    for a past-tense question unless it asks for the latest ("What was the last PO I
    raised?"), and, for a slot naming nothing, only for a question about one thing. Beside it
@@ -71,8 +72,8 @@ now read.
    vectors, beside the similarity scoring. Rules are the rule and instruction categories, any
    memory the labeller read as a rule or correction, and any statement giving an instruction
    it says is for every time that a no-model labeller left undecided (`standing_instruction`).
-   A statement applies at cosine 0.4 or one shared content word or code; a later rule on the same subject (half of the shorter one's words)
-   supersedes an earlier one; what was said in the same turn as an applying preference comes
+   A statement applies at cosine 0.4 or one shared content word or code; a later rule on the
+   same subject (half of the shorter one's words, codes, numbers and names aside) supersedes an earlier one; what was said in the same turn as an applying preference comes
    with it; an earlier value never applies. They come back as two profile sections,
    `standing_rules` and `preferences` (at most 6 and 4 lines), in any conversation, and are
    kept when the whole profile does not fit the pinned share.
@@ -81,8 +82,9 @@ now read.
    or simply prefers ("I manage store X", "Prefiero las alertas por X") is not: it is one value
    of a slot that changes, a lasting preference is never replaced (ADR 0038 compares
    statements), and read as one it kept every earlier store and channel current
-   (stress_accumulated `preference` fell 8 points below the candidate); the turn keeps it; "From now on, always answer ..." (a standing word opening the clause after
-   another one) is a rule when what follows is an instruction.
+   (stress_accumulated `preference` fell 8 points below the candidate); the turn keeps it.
+   "From now on, always answer ..." (a standing word opening the clause after another one) is
+   a rule when what follows is an instruction.
 8. **Upgrading a store an earlier build wrote** (`tools.backfill`, `make backfill`, documented
    in `docs/deploy/database.md`). For every user, their statements message by message in event
    time through the write path's replacement, then their memories indexed again; live-safe,
@@ -121,11 +123,12 @@ All on the capability eval's dev split, replaying the bundles a no-LLM run recor
 
 | constant | value | where it came from |
 |---|---|---|
-| `standing.RULE_SIMILARITY`, `PREFERENCE_SIMILARITY` | 0.4 | capability dev split: primary-space cosines of rules/preferences to their own vs other scenarios' dev questions (own p50 0.29, others' p99 0.35) |
+| `standing.RULE_SIMILARITY`, `PREFERENCE_SIMILARITY` | 0.4 | capability dev split: primary-space cosines of rules/preferences to their own vs other scenarios' dev questions (own p50 0.29, others' p99 0.35); ±20%: 0.32 applies to 73.4% own / 16.2% others', 0.48 to 68.6% / 14.9% |
 | `standing.SHARED_STEMS` | 1 | same dev data: one shared word applies a statement to 69.5% of its own questions, 14.9% of others'; two: 49% / 3.9% |
 | `standing.SAME_SUBJECT` | 0.5 | half of the shorter rule's words: a structural choice, not fitted |
 | `standing.RULES_MAX` / `PREFERENCES_MAX` / `SEARCH_K` | 6 / 4 / 24 | bounds on the section's size and the round trip, not fitted |
-| `slots` anchorless share | 0.6 of the asked words (at least 2) | structural ("most of them"), not fitted |
+| `slots` anchorless share | every asked word | structural (a word left out may be the thing asked), not fitted |
+| `slots.SAME_FRAME` | 0.5 | half of the shorter statement's words, values aside: structural, not fitted |
 | `slots._shares` affix length | 4 characters | structural (a stem inside a longer word), not fitted |
 | `engine.SECOND_HOP_BRIDGES` / `_K` / `_ADDED` | 5 / 8 / 2 | bounds (one hop, a small k), not fitted |
 

@@ -75,8 +75,13 @@ async def test_observation_becomes_memories_and_is_recallable(container, uow_fac
     assert any("Europe/Berlin" in c.text for c in res.candidates)
     from memory_service.modules.context.builder import candidate_to_item
 
-    retrieved = next(c for c in res.candidates if c.record_id == tz.memory_id)
-    assert candidate_to_item(retrieved).evidence == tz.evidence
+    # one statement, one document (ADR 0041): the reading may ride as a form of its turn
+    retrieved = next(
+        c for c in res.candidates if tz.memory_id in (c.record_id, *c.payload.get("duplicates", ()))
+    )
+    assert {e.source_id for e in candidate_to_item(retrieved).evidence} == {
+        e.source_id for e in tz.evidence
+    }
     # exact identifier lookup by memory id, with visibility enforced
     exact = await engine.retrieve(U1, f"show {tz.memory_id}")
     assert exact.candidates[0].record_id == tz.memory_id  # the exact hit leads

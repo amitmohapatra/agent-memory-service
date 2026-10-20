@@ -42,7 +42,7 @@ async def test_a_list_comes_back_whole(container, uow_factory, lang, size):
     said, asked = LIST[lang]
     await _say(container, uow_factory, _chat(), said.format(", ".join(codes)))
     rendered = (await _context(container, _chat(), asked)).render()
-    assert all(code in rendered for code in codes)
+    assert not [code for code in codes if code not in rendered], rendered
 
 
 # ------------------------------------------------------------------ a correction in a new chat
