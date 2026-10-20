@@ -239,31 +239,42 @@ async def read_again(
       build reads no rule in becomes a fact.
     """
     from memory_service.modules.memory.native import split_sentences, standing_instruction
-    from memory_service.modules.memory.statements import RULE_KINDS, most_salient
 
     meta = memory.system_metadata
-    stored = meta.get("statement_kind")
-    if not stored:
+    if not meta.get("statement_kind"):
         return None
     sentences = split_sentences(memory.content) or [memory.content]
     lexical = [labeller.lexicon.label(s) for s in sentences]
     fixed = dict(meta)
     if relabel:
-        possible = {x.kind for x in lexical} | {
-            x.maybe for x in lexical if not x.decided and x.maybe is not None
-        }
-        if stored not in {k.value for k in possible if k is not None}:
-            kind = most_salient(label.kind for label in await labeller.label(sentences))
-            if kind is not None and kind.value != stored:
-                fixed["statement_kind"] = kind.value
-                if meta.get("category") == "rule" and kind not in RULE_KINDS:
-                    fixed["category"] = "fact"
-                    fixed.pop("standing_instruction", None)
+        fixed |= await _kind_again(meta, sentences, lexical, labeller)
+        if fixed.get("category") != "rule" and meta.get("category") == "rule":
+            fixed.pop("standing_instruction", None)
     if any(standing_instruction(x) for x in lexical):
         fixed["standing_instruction"] = "yes"
     if fixed == meta:
         return None
     return memory.model_copy(update={"system_metadata": fixed})
+
+
+async def _kind_again(
+    meta: dict[str, Any], sentences: list[str], lexical: list[Any], labeller: Any
+) -> dict[str, Any]:
+    """The labels to change when this build's labeller cannot give the stored kind (none of
+    the lexicon's kinds, nor a kind it leaves to the head): the labeller's own reading, and a
+    rule reading it reads no rule in is a fact."""
+    from memory_service.modules.memory.statements import RULE_KINDS, most_salient
+
+    possible = {x.kind for x in lexical} | {x.maybe for x in lexical if not x.decided}
+    if meta.get("statement_kind") in {k.value for k in possible if k is not None}:
+        return {}
+    kind = most_salient(label.kind for label in await labeller.label(sentences))
+    if kind is None or kind.value == meta.get("statement_kind"):
+        return {}
+    out: dict[str, Any] = {"statement_kind": kind.value}
+    if meta.get("category") == "rule" and kind not in RULE_KINDS:
+        out["category"] = "fact"
+    return out
 
 
 async def _relabel(
@@ -304,6 +315,17 @@ async def _index_again(
             await graph.enrich_memories(tenant, chunk)
 
 
+async def _replace(
+    uow: Any, replacement: Any, ctx: MemoryExecutionContext, said: list[Any], report: Any
+) -> list[CanonicalMemory]:
+    """One message's statements through the write path's replacement: what it changed."""
+    if not said:
+        return []
+    outcome = await replacement.run(uow, ctx, said, now=datetime.now(UTC))
+    report.replaced += len(outcome.changed)
+    return list(outcome.changed)
+
+
 async def backfill_user(
     container: Any,
     tenant: str,
@@ -322,8 +344,9 @@ async def backfill_user(
 
     pipeline = container.services["observation_pipeline"]
     replacement = pipeline.replacement
-    replacing = replacement is not None and replacement.enabled
-    relabel = without_a_model(container)
+    replacing = bool(replacement is not None and replacement.enabled)
+    # the kinds only with the head that decides them, as on the write path
+    relabel = replacing and without_a_model(container)
     # the write path's labeller (the lexicon, and the NLI head for what it leaves open)
     labeller = getattr(pipeline.provider, "labeller", None) or StatementLabeller()
     user_id = principal.removeprefix("user:")
@@ -339,16 +362,13 @@ async def backfill_user(
                 for m in await uow.memories.get_many(tenant, [m.memory_id for m in said])
                 if m.temporal.status is TemporalStatus.CURRENT and m.deleted_at is None
             ]
-            read = await _relabel(uow, current, report, labeller, relabel=relabel and replacing)
+            read = await _relabel(uow, current, report, labeller, relabel=relabel)
             changed = [m for m, before in zip(read, current, strict=True) if m is not before]
+            if replacing:
+                changed += await _replace(uow, replacement, ctx, read, report)
+            touched |= {m.memory_id for m in changed}
             if changed:
                 await bump_memory_revisions(uow, changed)
-            if read and replacement is not None and replacing:
-                outcome = await replacement.run(uow, ctx, read, now=datetime.now(UTC))
-                if outcome.changed:
-                    report.replaced += len(outcome.changed)
-                    touched |= {m.memory_id for m in outcome.changed}
-                    await bump_memory_revisions(uow, outcome.changed)
             await uow.commit()
         report.messages += 1
         if n % batch == 0:
