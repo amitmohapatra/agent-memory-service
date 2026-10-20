@@ -618,7 +618,14 @@ def _said_of(text: str, lang: str | None) -> set[str]:
     lang = lang or detect_language(text)
     found = anchors(text, lang)
     named = {w for label, value in found.ids for w in (*label.lstrip("#").split(), value)}
-    named |= {w for name in found.names for w in name.split()}
+    named |= {
+        w
+        for name in found.names
+        # German capitalises its nouns: a capitalised word names a thing only when marked as
+        # a name ("Mein Vermieter ist ..." says "Vermieter" of what it names)
+        if lang != "de" or any(_marked(word) for word in name.split())
+        for w in name.split()
+    }
     # the word right before a code or a number labels it ("المنطقة G10", "रीजन G10"), and a
     # code's own parts are its name ("DC-Foxhollow-E910")
     named |= {m.group(1).lower() for m in re.finditer(r"(\S+)\s+(?=[\w-]*\d)", text)}
@@ -688,10 +695,12 @@ def _lexicon() -> Any:
 
 
 def says_a_change(memory: CanonicalMemory) -> bool:
-    """The statement says something changed: its label (CORRECTION, LIFECYCLE, STATUS), no
-    label at all, or a word the lexicon reads as one ("ended", "is back", "now")."""
+    """The statement may say something changed: any label but FACT (a correction, a change
+    of state, a rule that replaces a way of doing), no label at all, or, labelled a fact, a
+    word the lexicon reads as a change ("ended", "is back", "now", "instead of")."""
     kind = statement_kind_of(memory.system_metadata)
-    if kind is None or kind in CHANGE_KINDS:
+    if kind is not StatementKind.FACT:
+        # a change, a rule ("We dropped X; Y handles it from now on"), or no label at all
         return True
     reader = _lexicon().reader(memory.content)
     return any(
