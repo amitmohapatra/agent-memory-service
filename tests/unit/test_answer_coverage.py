@@ -269,6 +269,45 @@ def test_a_code_the_evidence_names_however_written_is_answered(question, item):
     assert unanswered(question, [item]) is None
 
 
+@pytest.mark.parametrize(
+    ("question", "rule"),
+    [
+        (
+            "Write the service report for WO-4120.",
+            "Every service report I ask for must end with a parts-used list and a signature line.",
+        ),
+        (
+            "Schreib den Servicebericht für WO-4120.",
+            "Jeder Servicebericht, um den ich bitte, endet mit einer Liste der verbauten Teile.",
+        ),
+        (
+            "¿Qué debo volver a pedir para CN-330?",
+            "Cuando pida una recomendación de pedido, redondea a cajas completas.",
+        ),
+        (
+            "ما هو الانكماش الأسبوع الماضي في HB-77؟",  # noqa: RUF001
+            "أبلغ دائمًا عن الانكماش بالوحدات وبالقيمة.",
+        ),
+        (
+            "KB-2291 को trd-01 पर इस हफ़्ते कब लगाएँ?",
+            "ट्रेडिंग सर्वर पर 09:00 से 11:00 के बीच कभी रखरखाव मत रखो।",
+        ),
+    ],
+)
+def test_a_code_of_a_kind_the_store_holds_none_of_is_a_value_the_user_supplies(question, rule):
+    # a request that names a work order, SKU or patch the rule applies to: no refusal
+    assert unanswered(question, [rule]) is None
+
+
+def test_a_code_of_another_kind_than_those_found_is_no_unknown_thing():
+    question = "Die Pumpen in Riverside nehmen nicht den SK-12-Satz, oder? Welchen dann?"
+    evidence = [
+        "Die Station Riverside betreibt zwei PX-400-Pumpen.",
+        "Pumpenmodell PX-400 braucht bei jedem Service den Dichtungssatz SK-19.",
+    ]
+    assert unanswered(question, evidence) is None
+
+
 def test_a_code_found_but_not_shown_is_a_miss_not_an_unknown_thing():
     question = "Who is the dispatcher for site SITE-7786?"
     shown = ["The technician for site SITE-2860 is Zeno Borisova."]

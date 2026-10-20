@@ -682,7 +682,21 @@ def _links(new: CanonicalMemory, old: CanonicalMemory) -> bool:
     finished state after an ongoing one are always compared."""
     if says_a_change(new) or finished_after_ongoing(new.content, old.content):
         return False
+    if not _names_its_own(old, new):
+        # the older names nothing the newer does not: the newer says what became of it
+        # ("Users log IT tickets in Zendesk" / "We moved the help desk from Zendesk to
+        # Freshservice"), not the next link of a chain
+        return False
     return not says_the_same_of_it(new.content, old.content)
+
+
+def _names_its_own(old: CanonicalMemory, new: CanonicalMemory) -> bool:
+    """``old`` names a thing (a name or a code) that ``new`` does not name."""
+    mine = anchors(old.content, old.lang or None)
+    theirs = anchors(new.content, new.lang or None)
+    own = {n for n in mine.names if not _common_names(frozenset({n}), theirs.names)}
+    own |= {v for _, v in mine.ids} - {v for _, v in theirs.ids}
+    return bool(own - _code_labels(old.content))
 
 
 _CHANGE_CUES = (
