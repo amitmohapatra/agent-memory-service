@@ -5,7 +5,8 @@
   words it asks with: every other item is decided by those cheap parts, as ``read`` decides it.
 * ``coverage._unknown_code`` answers as it did when it also read every word's code form.
 * The standing rules and preferences are read from the moment the retrieval has the query's
-  vectors, under the ranking, not after it.
+  vectors, under the ranking, not after it; and every payload field their searches filter on
+  is indexed in the store, so a search does not read each point's payload to test it.
 """
 
 from __future__ import annotations
@@ -170,3 +171,36 @@ async def test_the_standing_rules_are_read_under_the_ranking(monkeypatch):
     assert engine.standing_started_during_retrieve
     # once, on the vectors the result carries
     assert engine.standing_calls == [engine.vectors]  # type: ignore[attr-defined]
+
+
+async def test_every_field_the_standing_searches_filter_on_is_indexed():
+    from types import SimpleNamespace
+
+    from memory_service.adapters.search.qdrant_store import _PAYLOAD_INDEXES
+    from memory_service.domain.script import Script
+    from memory_service.modules.context import standing
+    from memory_service.modules.retrieval.engine import QueryVectors
+    from memory_service.ports.search import SearchFilter, SparseVector, VectorName
+
+    filters: list[SearchFilter] = []
+
+    async def search(collection: str, *args: Any, **kwargs: Any) -> list:
+        filters.append(next(a for a in args if isinstance(a, SearchFilter)))
+        return []
+
+    engine = SimpleNamespace(
+        memory_scope=lambda visibility: ("memories", SearchFilter(tenant_id="acme")),
+        indexer=SimpleNamespace(
+            spaces=SimpleNamespace(primary_space=SimpleNamespace(name=VectorName.DENSE_ML))
+        ),
+        store=SimpleNamespace(search_dense=search, search_sparse=search),
+    )
+    vectors = QueryVectors(
+        dense={VectorName.DENSE_ML: [0.1] * 4},
+        sparse=SparseVector(indices=[1], values=[1.0]),
+        script=Script.LATIN,
+    )
+    await standing.standing_blocks(engine, "Always send reports as a table", None, vectors)
+    fields = {key for flt in filters for key in (*flt.must_any, *flt.should_any)}
+    assert len(filters) == 4 and fields
+    assert fields <= set(_PAYLOAD_INDEXES)
