@@ -33,6 +33,7 @@ x-common-env: &common-env
 
 services:
   postgres:
+    restart: unless-stopped
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: memory
@@ -48,6 +49,7 @@ services:
       retries: 20
 
   pgbouncer:
+    restart: unless-stopped
     image: edoburu/pgbouncer:v1.25.2-p0
     # the mounted pgbouncer.ini is used as is (the image only generates one when absent)
     volumes:
@@ -64,6 +66,7 @@ services:
       retries: 20
 
   qdrant:
+    restart: unless-stopped
     image: qdrant/qdrant:v1.18.2
     ports: ["6333:6333", "6334:6334"]
     volumes: ["qdrant:/qdrant/storage"]
@@ -74,6 +77,7 @@ services:
       retries: 20
 
   dragonfly:
+    restart: unless-stopped
     image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.1
     command: ["--maxmemory=1gb", "--proactor_threads=2"]
     ulimits:
@@ -97,6 +101,7 @@ services:
         condition: service_completed_successfully
 
   openfga:
+    restart: unless-stopped
     image: openfga/openfga:v1.18.1
     command: run
     environment:
@@ -164,6 +169,7 @@ services:
         condition: service_healthy
 
   memory-api:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: deploy/Dockerfile
@@ -236,7 +242,7 @@ services:
     stop_grace_period: 45s
     # The worker exits non-zero when its database stays out of reach past
     # TASKS.worker_db_outage_seconds or a pool stops on its own: start a fresh one
-    restart: on-failure
+    restart: unless-stopped
     # Prometheus series (queue depth, oldest-job lag, outbox backlog, failed jobs)
     ports: ["9464:9464"]
     healthcheck:
