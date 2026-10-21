@@ -213,7 +213,7 @@ flowchart TB
     PQ["periodic.profile_queries: due standing questions"]
     PL["periodic.prefetch_learn: what pulls teach the push"]
     TL["periodic.tools_learn: procedures and procedural edges"]
-    TR["periodic.tools_refresh: re-index tool records embedded from older text<br/>(once per worker process per 6 h)"]
+    TR["periodic.tools_refresh: index catalog entries with no record or older text<br/>(once per worker process per 6 h)"]
   end
   subgraph hourly[Hourly]
     EX["periodic.memory_expire (:29)"]

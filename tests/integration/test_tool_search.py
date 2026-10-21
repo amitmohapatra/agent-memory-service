@@ -10,6 +10,7 @@ import pytest
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.ids import content_hash
 from memory_service.domain.tools import ToolDescriptor
+from memory_service.ports.search import SearchFilter
 
 pytestmark = pytest.mark.integration
 
@@ -97,9 +98,9 @@ async def test_records_an_earlier_build_wrote_are_reindexed_on_the_periodic_refr
         for record in records:
             record.payload.pop("text_hash")
         await container.search.upsert(records)
-    # an entry a recorded call created, never indexed: left to its own job
+    # an entry a recorded call created: never indexed by a job of its own
     async with uow_factory() as uow:
-        bare = await uow.tools.ensure("acme", "chargeback-bare")
+        bare = await uow.tools.ensure("acme", "crm-bare-entry")
         await uow.commit()
     ids = [e.tool_id for e in entries]
 
@@ -113,7 +114,9 @@ async def test_records_an_earlier_build_wrote_are_reindexed_on_the_periodic_refr
 
     await container.tasks.run_periodic("periodic.tools_refresh")
 
-    assert await stored() == {e.tool_id: content_hash(e.index_text()) for e in entries}
+    assert await stored() == {e.tool_id: content_hash(e.index_text()) for e in [*entries, bare]}, (
+        "the stale records re-embedded, the missing one indexed"
+    )
     assert (await _search(container))[0] == ("billing-adjust", 1.0)
     # once per process: the next tick reads nothing; forced, nothing is stale any more
     assert await index.refresh() == 0
@@ -136,3 +139,64 @@ async def test_a_refresh_after_a_text_change_reindexes_only_what_changed(
     monkeypatch.setattr(ToolDescriptor, "index_text", next_build)
     assert await index.refresh(force=True) == 1
     assert await index.refresh(force=True) == 0
+
+
+async def test_a_tool_first_seen_in_a_recorded_call_becomes_searchable(
+    container, uow_factory
+) -> None:
+    """``record`` creates a bare catalog entry for a tool nobody published; the refresh
+    indexes it like any entry without a record, so tool search can offer it by name."""
+    index = container.services["tool_index"]
+    ctx = MemoryExecutionContext(tenant_id="acme", user_id="u1", workspace_id="ws1")
+    async with uow_factory() as uow:
+        await container.services["tool_memory"].record(
+            uow, ctx, tool="ledger-chargeback_open", args={"case": "C-1"}
+        )
+        await uow.commit()
+    await container.tasks.drain()
+    assert await _search(container) == []
+
+    assert await index.refresh(force=True) == 1
+    assert [name for name, _ in await _search(container)] == ["ledger-chargeback_open"]
+    assert await index.refresh(force=True) == 0
+
+
+async def test_the_reindex_tool_rebuilds_tool_search_after_a_model_change(
+    container, uow_factory
+) -> None:
+    """A model change is a new, empty collection: ``memory-reindex`` fills it from the
+    catalog, every tenant's or one tenant's only."""
+    from memory_service.tools.reindex import rebuild_search_index
+
+    await _publish(container, uow_factory)
+    globex = MemoryExecutionContext(tenant_id="globex", user_id="u9")
+    async with uow_factory() as uow:
+        await container.services["tool_memory"].put_catalog(
+            uow,
+            globex,
+            [(ToolDescriptor(tenant_id="", name="globex-tool"), frozenset({"name"}))],
+        )
+        await uow.commit()
+    await container.tasks.drain()
+    index = container.services["tool_index"]
+
+    async def counts() -> dict[str, int]:
+        return {
+            t: len(await container.search.record_ids(index.collection, SearchFilter(tenant_id=t)))
+            for t in ("acme", "globex")
+        }
+
+    assert await counts() == {"acme": 2, "globex": 1}
+
+    await container.search.drop_collection(index.collection)  # the new model's: empty
+    index.forget_collections()
+    assert await _search(container) == []
+
+    acme = await rebuild_search_index(container, tenant_id="acme")
+    assert acme.ok and acme.tools == 2
+    assert await counts() == {"acme": 2, "globex": 0}, "never another tenant's"
+    assert (await _search(container))[0] == ("billing-adjust", 1.0)
+
+    everyone = await rebuild_search_index(container)
+    assert everyone.ok and everyone.tools == 3
+    assert await counts() == {"acme": 2, "globex": 1}

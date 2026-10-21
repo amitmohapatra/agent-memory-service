@@ -48,6 +48,8 @@ make reindex-image REINDEX_ARGS="--drop"
 `--drop` deletes the current collections first, so search answers from an empty index until
 the rebuild finishes. Run it in a maintenance window, or against a second deployment that
 writes the same fingerprint's collections first and then switches. `reindex` reports every
-document and memory that failed, and none is skipped silently. Replication factor and write
+document and memory that failed, and none is skipped silently. The tool-search collection is
+not dropped: the rebuild re-embeds every catalog entry into it in place (`tools` in the
+report), and `--prune` keeps it as live. Replication factor and write
 consistency can be raised on a live collection through Qdrant's own collection-update and
 shard-replication APIs. This service never does that on its own.

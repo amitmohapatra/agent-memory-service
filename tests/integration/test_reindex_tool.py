@@ -133,7 +133,15 @@ async def test_a_whole_store_rebuild_restores_every_record_after_a_drop(
     assert seeded["acme_memory"] in await _ids(container, memories, "acme")
     assert seeded["globex_memory"] in await _ids(container, memories, "globex")
     as_dict = report.as_dict()
-    assert set(as_dict) == {"documents", "chunks", "memories", "episodes", "dropped", "failures"}
+    assert set(as_dict) == {
+        "documents",
+        "chunks",
+        "memories",
+        "episodes",
+        "tools",
+        "dropped",
+        "failures",
+    }
     assert as_dict["documents"] == 1
 
 
@@ -268,7 +276,8 @@ def test_the_command_rebuilds_and_prints_its_report(
     assert reindex.main() == 0
     last = capsys.readouterr().out.splitlines()[-1]
     assert last == (
-        "{'documents': 0, 'chunks': 0, 'memories': 0, 'episodes': 0, 'dropped': [], 'failures': []}"
+        "{'documents': 0, 'chunks': 0, 'memories': 0, 'episodes': 0, 'tools': 0, 'dropped': [], "
+        "'failures': []}"
     )
     assert len(built) == 1
 
