@@ -21,6 +21,8 @@ beside the thresholds (the pre-B1 values of cells B1 lowered): reported, never f
   does not is reported, and gated once recorded;
 * context p95 may not rise more than 10 % over the baseline's; a latency measured on a
   loaded machine fails the latency check;
+* an ``llm`` run whose model calls did not reach the model (the gateway or the model was
+  down: ``meta.llm_calls``) measured the model-free path: it fails and is never a baseline;
 * a run on another dataset (the questions, the scorer, the generator) or another selection
   is refused: re-record in the same change, where a reviewer sees both numbers. Any byte
   change to scoring.py, generate.py or the language data resets every threshold; a change
@@ -41,6 +43,12 @@ from benchmark.common import RESULTS
 GATE = RESULTS / "capability_gate.json"
 #: context p95 may rise at most this much over the recorded baseline
 LATENCY_RISE_MAX = 0.10
+#: the gateway outcomes (``memory_llm_requests_total``) in which the model answered; an
+#: ``invalid_output`` or ``empty_output`` is the model's own answer and part of what is measured
+ANSWERED = frozenset({"ok", "invalid_output", "empty_output"})
+#: the share of an llm run's model calls that may fail to reach the model (``exhausted``,
+#: ``circuit_open``, an HTTP error): above it the run measured the model-free path
+UNREACHED_MAX = 0.01
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -64,6 +72,30 @@ def key_of(run: Mapping[str, Any]) -> str:
     return str(mode) if sample in (None, mode) else f"{mode}/{sample}"
 
 
+def model_unreached(run: Mapping[str, Any]) -> str | None:
+    """Why an ``llm`` run did not measure the model, from the calls its processes counted
+    (``meta.llm_calls``), or None. A gateway or model that went down mid-run (a model server
+    killed for memory, say) turns every use into its fallback: such a run is the model-free
+    path under the llm label. Runs that predate the count are not judged."""
+    calls = (run.get("meta") or {}).get("llm_calls")
+    if run.get("mode") != "llm" or calls is None:
+        return None
+    outcomes: dict[str, float] = {}
+    for proc in calls.values():
+        for outcome, n in (proc.get("requests") or {}).items():
+            outcomes[outcome] = outcomes.get(outcome, 0.0) + n
+    total = sum(outcomes.values())
+    unreached = {k: int(v) for k, v in sorted(outcomes.items()) if k not in ANSWERED and v}
+    if not total:
+        return "the run made no model call: it measured the model-free path"
+    if sum(unreached.values()) > UNREACHED_MAX * total:
+        return (
+            f"{sum(unreached.values())} of {int(total)} model calls never reached the model "
+            f"({unreached}): the run measured the model-free path"
+        )
+    return None
+
+
 def _subset_of(run: Mapping[str, Any]) -> str | None:
     """A set gated against another baseline's matching cells (``"gate": "subset_of"`` in
     ``_modes.json``): the scale set is held to the full run's scale cells."""
@@ -81,6 +113,7 @@ def baseline_of(run: Mapping[str, Any], source: str) -> dict[str, Any]:
     return {
         "source": source,
         "run_date": run["meta"].get("run_date"),
+        "identities": run["meta"].get("identities"),
         "selection": run["meta"].get("selection"),
         "sample": run["meta"].get("sample"),
         "scale": run["meta"].get("scale"),
@@ -104,6 +137,8 @@ def _merge(base: dict[str, Any], other: dict[str, Any]) -> dict[str, Any]:
     run-to-run noise without a blanket tolerance (it has been one cell in 192, by 0.03)."""
     if base["selection"] != other["selection"]:
         raise SystemExit(f"repeat runs of {base['source']} differ in selection")
+    if base.get("identities") != other.get("identities"):
+        raise SystemExit(f"repeat runs of {base['source']} named their users differently")
     cells = dict(base["cells"])
     noisy: dict[str, list[float]] = {k: list(v) for k, v in base.get("noisy", {}).items()}
     for key, cell in other["cells"].items():
@@ -192,6 +227,8 @@ def record(paths: Sequence[Path], gate: Path = GATE) -> dict[str, Any]:
             raise SystemExit(f"{path}: the run measured nothing; it is not a baseline")
         if (run.get("meta") or {}).get("answer_errors"):
             raise SystemExit(f"{path}: model calls failed in this run; it is not a baseline")
+        if why := model_unreached(run):
+            raise SystemExit(f"{path}: {why}; it is not a baseline")
     shas = {r["dataset"]["sha256"] for _, r in runs}
     if len(shas) != 1:
         raise SystemExit(f"runs measured on different datasets: {sorted(shas)}")
@@ -209,6 +246,11 @@ def record(paths: Sequence[Path], gate: Path = GATE) -> dict[str, Any]:
     regressions: list[str] = []
     for key, b in fresh.items():
         prev = previous.get(key) or {}
+        if prev.get("identities") != b.get("identities"):
+            # runs that named their users another way wrote other text to the index (the
+            # subject is indexed with each memory): their values measured something else and
+            # carry nothing - neither a threshold nor a noise range
+            prev = {}
         prev_cells = prev.get("cells") or {}
         noisy = {k: v for k, v in (prev.get("noisy") or {}).items() if carries(k)}
         for k, (lo, hi) in (b.get("noisy") or {}).items():
@@ -271,6 +313,14 @@ def check(
             "dataset changed since the baseline was recorded "
             f"({run['dataset']['sha256'][:12]} != {str(gate.get('dataset_sha256'))[:12]}): "
             "re-record the baseline in the same change"
+        ]
+    if why := model_unreached(run):
+        return [why]
+    if run["meta"].get("identities") != base.get("identities"):
+        return [
+            "the run named its users another way than the baseline's runs "
+            f"({run['meta'].get('identities')} != {base.get('identities')}): what it wrote is "
+            "not what the baseline measured; re-record the baseline in the same change"
         ]
     if not subset and run["meta"].get("selection") != base.get("selection"):
         return [
@@ -407,6 +457,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"CAPABILITY GATE {path}: {verdict}")
         for c in new_cells(run, gate):
             print(f"  + new cell (not gated until recorded): {c}")
+        base = (gate.get("baselines") or {}).get(_subset_of(run) or key_of(run)) or {}
+        if base.get("run_date") and run["meta"].get("run_date") != base["run_date"]:
+            print(
+                f"  note: run date {run['meta'].get('run_date')}, the baseline's "
+                f"{base['run_date']}: each memory is indexed with its date, so cells near a "
+                "floor may move with it (--run-date pins it within a day of the clock)"
+            )
         for t in below_targets(run, gate):
             print(f"  ~ below target (not failed): {t}")
         for f in failures:

@@ -9,6 +9,7 @@ model, the harness - are ``make eval-capabilities`` targets, not tests.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import subprocess
 from collections import Counter
@@ -388,6 +389,150 @@ def test_the_gate_is_a_ratchet_with_report_only_targets(tmp_path: Path) -> None:
     assert gate.below_targets(_run(0.9, 100.0), with_target) == []
 
 
+def test_thresholds_do_not_carry_across_identity_schemes(tmp_path: Path) -> None:
+    """Runs that named their users another way indexed other text: their values are another
+    measurement. A run is refused against them; a re-record starts the thresholds afresh."""
+    cell = "context/new_session/single_fact_recall/en"
+    g = tmp_path / "gate.json"
+
+    def named(acc: float, scheme: str | None) -> Path:
+        run = _run(acc, 100.0)
+        run["meta"]["identities"] = scheme
+        path = tmp_path / f"run_{acc}_{(scheme or 'old').replace('/', '_')}.json"
+        path.write_text(json.dumps(run))
+        return path
+
+    old = gate.record([named(0.8, None)], g)
+    current = _run(0.6, 100.0)
+    current["meta"]["identities"] = "scenario-language/v1"
+    refused = gate.check(current, old)
+    assert refused and "named its users another way" in refused[0]
+    # not "a regression" from 0.8: the 0.8 was measured on other index text
+    fresh = gate.record([named(0.6, "scenario-language/v1")], g)
+    assert fresh["baselines"]["nollm"]["cells"][cell]["accuracy"] == 0.6
+    assert fresh["baselines"]["nollm"]["identities"] == "scenario-language/v1"
+    assert gate.check(current, fresh) == []
+    # and from then on it ratchets as before
+    with pytest.raises(SystemExit, match="would record a regression"):
+        gate.record([named(0.4, "scenario-language/v1")], g)
+    with pytest.raises(SystemExit, match="named their users differently"):
+        gate.record([named(0.6, "scenario-language/v1"), named(0.6, None)], tmp_path / "g2.json")
+
+
+def test_eval_identities_are_a_function_of_scenario_and_language() -> None:
+    """Two runs write the same users and threads: nothing drawn per run reaches the store."""
+    from datetime import UTC, datetime
+
+    from benchmark.capabilities.runner import identity, parse, run_day, thread_name
+
+    a = identity("recall-retail-hazmat-code", "en")
+    assert a == identity("recall-retail-hazmat-code", "en")
+    assert a != identity("recall-retail-hazmat-code", "de")
+    assert a != identity("recall-retail-dock-door", "en")
+    # opaque, like a production user id: the subject is indexed with every memory's text
+    assert a.startswith("ce") and "hazmat" not in a and len(a) == 14
+    assert thread_name(a, "s1") == f"{a}-s1"
+    users = {identity(s.id, lang) for s in DATASET.scenarios for lang in LANGUAGES}
+    assert len(users) == len(DATASET.scenarios) * len(LANGUAGES)
+    settings, _ = parse(["--mode", "nollm", "--run-date", "2026-10-12"])
+    assert run_day(settings) == datetime(2026, 10, 12, tzinfo=UTC)
+    settings.run_date = None
+    assert run_day(settings).date() == datetime.now(UTC).date()
+
+
+def test_a_run_counts_the_model_calls_its_uses_made() -> None:
+    from benchmark.capabilities.runner import llm_counts
+
+    text = "\n".join(
+        [
+            "# HELP memory_llm_assist_total Module-level LLM assistance",
+            'memory_llm_assist_total{outcome="used",use="relation_extraction"} 40.0',
+            'memory_llm_assist_total{outcome="fallback",use="relation_extraction"} 2.0',
+            'memory_llm_assist_total{outcome="used",use="summaries"} 5.0',
+            'memory_llm_assist_total_created{outcome="used",use="summaries"} 1.7e9',
+            'memory_llm_requests_total{outcome="ok",use="summaries"} 5.0',
+            'memory_llm_requests_total{outcome="circuit_open",use="relation_extraction"} 1.0',
+        ]
+    )
+    counts = llm_counts(text)
+    assert counts["assist"] == {"used": 45.0, "fallback": 2.0}
+    assert counts["assist_by_use"]["relation_extraction"] == {"used": 40.0, "fallback": 2.0}
+    assert counts["requests"] == {"ok": 5.0, "circuit_open": 1.0}
+    assert llm_counts("") == {"assist": {}, "assist_by_use": {}, "requests": {}}
+
+
+def test_an_llm_run_whose_model_was_unreachable_is_not_a_baseline(tmp_path: Path) -> None:
+    """The eval's model server killed mid-run (out of memory) turned every later use into its
+    fallback: the run measured the model-free path under the llm label."""
+
+    def llm(requests: dict[str, float] | None) -> dict:
+        run = _run(0.7, 100.0)
+        run["mode"] = run["meta"]["mode"] = "llm"
+        if requests is not None:
+            run["meta"]["llm_calls"] = {
+                "api": {"requests": {k: v for k, v in requests.items() if k == "circuit_open"}},
+                "worker": {"requests": {k: v for k, v in requests.items() if k != "circuit_open"}},
+            }
+        return run
+
+    healthy = tmp_path / "healthy.json"
+    # the model's own bad answers are measured, and one transient failure in 100 is tolerated
+    healthy.write_text(json.dumps(llm({"ok": 98.0, "invalid_output": 1.0, "exhausted": 1.0})))
+    recorded = gate.record([healthy], tmp_path / "gate.json")
+    assert gate.model_unreached(llm({"ok": 98.0, "invalid_output": 1.0, "exhausted": 1.0})) is None
+    assert gate.check(llm({"ok": 100.0}), recorded) == []
+    down = llm({"ok": 1499.0, "exhausted": 14.0, "circuit_open": 1120.0})
+    why = gate.model_unreached(down)
+    assert why and "1134 of 2633 model calls never reached the model" in why
+    assert gate.check(down, recorded) == [why]
+    assert "made no model call" in gate.check(llm({}), recorded)[0]
+    broken = tmp_path / "down.json"
+    broken.write_text(json.dumps(down))
+    with pytest.raises(SystemExit, match="never reached the model.*not a baseline"):
+        gate.record([healthy, broken], tmp_path / "gate2.json")
+    # not judged: another mode, or a run that predates the count
+    assert gate.model_unreached(_run(0.7, 100.0)) is None
+    assert gate.model_unreached(llm(None)) is None
+
+
+async def test_the_llm_stack_starts_the_service_with_the_eval_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the model call's timeout and the query expansion's deadline differ from the
+    shipped service, and only when set."""
+    import types
+
+    from benchmark.capabilities import stack_service
+
+    from memory_service.config.constants import LLM, RETRIEVAL
+
+    monkeypatch.delenv("CAPEVAL_LLM_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS", raising=False)
+    assert stack_service.overrides() is None
+    monkeypatch.setenv("CAPEVAL_LLM_TIMEOUT_SECONDS", "600")
+    assert stack_service.overrides().retrieval is None, "the shipped retrieval tuning"
+    monkeypatch.setenv("CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS", "60000")
+    tuned = stack_service.overrides()
+    assert tuned.llm.timeout_seconds == 600.0
+    assert dataclasses.replace(tuned.llm, timeout_seconds=LLM.timeout_seconds) == LLM
+    # past the setting's production bound (5 s): a CPU model needs seconds per expansion
+    assert tuned.retrieval.query_expansion_timeout_ms == 60000
+    assert tuned.retrieval.model_copy(update={"query_expansion_timeout_ms": 250}) == RETRIEVAL
+
+    seen: list[object] = []
+
+    async def build_container(
+        settings: object, version: str, *, overrides: object = None, **kw: object
+    ) -> str:
+        seen.append(overrides)
+        return "container"
+
+    module = types.SimpleNamespace(build_container=build_container)
+    stack_service._with_overrides(module, tuned)  # type: ignore[arg-type]
+    assert await module.build_container(None, "v", role="worker") == "container"
+    assert seen == [tuned]
+
+
 def test_noise_is_allowed_once(tmp_path: Path) -> None:
     """llm_core implicit_personalization/hi measured 0.5 and 0.667: the threshold is the lower,
     0.5, and its noise is already spent - 0.333 must not pass."""
@@ -507,6 +652,36 @@ def test_the_isolated_stack_refuses_logs_inside_another_runs_work(tmp_path: Path
         assert own.returncode == 2 and "inside this run's WORK" in own.stderr, own.stderr
     finally:
         lock.unlink(missing_ok=True)
+
+
+def test_the_isolated_stack_waits_for_room_in_its_memory_cgroup(tmp_path: Path) -> None:
+    """The host had 6 GB available while the container's 14 GB cgroup had 2 GB left: the
+    encoders were started on the host's number and the cgroup's OOM killer took the API (and
+    the model server beside it). The room is the smaller of the two."""
+    root = tmp_path / "cgroup"
+    mib = 1 << 20
+    for line in Path("/proc/self/cgroup").read_text().splitlines():
+        hid, controllers, rel = line.split(":", 2)
+        if controllers == "memory" or hid == "0":
+            d = root / ("memory" if controllers == "memory" else "") / rel.lstrip("/")
+            d.mkdir(parents=True, exist_ok=True)
+            # v1 and v2 names side by side: the script reads whichever the level has
+            (d / "memory.limit_in_bytes").write_text(f"{14_000 * mib}\n")
+            # held: anon + shmem + mapped files; the rest of the page cache is reclaimable
+            (d / "memory.stat").write_text(
+                f"total_cache {3_000 * mib}\ntotal_rss {11_880 * mib}\n"
+                f"total_shmem {500 * mib}\ntotal_mapped_file {1_500 * mib}\n"
+                f"total_inactive_file {900 * mib}\n"
+            )
+    done = _stack(
+        tmp_path,
+        CAPEVAL_CGROUP_ROOT=str(root),
+        CAPEVAL_MIN_MEM_MB="1000",
+        CAPEVAL_MEM_WAITS="0",
+        CAPEVAL_REDIS_DB="14",  # not the default 15, which a real run may be using
+    )
+    assert done.returncode == 2 and "only 120 MB of memory available" in done.stderr, done.stderr
+    assert not (tmp_path / "ran").exists()
 
 
 def test_the_isolated_stack_refuses_a_port_that_already_answers(tmp_path: Path) -> None:
@@ -739,6 +914,12 @@ async def test_the_runner_drives_the_service_through_the_sdk(app, running) -> No
             )
         ).one()
     assert tuple(live) == (0, 0), f"left behind: {live[0]} memories, {live[1]} threads"
+    # users are named from scenario and language, so a second run must not share the store
+    from benchmark.capabilities.runner import IDENTITIES
+
+    assert payload["meta"]["identities"] == IDENTITIES
+    with pytest.raises(SystemExit, match="must not share a store"):
+        await run(settings, client_factory=factory)
 
 
 def test_a_run_purges_unless_kept_or_reused() -> None:

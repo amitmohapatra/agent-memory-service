@@ -171,6 +171,11 @@ async def test_a_slow_expansion_is_abandoned_at_its_deadline(parts) -> None:
     import asyncio
     import time
 
+    from memory_service.observability.metrics import llm_assist_total
+
+    def fallbacks() -> float:
+        return llm_assist_total.labels("query_expansion", "fallback")._value.get()
+
     _, embedding, _ = parts
     with mocked_gateway([{"query_type": None, "terms": ["late"], "identifiers": []}]) as gw:
         engine = _engine(parts, gw.assist(uses=["query_expansion"]))
@@ -180,11 +185,14 @@ async def test_a_slow_expansion_is_abandoned_at_its_deadline(parts) -> None:
             await asyncio.sleep(5)
 
         engine._expand_query = slow  # type: ignore[method-assign]
+        before = fallbacks()
         started = time.perf_counter()
         res = await engine.retrieve(CTX, QUERY, kinds=("chunk",), visibility=VISIBILITY)
         elapsed = time.perf_counter() - started
     assert elapsed < 2, "the search waited for the model past its deadline"
     assert res.diagnostics["query_expansion_timeout"] is True
+    # the use fell back to the written query: counted as a fallback like any other
+    assert fallbacks() == before + 1
     assert "query_expansion" not in res.diagnostics
     assert embedding.queries == [QUERY], "the written query is encoded once, not twice"
     assert res.candidates

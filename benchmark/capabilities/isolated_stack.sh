@@ -33,7 +33,16 @@
 # the stack. Teardown runs on any exit. The disk is recorded before and after.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# the harness checkout (this script's); the service runs from CAPEVAL_ROOT when set (another
+# branch measured with this harness), else from the harness checkout itself
+HARNESS="$(cd "$(dirname "$0")/../.." && pwd)"
+ROOT="$(realpath "${CAPEVAL_ROOT:-$HARNESS}")"
+# upgrade path (optional, CAPEVAL_UPGRADE_ROOT): when the command succeeds, stop the service,
+# migrate the SAME database to CAPEVAL_UPGRADE_ROOT's head, run CAPEVAL_UPGRADE_BACKFILL (a shell
+# command, run in the new checkout with the service's environment) if set, serve the same
+# database, Qdrant, Redis and OpenFGA from the new checkout, and run CAPEVAL_UPGRADE_CMD (a shell
+# command) against it - a deployed store upgraded in place
+UPGRADE_ROOT="${CAPEVAL_UPGRADE_ROOT:+$(realpath "$CAPEVAL_UPGRADE_ROOT")}"
 PY="${CAPEVAL_PY:-$ROOT/.venv/bin/python}"
 QDRANT_BIN="${QDRANT_BIN:-/var/tmp/qdrant}"
 OPENFGA_BIN="${OPENFGA_BIN:-/var/tmp/fga/openfga}"
@@ -56,6 +65,19 @@ log() { echo "[isolated-stack $(date +%T)] $*" >&2; }
 refuse() { log "refused: $*"; exit 2; }
 answers() { curl -s -m 2 -o /dev/null "http://127.0.0.1:$1/" 2>/dev/null; }
 psql_() { PGPASSWORD="$PGPASSWORD_" psql -h "$PGHOST_" -U "$PGUSER_" -d postgres -Atq "$@"; }
+# redis_ DB CMD: one argument-free command (dbsize, flushdb) against local Redis, through
+# redis-cli where it is installed, else the protocol over bash's /dev/tcp (CI's runner talks
+# to a Redis service container and has no redis-cli)
+redis_() {
+  if command -v redis-cli >/dev/null 2>&1; then redis-cli -n "$1" "$2"; return; fi
+  local reply
+  exec 9<>/dev/tcp/127.0.0.1/6379 || return 1
+  printf '*2\r\n$6\r\nSELECT\r\n$%d\r\n%s\r\n*1\r\n$%d\r\n%s\r\n' "${#1}" "$1" "${#2}" "$2" >&9
+  read -r reply <&9 && [ "${reply%$'\r'}" = +OK ] && read -r reply <&9
+  exec 9<&-
+  reply="${reply%$'\r'}"
+  case "$reply" in :*|+*) echo "${reply:1}" ;; *) return 1 ;; esac
+}
 
 # ------------------------------------------------------------------ refuse before creating
 [[ "$DB" =~ ^capeval[a-z0-9_]*$ ]] || refuse "database '$DB' does not match ^capeval"
@@ -103,7 +125,7 @@ disk() {
   echo "df_avail_mb=$(df -BM --output=avail / | tail -1 | tr -d ' M')"\
 " work_mb=$(du -sm "$WORK" 2>/dev/null | cut -f1 || echo 0)"\
 " db_exists=$(psql_ -c "select count(*) from pg_database where datname='$DB'" 2>/dev/null || echo ?)"\
-" redis_keys=$(redis-cli -n "$REDIS_DB" dbsize 2>/dev/null || echo ?)"
+" redis_keys=$(redis_ "$REDIS_DB" dbsize 2>/dev/null || echo ?)"
 }
 stop() {  # pid marker: SIGTERM, then SIGKILL if it has not exited (a worker draining a job
   # may never exit on its own, and would keep the stack's port for the next run)
@@ -118,7 +140,7 @@ ours() {  # pid, a marker its command line or its environment must still carry
   { tr '\0' ' ' < "/proc/$1/cmdline"; tr '\0' ' ' < "/proc/$1/environ" 2>/dev/null; } | grep -qF -- "$2"
 }
 note() { echo "$1=$2" >> "$MANIFEST"; }
-get() { grep -m1 "^$1=" "$MANIFEST" 2>/dev/null | cut -d= -f2- || true; }
+get() { grep "^$1=" "$MANIFEST" 2>/dev/null | tail -1 | cut -d= -f2- || true; }
 
 teardown() {
   local errexit=0
@@ -143,7 +165,7 @@ teardown() {
   local db rdb work
   db="$(get db_created)" rdb="$(get redis_db)" work="$(get work_created)"
   [[ "$db" =~ ^capeval ]] && psql_ -c "drop database if exists $db with (force)" 2>/dev/null
-  [ -n "$rdb" ] && redis-cli -n "$rdb" flushdb >/dev/null 2>&1
+  [ -n "$rdb" ] && redis_ "$rdb" flushdb >/dev/null 2>&1
   work="$(realpath -m "${work:-/nonexistent}")"
   if [[ "$work" == /var/tmp/capeval* ]] && [[ "$LOGS" == /var/tmp/capeval* ]]; then
     mkdir -p "$LOGS" && cp "$work"/*.log "$LOGS"/ 2>/dev/null
@@ -162,15 +184,44 @@ fi
 [ -e "$WORK" ] && refuse "$WORK exists but no manifest names it: not ours to remove"
 [ "$(psql_ -c "select count(*) from pg_database where datname='$DB'")" = 0 ] \
   || refuse "database $DB exists but no manifest names it: not ours to drop"
-[ "$(redis-cli -n "$REDIS_DB" dbsize)" = 0 ] || refuse "Redis db $REDIS_DB is not empty"
+[ "$(redis_ "$REDIS_DB" dbsize)" = 0 ] || refuse "Redis db $REDIS_DB is not empty"
 
 log "disk before: $(disk)"
+# Memory this script's processes may still take, in MB: the host's MemAvailable, or less when a
+# memory cgroup (v1 or v2, this one or an ancestor) caps them below the host - a container's
+# cgroup is often smaller than the machine, and its OOM killer acts on the cgroup's limit. A
+# level's room is its limit less what reclaim cannot give back: anonymous memory, shmem and
+# mapped files (the page cache beyond that is reclaimed before anything is killed).
+mem_avail_mb() {
+  local best root rel dir lim held h
+  best=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)
+  root=${CAPEVAL_CGROUP_ROOT:-/sys/fs/cgroup}
+  for rel in $(awk -F: '$2=="memory"{print "memory" $3} $1=="0"{print $3}' /proc/self/cgroup); do
+    dir=$root/${rel#/}
+    while [[ $dir == "$root"/* ]]; do
+      dir=${dir%/}
+      lim=$(cat "$dir/memory.limit_in_bytes" "$dir/memory.max" 2>/dev/null | head -1)
+      # v1 (hierarchical totals) or v2 names
+      held=$(awk '$1~/^(total_rss|total_shmem|total_mapped_file|anon|shmem|file_mapped)$/{n+=$2; f=1}
+        END{if (f) print n}' "$dir/memory.stat" 2>/dev/null)
+      # "max" (v2) and the near-2^63 v1 default mean no limit at this level
+      if [[ $lim =~ ^[0-9]+$ && $held =~ ^[0-9]+$ ]] && [ "${#lim}" -lt 19 ]; then
+        h=$(( (lim - held) / 1048576 ))
+        [ "$h" -lt "$best" ] && best=$h
+      fi
+      dir=$(dirname "$dir")
+    done
+  done
+  echo "$best"
+}
+
 # the API and the worker each load the encoders (about 2 GB apiece): wait, bounded, for room
-for _ in $(seq 1 60); do
-  avail=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)
+avail=$(mem_avail_mb)
+for _ in $(seq 1 "${CAPEVAL_MEM_WAITS:-60}"); do
   [ "$avail" -ge "${CAPEVAL_MIN_MEM_MB:-5000}" ] && break
   log "waiting for memory: ${avail} MB available"
   sleep 10
+  avail=$(mem_avail_mb)
 done
 [ "$avail" -ge "${CAPEVAL_MIN_MEM_MB:-5000}" ] \
   || refuse "only ${avail} MB of memory available: starting the service would invite the OOM killer"
@@ -216,46 +267,99 @@ ours "$(get qdrant_pid)" "$(get qdrant_marker)" || refuse "the Qdrant on :$QDRAN
 psql_ -c "create database $DB"
 note db_created "$DB"
 URL="postgresql+psycopg://$PGUSER_:$PGPASSWORD_@$PGHOST_:5432/$DB"
-SERVICE_ENV=(
-  PATH=/usr/bin:/bin HOME="$HOME" LANG=C.UTF-8 PYTHONPATH="$ROOT/src:$ROOT"
-  MEMORY__SERVICE__ENVIRONMENT=dev MEMORY__SERVICE__PORT="$API_PORT" MEMORY__SERVICE__WORKERS=1
-  MEMORY__SERVICE__LOG_JSON=false MEMORY__SERVICE__LOG_LEVEL=WARNING
-  MEMORY__AUTHENTICATION__TRUSTED_DEV_API_KEYS='["capeval-dev-key"]'
-  MEMORY__DATABASE__URL="$URL" MEMORY__DATABASE__DIRECT_URL="$URL"
-  MEMORY__CACHE__URL="redis://localhost:6379/$REDIS_DB"
-  MEMORY__BLOB__FILESYSTEM_ROOT="$WORK/blob" MEMORY__TASKS__METRICS_PORT="$METRICS_PORT"
-  MEMORY__SEARCH__QDRANT_URL="http://127.0.0.1:$QDRANT_HTTP"
-  MEMORY__SEARCH__QDRANT_GRPC_PORT="$QDRANT_GRPC"
-  MEMORY__AUTHORIZATION__OPENFGA_API_URL="http://127.0.0.1:$FGA_HTTP"
-)
-# the model gateway only when asked for (llm mode): its URL and key from the caller's env
+# the model gateway only when asked for (llm mode): its URL and key from the caller's env, and
+# a model-call timeout and a query-expansion deadline the gateway's model can meet
+# (benchmark/capabilities/stack_service.py: the 30 s and 250 ms constants are sized for a hosted
+# model; Granite 2B on this CPU writes ~8 tokens/s)
+ENTRY="from memory_service.__main__ import run_api; run_api()"
+WORKER_ENTRY="from memory_service.__main__ import run_worker; run_worker()"
 if [ "${CAPEVAL_GATEWAY:-0}" = 1 ]; then
-  SERVICE_ENV+=(BIFROST_URL="$BIFROST_URL" BIFROST_VIRTUAL_KEY="$BIFROST_VIRTUAL_KEY")
+  LLM_TIMEOUT="${CAPEVAL_LLM_TIMEOUT_SECONDS:-600}"
+  [[ "$LLM_TIMEOUT" =~ ^[0-9]+$ ]] || refuse "CAPEVAL_LLM_TIMEOUT_SECONDS '$LLM_TIMEOUT' is not a number"
+  EXPANSION_MS="${CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS:-60000}"
+  [[ "$EXPANSION_MS" =~ ^[0-9]+$ ]] || refuse "CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS '$EXPANSION_MS' is not a number"
+  ENTRY="from benchmark.capabilities.stack_service import main; main('api')"
+  WORKER_ENTRY="from benchmark.capabilities.stack_service import main; main('worker')"
+  export CAPEVAL_LLM_TIMEOUT_SECONDS="$LLM_TIMEOUT" CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS="$EXPANSION_MS"
 fi
-# migrations from WORK (no .env there), with the eval database named explicitly
-sed -e "s|^script_location = .*|script_location = $ROOT/migrations|" \
-    -e "s|^prepend_sys_path = .*|prepend_sys_path = $ROOT/src\nsqlalchemy.url = $URL|" \
-    "$ROOT/alembic.ini" > "$WORK/alembic.ini"
-(cd "$WORK" && env -i "${SERVICE_ENV[@]}" "$PY" -m alembic -c "$WORK/alembic.ini" upgrade head > "$WORK/migrate.log" 2>&1)
-(cd "$WORK" && env -i "${SERVICE_ENV[@]}" "$PY" -m memory_service.adapters.tasks.procrastinate_schema >> "$WORK/migrate.log" 2>&1) || true
+service_env() {  # root: the service's clean environment, serving that checkout's src/
+  SERVICE_ENV=(
+    PATH=/usr/bin:/bin HOME="$HOME" LANG=C.UTF-8 PYTHONPATH="$1/src:$1:$HARNESS"
+    MEMORY__SERVICE__ENVIRONMENT=dev MEMORY__SERVICE__PORT="$API_PORT" MEMORY__SERVICE__WORKERS=1
+    MEMORY__SERVICE__LOG_JSON=false MEMORY__SERVICE__LOG_LEVEL=WARNING
+    MEMORY__AUTHENTICATION__TRUSTED_DEV_API_KEYS='["capeval-dev-key"]'
+    MEMORY__DATABASE__URL="$URL" MEMORY__DATABASE__DIRECT_URL="$URL"
+    MEMORY__CACHE__URL="redis://localhost:6379/$REDIS_DB"
+    MEMORY__BLOB__FILESYSTEM_ROOT="$WORK/blob" MEMORY__TASKS__METRICS_PORT="$METRICS_PORT"
+    MEMORY__SEARCH__QDRANT_URL="http://127.0.0.1:$QDRANT_HTTP"
+    MEMORY__SEARCH__QDRANT_GRPC_PORT="$QDRANT_GRPC"
+    MEMORY__AUTHORIZATION__OPENFGA_API_URL="http://127.0.0.1:$FGA_HTTP"
+  )
+  if [ "${CAPEVAL_GATEWAY:-0}" = 1 ]; then
+    SERVICE_ENV+=(BIFROST_URL="$BIFROST_URL" BIFROST_VIRTUAL_KEY="$BIFROST_VIRTUAL_KEY"
+      CAPEVAL_LLM_TIMEOUT_SECONDS="$LLM_TIMEOUT" CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS="$EXPANSION_MS")
+    [ -n "${CAPEVAL_WORKER_CONCURRENCY:-}" ] && SERVICE_ENV+=(MEMORY__TASKS__WORKER_CONCURRENCY="$CAPEVAL_WORKER_CONCURRENCY")
+  fi
+  return 0
+}
+migrate() {  # root: the eval database to that checkout's head
+  local root=$1
+  service_env "$root"
+  # the service reads its frozen model set from ./models: the checkout's, through a link
+  ln -sfn "$root/models" "$WORK/models"
+  # migrations from WORK (no .env there), with the eval database named explicitly
+  sed -e "s|^script_location = .*|script_location = $root/migrations|" \
+      -e "s|^prepend_sys_path = .*|prepend_sys_path = $root/src\nsqlalchemy.url = $URL|" \
+      "$root/alembic.ini" > "$WORK/alembic.ini"
+  (cd "$WORK" && env -i "${SERVICE_ENV[@]}" "$PY" -m alembic -c "$WORK/alembic.ini" upgrade head >> "$WORK/migrate.log" 2>&1)
+  (cd "$WORK" && env -i "${SERVICE_ENV[@]}" "$PY" -m memory_service.adapters.tasks.procrastinate_schema >> "$WORK/migrate.log" 2>&1) || true
+}
+start_service() {  # root: that checkout's API and worker
+  local root=$1
+  service_env "$root"
+  (cd "$WORK" && exec env -i "${SERVICE_ENV[@]}" "$PY" -c "$ENTRY  # $API_MARK" >> "$WORK/api.log" 2>&1) &
+  note api_pid $!
+  (cd "$WORK" && exec env -i "${SERVICE_ENV[@]}" "$PY" -c "$WORKER_ENTRY  # $WORKER_MARK" >> "$WORK/worker.log" 2>&1) &
+  note worker_pid $!
+  wait_for "http://127.0.0.1:$API_PORT/health/ready" "$READY_SECONDS" "$(get api_pid)"
+  wait_for "http://127.0.0.1:$METRICS_PORT/metrics" "$READY_SECONDS" "$(get worker_pid)"
+  log "ready: memory on :$API_PORT ($root @ $(git -C "$root" rev-parse --short HEAD 2>/dev/null)), worker metrics on :$METRICS_PORT"
+}
 API_MARK="capeval-api-$API_PORT"
 WORKER_MARK="capeval-worker-$METRICS_PORT"
-(cd "$WORK" && exec env -i "${SERVICE_ENV[@]}" "$PY" -c "from memory_service.__main__ import run_api; run_api()  # $API_MARK" > "$WORK/api.log" 2>&1) &
-note api_pid $!
 note api_marker "$API_MARK"
-(cd "$WORK" && exec env -i "${SERVICE_ENV[@]}" "$PY" -c "from memory_service.__main__ import run_worker; run_worker()  # $WORKER_MARK" > "$WORK/worker.log" 2>&1) &
-note worker_pid $!
 note worker_marker "$WORKER_MARK"
-wait_for "http://127.0.0.1:$API_PORT/health/ready" "$READY_SECONDS" "$(get api_pid)"
-wait_for "http://127.0.0.1:$METRICS_PORT/metrics" "$READY_SECONDS" "$(get worker_pid)"
-log "ready: memory on :$API_PORT, worker metrics on :$METRICS_PORT"
+migrate "$ROOT"
+start_service "$ROOT"
 
 export MEMORY_URL="http://127.0.0.1:$API_PORT"
 export MEMORY_WORKER_METRICS_URL="http://127.0.0.1:$METRICS_PORT/metrics"
-export CAPEVAL_ADMIN_KEY=capeval-dev-key
+export CAPEVAL_ADMIN_KEY=capeval-dev-key CAPEVAL_ROOT="$ROOT"
 unset TRELLIS_ADMIN_KEY TRELLIS_API_KEY
 set +e
 "$@"
 rc=$?
 set -e
+if [ -n "$UPGRADE_ROOT" ] && [ "$rc" = 0 ]; then
+  log "upgrade: stopping the service of $ROOT, serving the same stores from $UPGRADE_ROOT"
+  stop "$(get worker_pid)" "$WORKER_MARK"
+  stop "$(get api_pid)" "$API_MARK"
+  migrate "$UPGRADE_ROOT"
+  if [ -n "${CAPEVAL_UPGRADE_BACKFILL:-}" ]; then
+    service_env "$UPGRADE_ROOT"
+    log "upgrade: backfill: $CAPEVAL_UPGRADE_BACKFILL"
+    set +e
+    (cd "$UPGRADE_ROOT" && env -i "${SERVICE_ENV[@]}" bash -c "$CAPEVAL_UPGRADE_BACKFILL") > "$WORK/backfill.log" 2>&1
+    brc=$?
+    set -e
+    log "upgrade: backfill rc=$brc"
+    [ "$brc" = 0 ] || exit "$brc"
+  fi
+  start_service "$UPGRADE_ROOT"
+  export CAPEVAL_ROOT="$UPGRADE_ROOT" CAPEVAL_UPGRADED_FROM="$ROOT"
+  set +e
+  bash -c "${CAPEVAL_UPGRADE_CMD:?CAPEVAL_UPGRADE_ROOT needs CAPEVAL_UPGRADE_CMD}"
+  rc=$?
+  set -e
+fi
 exit "$rc"

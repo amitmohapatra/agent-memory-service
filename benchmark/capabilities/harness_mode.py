@@ -17,12 +17,11 @@ The model on a CPU is slow, so this mode runs a named, deterministic sample
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import sys
 import time
-import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -36,15 +35,19 @@ from benchmark.capabilities.dataset import (
     select,
 )
 from benchmark.capabilities.runner import (
+    IDENTITIES,
     LoadSampler,
     Service,
     Settings,
     _revoke,
     _tenant,
     default_factory,
+    identity,
     owned_by,
     parse,
+    run_day,
     settle,
+    thread_name,
     write_scenario,
 )
 from benchmark.capabilities.scoring import items_from_answer, preview, score
@@ -99,12 +102,12 @@ async def run(settings: Settings, model: str) -> dict[str, Any]:
     scenarios = select(dataset, settings.selection)
     factory = default_factory(settings)
     token, policy = await _tenant(settings, factory)
-    today = datetime.now(UTC)
+    today = run_day(settings)
     client = MemoryClient(settings.url, api_key=token, timeout=settings.timeout)
     service = Service(client, settings.worker_metrics_url)
     work = [
-        (s, lang, f"ce{settings.run_id}-{i:03d}-{lang}")
-        for i, s in enumerate(scenarios)
+        (s, lang, identity(s.id, lang))
+        for s in scenarios
         for lang in languages_of(s, settings.selection)
     ]
     sem = asyncio.Semaphore(settings.write_concurrency)
@@ -191,6 +194,7 @@ async def run(settings: Settings, model: str) -> dict[str, Any]:
         "memory_url": settings.url,
         "run_id": settings.run_id,
         "run_date": today.date().isoformat(),
+        "identities": IDENTITIES,
         "selection": settings.selection.describe(),
         "sample": settings.sample,
         "scale": settings.scale,
@@ -223,7 +227,7 @@ async def run(settings: Settings, model: str) -> dict[str, Any]:
 
 async def _ask(agent: Any, w: Any, case: Case, settings: Settings) -> dict[str, Any]:
     expect = w.expects.get(case.query.id, case.query.expect)
-    thread = f"ce-{settings.run_id}-{w.user_id}-h-{uuid.uuid4().hex[:8]}"
+    thread = thread_name(w.user_id, f"h-{hashlib.sha1(case.key.encode()).hexdigest()[:10]}")
     t = time.perf_counter()
     error = None
     try:

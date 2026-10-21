@@ -126,6 +126,10 @@ SET ?= full
 CAPEVAL_SET = $(if $(filter full,$(SET)),,--sample $(SET))
 CAPEVAL_RESULT = benchmark/results/capabilities/$(MODE)$(if $(filter full,$(SET)),,_$(SET)).json
 CAPEVAL_ARGS ?=
+#: users are named by scenario and language, the same in every run, so a run on a shared stack
+#: needs a tenant no earlier run used (the runner refuses one that exists); the isolated stack
+#: is new each time and keeps the default capeval-<mode>
+CAPEVAL_TENANT ?= capeval-$(MODE)-$(shell date -u +%Y%m%d%H%M%S)
 #: every eval run takes the machine-wide heavy-job lock by default (HEAVY_LOCK; HEAVY= runs bare)
 HEAVY_LOCK ?= /var/tmp/heavy.lock
 HEAVY ?= flock -o $(HEAVY_LOCK)
@@ -133,9 +137,9 @@ HARNESS_PY ?= ../agent-harness/.venv/bin/python
 
 eval-capabilities: ## Capability eval against MEMORY_URL (MODE=nollm|llm|harness, SET=full|core|scale) -> benchmark/results/capabilities/
 	@case "$(MODE)" in \
-	  nollm) $(HEAVY) $(PY) python -m benchmark.capabilities.runner --mode nollm $(CAPEVAL_SET) $(CAPEVAL_ARGS) ;; \
-	  llm) $(HEAVY) $(PY) python -m benchmark.capabilities.runner --mode llm --sample llm $(CAPEVAL_ARGS) ;; \
-	  harness) $(HEAVY) $(HARNESS_PY) -m benchmark.capabilities.harness_mode --sample harness $(CAPEVAL_ARGS) ;; \
+	  nollm) $(HEAVY) $(PY) python -m benchmark.capabilities.runner --mode nollm $(CAPEVAL_SET) --tenant $(CAPEVAL_TENANT) $(CAPEVAL_ARGS) ;; \
+	  llm) $(HEAVY) $(PY) python -m benchmark.capabilities.runner --mode llm --sample llm --tenant $(CAPEVAL_TENANT) $(CAPEVAL_ARGS) ;; \
+	  harness) $(HEAVY) $(HARNESS_PY) -m benchmark.capabilities.harness_mode --sample harness --tenant $(CAPEVAL_TENANT) $(CAPEVAL_ARGS) ;; \
 	  *) echo "MODE must be nollm, llm or harness" >&2; exit 2 ;; \
 	esac
 
@@ -145,7 +149,7 @@ eval-capabilities-isolated: ## The capability eval on a store of its own, droppe
 
 eval-capabilities-scale: ## Opt-in ~1M-token tenant for capability 7 (--scale large, English)
 	$(HEAVY) $(PY) python -m benchmark.capabilities.runner --mode nollm --capabilities scale \
-	  --languages en --scale large --out benchmark/results/capabilities/scale_large.json $(CAPEVAL_ARGS)
+	  --languages en --scale large --tenant $(CAPEVAL_TENANT) --out benchmark/results/capabilities/scale_large.json $(CAPEVAL_ARGS)
 
 eval-capabilities-gate: ## Fail on any capability drop or a context p95 rise > 10% (MODE=, SET=core for a PR)
 	$(PY) python -m benchmark.capabilities.gate check $(CAPEVAL_RESULT) $(if $(RERUN),--rerun $(RERUN))

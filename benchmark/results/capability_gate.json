@@ -987,8 +987,8 @@
           "n": 100
         },
         "context/new_session/abstention/hi": {
-          "accuracy": 0.31,
-          "measured": 0.31,
+          "accuracy": 0.32,
+          "measured": 0.32,
           "n": 100
         },
         "context/new_session/abstention/mixed": {
@@ -1027,8 +1027,8 @@
           "n": 4
         },
         "context/new_session/forgetting_decay/ar": {
-          "accuracy": 0.46,
-          "measured": 0.46,
+          "accuracy": 0.44,
+          "measured": 0.44,
           "n": 100
         },
         "context/new_session/forgetting_decay/de": {
@@ -1042,8 +1042,8 @@
           "n": 100
         },
         "context/new_session/forgetting_decay/es": {
-          "accuracy": 0.48,
-          "measured": 0.48,
+          "accuracy": 0.49,
+          "measured": 0.49,
           "n": 100
         },
         "context/new_session/forgetting_decay/hi": {
@@ -1057,13 +1057,13 @@
           "n": 4
         },
         "context/new_session/implicit_personalization/ar": {
-          "accuracy": 0.69,
-          "measured": 0.69,
+          "accuracy": 0.67,
+          "measured": 0.67,
           "n": 100
         },
         "context/new_session/implicit_personalization/de": {
-          "accuracy": 0.73,
-          "measured": 0.73,
+          "accuracy": 0.78,
+          "measured": 0.78,
           "n": 100
         },
         "context/new_session/implicit_personalization/en": {
@@ -1072,8 +1072,8 @@
           "n": 100
         },
         "context/new_session/implicit_personalization/es": {
-          "accuracy": 0.76,
-          "measured": 0.76,
+          "accuracy": 0.81,
+          "measured": 0.81,
           "n": 100
         },
         "context/new_session/implicit_personalization/hi": {
@@ -1087,13 +1087,13 @@
           "n": 4
         },
         "context/new_session/multi_hop/ar": {
-          "accuracy": 0.43,
-          "measured": 0.43,
+          "accuracy": 0.45,
+          "measured": 0.45,
           "n": 100
         },
         "context/new_session/multi_hop/de": {
-          "accuracy": 0.47,
-          "measured": 0.47,
+          "accuracy": 0.5,
+          "measured": 0.5,
           "n": 100
         },
         "context/new_session/multi_hop/en": {
@@ -1102,13 +1102,13 @@
           "n": 100
         },
         "context/new_session/multi_hop/es": {
-          "accuracy": 0.47,
-          "measured": 0.47,
+          "accuracy": 0.53,
+          "measured": 0.53,
           "n": 100
         },
         "context/new_session/multi_hop/hi": {
-          "accuracy": 0.41,
-          "measured": 0.41,
+          "accuracy": 0.42,
+          "measured": 0.42,
           "n": 100
         },
         "context/new_session/multi_hop/mixed": {
@@ -1177,8 +1177,8 @@
           "n": 4
         },
         "context/new_session/temporal_recency/ar": {
-          "accuracy": 0.08,
-          "measured": 0.08,
+          "accuracy": 0.07,
+          "measured": 0.07,
           "n": 100
         },
         "context/new_session/temporal_recency/de": {
@@ -1207,13 +1207,13 @@
           "n": 4
         },
         "context/new_session/test_time_learning/ar": {
-          "accuracy": 0.92,
-          "measured": 0.92,
+          "accuracy": 0.93,
+          "measured": 0.93,
           "n": 100
         },
         "context/new_session/test_time_learning/de": {
-          "accuracy": 0.94,
-          "measured": 0.94,
+          "accuracy": 0.93,
+          "measured": 0.93,
           "n": 100
         },
         "context/new_session/test_time_learning/en": {
@@ -1227,8 +1227,8 @@
           "n": 100
         },
         "context/new_session/test_time_learning/hi": {
-          "accuracy": 0.88,
-          "measured": 0.88,
+          "accuracy": 0.9,
+          "measured": 0.9,
           "n": 100
         },
         "context/new_session/test_time_learning/mixed": {
@@ -1237,23 +1237,23 @@
           "n": 4
         },
         "context/new_session/update_contradiction/ar": {
-          "accuracy": 0.04,
-          "measured": 0.04,
+          "accuracy": 0.02,
+          "measured": 0.02,
           "n": 100
         },
         "context/new_session/update_contradiction/de": {
-          "accuracy": 0.02,
-          "measured": 0.02,
+          "accuracy": 0.03,
+          "measured": 0.03,
           "n": 100
         },
         "context/new_session/update_contradiction/en": {
-          "accuracy": 0.11,
-          "measured": 0.11,
+          "accuracy": 0.1,
+          "measured": 0.1,
           "n": 100
         },
         "context/new_session/update_contradiction/es": {
-          "accuracy": 0.02,
-          "measured": 0.02,
+          "accuracy": 0.03,
+          "measured": 0.03,
           "n": 100
         },
         "context/new_session/update_contradiction/hi": {
@@ -1287,8 +1287,8 @@
           "n": 100
         },
         "context/same_session/abstention/hi": {
-          "accuracy": 0.14,
-          "measured": 0.14,
+          "accuracy": 0.15,
+          "measured": 0.15,
           "n": 100
         },
         "context/same_session/abstention/mixed": {
@@ -1297,8 +1297,8 @@
           "n": 4
         },
         "context/same_session/explicit_personalization/ar": {
-          "accuracy": 0.9545,
-          "measured": 0.9545,
+          "accuracy": 0.9636,
+          "measured": 0.9636,
           "n": 110
         },
         "context/same_session/explicit_personalization/de": {
@@ -1307,13 +1307,13 @@
           "n": 110
         },
         "context/same_session/explicit_personalization/en": {
-          "accuracy": 0.9818,
-          "measured": 0.9818,
+          "accuracy": 1.0,
+          "measured": 1.0,
           "n": 110
         },
         "context/same_session/explicit_personalization/es": {
-          "accuracy": 0.9636,
-          "measured": 0.9636,
+          "accuracy": 0.9455,
+          "measured": 0.9455,
           "n": 110
         },
         "context/same_session/explicit_personalization/hi": {
@@ -1327,8 +1327,8 @@
           "n": 4
         },
         "context/same_session/forgetting_decay/ar": {
-          "accuracy": 0.46,
-          "measured": 0.46,
+          "accuracy": 0.44,
+          "measured": 0.44,
           "n": 100
         },
         "context/same_session/forgetting_decay/de": {
@@ -1342,8 +1342,8 @@
           "n": 100
         },
         "context/same_session/forgetting_decay/es": {
-          "accuracy": 0.48,
-          "measured": 0.48,
+          "accuracy": 0.49,
+          "measured": 0.49,
           "n": 100
         },
         "context/same_session/forgetting_decay/hi": {
@@ -1357,13 +1357,13 @@
           "n": 4
         },
         "context/same_session/implicit_personalization/ar": {
-          "accuracy": 0.69,
-          "measured": 0.69,
+          "accuracy": 0.67,
+          "measured": 0.67,
           "n": 100
         },
         "context/same_session/implicit_personalization/de": {
-          "accuracy": 0.73,
-          "measured": 0.73,
+          "accuracy": 0.78,
+          "measured": 0.78,
           "n": 100
         },
         "context/same_session/implicit_personalization/en": {
@@ -1372,8 +1372,8 @@
           "n": 100
         },
         "context/same_session/implicit_personalization/es": {
-          "accuracy": 0.76,
-          "measured": 0.76,
+          "accuracy": 0.81,
+          "measured": 0.81,
           "n": 100
         },
         "context/same_session/implicit_personalization/hi": {
@@ -1387,13 +1387,13 @@
           "n": 4
         },
         "context/same_session/multi_hop/ar": {
-          "accuracy": 0.64,
-          "measured": 0.64,
+          "accuracy": 0.68,
+          "measured": 0.68,
           "n": 100
         },
         "context/same_session/multi_hop/de": {
-          "accuracy": 0.68,
-          "measured": 0.68,
+          "accuracy": 0.69,
+          "measured": 0.69,
           "n": 100
         },
         "context/same_session/multi_hop/en": {
@@ -1402,13 +1402,13 @@
           "n": 100
         },
         "context/same_session/multi_hop/es": {
-          "accuracy": 0.72,
-          "measured": 0.72,
+          "accuracy": 0.79,
+          "measured": 0.79,
           "n": 100
         },
         "context/same_session/multi_hop/hi": {
-          "accuracy": 0.47,
-          "measured": 0.47,
+          "accuracy": 0.49,
+          "measured": 0.49,
           "n": 100
         },
         "context/same_session/multi_hop/mixed": {
@@ -1427,8 +1427,8 @@
           "n": 100
         },
         "context/same_session/procedural_skill/en": {
-          "accuracy": 0.99,
-          "measured": 0.99,
+          "accuracy": 0.98,
+          "measured": 0.98,
           "n": 100
         },
         "context/same_session/procedural_skill/es": {
@@ -1437,8 +1437,8 @@
           "n": 100
         },
         "context/same_session/procedural_skill/hi": {
-          "accuracy": 0.94,
-          "measured": 0.94,
+          "accuracy": 0.91,
+          "measured": 0.91,
           "n": 100
         },
         "context/same_session/procedural_skill/mixed": {
@@ -1497,8 +1497,8 @@
           "n": 100
         },
         "context/same_session/temporal_recency/hi": {
-          "accuracy": 0.39,
-          "measured": 0.39,
+          "accuracy": 0.37,
+          "measured": 0.37,
           "n": 100
         },
         "context/same_session/temporal_recency/mixed": {
@@ -1507,13 +1507,13 @@
           "n": 4
         },
         "context/same_session/test_time_learning/ar": {
-          "accuracy": 0.92,
-          "measured": 0.92,
+          "accuracy": 0.93,
+          "measured": 0.93,
           "n": 100
         },
         "context/same_session/test_time_learning/de": {
-          "accuracy": 0.94,
-          "measured": 0.94,
+          "accuracy": 0.93,
+          "measured": 0.93,
           "n": 100
         },
         "context/same_session/test_time_learning/en": {
@@ -1527,8 +1527,8 @@
           "n": 100
         },
         "context/same_session/test_time_learning/hi": {
-          "accuracy": 0.88,
-          "measured": 0.88,
+          "accuracy": 0.9,
+          "measured": 0.9,
           "n": 100
         },
         "context/same_session/test_time_learning/mixed": {
@@ -1537,23 +1537,23 @@
           "n": 4
         },
         "context/same_session/update_contradiction/ar": {
-          "accuracy": 0.04,
-          "measured": 0.04,
+          "accuracy": 0.02,
+          "measured": 0.02,
           "n": 100
         },
         "context/same_session/update_contradiction/de": {
-          "accuracy": 0.02,
-          "measured": 0.02,
+          "accuracy": 0.03,
+          "measured": 0.03,
           "n": 100
         },
         "context/same_session/update_contradiction/en": {
-          "accuracy": 0.11,
-          "measured": 0.11,
+          "accuracy": 0.1,
+          "measured": 0.1,
           "n": 100
         },
         "context/same_session/update_contradiction/es": {
-          "accuracy": 0.02,
-          "measured": 0.02,
+          "accuracy": 0.03,
+          "measured": 0.03,
           "n": 100
         },
         "context/same_session/update_contradiction/hi": {
@@ -1837,212 +1837,20 @@
           "n": 4
         }
       },
-      "git_commit": "50e615fb60079414afa4460303097ea8c20354c3",
+      "git_commit": "fe995bb9bab73ce80e46c98c644f9e93b23a04c3",
+      "identities": "scenario-language/v1",
       "latency": {
-        "context_p50_ms": 44.84,
-        "context_p95_ms": 66.36,
+        "context_p50_ms": 45.83,
+        "context_p95_ms": 67.39,
         "max_load_per_core": 0.81,
         "max_rise": 0.1,
         "trustworthy": true
       },
-      "macro_accuracy": 0.4789,
-      "noisy": {
-        "context/new_session/forgetting_decay/es": [
-          0.48,
-          0.49
-        ],
-        "context/new_session/forgetting_decay/hi": [
-          0.43,
-          0.44
-        ],
-        "context/new_session/implicit_personalization/ar": [
-          0.69,
-          0.71
-        ],
-        "context/new_session/implicit_personalization/de": [
-          0.73,
-          0.75
-        ],
-        "context/new_session/implicit_personalization/en": [
-          0.64,
-          0.65
-        ],
-        "context/new_session/implicit_personalization/es": [
-          0.76,
-          0.77
-        ],
-        "context/new_session/implicit_personalization/hi": [
-          0.51,
-          0.52
-        ],
-        "context/new_session/multi_hop/de": [
-          0.47,
-          0.51
-        ],
-        "context/new_session/multi_hop/en": [
-          0.53,
-          0.54
-        ],
-        "context/new_session/multi_hop/es": [
-          0.47,
-          0.5
-        ],
-        "context/new_session/multi_hop/hi": [
-          0.41,
-          0.42
-        ],
-        "context/new_session/procedural_skill/de": [
-          0.58,
-          0.59
-        ],
-        "context/new_session/single_fact_recall/hi": [
-          0.96,
-          0.97
-        ],
-        "context/new_session/temporal_recency/ar": [
-          0.08,
-          0.09
-        ],
-        "context/new_session/temporal_recency/en": [
-          0.0,
-          0.01
-        ],
-        "context/new_session/test_time_learning/ar": [
-          0.92,
-          0.93
-        ],
-        "context/new_session/test_time_learning/de": [
-          0.94,
-          0.95
-        ],
-        "context/new_session/test_time_learning/en": [
-          0.96,
-          0.97
-        ],
-        "context/new_session/test_time_learning/es": [
-          0.96,
-          0.97
-        ],
-        "context/new_session/test_time_learning/hi": [
-          0.88,
-          0.9
-        ],
-        "context/new_session/update_contradiction/es": [
-          0.02,
-          0.03
-        ],
-        "context/new_session/update_contradiction/hi": [
-          0.05,
-          0.06
-        ],
-        "context/same_session/explicit_personalization/de": [
-          0.9727,
-          0.9818
-        ],
-        "context/same_session/explicit_personalization/en": [
-          0.9818,
-          1.0
-        ],
-        "context/same_session/forgetting_decay/es": [
-          0.48,
-          0.49
-        ],
-        "context/same_session/forgetting_decay/hi": [
-          0.43,
-          0.44
-        ],
-        "context/same_session/implicit_personalization/ar": [
-          0.69,
-          0.71
-        ],
-        "context/same_session/implicit_personalization/de": [
-          0.73,
-          0.75
-        ],
-        "context/same_session/implicit_personalization/en": [
-          0.64,
-          0.65
-        ],
-        "context/same_session/implicit_personalization/es": [
-          0.76,
-          0.77
-        ],
-        "context/same_session/implicit_personalization/hi": [
-          0.51,
-          0.52
-        ],
-        "context/same_session/multi_hop/ar": [
-          0.64,
-          0.65
-        ],
-        "context/same_session/multi_hop/de": [
-          0.68,
-          0.69
-        ],
-        "context/same_session/multi_hop/es": [
-          0.72,
-          0.75
-        ],
-        "context/same_session/multi_hop/hi": [
-          0.47,
-          0.5
-        ],
-        "context/same_session/procedural_skill/ar": [
-          0.94,
-          0.95
-        ],
-        "context/same_session/procedural_skill/hi": [
-          0.94,
-          0.95
-        ],
-        "context/same_session/single_fact_recall/hi": [
-          0.96,
-          0.97
-        ],
-        "context/same_session/temporal_recency/ar": [
-          0.44,
-          0.46
-        ],
-        "context/same_session/temporal_recency/en": [
-          0.39,
-          0.4
-        ],
-        "context/same_session/temporal_recency/es": [
-          0.38,
-          0.39
-        ],
-        "context/same_session/test_time_learning/ar": [
-          0.92,
-          0.93
-        ],
-        "context/same_session/test_time_learning/de": [
-          0.94,
-          0.95
-        ],
-        "context/same_session/test_time_learning/en": [
-          0.96,
-          0.97
-        ],
-        "context/same_session/test_time_learning/es": [
-          0.96,
-          0.97
-        ],
-        "context/same_session/test_time_learning/hi": [
-          0.88,
-          0.9
-        ],
-        "context/same_session/update_contradiction/es": [
-          0.02,
-          0.03
-        ],
-        "context/same_session/update_contradiction/hi": [
-          0.05,
-          0.06
-        ]
-      },
+      "macro_accuracy": 0.4806,
+      "noisy": {},
       "repeat_runs": 2,
-      "retail_track": 0.4763,
-      "run_date": "2026-10-11",
+      "retail_track": 0.4766,
+      "run_date": "2026-10-18",
       "sample": "core",
       "scale": "standard",
       "selection": {
@@ -2105,12 +1913,12 @@
   "gate": "capability",
   "provenance": {
     "cpu_count": 4,
-    "git_commit": "50e615fb60079414afa4460303097ea8c20354c3",
+    "git_commit": "fe995bb9bab73ce80e46c98c644f9e93b23a04c3",
     "host_load": {
-      "load_per_core": 1.03,
-      "loadavg_15m": 4.4,
-      "loadavg_1m": 4.13,
-      "loadavg_5m": 4.55
+      "load_per_core": 0.2,
+      "loadavg_15m": 3.73,
+      "loadavg_1m": 0.8,
+      "loadavg_5m": 2.84
     },
     "llm": {
       "enabled": false,
@@ -2148,9 +1956,9 @@
       "transformers": "5.17.0",
       "zstandard": "0.25.0"
     },
-    "platform": "Linux-6.18.44-fc-v114-x86_64-with-glibc2.39",
+    "platform": "Linux-6.18.44-fc-v139-x86_64-with-glibc2.39",
     "python": "3.13.14",
-    "timestamp": "2026-10-12T09:24:07.810581+00:00"
+    "timestamp": "2026-10-18T23:27:03.550427+00:00"
   },
   "rule": "ratchet: every cell >= its best recorded accuracy, less its recorded noise; context p95 <= recorded x (1 + max_rise)",
   "targets": {

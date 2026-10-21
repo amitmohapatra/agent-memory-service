@@ -1,0 +1,3606 @@
+{
+ "version": 1,
+ "description": "Accumulated-memory stress scripts: each script is one tester's scripted conversation, re-run day after day for the same user with fresh random values and never cleared. Texts are lists in the order of 'languages'. {slot} placeholders are filled per run (build.py). Values (names, codes, numbers) are the same in every language, except lang_pools entries.",
+ "languages": [
+  "en",
+  "de",
+  "es",
+  "ar",
+  "hi"
+ ],
+ "acks": [
+  [
+   "Noted.",
+   "Notiert.",
+   "Anotado.",
+   "تم التسجيل.",
+   "नोट कर लिया।"
+  ],
+  [
+   "Got it.",
+   "Alles klar.",
+   "Entendido.",
+   "فهمت.",
+   "समझ गया।"
+  ],
+  [
+   "Okay, saved.",
+   "Okay, gespeichert.",
+   "Vale, guardado.",
+   "حسنًا، تم الحفظ.",
+   "ठीक है, सेव कर लिया।"
+  ]
+ ],
+ "no_info": [
+  "I don't have that information.",
+  "Dazu habe ich keine Information.",
+  "No tengo esa información.",
+  "ليست لدي هذه المعلومة.",
+  "मेरे पास यह जानकारी नहीं है।"
+ ],
+ "pools": {
+  "first": [
+   "Anouk",
+   "Bram",
+   "Catalina",
+   "Dmitri",
+   "Esme",
+   "Faisal",
+   "Greta",
+   "Hiro",
+   "Ines",
+   "Joaquin",
+   "Kaveh",
+   "Lucia",
+   "Mateo",
+   "Nadia",
+   "Oskar",
+   "Priya",
+   "Quentin",
+   "Rosa",
+   "Sven",
+   "Tamsin",
+   "Umar",
+   "Vera",
+   "Wendell",
+   "Ximena",
+   "Yusuf",
+   "Zora",
+   "Amara",
+   "Benedikt",
+   "Celeste",
+   "Darius",
+   "Elif",
+   "Florian",
+   "Gaia",
+   "Hamid",
+   "Ilse",
+   "Jasper",
+   "Keiko",
+   "Leander",
+   "Mireille",
+   "Nikhil",
+   "Odette",
+   "Pavel",
+   "Rania",
+   "Soren",
+   "Thea",
+   "Ugo",
+   "Valentina",
+   "Wim",
+   "Yara",
+   "Zeno"
+  ],
+  "last": [
+   "Abernathy",
+   "Bellweather",
+   "Castellano",
+   "Delacroix",
+   "Eriksen",
+   "Fairbanks",
+   "Galloway",
+   "Halvorsen",
+   "Ibarra",
+   "Jankowski",
+   "Kowalczyk",
+   "Lindqvist",
+   "Marchetti",
+   "Nakashima",
+   "Oyelaran",
+   "Pemberton",
+   "Quaresma",
+   "Rasmussen",
+   "Santangelo",
+   "Thorvaldsen",
+   "Uchenna",
+   "Vasquez",
+   "Whitlock",
+   "Xanthos",
+   "Yamaguchi",
+   "Zabala",
+   "Achterberg",
+   "Brannigan",
+   "Cervantes",
+   "Dunmore",
+   "Ekwueme",
+   "Fontaine",
+   "Grimaldi",
+   "Hargreaves",
+   "Iwasaki",
+   "Jovanovic",
+   "Kristensen",
+   "Lombardi",
+   "Mbeki",
+   "Novak",
+   "Ortega",
+   "Petrakis",
+   "Quintero",
+   "Rosenthal",
+   "Salvatore",
+   "Takahashi",
+   "Underhill",
+   "Vandermeer",
+   "Wojcik",
+   "Yilmaz",
+   "Zeller",
+   "Arkwright",
+   "Bertolini",
+   "Dragomir",
+   "Esposito",
+   "Falkenberg",
+   "Gutierrez",
+   "Holmberg",
+   "Ivanova",
+   "Jaramillo",
+   "Kerrigan",
+   "Lachance",
+   "Montague",
+   "Nordstrom",
+   "Oduya",
+   "Pacheco",
+   "Radcliffe",
+   "Szabo",
+   "Tremblay",
+   "Ulloa",
+   "Varga",
+   "Westergaard",
+   "Yoshida",
+   "Zielinski",
+   "Albrecht",
+   "Borisova",
+   "Carvalho",
+   "Dahlberg",
+   "Engstrom",
+   "Ferreira",
+   "Gallardo",
+   "Heikkinen",
+   "Inoue",
+   "Jensen",
+   "Kuznetsova",
+   "Laurent",
+   "Moreno",
+   "Nilsen",
+   "Okonkwo",
+   "Paredes",
+   "Rinaldi",
+   "Sandoval",
+   "Toivonen",
+   "Urquhart",
+   "Valdivia",
+   "Whitaker",
+   "Yanez",
+   "Zamora",
+   "Ashdown",
+   "Blackwood",
+   "Castillo",
+   "Devereux",
+   "Eastwood",
+   "Fitzgerald",
+   "Gonzaga",
+   "Ingram",
+   "Kilbride",
+   "Llewellyn",
+   "Macaulay",
+   "Newbury",
+   "Ormsby",
+   "Prescott",
+   "Redgrave",
+   "Stanhope",
+   "Tolliver",
+   "Vickery",
+   "Wainwright",
+   "Youngblood"
+  ],
+  "places": [
+   "Riverside",
+   "Lakeside",
+   "Harborview",
+   "Summit",
+   "Meadowbrook",
+   "Ironbridge",
+   "Westgate",
+   "Northfield",
+   "Cedar Hill",
+   "Foxhollow",
+   "Kingsport",
+   "Brightwater",
+   "Stonecrest",
+   "Elmwood",
+   "Oakridge",
+   "Silverlake",
+   "Redcliff",
+   "Ashford",
+   "Pinecrest",
+   "Thornbury"
+  ],
+  "malls": [
+   "Harbor Point Plaza",
+   "Cedar Crossing",
+   "Northgate Galleria",
+   "Bayfront Commons",
+   "Willow Creek Mall",
+   "Sunset Promenade",
+   "Maple Grove Center",
+   "Lakeshore Arcade",
+   "Granite Square",
+   "Copper Hills Mall",
+   "Seaview Terrace",
+   "Old Mill Market"
+  ],
+  "unlock": [
+   "include stockouts",
+   "show zeros",
+   "with zero stock",
+   "all rows please",
+   "zeros too",
+   "include empties",
+   "full list",
+   "keep zeros",
+   "no filter",
+   "raw list",
+   "incl stockouts",
+   "show blanks",
+   "every row"
+  ],
+  "retail_cols": [
+   "SKU",
+   "Style",
+   "Color",
+   "Size",
+   "On-hand",
+   "On-order",
+   "WOS",
+   "ROS",
+   "Sell-through",
+   "Last receipt",
+   "Vendor",
+   "Markdown %"
+  ],
+  "gw": [
+   "atlas",
+   "boreal",
+   "cobalt",
+   "delta",
+   "ember",
+   "fjord",
+   "granite",
+   "helix",
+   "indigo",
+   "juniper",
+   "kestrel",
+   "lumen",
+   "mistral",
+   "nimbus",
+   "onyx",
+   "polaris"
+  ],
+  "teams": [
+   "Falcon",
+   "Orion",
+   "Basalt",
+   "Quasar",
+   "Tundra",
+   "Zephyr",
+   "Vortex",
+   "Sequoia",
+   "Pulsar",
+   "Cascade",
+   "Monsoon",
+   "Glacier",
+   "Aurora",
+   "Sirocco"
+  ],
+  "windows": [
+   "00:00 UTC",
+   "00:15 UTC",
+   "00:30 UTC",
+   "00:45 UTC",
+   "01:00 UTC",
+   "01:15 UTC",
+   "01:30 UTC",
+   "01:45 UTC",
+   "02:00 UTC",
+   "02:15 UTC",
+   "02:30 UTC",
+   "02:45 UTC",
+   "03:00 UTC",
+   "03:15 UTC",
+   "03:30 UTC",
+   "03:45 UTC",
+   "04:00 UTC",
+   "04:15 UTC",
+   "04:30 UTC",
+   "04:45 UTC",
+   "05:00 UTC",
+   "05:15 UTC",
+   "05:30 UTC",
+   "05:45 UTC"
+  ],
+  "it_fields": [
+   "Impact",
+   "Owner",
+   "ETA",
+   "Next step",
+   "Root cause",
+   "Customer comms",
+   "Severity",
+   "Workaround",
+   "Start time",
+   "Systems",
+   "Ticket",
+   "Status"
+  ],
+  "channels": [
+   "SMS",
+   "Slack",
+   "email",
+   "phone call",
+   "Teams",
+   "pager",
+   "Signal",
+   "WhatsApp",
+   "Telegram",
+   "Discord",
+   "Webex",
+   "Zoom chat",
+   "Mattermost",
+   "Rocket.Chat",
+   "iMessage",
+   "Viber",
+   "Threema",
+   "LINE"
+  ],
+  "tz": [
+   "Nairobi",
+   "Denver",
+   "Osaka",
+   "Perth",
+   "Recife",
+   "Tallinn",
+   "Hanoi",
+   "Calgary",
+   "Muscat",
+   "Lima",
+   "Auckland",
+   "Dakar",
+   "Quito",
+   "Manila"
+  ],
+  "ag1": [
+   "North",
+   "Blue",
+   "Silver",
+   "Bright",
+   "Swift",
+   "Golden",
+   "Clear",
+   "True",
+   "Wide",
+   "High",
+   "Open",
+   "Far"
+  ],
+  "ag2": [
+   "wind",
+   "harbor",
+   "path",
+   "line",
+   "star",
+   "way",
+   "bridge",
+   "field",
+   "gate",
+   "point"
+  ],
+  "currencies": [
+   "EUR",
+   "GBP",
+   "CHF",
+   "USD",
+   "SEK",
+   "NOK",
+   "DKK",
+   "PLN",
+   "CZK",
+   "JPY",
+   "AUD",
+   "CAD",
+   "SGD",
+   "INR"
+  ],
+  "fin_cols": [
+   "Account",
+   "Budget",
+   "Actual",
+   "Variance",
+   "Variance %",
+   "Forecast",
+   "Owner",
+   "Comment",
+   "Prior year",
+   "Cost center",
+   "Month",
+   "YTD"
+  ],
+  "file_formats": [
+   "PDF",
+   "XLSX",
+   "CSV",
+   "DOCX",
+   "PPTX",
+   "ODS",
+   "HTML",
+   "Numbers",
+   "Keynote",
+   "ODT",
+   "RTF",
+   "XPS"
+  ],
+  "due_dates": [
+   "2026-11-02",
+   "2026-11-03",
+   "2026-11-04",
+   "2026-11-05",
+   "2026-11-06",
+   "2026-11-09",
+   "2026-11-10",
+   "2026-11-11",
+   "2026-11-12",
+   "2026-11-13",
+   "2026-11-16",
+   "2026-11-17",
+   "2026-11-18",
+   "2026-11-19",
+   "2026-11-20",
+   "2026-11-23",
+   "2026-11-24",
+   "2026-11-25",
+   "2026-11-26",
+   "2026-11-27",
+   "2026-12-01",
+   "2026-12-02",
+   "2026-12-03",
+   "2026-12-04"
+  ],
+  "slots": [
+   "17:05",
+   "17:10",
+   "17:15",
+   "17:20",
+   "17:25",
+   "17:30",
+   "17:35",
+   "17:40",
+   "17:45",
+   "17:50",
+   "17:55",
+   "18:05",
+   "18:10",
+   "18:15",
+   "18:20",
+   "18:25",
+   "18:30",
+   "18:35",
+   "18:40",
+   "18:45",
+   "18:50",
+   "18:55",
+   "19:05",
+   "19:10",
+   "19:15",
+   "19:20",
+   "19:25",
+   "19:30",
+   "19:35",
+   "19:40",
+   "19:45",
+   "19:50",
+   "19:55"
+  ],
+  "job_cols": [
+   "Site",
+   "Job",
+   "Technician",
+   "Start",
+   "End",
+   "Status",
+   "Parts used",
+   "Notes",
+   "Travel time",
+   "Customer",
+   "Priority",
+   "Follow-up"
+  ],
+  "towns": [
+   "Halden",
+   "Brixworth",
+   "Tamsworth",
+   "Kelso",
+   "Ardmore",
+   "Fenwick",
+   "Lisgarry",
+   "Pontrail",
+   "Westerby",
+   "Dunholme",
+   "Corrib",
+   "Maldon"
+  ],
+  "classes": [
+   "Maple",
+   "Willow",
+   "Birch",
+   "Rowan",
+   "Hazel",
+   "Aspen",
+   "Juniper",
+   "Linden",
+   "Alder",
+   "Sycamore",
+   "Poplar",
+   "Larch"
+  ],
+  "rest1": [
+   "Casa",
+   "Trattoria",
+   "Bistro",
+   "Taverna",
+   "Osteria",
+   "Brasserie",
+   "Cantina",
+   "Maison",
+   "Kafe"
+  ],
+  "rest2": [
+   "Olivo",
+   "Luna",
+   "Verde",
+   "Roma",
+   "Azul",
+   "Fiore",
+   "Nido",
+   "Perla",
+   "Brisa",
+   "Salvia"
+  ],
+  "early": [
+   "06:05",
+   "06:10",
+   "06:20",
+   "06:25",
+   "06:35",
+   "06:40",
+   "06:50",
+   "06:55",
+   "07:05",
+   "07:10",
+   "07:20",
+   "07:25"
+  ],
+  "pack_cols": [
+   "Clothes",
+   "Toiletries",
+   "Documents",
+   "Electronics",
+   "Medicine",
+   "Snacks",
+   "Kids",
+   "Shoes",
+   "Chargers",
+   "Beach",
+   "Hiking",
+   "Paperwork"
+  ]
+ },
+ "lang_pools": {
+  "countries": [
+   [
+    "Thailand",
+    "Thailand",
+    "Tailandia",
+    "تايلاند",
+    "थाईलैंड"
+   ],
+   [
+    "Ethiopia",
+    "Äthiopien",
+    "Etiopía",
+    "إثيوبيا",
+    "इथियोपिया"
+   ],
+   [
+    "Peru",
+    "Peru",
+    "Perú",
+    "بيرو",
+    "पेरू"
+   ],
+   [
+    "Korea",
+    "Korea",
+    "Corea",
+    "كوريا",
+    "कोरिया"
+   ],
+   [
+    "Lebanon",
+    "Libanon",
+    "Líbano",
+    "لبنان",
+    "लेबनान"
+   ],
+   [
+    "Vietnam",
+    "Vietnam",
+    "Vietnam",
+    "فيتنام",
+    "वियतनाम"
+   ],
+   [
+    "Morocco",
+    "Marokko",
+    "Marruecos",
+    "المغرب",
+    "मोरक्को"
+   ],
+   [
+    "Greece",
+    "Griechenland",
+    "Grecia",
+    "اليونان",
+    "ग्रीस"
+   ],
+   [
+    "Japan",
+    "Japan",
+    "Japón",
+    "اليابان",
+    "जापान"
+   ],
+   [
+    "Mexico",
+    "Mexiko",
+    "México",
+    "المكسيك",
+    "मेक्सिको"
+   ],
+   [
+    "Turkey",
+    "der Türkei",
+    "Turquía",
+    "تركيا",
+    "तुर्की"
+   ],
+   [
+    "Indonesia",
+    "Indonesien",
+    "Indonesia",
+    "إندونيسيا",
+    "इंडोनेशिया"
+   ]
+  ]
+ },
+ "scripts": [
+  {
+   "id": "retail-replenishment",
+   "domain": "retail",
+   "slots": {
+    "brand": {
+     "fixed": "Marlowe & Pike"
+    },
+    "dc": {
+     "pattern": "DC-{w:places}-{A}{D}{d}{d}"
+    },
+    "rmm": {
+     "name": true
+    },
+    "store": {
+     "pattern": "{D}{d}{d}{d}"
+    },
+    "region": {
+     "pattern": "{A}{D}{d}"
+    },
+    "buyer": {
+     "name": true
+    },
+    "dc2": {
+     "pattern": "DC-{w:places}-{A}{D}{d}{d}"
+    },
+    "lead": {
+     "name": true
+    },
+    "region2": {
+     "pattern": "{A}{D}{d}"
+    },
+    "old_buyer": {
+     "name": true
+    },
+    "new_buyer": {
+     "name": true
+    },
+    "unlock": {
+     "pool": "unlock"
+    },
+    "cols": {
+     "pick": [
+      "retail_cols",
+      4,
+      ", "
+     ]
+    },
+    "my_store": {
+     "pattern": "{A}{A}{D}{d}{d}{d}"
+    },
+    "mall": {
+     "pool": "malls"
+    },
+    "aisle": {
+     "once": true,
+     "pattern": "{A}-{D}{d}"
+    },
+    "count1": {
+     "int": [
+      120,
+      980
+     ]
+    },
+    "count2": {
+     "int": [
+      120,
+      980
+     ]
+    },
+    "po": {
+     "pattern": "PO-{D}{d}{d}{d}{d}{d}"
+    },
+    "sku": {
+     "pattern": "{D}{d}{d}{d}{d}{d}"
+    },
+    "ghost_region": {
+     "once": true,
+     "pattern": "{A}{D}{d}"
+    }
+   },
+   "turns": [
+    [
+     "{brand} replenishment ships from {dc}.",
+     "Der Nachschub für {brand} kommt aus {dc}.",
+     "La reposición de {brand} sale de {dc}.",
+     "تُشحن إمدادات {brand} من {dc}.",
+     "{brand} की रिप्लेनिशमेंट {dc} से भेजी जाती है।"
+    ],
+    [
+     "My regional merchandise manager is {rmm}.",
+     "Mein regionaler Merchandise-Manager ist {rmm}.",
+     "Mi gerente regional de mercancía es {rmm}.",
+     "مدير البضائع الإقليمي الخاص بي هو {rmm}.",
+     "मेरे रीजनल मर्चेंडाइज़ मैनेजर {rmm} हैं।"
+    ],
+    [
+     "Store {store} belongs to Region {region}.",
+     "Filiale {store} gehört zur Region {region}.",
+     "La tienda {store} pertenece a la Región {region}.",
+     "المتجر {store} يتبع المنطقة {region}.",
+     "स्टोर {store} रीजन {region} में आता है।"
+    ],
+    [
+     "The buyer for Region {region} is {buyer}.",
+     "Der Einkäufer für Region {region} ist {buyer}.",
+     "El comprador de la Región {region} es {buyer}.",
+     "المشتري للمنطقة {region} هو {buyer}.",
+     "रीजन {region} के बायर {buyer} हैं।"
+    ],
+    [
+     "Region {region} is replenished from {dc2}.",
+     "Region {region} wird aus {dc2} beliefert.",
+     "La Región {region} se abastece desde {dc2}.",
+     "يتم تزويد المنطقة {region} من {dc2}.",
+     "रीजन {region} को {dc2} से माल मिलता है।"
+    ],
+    [
+     "The inbound lead at {dc2} is {lead}.",
+     "Die Wareneingangsleitung in {dc2} hat {lead}.",
+     "El responsable de recepción en {dc2} es {lead}.",
+     "مسؤول الاستلام في {dc2} هو {lead}.",
+     "{dc2} में इनबाउंड लीड {lead} हैं।"
+    ],
+    [
+     "The buyer for Region {region2} is {old_buyer}.",
+     "Der Einkäufer für Region {region2} ist {old_buyer}.",
+     "El comprador de la Región {region2} es {old_buyer}.",
+     "المشتري للمنطقة {region2} هو {old_buyer}.",
+     "रीजन {region2} के बायर {old_buyer} हैं।"
+    ],
+    [
+     "Never include rows with on-hand zero unless I type: {unlock}.",
+     "Zeig nie Zeilen mit Bestand null, außer ich schreibe: {unlock}.",
+     "Nunca incluyas filas con existencias cero a menos que escriba: {unlock}.",
+     "لا تُدرج أبدًا الصفوف ذات المخزون صفر إلا إذا كتبت: {unlock}.",
+     "जिन पंक्तियों में ऑन-हैंड शून्य हो, उन्हें कभी शामिल मत करना, जब तक मैं न लिखूँ: {unlock}।"
+    ],
+    [
+     "Whenever I ask for a stockout audit, always respond as a markdown table with columns: {cols}. No prose before the table.",
+     "Wenn ich nach einem Fehlbestands-Audit frage, antworte immer als Markdown-Tabelle mit den Spalten: {cols}. Kein Text vor der Tabelle.",
+     "Cada vez que pida una auditoría de quiebres de stock, responde siempre con una tabla markdown con las columnas: {cols}. Nada de texto antes de la tabla.",
+     "كلما طلبت تدقيقًا لنفاد المخزون، أجب دائمًا بجدول markdown بالأعمدة: {cols}. بدون أي نص قبل الجدول.",
+     "जब भी मैं स्टॉकआउट ऑडिट माँगूँ, हमेशा इन कॉलमों वाली markdown टेबल में जवाब देना: {cols}। टेबल से पहले कोई गद्य नहीं।"
+    ],
+    [
+     "I manage store {my_store} {mall}. I care about high-ROS styles with short WOS.",
+     "Ich leite die Filiale {my_store} {mall}. Mir sind Styles mit hoher ROS und kurzer WOS wichtig.",
+     "Dirijo la tienda {my_store} {mall}. Me importan los estilos con ROS alta y WOS corta.",
+     "أدير المتجر {my_store} {mall}. يهمني الموديلات ذات ROS المرتفع وWOS القصير.",
+     "मैं स्टोर {my_store} {mall} संभालती हूँ। मुझे ऊँचे ROS और छोटे WOS वाले स्टाइल की परवाह है।"
+    ],
+    [
+     "Cycle count for aisle {aisle}: {count1} units.",
+     "Inventur für Gang {aisle}: {count1} Stück.",
+     "Conteo cíclico del pasillo {aisle}: {count1} unidades.",
+     "الجرد الدوري للممر {aisle}: {count1} وحدة.",
+     "आइल {aisle} की साइकिल काउंट: {count1} यूनिट।"
+    ],
+    [
+     "I just raised {po} for SKU {sku}.",
+     "Ich habe gerade {po} für SKU {sku} angelegt.",
+     "Acabo de emitir {po} para el SKU {sku}.",
+     "أصدرتُ للتو {po} للصنف SKU {sku}.",
+     "मैंने अभी SKU {sku} के लिए {po} बनाया है।"
+    ],
+    [
+     "Update: {new_buyer} has replaced {old_buyer} as the buyer for Region {region2}.",
+     "Update: {new_buyer} hat {old_buyer} als Einkäufer für Region {region2} abgelöst.",
+     "Actualización: {new_buyer} ha sustituido a {old_buyer} como comprador de la Región {region2}.",
+     "تحديث: {new_buyer} حلّ محل {old_buyer} كمشترٍ للمنطقة {region2}.",
+     "अपडेट: रीजन {region2} के बायर के रूप में {new_buyer} ने {old_buyer} की जगह ले ली है।"
+    ],
+    [
+     "Recount for aisle {aisle} came back at {count2} units.",
+     "Die Nachzählung für Gang {aisle} ergab {count2} Stück.",
+     "El reconteo del pasillo {aisle} dio {count2} unidades.",
+     "إعادة العد للممر {aisle} أسفرت عن {count2} وحدة.",
+     "आइल {aisle} की रीकाउंट में {count2} यूनिट निकले।"
+    ]
+   ],
+   "queries": [
+    {
+     "id": "dc",
+     "category": "single_fact",
+     "contains": [
+      "dc"
+     ],
+     "stale": [
+      "dc"
+     ],
+     "phrasings": {
+      "direct": [
+       "Where does {brand} replenishment ship from?",
+       "Woher kommt der Nachschub für {brand}?",
+       "¿Desde dónde sale la reposición de {brand}?",
+       "من أين تُشحن إمدادات {brand}؟",
+       "{brand} की रिप्लेनिशमेंट कहाँ से भेजी जाती है?"
+      ],
+      "paraphrase": [
+       "Which distribution center sends us {brand} stock?",
+       "Welches Verteilzentrum schickt uns die Ware von {brand}?",
+       "¿Qué centro de distribución nos envía el stock de {brand}?",
+       "أي مركز توزيع يرسل لنا مخزون {brand}؟",
+       "हमें {brand} का स्टॉक कौन सा डिस्ट्रीब्यूशन सेंटर भेजता है?"
+      ]
+     }
+    },
+    {
+     "id": "rmm",
+     "category": "single_fact",
+     "contains": [
+      "rmm"
+     ],
+     "stale": [
+      "rmm"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is my regional merchandise manager?",
+       "Wer ist mein regionaler Merchandise-Manager?",
+       "¿Quién es mi gerente regional de mercancía?",
+       "من هو مدير البضائع الإقليمي الخاص بي؟",
+       "मेरे रीजनल मर्चेंडाइज़ मैनेजर कौन हैं?"
+      ],
+      "paraphrase": [
+       "Remind me who I report to for regional merchandising.",
+       "Erinnere mich: An wen berichte ich im regionalen Merchandising?",
+       "Recuérdame a quién reporto en merchandising regional.",
+       "ذكّرني لمن أرفع تقاريري في إدارة البضائع الإقليمية.",
+       "याद दिलाओ, रीजनल मर्चेंडाइज़िंग में मैं किसे रिपोर्ट करती हूँ?"
+      ]
+     }
+    },
+    {
+     "id": "hop2",
+     "category": "multi_hop_2",
+     "contains": [
+      "region",
+      "buyer"
+     ],
+     "stale": [
+      "store",
+      "region",
+      "buyer"
+     ],
+     "anchor": [
+      "store"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is the buyer for store {store}?",
+       "Wer ist der Einkäufer für Filiale {store}?",
+       "¿Quién es el comprador de la tienda {store}?",
+       "من هو المشتري للمتجر {store}؟",
+       "स्टोर {store} के बायर कौन हैं?"
+      ],
+      "paraphrase": [
+       "Which buyer should I contact about store {store}?",
+       "An welchen Einkäufer wende ich mich wegen Filiale {store}?",
+       "¿Con qué comprador hablo sobre la tienda {store}?",
+       "بأي مشترٍ أتواصل بخصوص المتجر {store}؟",
+       "स्टोर {store} के बारे में मुझे किस बायर से बात करनी चाहिए?"
+      ]
+     }
+    },
+    {
+     "id": "hop3",
+     "category": "multi_hop_3",
+     "contains": [
+      "region",
+      "dc2",
+      "lead"
+     ],
+     "stale": [
+      "store",
+      "region",
+      "dc2",
+      "lead"
+     ],
+     "anchor": [
+      "store"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is the inbound lead at the DC that replenishes store {store}?",
+       "Wer leitet den Wareneingang in dem Verteilzentrum, das Filiale {store} beliefert?",
+       "¿Quién es el responsable de recepción en el centro que abastece a la tienda {store}?",
+       "من مسؤول الاستلام في مركز التوزيع الذي يزوّد المتجر {store}؟",
+       "स्टोर {store} को माल देने वाले DC में इनबाउंड लीड कौन है?"
+      ],
+      "paraphrase": [
+       "Store {store} has a delivery problem: who runs inbound at its supplying DC?",
+       "Filiale {store} hat ein Lieferproblem: Wer ist für den Wareneingang im zuständigen Lager verantwortlich?",
+       "La tienda {store} tiene un problema de entregas: ¿quién lleva la recepción en su centro de suministro?",
+       "لدى المتجر {store} مشكلة في التوريد: من يدير الاستلام في مركز التوزيع المورِّد له؟",
+       "स्टोर {store} की डिलीवरी में दिक्कत है: उसके सप्लाई करने वाले DC में इनबाउंड कौन देखता है?"
+      ]
+     }
+    },
+    {
+     "id": "replace",
+     "category": "update_replacement",
+     "contains": [
+      "new_buyer"
+     ],
+     "stale": [
+      "old_buyer",
+      "new_buyer"
+     ],
+     "anchor": [
+      "region2"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is the buyer for Region {region2}?",
+       "Wer ist der Einkäufer für Region {region2}?",
+       "¿Quién es el comprador de la Región {region2}?",
+       "من هو المشتري للمنطقة {region2}؟",
+       "रीजन {region2} के बायर कौन हैं?"
+      ],
+      "paraphrase": [
+       "I need to send the Region {region2} buyer a markdown request. Who is it?",
+       "Ich muss dem Einkäufer von Region {region2} eine Preisreduzierung schicken. Wer ist das?",
+       "Tengo que enviar una solicitud de rebaja al comprador de la Región {region2}. ¿Quién es?",
+       "أحتاج إلى إرسال طلب تخفيض إلى مشتري المنطقة {region2}. من هو؟",
+       "मुझे रीजन {region2} के बायर को मार्कडाउन रिक्वेस्ट भेजनी है। वो कौन हैं?"
+      ]
+     }
+    },
+    {
+     "id": "recount",
+     "category": "recency",
+     "contains": [
+      "count2"
+     ],
+     "stale": [
+      "count1",
+      "count2"
+     ],
+     "phrasings": {
+      "direct": [
+       "What's the current count for aisle {aisle}?",
+       "Wie ist der aktuelle Bestand in Gang {aisle}?",
+       "¿Cuál es el conteo actual del pasillo {aisle}?",
+       "ما هو العدد الحالي للممر {aisle}؟",
+       "आइल {aisle} की मौजूदा काउंट क्या है?"
+      ],
+      "paraphrase": [
+       "How many units are in aisle {aisle} now?",
+       "Wie viele Stück liegen jetzt in Gang {aisle}?",
+       "¿Cuántas unidades hay ahora en el pasillo {aisle}?",
+       "كم وحدة في الممر {aisle} الآن؟",
+       "अभी आइल {aisle} में कितनी यूनिट हैं?"
+      ]
+     }
+    },
+    {
+     "id": "po",
+     "category": "recency",
+     "contains": [
+      "po"
+     ],
+     "stale": [
+      "po"
+     ],
+     "anchor": [
+      "po"
+     ],
+     "phrasings": {
+      "direct": [
+       "What was the last PO I raised?",
+       "Welche Bestellung habe ich zuletzt angelegt?",
+       "¿Cuál fue la última orden de compra que emití?",
+       "ما آخر أمر شراء أصدرته؟",
+       "मैंने आख़िरी PO कौन सा बनाया था?"
+      ],
+      "paraphrase": [
+       "Give me the number of my most recent purchase order.",
+       "Nenn mir die Nummer meiner neuesten Bestellung.",
+       "Dame el número de mi orden de compra más reciente.",
+       "أعطني رقم أحدث أمر شراء لي.",
+       "मेरे सबसे हाल के परचेज़ ऑर्डर का नंबर बताओ।"
+      ]
+     }
+    },
+    {
+     "id": "abst_partner",
+     "category": "abstention",
+     "abstain": true,
+     "near": [
+      "rmm",
+      "buyer",
+      "new_buyer"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is my regional finance partner?",
+       "Wer ist mein regionaler Finanzpartner?",
+       "¿Quién es mi socio financiero regional?",
+       "من هو شريكي المالي الإقليمي؟",
+       "मेरे रीजनल फ़ाइनेंस पार्टनर कौन हैं?"
+      ],
+      "paraphrase": [
+       "Which finance contact covers my region?",
+       "Welcher Finanzansprechpartner ist für meine Region zuständig?",
+       "¿Qué contacto de finanzas cubre mi región?",
+       "أي جهة اتصال مالية تغطي منطقتي؟",
+       "मेरे रीजन के लिए फ़ाइनेंस कॉन्टैक्ट कौन है?"
+      ]
+     }
+    },
+    {
+     "id": "abst_region",
+     "category": "abstention",
+     "abstain": true,
+     "near": [
+      "buyer",
+      "new_buyer",
+      "old_buyer"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is the buyer for Region {ghost_region}?",
+       "Wer ist der Einkäufer für Region {ghost_region}?",
+       "¿Quién es el comprador de la Región {ghost_region}?",
+       "من هو المشتري للمنطقة {ghost_region}؟",
+       "रीजन {ghost_region} के बायर कौन हैं?"
+      ],
+      "paraphrase": [
+       "Which buyer handles Region {ghost_region}?",
+       "Welcher Einkäufer betreut Region {ghost_region}?",
+       "¿Qué comprador lleva la Región {ghost_region}?",
+       "أي مشترٍ يتولى المنطقة {ghost_region}؟",
+       "रीजन {ghost_region} को कौन सा बायर देखता है?"
+      ]
+     }
+    },
+    {
+     "id": "rule",
+     "category": "standing_rule",
+     "contains": [
+      "unlock"
+     ],
+     "stale": [
+      "unlock"
+     ],
+     "phrasings": {
+      "direct": [
+       "Show me the low-stock rows for store {my_store}.",
+       "Zeig mir die Zeilen mit niedrigem Bestand für Filiale {my_store}.",
+       "Muéstrame las filas con poco stock de la tienda {my_store}.",
+       "اعرض لي صفوف المخزون المنخفض للمتجر {my_store}.",
+       "स्टोर {my_store} की कम स्टॉक वाली पंक्तियाँ दिखाओ।"
+      ],
+      "paraphrase": [
+       "Pull the on-hand report for {my_store}.",
+       "Hol mir den Bestandsbericht für {my_store}.",
+       "Sácame el informe de existencias de {my_store}.",
+       "استخرج تقرير المخزون المتوفر للمتجر {my_store}.",
+       "{my_store} की ऑन-हैंड रिपोर्ट निकालो।"
+      ]
+     }
+    },
+    {
+     "id": "format",
+     "category": "format_rule",
+     "contains": [
+      "cols"
+     ],
+     "stale": [
+      "cols"
+     ],
+     "phrasings": {
+      "direct": [
+       "Run a stockout audit for store {my_store}.",
+       "Mach ein Fehlbestands-Audit für Filiale {my_store}.",
+       "Haz una auditoría de quiebres de stock para la tienda {my_store}.",
+       "أجرِ تدقيقًا لنفاد المخزون للمتجر {my_store}.",
+       "स्टोर {my_store} का स्टॉकआउट ऑडिट करो।"
+      ],
+      "paraphrase": [
+       "Which items are out of stock at {my_store}? Audit it.",
+       "Welche Artikel sind in {my_store} ausverkauft? Prüf das.",
+       "¿Qué artículos están agotados en {my_store}? Audítalo.",
+       "ما الأصناف النافدة في {my_store}؟ دقّق في ذلك.",
+       "{my_store} में कौन से आइटम आउट ऑफ़ स्टॉक हैं? ऑडिट करो।"
+      ]
+     }
+    },
+    {
+     "id": "pref",
+     "category": "preference",
+     "contains": [
+      "my_store",
+      "mall"
+     ],
+     "stale": [
+      "my_store",
+      "mall"
+     ],
+     "phrasings": {
+      "direct": [
+       "Which styles should I look at this week?",
+       "Welche Styles sollte ich mir diese Woche ansehen?",
+       "¿Qué estilos debería revisar esta semana?",
+       "ما الموديلات التي يجب أن أنظر إليها هذا الأسبوع؟",
+       "इस हफ़्ते मुझे कौन से स्टाइल देखने चाहिए?"
+      ],
+      "paraphrase": [
+       "Plan my store walk for tomorrow.",
+       "Plane meinen Filialrundgang für morgen.",
+       "Planifica mi recorrido por la tienda para mañana.",
+       "خطط لجولتي في المتجر غدًا.",
+       "कल के लिए मेरा स्टोर वॉक प्लान करो।"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "it-operations",
+   "domain": "it_support",
+   "slots": {
+    "office": {
+     "fixed": "Porto"
+    },
+    "ghost_office": {
+     "fixed": "Oslo"
+    },
+    "vpn": {
+     "pattern": "{w:gw}-gw{D}{d}"
+    },
+    "lead": {
+     "name": true
+    },
+    "oncall_old": {
+     "name": true
+    },
+    "oncall_new": {
+     "name": true
+    },
+    "server": {
+     "pattern": "{w:gw}-{D}{d}{d}"
+    },
+    "cluster": {
+     "pattern": "CL-{A}{D}{d}"
+    },
+    "team": {
+     "pool": "teams"
+    },
+    "esc": {
+     "name": true
+    },
+    "win1": {
+     "pool": "windows"
+    },
+    "win2": {
+     "pool": "windows"
+    },
+    "cc": {
+     "pattern": "ops-{w:gw}{D}@example.com"
+    },
+    "fields": {
+     "pick": [
+      "it_fields",
+      4,
+      ", "
+     ]
+    },
+    "channel": {
+     "pool": "channels"
+    },
+    "tz": {
+     "pool": "tz"
+    },
+    "ticket": {
+     "pattern": "INC-{D}{d}{d}{d}{d}{d}"
+    }
+   },
+   "turns": [
+    [
+     "The VPN gateway for the {office} office is {vpn}.",
+     "Das VPN-Gateway für das Büro {office} ist {vpn}.",
+     "El gateway VPN de la oficina de {office} es {vpn}.",
+     "بوابة VPN لمكتب {office} هي {vpn}.",
+     "{office} ऑफ़िस का VPN गेटवे {vpn} है।"
+    ],
+    [
+     "My team lead is {lead}.",
+     "Meine Teamleitung ist {lead}.",
+     "Mi líder de equipo es {lead}.",
+     "قائد فريقي هو {lead}.",
+     "मेरे टीम लीड {lead} हैं।"
+    ],
+    [
+     "This week's on-call SRE is {oncall_old}.",
+     "Die SRE-Rufbereitschaft diese Woche hat {oncall_old}.",
+     "El SRE de guardia esta semana es {oncall_old}.",
+     "مهندس SRE المناوب هذا الأسبوع هو {oncall_old}.",
+     "इस हफ़्ते के ऑन-कॉल SRE {oncall_old} हैं।"
+    ],
+    [
+     "Server {server} runs in cluster {cluster}.",
+     "Server {server} läuft im Cluster {cluster}.",
+     "El servidor {server} corre en el clúster {cluster}.",
+     "الخادم {server} يعمل في العنقود {cluster}.",
+     "सर्वर {server} क्लस्टर {cluster} में चलता है।"
+    ],
+    [
+     "Cluster {cluster} is owned by the {team} team.",
+     "Cluster {cluster} gehört dem Team {team}.",
+     "El clúster {cluster} pertenece al equipo {team}.",
+     "العنقود {cluster} يملكه فريق {team}.",
+     "क्लस्टर {cluster} की ओनर {team} टीम है।"
+    ],
+    [
+     "The {team} team's escalation contact is {esc}.",
+     "Eskalationskontakt des Teams {team} ist {esc}.",
+     "El contacto de escalamiento del equipo {team} es {esc}.",
+     "جهة التصعيد لفريق {team} هي {esc}.",
+     "{team} टीम का एस्केलेशन कॉन्टैक्ट {esc} है।"
+    ],
+    [
+     "The maintenance window is set for {win1}.",
+     "Das Wartungsfenster ist auf {win1} festgelegt.",
+     "La ventana de mantenimiento está fijada a las {win1}.",
+     "نافذة الصيانة محددة عند {win1}.",
+     "मेंटेनेंस विंडो {win1} पर तय है।"
+    ],
+    [
+     "Always cc {cc} on outage emails.",
+     "Setz bei Störungs-E-Mails immer {cc} in CC.",
+     "Pon siempre en copia a {cc} en los correos de incidencias.",
+     "أضف دائمًا {cc} في نسخة رسائل الأعطال.",
+     "आउटेज ईमेल में हमेशा {cc} को cc करना।"
+    ],
+    [
+     "When I ask for a status update, reply as a bullet list with the fields: {fields}.",
+     "Wenn ich nach einem Statusupdate frage, antworte als Stichpunktliste mit den Feldern: {fields}.",
+     "Cuando pida una actualización de estado, responde con una lista de viñetas con los campos: {fields}.",
+     "عندما أطلب تحديث حالة، أجب بقائمة نقطية بالحقول: {fields}.",
+     "जब मैं स्टेटस अपडेट माँगूँ, तो इन फ़ील्ड वाली बुलेट लिस्ट में जवाब देना: {fields}।"
+    ],
+    [
+     "I like alerts by {channel}, and I work on {tz} time.",
+     "Alarme bitte per {channel}, und ich arbeite nach {tz}-Zeit.",
+     "Prefiero las alertas por {channel} y trabajo con la hora de {tz}.",
+     "أفضّل التنبيهات عبر {channel}، وأعمل بتوقيت {tz}.",
+     "मुझे अलर्ट {channel} पर चाहिए, और मैं {tz} के समय पर काम करती हूँ।"
+    ],
+    [
+     "I just opened ticket {ticket} for the printer queue.",
+     "Ich habe gerade Ticket {ticket} für die Druckerwarteschlange eröffnet.",
+     "Acabo de abrir el ticket {ticket} para la cola de impresión.",
+     "فتحت للتو التذكرة {ticket} لطابور الطباعة.",
+     "मैंने अभी प्रिंटर क्यू के लिए टिकट {ticket} खोला है।"
+    ],
+    [
+     "{oncall_new} is taking over the on-call pager from {oncall_old} starting today.",
+     "{oncall_new} übernimmt ab heute den Bereitschafts-Pager von {oncall_old}.",
+     "{oncall_new} toma desde hoy el busca de guardia que tenía {oncall_old}.",
+     "{oncall_new} يتسلم جهاز المناوبة من {oncall_old} بدءًا من اليوم.",
+     "आज से ऑन-कॉल पेजर {oncall_old} की जगह {oncall_new} संभालेंगे।"
+    ],
+    [
+     "Correction: the maintenance window moves to {win2}.",
+     "Korrektur: Das Wartungsfenster wird auf {win2} verschoben.",
+     "Corrección: la ventana de mantenimiento pasa a las {win2}.",
+     "تصحيح: نافذة الصيانة تنتقل إلى {win2}.",
+     "सुधार: मेंटेनेंस विंडो अब {win2} पर है।"
+    ]
+   ],
+   "queries": [
+    {
+     "id": "vpn",
+     "category": "single_fact",
+     "contains": [
+      "vpn"
+     ],
+     "stale": [
+      "vpn"
+     ],
+     "phrasings": {
+      "direct": [
+       "What's the VPN gateway for the {office} office?",
+       "Welches VPN-Gateway hat das Büro {office}?",
+       "¿Cuál es el gateway VPN de la oficina de {office}?",
+       "ما هي بوابة VPN لمكتب {office}؟",
+       "{office} ऑफ़िस का VPN गेटवे क्या है?"
+      ],
+      "paraphrase": [
+       "I'm at the {office} office and need to connect remotely. Which gateway do I use?",
+       "Ich bin im Büro {office} und muss mich remote verbinden. Welches Gateway nehme ich?",
+       "Estoy en la oficina de {office} y necesito conectarme en remoto. ¿Qué gateway uso?",
+       "أنا في مكتب {office} وأحتاج إلى الاتصال عن بُعد. أي بوابة أستخدم؟",
+       "मैं {office} ऑफ़िस में हूँ और रिमोट कनेक्ट करना है। कौन सा गेटवे इस्तेमाल करूँ?"
+      ]
+     }
+    },
+    {
+     "id": "lead",
+     "category": "single_fact",
+     "contains": [
+      "lead"
+     ],
+     "stale": [
+      "lead"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is my team lead?",
+       "Wer ist meine Teamleitung?",
+       "¿Quién es mi líder de equipo?",
+       "من هو قائد فريقي؟",
+       "मेरे टीम लीड कौन हैं?"
+      ],
+      "paraphrase": [
+       "Remind me who leads my team.",
+       "Erinnere mich, wer mein Team leitet.",
+       "Recuérdame quién dirige mi equipo.",
+       "ذكّرني من يقود فريقي.",
+       "याद दिलाओ, मेरी टीम कौन लीड करता है?"
+      ]
+     }
+    },
+    {
+     "id": "hop2",
+     "category": "multi_hop_2",
+     "contains": [
+      "cluster",
+      "team"
+     ],
+     "stale": [
+      "server",
+      "cluster",
+      "team"
+     ],
+     "anchor": [
+      "server"
+     ],
+     "phrasings": {
+      "direct": [
+       "Which team owns server {server}?",
+       "Welchem Team gehört Server {server}?",
+       "¿Qué equipo es dueño del servidor {server}?",
+       "أي فريق يملك الخادم {server}؟",
+       "सर्वर {server} की ओनर कौन सी टीम है?"
+      ],
+      "paraphrase": [
+       "Server {server} is throwing errors. Which team do I ping?",
+       "Server {server} wirft Fehler. Welches Team pinge ich an?",
+       "El servidor {server} da errores. ¿A qué equipo aviso?",
+       "الخادم {server} يُظهر أخطاء. أي فريق أُنبّه؟",
+       "सर्वर {server} में एरर आ रहे हैं। किस टीम को पिंग करूँ?"
+      ]
+     }
+    },
+    {
+     "id": "hop3",
+     "category": "multi_hop_3",
+     "contains": [
+      "cluster",
+      "team",
+      "esc"
+     ],
+     "stale": [
+      "server",
+      "cluster",
+      "team",
+      "esc"
+     ],
+     "anchor": [
+      "server"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is the escalation contact for server {server}?",
+       "Wer ist der Eskalationskontakt für Server {server}?",
+       "¿Quién es el contacto de escalamiento del servidor {server}?",
+       "من هي جهة التصعيد للخادم {server}؟",
+       "सर्वर {server} का एस्केलेशन कॉन्टैक्ट कौन है?"
+      ],
+      "paraphrase": [
+       "{server} is down. Whom do I escalate to?",
+       "{server} ist ausgefallen. An wen eskaliere ich?",
+       "{server} está caído. ¿A quién escalo?",
+       "{server} متوقف. إلى من أصعّد؟",
+       "{server} डाउन है। किसे एस्केलेट करूँ?"
+      ]
+     }
+    },
+    {
+     "id": "replace",
+     "category": "update_replacement",
+     "contains": [
+      "oncall_new"
+     ],
+     "stale": [
+      "oncall_old",
+      "oncall_new"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is on call right now?",
+       "Wer hat gerade Rufbereitschaft?",
+       "¿Quién está de guardia ahora mismo?",
+       "من المناوب الآن؟",
+       "अभी ऑन-कॉल कौन है?"
+      ],
+      "paraphrase": [
+       "Page the on-call SRE for me: who is it?",
+       "Ruf die SRE-Bereitschaft für mich an: Wer ist das?",
+       "Llama al SRE de guardia por mí: ¿quién es?",
+       "استدعِ مهندس SRE المناوب لي: من هو؟",
+       "मेरे लिए ऑन-कॉल SRE को पेज करो: वो कौन है?"
+      ]
+     }
+    },
+    {
+     "id": "window",
+     "category": "recency",
+     "contains": [
+      "win2"
+     ],
+     "stale": [
+      "win1",
+      "win2"
+     ],
+     "phrasings": {
+      "direct": [
+       "When is the maintenance window?",
+       "Wann ist das Wartungsfenster?",
+       "¿Cuándo es la ventana de mantenimiento?",
+       "متى نافذة الصيانة؟",
+       "मेंटेनेंस विंडो कब है?"
+      ],
+      "paraphrase": [
+       "What time does maintenance start tonight?",
+       "Um wie viel Uhr beginnt heute Nacht die Wartung?",
+       "¿A qué hora empieza el mantenimiento esta noche?",
+       "في أي ساعة تبدأ الصيانة الليلة؟",
+       "आज रात मेंटेनेंस कितने बजे शुरू होगा?"
+      ]
+     }
+    },
+    {
+     "id": "ticket",
+     "category": "recency",
+     "contains": [
+      "ticket"
+     ],
+     "stale": [
+      "ticket"
+     ],
+     "anchor": [
+      "ticket"
+     ],
+     "phrasings": {
+      "direct": [
+       "What's the latest ticket I opened?",
+       "Welches Ticket habe ich zuletzt eröffnet?",
+       "¿Cuál es el último ticket que abrí?",
+       "ما آخر تذكرة فتحتها؟",
+       "मैंने आख़िरी टिकट कौन सा खोला था?"
+      ],
+      "paraphrase": [
+       "Give me the number of my most recent ticket.",
+       "Nenn mir die Nummer meines neuesten Tickets.",
+       "Dame el número de mi ticket más reciente.",
+       "أعطني رقم أحدث تذكرة لي.",
+       "मेरे सबसे हाल के टिकट का नंबर बताओ।"
+      ]
+     }
+    },
+    {
+     "id": "abst_dba",
+     "category": "abstention",
+     "abstain": true,
+     "near": [
+      "oncall_new",
+      "oncall_old"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is our on-call DBA?",
+       "Wer ist unser DBA in Rufbereitschaft?",
+       "¿Quién es nuestro DBA de guardia?",
+       "من هو مسؤول قواعد البيانات المناوب لدينا؟",
+       "हमारा ऑन-कॉल DBA कौन है?"
+      ],
+      "paraphrase": [
+       "Which database administrator is on duty tonight?",
+       "Welcher Datenbankadministrator hat heute Nacht Dienst?",
+       "¿Qué administrador de bases de datos está de turno esta noche?",
+       "أي مسؤول قواعد بيانات في الخدمة الليلة؟",
+       "आज रात कौन सा डेटाबेस एडमिन ड्यूटी पर है?"
+      ]
+     }
+    },
+    {
+     "id": "abst_office",
+     "category": "abstention",
+     "abstain": true,
+     "near": [
+      "vpn"
+     ],
+     "phrasings": {
+      "direct": [
+       "What's the VPN gateway for the {ghost_office} office?",
+       "Welches VPN-Gateway hat das Büro {ghost_office}?",
+       "¿Cuál es el gateway VPN de la oficina de {ghost_office}?",
+       "ما هي بوابة VPN لمكتب {ghost_office}؟",
+       "{ghost_office} ऑफ़िस का VPN गेटवे क्या है?"
+      ],
+      "paraphrase": [
+       "Which gateway does the {ghost_office} office use for remote access?",
+       "Welches Gateway nutzt das Büro {ghost_office} für den Fernzugriff?",
+       "¿Qué gateway usa la oficina de {ghost_office} para el acceso remoto?",
+       "أي بوابة يستخدمها مكتب {ghost_office} للوصول عن بُعد؟",
+       "{ghost_office} ऑफ़िस रिमोट एक्सेस के लिए कौन सा गेटवे इस्तेमाल करता है?"
+      ]
+     }
+    },
+    {
+     "id": "rule",
+     "category": "standing_rule",
+     "contains": [
+      "cc"
+     ],
+     "stale": [
+      "cc"
+     ],
+     "phrasings": {
+      "direct": [
+       "Draft an outage email about the {server} incident.",
+       "Entwirf eine Störungs-E-Mail zum Vorfall auf {server}.",
+       "Redacta un correo de incidencia sobre el incidente de {server}.",
+       "اكتب مسودة بريد عطل حول حادثة {server}.",
+       "{server} इंसिडेंट के बारे में आउटेज ईमेल का ड्राफ़्ट बनाओ।"
+      ],
+      "paraphrase": [
+       "Write the customer notice for tonight's outage.",
+       "Schreib die Kundenmitteilung zur heutigen Störung.",
+       "Escribe el aviso a clientes sobre la caída de esta noche.",
+       "اكتب إشعار العملاء عن عطل الليلة.",
+       "आज रात के आउटेज के लिए कस्टमर नोटिस लिखो।"
+      ]
+     }
+    },
+    {
+     "id": "format",
+     "category": "format_rule",
+     "contains": [
+      "fields"
+     ],
+     "stale": [
+      "fields"
+     ],
+     "phrasings": {
+      "direct": [
+       "Give me a status update on the {server} incident.",
+       "Gib mir ein Statusupdate zum Vorfall auf {server}.",
+       "Dame una actualización de estado del incidente de {server}.",
+       "أعطني تحديث حالة عن حادثة {server}.",
+       "{server} इंसिडेंट का स्टेटस अपडेट दो।"
+      ],
+      "paraphrase": [
+       "Where are we on the outage? Update me.",
+       "Wie ist der Stand bei der Störung? Bring mich auf den neuesten Stand.",
+       "¿Cómo vamos con la caída? Ponme al día.",
+       "أين وصلنا في العطل؟ أطلعني.",
+       "आउटेज पर हम कहाँ हैं? मुझे अपडेट करो।"
+      ]
+     }
+    },
+    {
+     "id": "pref",
+     "category": "preference",
+     "contains": [
+      "channel",
+      "tz"
+     ],
+     "stale": [
+      "channel",
+      "tz"
+     ],
+     "phrasings": {
+      "direct": [
+       "Set up my alerting for the new service.",
+       "Richte meine Alarmierung für den neuen Dienst ein.",
+       "Configura mis alertas para el nuevo servicio.",
+       "اضبط تنبيهاتي للخدمة الجديدة.",
+       "नई सर्विस के लिए मेरी अलर्टिंग सेट करो।"
+      ],
+      "paraphrase": [
+       "When and how should you notify me about incidents?",
+       "Wann und wie sollst du mich über Vorfälle informieren?",
+       "¿Cuándo y cómo debes avisarme de incidentes?",
+       "متى وكيف يجب أن تُبلغني بالحوادث؟",
+       "इंसिडेंट के बारे में मुझे कब और कैसे बताना चाहिए?"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "finance-ops",
+   "domain": "finance_hr",
+   "slots": {
+    "hrbp": {
+     "name": true
+    },
+    "limit": {
+     "int": [
+      310,
+      1990
+     ]
+    },
+    "proj": {
+     "pattern": "PRJ-{A}{A}{D}{d}"
+    },
+    "cc": {
+     "pattern": "CC-{D}{d}{d}{d}"
+    },
+    "approver": {
+     "name": true
+    },
+    "delegate": {
+     "name": true
+    },
+    "agency_old": {
+     "pattern": "{w:ag1}{w:ag2} Travel"
+    },
+    "agency_new": {
+     "pattern": "{w:ag1}{w:ag2} Travel"
+    },
+    "currency": {
+     "pool": "currencies"
+    },
+    "fcols": {
+     "pick": [
+      "fin_cols",
+      4,
+      ", "
+     ]
+    },
+    "fmt": {
+     "pool": "file_formats"
+    },
+    "due1": {
+     "pool": "due_dates"
+    },
+    "due2": {
+     "pool": "due_dates"
+    },
+    "er": {
+     "pattern": "ER-{D}{d}{d}{d}{d}"
+    },
+    "ghost_proj": {
+     "once": true,
+     "pattern": "PRJ-{A}{A}{D}{d}"
+    }
+   },
+   "turns": [
+    [
+     "My HR business partner is {hrbp}.",
+     "Meine HR-Business-Partnerin ist {hrbp}.",
+     "Mi socia de RR. HH. es {hrbp}.",
+     "شريكة الموارد البشرية الخاصة بي هي {hrbp}.",
+     "मेरी HR बिज़नेस पार्टनर {hrbp} हैं।"
+    ],
+    [
+     "My expense limit without pre-approval is {limit}.",
+     "Mein Spesenlimit ohne Vorabgenehmigung liegt bei {limit}.",
+     "Mi límite de gastos sin aprobación previa es {limit}.",
+     "حد مصروفاتي دون موافقة مسبقة هو {limit}.",
+     "बिना पूर्व-अनुमोदन के मेरी खर्च सीमा {limit} है।"
+    ],
+    [
+     "Project {proj} is billed to cost center {cc}.",
+     "Projekt {proj} wird über Kostenstelle {cc} abgerechnet.",
+     "El proyecto {proj} se factura al centro de costos {cc}.",
+     "يُحمَّل المشروع {proj} على مركز التكلفة {cc}.",
+     "प्रोजेक्ट {proj} का बिल कॉस्ट सेंटर {cc} में जाता है।"
+    ],
+    [
+     "Cost center {cc} is approved by {approver}.",
+     "Kostenstelle {cc} wird von {approver} genehmigt.",
+     "El centro de costos {cc} lo aprueba {approver}.",
+     "يعتمد مركز التكلفة {cc} {approver}.",
+     "कॉस्ट सेंटर {cc} को {approver} अप्रूव करते हैं।"
+    ],
+    [
+     "While {approver} is travelling, approvals go to {delegate}.",
+     "Solange {approver} auf Reisen ist, gehen Freigaben an {delegate}.",
+     "Mientras {approver} está de viaje, las aprobaciones van a {delegate}.",
+     "أثناء سفر {approver} تذهب الموافقات إلى {delegate}.",
+     "जब {approver} यात्रा पर हों, तो अप्रूवल {delegate} के पास जाते हैं।"
+    ],
+    [
+     "Our travel agency is {agency_old}.",
+     "Unser Reisebüro ist {agency_old}.",
+     "Nuestra agencia de viajes es {agency_old}.",
+     "وكالة السفر لدينا هي {agency_old}.",
+     "हमारी ट्रैवल एजेंसी {agency_old} है।"
+    ],
+    [
+     "Always quote amounts in {currency}.",
+     "Gib Beträge immer in {currency} an.",
+     "Expresa siempre los importes en {currency}.",
+     "اذكر المبالغ دائمًا بعملة {currency}.",
+     "रकम हमेशा {currency} में बताना।"
+    ],
+    [
+     "When I ask for a variance report, give me a markdown table with columns: {fcols}.",
+     "Wenn ich nach einem Abweichungsbericht frage, gib mir eine Markdown-Tabelle mit den Spalten: {fcols}.",
+     "Cuando pida un informe de desviaciones, dame una tabla markdown con las columnas: {fcols}.",
+     "عندما أطلب تقرير الانحرافات، أعطني جدول markdown بالأعمدة: {fcols}.",
+     "जब मैं वेरिएंस रिपोर्ट माँगूँ, तो इन कॉलमों वाली markdown टेबल देना: {fcols}।"
+    ],
+    [
+     "Send me reports as {fmt} files, and keep them short.",
+     "Schick mir Berichte als {fmt}-Dateien und halte sie kurz.",
+     "Envíame los informes como archivos {fmt} y que sean breves.",
+     "أرسل لي التقارير كملفات {fmt} واجعلها قصيرة.",
+     "मुझे रिपोर्ट {fmt} फ़ाइल के रूप में भेजो, और छोटी रखो।"
+    ],
+    [
+     "The board pack is due on {due1}.",
+     "Die Vorstandsunterlagen sind am {due1} fällig.",
+     "El dosier del consejo vence el {due1}.",
+     "موعد تسليم ملف مجلس الإدارة هو {due1}.",
+     "बोर्ड पैक {due1} को देना है।"
+    ],
+    [
+     "I just submitted expense report {er}.",
+     "Ich habe gerade die Spesenabrechnung {er} eingereicht.",
+     "Acabo de presentar el informe de gastos {er}.",
+     "قدّمت للتو تقرير المصروفات {er}.",
+     "मैंने अभी एक्सपेंस रिपोर्ट {er} जमा की है।"
+    ],
+    [
+     "We dropped {agency_old}; {agency_new} handles all business travel from now on.",
+     "Wir haben {agency_old} gekündigt; {agency_new} übernimmt ab sofort alle Geschäftsreisen.",
+     "Dejamos {agency_old}; {agency_new} se encarga de todos los viajes de negocios a partir de ahora.",
+     "تخلّينا عن {agency_old}؛ {agency_new} تتولى جميع سفريات العمل من الآن.",
+     "हमने {agency_old} को छोड़ दिया; अब से सारी बिज़नेस ट्रैवल {agency_new} संभालेगी।"
+    ],
+    [
+     "Scratch that: the board pack is now due on {due2}.",
+     "Vergiss das: Die Vorstandsunterlagen sind jetzt am {due2} fällig.",
+     "Olvida eso: el dosier del consejo ahora vence el {due2}.",
+     "انسَ ذلك: موعد تسليم ملف مجلس الإدارة أصبح {due2}.",
+     "वो छोड़ो: बोर्ड पैक अब {due2} को देना है।"
+    ]
+   ],
+   "queries": [
+    {
+     "id": "hrbp",
+     "category": "single_fact",
+     "contains": [
+      "hrbp"
+     ],
+     "stale": [
+      "hrbp"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is my HR business partner?",
+       "Wer ist meine HR-Business-Partnerin?",
+       "¿Quién es mi socia de RR. HH.?",
+       "من هي شريكة الموارد البشرية الخاصة بي؟",
+       "मेरी HR बिज़नेस पार्टनर कौन हैं?"
+      ],
+      "paraphrase": [
+       "I have a question about my contract. Which HR person do I talk to?",
+       "Ich habe eine Frage zu meinem Vertrag. An wen in HR wende ich mich?",
+       "Tengo una duda sobre mi contrato. ¿Con quién de RR. HH. hablo?",
+       "لدي سؤال عن عقدي. مع من أتحدث في الموارد البشرية؟",
+       "मेरे कॉन्ट्रैक्ट के बारे में सवाल है। HR में किससे बात करूँ?"
+      ]
+     }
+    },
+    {
+     "id": "limit",
+     "category": "single_fact",
+     "contains": [
+      "limit"
+     ],
+     "stale": [
+      "limit"
+     ],
+     "phrasings": {
+      "direct": [
+       "What's my expense limit without pre-approval?",
+       "Wie hoch ist mein Spesenlimit ohne Vorabgenehmigung?",
+       "¿Cuál es mi límite de gastos sin aprobación previa?",
+       "ما حد مصروفاتي دون موافقة مسبقة؟",
+       "बिना पूर्व-अनुमोदन के मेरी खर्च सीमा कितनी है?"
+      ],
+      "paraphrase": [
+       "How much can I spend before I need approval?",
+       "Wie viel darf ich ausgeben, bevor ich eine Genehmigung brauche?",
+       "¿Cuánto puedo gastar antes de necesitar aprobación?",
+       "كم يمكنني أن أنفق قبل أن أحتاج إلى موافقة؟",
+       "अप्रूवल की ज़रूरत से पहले मैं कितना खर्च कर सकती हूँ?"
+      ]
+     }
+    },
+    {
+     "id": "hop2",
+     "category": "multi_hop_2",
+     "contains": [
+      "cc",
+      "approver"
+     ],
+     "stale": [
+      "proj",
+      "cc",
+      "approver"
+     ],
+     "anchor": [
+      "proj"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who approves spending on project {proj}?",
+       "Wer genehmigt Ausgaben für Projekt {proj}?",
+       "¿Quién aprueba el gasto del proyecto {proj}?",
+       "من يعتمد الإنفاق على المشروع {proj}؟",
+       "प्रोजेक्ट {proj} पर खर्च कौन अप्रूव करता है?"
+      ],
+      "paraphrase": [
+       "I need sign-off for a purchase on {proj}. Who do I ask?",
+       "Ich brauche eine Freigabe für einen Kauf auf {proj}. Wen frage ich?",
+       "Necesito aprobación para una compra en {proj}. ¿A quién se la pido?",
+       "أحتاج إلى اعتماد لعملية شراء على {proj}. من أسأل؟",
+       "{proj} पर एक खरीद के लिए साइन-ऑफ़ चाहिए। किससे पूछूँ?"
+      ]
+     }
+    },
+    {
+     "id": "hop3",
+     "category": "multi_hop_3",
+     "contains": [
+      "cc",
+      "approver",
+      "delegate"
+     ],
+     "stale": [
+      "proj",
+      "cc",
+      "approver",
+      "delegate"
+     ],
+     "anchor": [
+      "proj"
+     ],
+     "phrasings": {
+      "direct": [
+       "The approver for project {proj} is travelling. Who signs off instead?",
+       "Der Genehmiger für Projekt {proj} ist auf Reisen. Wer gibt stattdessen frei?",
+       "El aprobador del proyecto {proj} está de viaje. ¿Quién aprueba en su lugar?",
+       "معتمد المشروع {proj} مسافر. من يعتمد بدلًا منه؟",
+       "प्रोजेक्ट {proj} के अप्रूवर यात्रा पर हैं। उनकी जगह कौन साइन-ऑफ़ करेगा?"
+      ],
+      "paraphrase": [
+       "Who covers approvals for {proj} while its approver is away?",
+       "Wer übernimmt die Freigaben für {proj}, während der Genehmiger weg ist?",
+       "¿Quién cubre las aprobaciones de {proj} mientras su aprobador está fuera?",
+       "من يغطي اعتمادات {proj} أثناء غياب معتمده؟",
+       "{proj} के अप्रूवर के बाहर रहने पर अप्रूवल कौन देखता है?"
+      ]
+     }
+    },
+    {
+     "id": "replace",
+     "category": "update_replacement",
+     "contains": [
+      "agency_new"
+     ],
+     "stale": [
+      "agency_old",
+      "agency_new"
+     ],
+     "phrasings": {
+      "direct": [
+       "Which travel agency do we use?",
+       "Welches Reisebüro nutzen wir?",
+       "¿Qué agencia de viajes usamos?",
+       "أي وكالة سفر نستخدم؟",
+       "हम कौन सी ट्रैवल एजेंसी इस्तेमाल करते हैं?"
+      ],
+      "paraphrase": [
+       "Book me a flight to the Madrid offsite through our agency. Which one is it?",
+       "Buch mir über unser Reisebüro einen Flug zum Offsite in Madrid. Welches ist das?",
+       "Resérvame un vuelo al offsite de Madrid con nuestra agencia. ¿Cuál es?",
+       "احجز لي رحلة إلى اجتماع مدريد عبر وكالتنا. ما هي؟",
+       "हमारी एजेंसी से मेरे लिए मैड्रिड ऑफ़साइट की फ़्लाइट बुक करो। वो कौन सी है?"
+      ]
+     }
+    },
+    {
+     "id": "due",
+     "category": "recency",
+     "contains": [
+      "due2"
+     ],
+     "stale": [
+      "due1",
+      "due2"
+     ],
+     "phrasings": {
+      "direct": [
+       "When is the board pack due?",
+       "Wann sind die Vorstandsunterlagen fällig?",
+       "¿Cuándo vence el dosier del consejo?",
+       "متى موعد تسليم ملف مجلس الإدارة؟",
+       "बोर्ड पैक कब देना है?"
+      ],
+      "paraphrase": [
+       "What's the deadline for the board pack?",
+       "Was ist die Frist für die Vorstandsunterlagen?",
+       "¿Cuál es la fecha límite del dosier del consejo?",
+       "ما الموعد النهائي لملف مجلس الإدارة؟",
+       "बोर्ड पैक की डेडलाइन क्या है?"
+      ]
+     }
+    },
+    {
+     "id": "er",
+     "category": "recency",
+     "contains": [
+      "er"
+     ],
+     "stale": [
+      "er"
+     ],
+     "anchor": [
+      "er"
+     ],
+     "phrasings": {
+      "direct": [
+       "What was the last expense report I submitted?",
+       "Welche Spesenabrechnung habe ich zuletzt eingereicht?",
+       "¿Cuál fue el último informe de gastos que presenté?",
+       "ما آخر تقرير مصروفات قدّمته؟",
+       "मैंने आख़िरी एक्सपेंस रिपोर्ट कौन सी जमा की थी?"
+      ],
+      "paraphrase": [
+       "Give me the number of my most recent expense report.",
+       "Nenn mir die Nummer meiner neuesten Spesenabrechnung.",
+       "Dame el número de mi informe de gastos más reciente.",
+       "أعطني رقم أحدث تقرير مصروفات لي.",
+       "मेरी सबसे हाल की एक्सपेंस रिपोर्ट का नंबर बताओ।"
+      ]
+     }
+    },
+    {
+     "id": "abst_payroll",
+     "category": "abstention",
+     "abstain": true,
+     "near": [
+      "hrbp"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is my payroll specialist?",
+       "Wer ist meine Ansprechperson für die Gehaltsabrechnung?",
+       "¿Quién es mi especialista de nóminas?",
+       "من هو أخصائي الرواتب الخاص بي؟",
+       "मेरे पेरोल स्पेशलिस्ट कौन हैं?"
+      ],
+      "paraphrase": [
+       "Who handles my payslip questions?",
+       "Wer kümmert sich um meine Fragen zur Gehaltsabrechnung?",
+       "¿Quién atiende mis dudas sobre la nómina?",
+       "من يتولى أسئلتي حول قسيمة الراتب؟",
+       "मेरी सैलरी स्लिप के सवाल कौन देखता है?"
+      ]
+     }
+    },
+    {
+     "id": "abst_proj",
+     "category": "abstention",
+     "abstain": true,
+     "near": [
+      "approver",
+      "cc"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who approves spending on project {ghost_proj}?",
+       "Wer genehmigt Ausgaben für Projekt {ghost_proj}?",
+       "¿Quién aprueba el gasto del proyecto {ghost_proj}?",
+       "من يعتمد الإنفاق على المشروع {ghost_proj}؟",
+       "प्रोजेक्ट {ghost_proj} पर खर्च कौन अप्रूव करता है?"
+      ],
+      "paraphrase": [
+       "Which cost center is project {ghost_proj} billed to?",
+       "Über welche Kostenstelle wird Projekt {ghost_proj} abgerechnet?",
+       "¿A qué centro de costos se factura el proyecto {ghost_proj}?",
+       "على أي مركز تكلفة يُحمَّل المشروع {ghost_proj}؟",
+       "प्रोजेक्ट {ghost_proj} का बिल किस कॉस्ट सेंटर में जाता है?"
+      ]
+     }
+    },
+    {
+     "id": "rule",
+     "category": "standing_rule",
+     "contains": [
+      "currency"
+     ],
+     "stale": [
+      "currency"
+     ],
+     "phrasings": {
+      "direct": [
+       "What did we spend on travel last quarter?",
+       "Was haben wir im letzten Quartal für Reisen ausgegeben?",
+       "¿Cuánto gastamos en viajes el último trimestre?",
+       "كم أنفقنا على السفر في الربع الماضي؟",
+       "पिछली तिमाही में हमने यात्रा पर कितना खर्च किया?"
+      ],
+      "paraphrase": [
+       "Summarize the budget for project {proj}.",
+       "Fass das Budget für Projekt {proj} zusammen.",
+       "Resume el presupuesto del proyecto {proj}.",
+       "لخّص ميزانية المشروع {proj}.",
+       "प्रोजेक्ट {proj} के बजट का सारांश दो।"
+      ]
+     }
+    },
+    {
+     "id": "format",
+     "category": "format_rule",
+     "contains": [
+      "fcols"
+     ],
+     "stale": [
+      "fcols"
+     ],
+     "phrasings": {
+      "direct": [
+       "Give me the variance report for this quarter.",
+       "Gib mir den Abweichungsbericht für dieses Quartal.",
+       "Dame el informe de desviaciones de este trimestre.",
+       "أعطني تقرير الانحرافات لهذا الربع.",
+       "इस तिमाही की वेरिएंस रिपोर्ट दो।"
+      ],
+      "paraphrase": [
+       "How far off budget are we? Show me the variances.",
+       "Wie weit liegen wir neben dem Budget? Zeig mir die Abweichungen.",
+       "¿Cuánto nos desviamos del presupuesto? Muéstrame las desviaciones.",
+       "كم ابتعدنا عن الميزانية؟ أرني الانحرافات.",
+       "हम बजट से कितना दूर हैं? वेरिएंस दिखाओ।"
+      ]
+     }
+    },
+    {
+     "id": "pref",
+     "category": "preference",
+     "contains": [
+      "fmt"
+     ],
+     "stale": [
+      "fmt"
+     ],
+     "phrasings": {
+      "direct": [
+       "Send me the monthly spend report.",
+       "Schick mir den monatlichen Ausgabenbericht.",
+       "Envíame el informe mensual de gastos.",
+       "أرسل لي تقرير الإنفاق الشهري.",
+       "मुझे मासिक खर्च रिपोर्ट भेजो।"
+      ],
+      "paraphrase": [
+       "Prepare the headcount summary for me.",
+       "Bereite mir die Personalübersicht vor.",
+       "Prepárame el resumen de plantilla.",
+       "جهّز لي ملخص أعداد الموظفين.",
+       "मेरे लिए हेडकाउंट सारांश तैयार करो।"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "field-service",
+   "domain": "field_service",
+   "slots": {
+    "home_site": {
+     "once": true,
+     "pattern": "SITE-{D}{d}{d}{d}"
+    },
+    "tech": {
+     "name": true
+    },
+    "depot": {
+     "pattern": "DEP-{A}{D}{d}{d}"
+    },
+    "site": {
+     "pattern": "SITE-{D}{d}{d}{d}"
+    },
+    "zone": {
+     "pattern": "ZN-{A}{D}{d}"
+    },
+    "dispatcher": {
+     "name": true
+    },
+    "depot2": {
+     "pattern": "DEP-{A}{D}{d}{d}"
+    },
+    "depot_mgr": {
+     "name": true
+    },
+    "site2": {
+     "pattern": "SITE-{D}{d}{d}{d}"
+    },
+    "tech_old": {
+     "name": true
+    },
+    "tech_new": {
+     "name": true
+    },
+    "slot1": {
+     "pool": "slots"
+    },
+    "slot2": {
+     "pool": "slots"
+    },
+    "wo": {
+     "pattern": "WO-{A}{D}"
+    },
+    "jcols": {
+     "pick": [
+      "job_cols",
+      4,
+      ", "
+     ]
+    },
+    "base": {
+     "pool": "towns"
+    },
+    "meter": {
+     "pattern": "MR-{D}{d}{d}{d}{d}"
+    }
+   },
+   "turns": [
+    [
+     "The technician assigned to site {home_site} is {tech}.",
+     "Der zuständige Techniker für Standort {home_site} ist {tech}.",
+     "El técnico asignado al sitio {home_site} es {tech}.",
+     "الفني المكلّف بالموقع {home_site} هو {tech}.",
+     "साइट {home_site} के लिए असाइन टेक्नीशियन {tech} हैं।"
+    ],
+    [
+     "Spare parts for the north zone come from depot {depot}.",
+     "Ersatzteile für die Nordzone kommen aus dem Depot {depot}.",
+     "Los repuestos de la zona norte salen del depósito {depot}.",
+     "قطع الغيار للمنطقة الشمالية تأتي من المستودع {depot}.",
+     "नॉर्थ ज़ोन के स्पेयर पार्ट्स डिपो {depot} से आते हैं।"
+    ],
+    [
+     "Site {site} is in zone {zone}.",
+     "Standort {site} liegt in Zone {zone}.",
+     "El sitio {site} está en la zona {zone}.",
+     "الموقع {site} يقع في النطاق {zone}.",
+     "साइट {site} ज़ोन {zone} में है।"
+    ],
+    [
+     "The dispatcher for zone {zone} is {dispatcher}.",
+     "Disponent für Zone {zone} ist {dispatcher}.",
+     "El despachador de la zona {zone} es {dispatcher}.",
+     "المُرسِل المسؤول عن النطاق {zone} هو {dispatcher}.",
+     "ज़ोन {zone} के डिस्पैचर {dispatcher} हैं।"
+    ],
+    [
+     "Zone {zone} is served by depot {depot2}.",
+     "Zone {zone} wird vom Depot {depot2} versorgt.",
+     "La zona {zone} se abastece del depósito {depot2}.",
+     "يخدم المستودع {depot2} النطاق {zone}.",
+     "ज़ोन {zone} को डिपो {depot2} सर्व करता है।"
+    ],
+    [
+     "Depot {depot2} is run by {depot_mgr}.",
+     "Depot {depot2} wird von {depot_mgr} geleitet.",
+     "El depósito {depot2} lo dirige {depot_mgr}.",
+     "يدير المستودع {depot2} {depot_mgr}.",
+     "डिपो {depot2} को {depot_mgr} चलाते हैं।"
+    ],
+    [
+     "The technician for site {site2} is {tech_old}.",
+     "Der Techniker für Standort {site2} ist {tech_old}.",
+     "El técnico del sitio {site2} es {tech_old}.",
+     "الفني المسؤول عن الموقع {site2} هو {tech_old}.",
+     "साइट {site2} के टेक्नीशियन {tech_old} हैं।"
+    ],
+    [
+     "Always put the work order number in the email subject, prefixed with {wo}.",
+     "Setz die Auftragsnummer immer in den E-Mail-Betreff, mit dem Präfix {wo}.",
+     "Pon siempre el número de orden de trabajo en el asunto del correo, con el prefijo {wo}.",
+     "ضع دائمًا رقم أمر العمل في عنوان البريد مسبوقًا بـ {wo}.",
+     "ईमेल सब्जेक्ट में वर्क ऑर्डर नंबर हमेशा {wo} प्रीफ़िक्स के साथ डालना।"
+    ],
+    [
+     "For the daily job summary, reply with a markdown table with columns: {jcols}.",
+     "Für die tägliche Auftragsübersicht antworte mit einer Markdown-Tabelle mit den Spalten: {jcols}.",
+     "Para el resumen diario de trabajos, responde con una tabla markdown con las columnas: {jcols}.",
+     "لملخص المهام اليومي، أجب بجدول markdown بالأعمدة: {jcols}.",
+     "डेली जॉब समरी के लिए इन कॉलमों वाली markdown टेबल में जवाब देना: {jcols}।"
+    ],
+    [
+     "I drive the van out of {base} and prefer jobs close to it.",
+     "Ich fahre den Transporter von {base} aus und bevorzuge Aufträge in der Nähe.",
+     "Salgo con la furgoneta desde {base} y prefiero trabajos cerca de allí.",
+     "أقود الشاحنة انطلاقًا من {base} وأفضّل المهام القريبة منها.",
+     "मैं {base} से वैन चलाता हूँ और पास के जॉब पसंद करता हूँ।"
+    ],
+    [
+     "The job at site {home_site} is booked for {slot1}.",
+     "Der Termin am Standort {home_site} ist für {slot1} gebucht.",
+     "El trabajo en el sitio {home_site} está reservado para las {slot1}.",
+     "المهمة في الموقع {home_site} محجوزة للساعة {slot1}.",
+     "साइट {home_site} का जॉब {slot1} बजे के लिए बुक है।"
+    ],
+    [
+     "I just logged meter reading {meter} at site {home_site}.",
+     "Ich habe gerade den Zählerstand {meter} am Standort {home_site} erfasst.",
+     "Acabo de registrar la lectura de contador {meter} en el sitio {home_site}.",
+     "سجّلت للتو قراءة العداد {meter} في الموقع {home_site}.",
+     "मैंने अभी साइट {home_site} पर मीटर रीडिंग {meter} दर्ज की है।"
+    ],
+    [
+     "{tech_new} now covers site {site2} instead of {tech_old}.",
+     "{tech_new} betreut jetzt Standort {site2} statt {tech_old}.",
+     "{tech_new} cubre ahora el sitio {site2} en lugar de {tech_old}.",
+     "{tech_new} يغطي الآن الموقع {site2} بدلًا من {tech_old}.",
+     "अब साइट {site2} को {tech_old} की जगह {tech_new} देखते हैं।"
+    ],
+    [
+     "Moved the job at site {home_site} to {slot2}.",
+     "Den Termin am Standort {home_site} habe ich auf {slot2} verschoben.",
+     "Moví el trabajo del sitio {home_site} a las {slot2}.",
+     "نقلت المهمة في الموقع {home_site} إلى الساعة {slot2}.",
+     "साइट {home_site} का जॉब {slot2} बजे पर शिफ़्ट कर दिया।"
+    ]
+   ],
+   "queries": [
+    {
+     "id": "tech",
+     "category": "single_fact",
+     "contains": [
+      "tech"
+     ],
+     "stale": [
+      "tech"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is the technician for site {home_site}?",
+       "Wer ist der Techniker für Standort {home_site}?",
+       "¿Quién es el técnico del sitio {home_site}?",
+       "من هو الفني المسؤول عن الموقع {home_site}؟",
+       "साइट {home_site} के टेक्नीशियन कौन हैं?"
+      ],
+      "paraphrase": [
+       "Site {home_site} called about a fault. Who do I send?",
+       "Standort {home_site} hat eine Störung gemeldet. Wen schicke ich hin?",
+       "El sitio {home_site} reportó una avería. ¿A quién envío?",
+       "اتصل الموقع {home_site} بشأن عطل. من أرسل؟",
+       "साइट {home_site} से फ़ॉल्ट की कॉल आई है। किसे भेजूँ?"
+      ]
+     }
+    },
+    {
+     "id": "depot",
+     "category": "single_fact",
+     "contains": [
+      "depot"
+     ],
+     "stale": [
+      "depot"
+     ],
+     "phrasings": {
+      "direct": [
+       "Which depot supplies spare parts for the north zone?",
+       "Welches Depot liefert Ersatzteile für die Nordzone?",
+       "¿Qué depósito surte los repuestos de la zona norte?",
+       "أي مستودع يورّد قطع الغيار للمنطقة الشمالية؟",
+       "नॉर्थ ज़ोन के स्पेयर पार्ट्स कौन सा डिपो देता है?"
+      ],
+      "paraphrase": [
+       "I need a pump seal for a north zone job. Where do I pick it up?",
+       "Ich brauche eine Pumpendichtung für einen Auftrag in der Nordzone. Wo hole ich sie ab?",
+       "Necesito un sello de bomba para un trabajo en la zona norte. ¿Dónde lo recojo?",
+       "أحتاج إلى مانع تسرب لمضخة لمهمة في المنطقة الشمالية. من أين أستلمه؟",
+       "नॉर्थ ज़ोन के एक जॉब के लिए पंप सील चाहिए। कहाँ से उठाऊँ?"
+      ]
+     }
+    },
+    {
+     "id": "hop2",
+     "category": "multi_hop_2",
+     "contains": [
+      "zone",
+      "dispatcher"
+     ],
+     "stale": [
+      "site",
+      "zone",
+      "dispatcher"
+     ],
+     "anchor": [
+      "site"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is the dispatcher for site {site}?",
+       "Wer disponiert für Standort {site}?",
+       "¿Quién es el despachador del sitio {site}?",
+       "من هو المُرسِل المسؤول عن الموقع {site}؟",
+       "साइट {site} के डिस्पैचर कौन हैं?"
+      ],
+      "paraphrase": [
+       "I'm running late to site {site}. Who should I tell in dispatch?",
+       "Ich komme zu spät zu Standort {site}. Wem in der Disposition sage ich Bescheid?",
+       "Llego tarde al sitio {site}. ¿A quién de despacho aviso?",
+       "سأتأخر عن الموقع {site}. من أُبلغ في الإرسال؟",
+       "मुझे साइट {site} पहुँचने में देर हो रही है। डिस्पैच में किसे बताऊँ?"
+      ]
+     }
+    },
+    {
+     "id": "hop3",
+     "category": "multi_hop_3",
+     "contains": [
+      "zone",
+      "depot2",
+      "depot_mgr"
+     ],
+     "stale": [
+      "site",
+      "zone",
+      "depot2",
+      "depot_mgr"
+     ],
+     "anchor": [
+      "site"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who runs the depot that serves site {site}?",
+       "Wer leitet das Depot, das Standort {site} versorgt?",
+       "¿Quién dirige el depósito que abastece al sitio {site}?",
+       "من يدير المستودع الذي يخدم الموقع {site}؟",
+       "साइट {site} को सर्व करने वाला डिपो कौन चलाता है?"
+      ],
+      "paraphrase": [
+       "Parts for site {site} are late. Who manages the depot that supplies it?",
+       "Die Teile für Standort {site} sind verspätet. Wer leitet das zuständige Depot?",
+       "Los repuestos del sitio {site} van con retraso. ¿Quién gestiona el depósito que lo surte?",
+       "قطع غيار الموقع {site} متأخرة. من يدير المستودع الذي يزوّده؟",
+       "साइट {site} के पार्ट्स लेट हैं। उसे सप्लाई करने वाला डिपो कौन संभालता है?"
+      ]
+     }
+    },
+    {
+     "id": "replace",
+     "category": "update_replacement",
+     "contains": [
+      "tech_new"
+     ],
+     "stale": [
+      "tech_old",
+      "tech_new"
+     ],
+     "anchor": [
+      "site2"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who covers site {site2}?",
+       "Wer betreut Standort {site2}?",
+       "¿Quién cubre el sitio {site2}?",
+       "من يغطي الموقع {site2}؟",
+       "साइट {site2} को कौन देखता है?"
+      ],
+      "paraphrase": [
+       "Which technician should I call about site {site2}?",
+       "Welchen Techniker rufe ich wegen Standort {site2} an?",
+       "¿A qué técnico llamo por el sitio {site2}?",
+       "بأي فني أتصل بخصوص الموقع {site2}؟",
+       "साइट {site2} के बारे में किस टेक्नीशियन को कॉल करूँ?"
+      ]
+     }
+    },
+    {
+     "id": "slot",
+     "category": "recency",
+     "contains": [
+      "slot2"
+     ],
+     "stale": [
+      "slot1",
+      "slot2"
+     ],
+     "phrasings": {
+      "direct": [
+       "When is the job at site {home_site}?",
+       "Wann ist der Termin am Standort {home_site}?",
+       "¿Cuándo es el trabajo en el sitio {home_site}?",
+       "متى المهمة في الموقع {home_site}؟",
+       "साइट {home_site} का जॉब कब है?"
+      ],
+      "paraphrase": [
+       "What time do I need to be at {home_site}?",
+       "Um wie viel Uhr muss ich bei {home_site} sein?",
+       "¿A qué hora tengo que estar en {home_site}?",
+       "في أي ساعة يجب أن أكون في {home_site}؟",
+       "मुझे {home_site} पर कितने बजे पहुँचना है?"
+      ]
+     }
+    },
+    {
+     "id": "meter",
+     "category": "recency",
+     "contains": [
+      "meter"
+     ],
+     "stale": [
+      "meter"
+     ],
+     "anchor": [
+      "meter"
+     ],
+     "phrasings": {
+      "direct": [
+       "What was the last meter reading I logged?",
+       "Welchen Zählerstand habe ich zuletzt erfasst?",
+       "¿Cuál fue la última lectura de contador que registré?",
+       "ما آخر قراءة عداد سجّلتها؟",
+       "मैंने आख़िरी मीटर रीडिंग कौन सी दर्ज की थी?"
+      ],
+      "paraphrase": [
+       "Give me my most recent meter reading entry.",
+       "Gib mir meinen neuesten Zählerstand-Eintrag.",
+       "Dame mi registro de lectura de contador más reciente.",
+       "أعطني أحدث قراءة عداد أدخلتها.",
+       "मेरी सबसे हाल की मीटर रीडिंग बताओ।"
+      ]
+     }
+    },
+    {
+     "id": "abst_safety",
+     "category": "abstention",
+     "abstain": true,
+     "near": [
+      "dispatcher"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is the safety officer for zone {zone}?",
+       "Wer ist die Sicherheitsfachkraft für Zone {zone}?",
+       "¿Quién es el responsable de seguridad de la zona {zone}?",
+       "من هو مسؤول السلامة في النطاق {zone}؟",
+       "ज़ोन {zone} के सेफ़्टी ऑफ़िसर कौन हैं?"
+      ],
+      "paraphrase": [
+       "Whom do I report a safety incident to in zone {zone}?",
+       "Wem melde ich einen Sicherheitsvorfall in Zone {zone}?",
+       "¿A quién reporto un incidente de seguridad en la zona {zone}?",
+       "لمن أبلغ عن حادث سلامة في النطاق {zone}؟",
+       "ज़ोन {zone} में सेफ़्टी इंसिडेंट किसे रिपोर्ट करूँ?"
+      ]
+     }
+    },
+    {
+     "id": "abst_gate",
+     "category": "abstention",
+     "abstain": true,
+     "near": [
+      "tech",
+      "slot2"
+     ],
+     "phrasings": {
+      "direct": [
+       "What's the gate code for site {home_site}?",
+       "Wie lautet der Torcode für Standort {home_site}?",
+       "¿Cuál es el código de la puerta del sitio {home_site}?",
+       "ما رمز البوابة للموقع {home_site}؟",
+       "साइट {home_site} का गेट कोड क्या है?"
+      ],
+      "paraphrase": [
+       "How do I get through the gate at {home_site}?",
+       "Wie komme ich am Tor von {home_site} rein?",
+       "¿Cómo paso la puerta de {home_site}?",
+       "كيف أعبر البوابة في {home_site}؟",
+       "{home_site} के गेट से अंदर कैसे जाऊँ?"
+      ]
+     }
+    },
+    {
+     "id": "rule",
+     "category": "standing_rule",
+     "contains": [
+      "wo"
+     ],
+     "stale": [
+      "wo"
+     ],
+     "phrasings": {
+      "direct": [
+       "Email the customer at site {site2} about tomorrow's visit.",
+       "Schreib dem Kunden am Standort {site2} wegen des Besuchs morgen.",
+       "Escribe al cliente del sitio {site2} sobre la visita de mañana.",
+       "راسل العميل في الموقع {site2} بشأن زيارة الغد.",
+       "साइट {site2} के कस्टमर को कल की विज़िट के बारे में ईमेल करो।"
+      ],
+      "paraphrase": [
+       "Draft the completion email for today's job.",
+       "Entwirf die Abschluss-E-Mail für den heutigen Auftrag.",
+       "Redacta el correo de cierre del trabajo de hoy.",
+       "اكتب مسودة بريد إنجاز مهمة اليوم.",
+       "आज के जॉब का कम्प्लीशन ईमेल ड्राफ़्ट करो।"
+      ]
+     }
+    },
+    {
+     "id": "format",
+     "category": "format_rule",
+     "contains": [
+      "jcols"
+     ],
+     "stale": [
+      "jcols"
+     ],
+     "phrasings": {
+      "direct": [
+       "Give me today's job summary.",
+       "Gib mir die heutige Auftragsübersicht.",
+       "Dame el resumen de trabajos de hoy.",
+       "أعطني ملخص مهام اليوم.",
+       "आज की जॉब समरी दो।"
+      ],
+      "paraphrase": [
+       "What did the crew get done today?",
+       "Was hat das Team heute erledigt?",
+       "¿Qué hizo hoy el equipo?",
+       "ماذا أنجز الفريق اليوم؟",
+       "आज टीम ने क्या-क्या किया?"
+      ]
+     }
+    },
+    {
+     "id": "pref",
+     "category": "preference",
+     "contains": [
+      "base"
+     ],
+     "stale": [
+      "base"
+     ],
+     "phrasings": {
+      "direct": [
+       "Pick my jobs for tomorrow.",
+       "Such mir die Aufträge für morgen aus.",
+       "Elige mis trabajos para mañana.",
+       "اختر مهامي لغد.",
+       "कल के लिए मेरे जॉब चुनो।"
+      ],
+      "paraphrase": [
+       "Plan an efficient route for my next shift.",
+       "Plane eine effiziente Route für meine nächste Schicht.",
+       "Planifica una ruta eficiente para mi próximo turno.",
+       "خطط مسارًا فعّالًا لنوبتي القادمة.",
+       "मेरी अगली शिफ़्ट के लिए एक कुशल रूट प्लान करो।"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "personal-assistant",
+   "domain": "personal",
+   "slots": {
+    "dentist": {
+     "name": true
+    },
+    "locker": {
+     "pattern": "L-{D}{d}{d}"
+    },
+    "class": {
+     "pool": "classes"
+    },
+    "teacher": {
+     "name": true
+    },
+    "bldg": {
+     "pattern": "{A}{A}{D}"
+    },
+    "recep": {
+     "name": true
+    },
+    "ll_old": {
+     "name": true
+    },
+    "ll_new": {
+     "name": true
+    },
+    "ntime": {
+     "pool": "early"
+    },
+    "pcols": {
+     "pick": [
+      "pack_cols",
+      4,
+      ", "
+     ]
+    },
+    "cuisine": {
+     "lang_pool": "countries"
+    },
+    "rest1": {
+     "pattern": "{w:rest1} {w:rest2}"
+    },
+    "rest2": {
+     "pattern": "{w:rest1} {w:rest2}"
+    },
+    "flight": {
+     "pattern": "{A}{A}{D}{d}{d}"
+    }
+   },
+   "turns": [
+    [
+     "My dentist is Dr. {dentist}.",
+     "Meine Zahnärztin ist Dr. {dentist}.",
+     "Mi dentista es la Dra. {dentist}.",
+     "طبيبة أسناني هي د. {dentist}.",
+     "मेरी डेंटिस्ट डॉ. {dentist} हैं।"
+    ],
+    [
+     "My gym locker is {locker}.",
+     "Mein Spind im Fitnessstudio ist {locker}.",
+     "Mi taquilla del gimnasio es la {locker}.",
+     "خزانتي في النادي الرياضي هي {locker}.",
+     "जिम में मेरा लॉकर {locker} है।"
+    ],
+    [
+     "My daughter is in the {class} class.",
+     "Meine Tochter ist in der Klasse {class}.",
+     "Mi hija está en la clase {class}.",
+     "ابنتي في فصل {class}.",
+     "मेरी बेटी {class} क्लास में है।"
+    ],
+    [
+     "The teacher for the {class} class is {teacher}.",
+     "Die Lehrkraft der Klasse {class} ist {teacher}.",
+     "La maestra de la clase {class} es {teacher}.",
+     "معلمة فصل {class} هي {teacher}.",
+     "{class} क्लास की टीचर {teacher} हैं।"
+    ],
+    [
+     "The {class} class meets in building {bldg}.",
+     "Die Klasse {class} hat Unterricht in Gebäude {bldg}.",
+     "La clase {class} se da en el edificio {bldg}.",
+     "يجتمع فصل {class} في المبنى {bldg}.",
+     "{class} क्लास बिल्डिंग {bldg} में लगती है।"
+    ],
+    [
+     "The receptionist in building {bldg} is {recep}.",
+     "Am Empfang von Gebäude {bldg} sitzt {recep}.",
+     "La recepcionista del edificio {bldg} es {recep}.",
+     "موظفة الاستقبال في المبنى {bldg} هي {recep}.",
+     "बिल्डिंग {bldg} की रिसेप्शनिस्ट {recep} हैं।"
+    ],
+    [
+     "My landlord is {ll_old}.",
+     "Mein Vermieter ist {ll_old}.",
+     "Mi casero es {ll_old}.",
+     "مالك شقتي هو {ll_old}.",
+     "मेरे मकान मालिक {ll_old} हैं।"
+    ],
+    [
+     "Never schedule anything before {ntime} on weekdays.",
+     "Plane an Werktagen nie etwas vor {ntime} Uhr.",
+     "Nunca programes nada antes de las {ntime} entre semana.",
+     "لا تحدد أي موعد قبل الساعة {ntime} في أيام الأسبوع.",
+     "हफ़्ते के दिनों में {ntime} से पहले कभी कुछ शेड्यूल मत करना।"
+    ],
+    [
+     "When I ask for a packing list, give me a checklist grouped under these headings: {pcols}.",
+     "Wenn ich nach einer Packliste frage, gib mir eine Checkliste mit diesen Überschriften: {pcols}.",
+     "Cuando pida una lista de equipaje, dame una lista de verificación agrupada bajo estos encabezados: {pcols}.",
+     "عندما أطلب قائمة أمتعة، أعطني قائمة تحقق مقسمة تحت هذه العناوين: {pcols}.",
+     "जब मैं पैकिंग लिस्ट माँगूँ, तो इन हेडिंग के तहत चेकलिस्ट देना: {pcols}।"
+    ],
+    [
+     "I'm vegetarian, and lately I love food from {cuisine}.",
+     "Ich bin Vegetarierin und liebe gerade Gerichte aus {cuisine}.",
+     "Soy vegetariana y últimamente me encanta la comida de {cuisine}.",
+     "أنا نباتية، وأحب مؤخرًا الطعام من {cuisine}.",
+     "मैं शाकाहारी हूँ, और आजकल मुझे {cuisine} का खाना बहुत पसंद है।"
+    ],
+    [
+     "Dinner with my sister is at {rest1}.",
+     "Das Abendessen mit meiner Schwester ist im {rest1}.",
+     "La cena con mi hermana es en {rest1}.",
+     "العشاء مع أختي في {rest1}.",
+     "बहन के साथ डिनर {rest1} में है।"
+    ],
+    [
+     "I just booked flight {flight}.",
+     "Ich habe gerade den Flug {flight} gebucht.",
+     "Acabo de reservar el vuelo {flight}.",
+     "حجزت للتو الرحلة {flight}.",
+     "मैंने अभी फ़्लाइट {flight} बुक की है।"
+    ],
+    [
+     "The building was sold, so {ll_new} is my landlord now, not {ll_old}.",
+     "Das Haus wurde verkauft, deshalb ist jetzt {ll_new} mein Vermieter, nicht mehr {ll_old}.",
+     "Vendieron el edificio, así que ahora mi casero es {ll_new}, ya no {ll_old}.",
+     "بيع المبنى، لذا أصبح {ll_new} مالك شقتي الآن، وليس {ll_old}.",
+     "बिल्डिंग बिक गई, इसलिए अब मेरे मकान मालिक {ll_new} हैं, {ll_old} नहीं।"
+    ],
+    [
+     "Change of plans: dinner with my sister moved to {rest2}.",
+     "Planänderung: Das Abendessen mit meiner Schwester ist jetzt im {rest2}.",
+     "Cambio de planes: la cena con mi hermana pasó a {rest2}.",
+     "تغيير في الخطة: العشاء مع أختي انتقل إلى {rest2}.",
+     "प्लान बदल गया: बहन के साथ डिनर अब {rest2} में है।"
+    ]
+   ],
+   "queries": [
+    {
+     "id": "dentist",
+     "category": "single_fact",
+     "contains": [
+      "dentist"
+     ],
+     "stale": [
+      "dentist"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is my dentist?",
+       "Wer ist meine Zahnärztin?",
+       "¿Quién es mi dentista?",
+       "من هي طبيبة أسناني؟",
+       "मेरी डेंटिस्ट कौन हैं?"
+      ],
+      "paraphrase": [
+       "I chipped a tooth. Whose practice should I call?",
+       "Ich habe mir einen Zahn abgebrochen. Welche Praxis rufe ich an?",
+       "Se me rompió un diente. ¿A qué consulta llamo?",
+       "انكسر سني. بأي عيادة أتصل؟",
+       "मेरा दाँत टूट गया। किसके क्लिनिक में फ़ोन करूँ?"
+      ]
+     }
+    },
+    {
+     "id": "locker",
+     "category": "single_fact",
+     "contains": [
+      "locker"
+     ],
+     "stale": [
+      "locker"
+     ],
+     "phrasings": {
+      "direct": [
+       "What's my gym locker?",
+       "Welcher Spind ist meiner im Fitnessstudio?",
+       "¿Cuál es mi taquilla del gimnasio?",
+       "ما خزانتي في النادي الرياضي؟",
+       "जिम में मेरा लॉकर कौन सा है?"
+      ],
+      "paraphrase": [
+       "Which locker did I get at the gym?",
+       "Welchen Spind habe ich im Studio bekommen?",
+       "¿Qué taquilla me dieron en el gimnasio?",
+       "أي خزانة حصلت عليها في النادي؟",
+       "जिम में मुझे कौन सा लॉकर मिला?"
+      ]
+     }
+    },
+    {
+     "id": "hop2",
+     "category": "multi_hop_2",
+     "contains": [
+      "class",
+      "teacher"
+     ],
+     "stale": [
+      "class",
+      "teacher"
+     ],
+     "anchor": [
+      "class"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is my daughter's teacher?",
+       "Wer ist die Lehrkraft meiner Tochter?",
+       "¿Quién es la maestra de mi hija?",
+       "من هي معلمة ابنتي؟",
+       "मेरी बेटी की टीचर कौन हैं?"
+      ],
+      "paraphrase": [
+       "I need to email my daughter's teacher. Who is it?",
+       "Ich muss der Lehrkraft meiner Tochter schreiben. Wer ist das?",
+       "Tengo que escribirle a la maestra de mi hija. ¿Quién es?",
+       "أحتاج إلى مراسلة معلمة ابنتي. من هي؟",
+       "मुझे बेटी की टीचर को ईमेल करना है। वो कौन हैं?"
+      ]
+     }
+    },
+    {
+     "id": "hop3",
+     "category": "multi_hop_3",
+     "contains": [
+      "class",
+      "bldg",
+      "recep"
+     ],
+     "stale": [
+      "class",
+      "bldg",
+      "recep"
+     ],
+     "anchor": [
+      "class"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is the receptionist in the building where my daughter's class meets?",
+       "Wer sitzt am Empfang des Gebäudes, in dem die Klasse meiner Tochter Unterricht hat?",
+       "¿Quién es la recepcionista del edificio donde se da la clase de mi hija?",
+       "من موظفة الاستقبال في المبنى الذي يجتمع فيه فصل ابنتي؟",
+       "जिस बिल्डिंग में मेरी बेटी की क्लास लगती है, वहाँ की रिसेप्शनिस्ट कौन है?"
+      ],
+      "paraphrase": [
+       "I'm picking up my daughter early. Whom do I check in with at the front desk?",
+       "Ich hole meine Tochter früher ab. Bei wem melde ich mich am Empfang?",
+       "Voy a recoger antes a mi hija. ¿Con quién me registro en recepción?",
+       "سأصطحب ابنتي مبكرًا. لدى من أسجّل في الاستقبال؟",
+       "मैं बेटी को जल्दी लेने जा रही हूँ। रिसेप्शन पर किससे मिलूँ?"
+      ]
+     }
+    },
+    {
+     "id": "replace",
+     "category": "update_replacement",
+     "contains": [
+      "ll_new"
+     ],
+     "stale": [
+      "ll_old",
+      "ll_new"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is my landlord?",
+       "Wer ist mein Vermieter?",
+       "¿Quién es mi casero?",
+       "من هو مالك شقتي؟",
+       "मेरे मकान मालिक कौन हैं?"
+      ],
+      "paraphrase": [
+       "The heating is broken. Who do I contact about the flat?",
+       "Die Heizung ist kaputt. Wen kontaktiere ich wegen der Wohnung?",
+       "La calefacción no funciona. ¿A quién contacto por el piso?",
+       "التدفئة معطلة. بمن أتصل بخصوص الشقة؟",
+       "हीटिंग ख़राब है। फ़्लैट के बारे में किससे संपर्क करूँ?"
+      ]
+     }
+    },
+    {
+     "id": "dinner",
+     "category": "recency",
+     "contains": [
+      "rest2"
+     ],
+     "stale": [
+      "rest1",
+      "rest2"
+     ],
+     "phrasings": {
+      "direct": [
+       "Where is dinner with my sister?",
+       "Wo ist das Abendessen mit meiner Schwester?",
+       "¿Dónde es la cena con mi hermana?",
+       "أين العشاء مع أختي؟",
+       "बहन के साथ डिनर कहाँ है?"
+      ],
+      "paraphrase": [
+       "Which restaurant am I meeting my sister at?",
+       "In welchem Restaurant treffe ich meine Schwester?",
+       "¿En qué restaurante quedo con mi hermana?",
+       "في أي مطعم سألتقي أختي؟",
+       "मैं बहन से किस रेस्टोरेंट में मिल रही हूँ?"
+      ]
+     }
+    },
+    {
+     "id": "flight",
+     "category": "recency",
+     "contains": [
+      "flight"
+     ],
+     "stale": [
+      "flight"
+     ],
+     "anchor": [
+      "flight"
+     ],
+     "phrasings": {
+      "direct": [
+       "What's the last flight I booked?",
+       "Welchen Flug habe ich zuletzt gebucht?",
+       "¿Cuál es el último vuelo que reservé?",
+       "ما آخر رحلة حجزتها؟",
+       "मैंने आख़िरी फ़्लाइट कौन सी बुक की थी?"
+      ],
+      "paraphrase": [
+       "Give me the flight number of my most recent booking.",
+       "Nenn mir die Flugnummer meiner neuesten Buchung.",
+       "Dame el número de vuelo de mi reserva más reciente.",
+       "أعطني رقم رحلة أحدث حجز لي.",
+       "मेरी सबसे हाल की बुकिंग का फ़्लाइट नंबर बताओ।"
+      ]
+     }
+    },
+    {
+     "id": "abst_derm",
+     "category": "abstention",
+     "abstain": true,
+     "near": [
+      "dentist"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is my dermatologist?",
+       "Wer ist meine Hautärztin?",
+       "¿Quién es mi dermatóloga?",
+       "من هي طبيبة الجلدية الخاصة بي؟",
+       "मेरी डर्मेटोलॉजिस्ट कौन हैं?"
+      ],
+      "paraphrase": [
+       "Which skin doctor do I see?",
+       "Zu welcher Hautärztin gehe ich?",
+       "¿A qué médica de la piel voy?",
+       "عند أي طبيبة جلدية أتابع؟",
+       "मैं किस स्किन डॉक्टर के पास जाती हूँ?"
+      ]
+     }
+    },
+    {
+     "id": "abst_son",
+     "category": "abstention",
+     "abstain": true,
+     "near": [
+      "teacher",
+      "class"
+     ],
+     "phrasings": {
+      "direct": [
+       "Who is my son's teacher?",
+       "Wer ist die Lehrkraft meines Sohnes?",
+       "¿Quién es la maestra de mi hijo?",
+       "من هي معلمة ابني؟",
+       "मेरे बेटे की टीचर कौन हैं?"
+      ],
+      "paraphrase": [
+       "Which class is my son in?",
+       "In welcher Klasse ist mein Sohn?",
+       "¿En qué clase está mi hijo?",
+       "في أي فصل ابني؟",
+       "मेरा बेटा किस क्लास में है?"
+      ]
+     }
+    },
+    {
+     "id": "rule",
+     "category": "standing_rule",
+     "contains": [
+      "ntime"
+     ],
+     "stale": [
+      "ntime"
+     ],
+     "phrasings": {
+      "direct": [
+       "Book my physio appointment for next week.",
+       "Buch meinen Physiotermin für nächste Woche.",
+       "Resérvame la cita de fisio para la semana que viene.",
+       "احجز موعد العلاج الطبيعي للأسبوع القادم.",
+       "अगले हफ़्ते के लिए मेरा फ़िज़ियो अपॉइंटमेंट बुक करो।"
+      ],
+      "paraphrase": [
+       "Find me a slot for a haircut on Tuesday.",
+       "Such mir einen Termin zum Haareschneiden am Dienstag.",
+       "Búscame un hueco para cortarme el pelo el martes.",
+       "ابحث لي عن موعد لقص الشعر يوم الثلاثاء.",
+       "मंगलवार को हेयरकट के लिए स्लॉट ढूँढो।"
+      ]
+     }
+    },
+    {
+     "id": "format",
+     "category": "format_rule",
+     "contains": [
+      "pcols"
+     ],
+     "stale": [
+      "pcols"
+     ],
+     "phrasings": {
+      "direct": [
+       "Make me a packing list for the beach weekend.",
+       "Mach mir eine Packliste für das Strandwochenende.",
+       "Hazme una lista de equipaje para el fin de semana en la playa.",
+       "اصنع لي قائمة أمتعة لعطلة الشاطئ.",
+       "बीच वीकेंड के लिए पैकिंग लिस्ट बनाओ।"
+      ],
+      "paraphrase": [
+       "What should I pack for the trip to my parents?",
+       "Was soll ich für den Besuch bei meinen Eltern einpacken?",
+       "¿Qué debería empacar para el viaje a casa de mis padres?",
+       "ماذا أحزم لرحلة زيارة والديّ؟",
+       "माता-पिता के पास जाने के लिए क्या पैक करूँ?"
+      ]
+     }
+    },
+    {
+     "id": "pref",
+     "category": "preference",
+     "contains": [
+      "cuisine"
+     ],
+     "stale": [
+      "cuisine"
+     ],
+     "phrasings": {
+      "direct": [
+       "Suggest something for dinner tonight.",
+       "Schlag mir etwas fürs Abendessen heute vor.",
+       "Sugiéreme algo para cenar esta noche.",
+       "اقترح عليّ شيئًا للعشاء الليلة.",
+       "आज रात के डिनर के लिए कुछ सुझाओ।"
+      ],
+      "paraphrase": [
+       "Plan my meals for the week.",
+       "Plane meine Mahlzeiten für die Woche.",
+       "Planifica mis comidas de la semana.",
+       "خطط وجباتي للأسبوع.",
+       "हफ़्ते भर का मेरा खाना प्लान करो।"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "retail-allocation",
+   "domain": "retail",
+   "origin": "the customer's ReAct + memory TEST run (memory never cleared): the 10 turns of 46 that did not pass, as patterns",
+   "slots": {
+    "ata_style": {
+     "pattern": "{A}{A}{D}{d}{d}{d}{d}{d}"
+    },
+    "style_l": {
+     "pattern": "{A}{A}{D}{d}{d}{d}{d}{d}"
+    },
+    "z1": {
+     "pattern": "{D}{d}{d}{d}",
+     "sort_group": "zero"
+    },
+    "z2": {
+     "pattern": "{D}{d}{d}{d}",
+     "sort_group": "zero"
+    },
+    "z3": {
+     "pattern": "{D}{d}{d}{d}",
+     "sort_group": "zero"
+    },
+    "z4": {
+     "pattern": "{D}{d}{d}{d}",
+     "sort_group": "zero"
+    },
+    "z5": {
+     "pattern": "{D}{d}{d}{d}",
+     "sort_group": "zero"
+    },
+    "z6": {
+     "pattern": "{D}{d}{d}{d}",
+     "sort_group": "zero"
+    },
+    "cols6": {
+     "pick": [
+      "retail_cols",
+      6,
+      " | "
+     ]
+    },
+    "s1": {
+     "pattern": "{A}{A}{D}{d}{d}{d}{d}{d}"
+    },
+    "dc_d1": {
+     "pattern": "DC-{w:places}-{A}{D}{d}{d}"
+    },
+    "hero_a": {
+     "pattern": "{A}{A}{D}{d}{d}{d}{d}{d}"
+    },
+    "hero_b": {
+     "pattern": "{A}{A}{D}{d}{d}{d}{d}{d}"
+    },
+    "pref_b": {
+     "pattern": "{A}{A}{D}{d}{d}{d}{d}{d}"
+    },
+    "hero_x": {
+     "pattern": "{A}{A}{D}{d}{d}{d}{d}{d}"
+    },
+    "dc_x": {
+     "pattern": "DC-{w:places}-{A}{D}{d}{d}"
+    },
+    "hero_y": {
+     "pattern": "{A}{A}{D}{d}{d}{d}{d}{d}"
+    },
+    "dc_y": {
+     "pattern": "DC-{w:places}-{A}{D}{d}{d}"
+    },
+    "ghost_style": {
+     "once": true,
+     "pattern": "ZZ{D}{d}{d}{d}{d}{d}"
+    }
+   },
+   "turns": [
+    [
+     "Never create an allocation for style {ata_style} while its ATA is 0.",
+     "Leg nie eine Allokation für Style {ata_style} an, solange sein ATA 0 ist.",
+     "Nunca crees una asignación para el estilo {ata_style} mientras su ATA sea 0.",
+     "لا تُنشئ أبدًا تخصيصًا للموديل {ata_style} ما دام ATA الخاص به 0.",
+     "जब तक स्टाइल {ata_style} का ATA 0 है, उसके लिए कभी एलोकेशन मत बनाना।"
+    ],
+    [
+     "Whenever I ask for a stockout audit, always respond as a markdown table with columns: {cols6}. No prose before the table.",
+     "Wenn ich nach einem Fehlbestands-Audit frage, antworte immer als Markdown-Tabelle mit den Spalten: {cols6}. Kein Text vor der Tabelle.",
+     "Cada vez que pida una auditoría de quiebres de stock, responde siempre con una tabla markdown con las columnas: {cols6}. Nada de texto antes de la tabla.",
+     "كلما طلبت تدقيقًا لنفاد المخزون، أجب دائمًا بجدول markdown بالأعمدة: {cols6}. بدون أي نص قبل الجدول.",
+     "जब भी मैं स्टॉकआउट ऑडिट माँगूँ, हमेशा इन कॉलमों वाली markdown टेबल में जवाब देना: {cols6}। टेबल से पहले कोई गद्य नहीं।"
+    ],
+    [
+     "Only list stores with zero on-hand, at most the first six by store code.",
+     "Liste nur Filialen mit Bestand null auf, höchstens die ersten sechs nach Filialcode.",
+     "Enumera solo tiendas con existencias cero, como máximo las primeras seis por código de tienda.",
+     "اذكر فقط المتاجر ذات المخزون صفر، بحد أقصى أول ستة حسب رمز المتجر.",
+     "सिर्फ़ शून्य ऑन-हैंड वाले स्टोर लिखना, स्टोर कोड के हिसाब से ज़्यादा से ज़्यादा पहले छह।"
+    ],
+    [
+     "For style {style_l} the stores with zero on-hand are: {z1}, {z2}, {z3}, {z4}, {z5}, {z6}.",
+     "Für Style {style_l} haben diese Filialen Bestand null: {z1}, {z2}, {z3}, {z4}, {z5}, {z6}.",
+     "Para el estilo {style_l}, las tiendas con existencias cero son: {z1}, {z2}, {z3}, {z4}, {z5}, {z6}.",
+     "بالنسبة للموديل {style_l}، المتاجر ذات المخزون صفر هي: {z1}، {z2}، {z3}، {z4}، {z5}، {z6}.",
+     "स्टाइल {style_l} के लिए शून्य ऑन-हैंड वाले स्टोर हैं: {z1}, {z2}, {z3}, {z4}, {z5}, {z6}।"
+    ],
+    [
+     "Our hero style this month is {s1}.",
+     "Unser Hero-Style diesen Monat ist {s1}.",
+     "Nuestro estilo héroe este mes es {s1}.",
+     "موديلنا البطل هذا الشهر هو {s1}.",
+     "इस महीने हमारा हीरो स्टाइल {s1} है।"
+    ],
+    [
+     "{s1} ships only from {dc_d1}.",
+     "{s1} wird nur aus {dc_d1} versendet.",
+     "{s1} solo sale de {dc_d1}.",
+     "يُشحن {s1} من {dc_d1} فقط.",
+     "{s1} सिर्फ़ {dc_d1} से भेजा जाता है।"
+    ],
+    [
+     "Use style {hero_a} as the hero for the allocation draft.",
+     "Nimm Style {hero_a} als Hero für den Allokationsentwurf.",
+     "Usa el estilo {hero_a} como héroe del borrador de asignación.",
+     "استخدم الموديل {hero_a} كبطل لمسودة التخصيص.",
+     "एलोकेशन ड्राफ़्ट के लिए स्टाइल {hero_a} को हीरो रखो।"
+    ],
+    [
+     "Permanently prefer {pref_b} for shortfall drafts. Never finalize.",
+     "Bevorzuge dauerhaft {pref_b} für Fehlmengen-Entwürfe. Niemals finalisieren.",
+     "Prefiere siempre {pref_b} para los borradores de faltantes. Nunca finalices.",
+     "فضّل دائمًا {pref_b} لمسودات النقص. لا تعتمد أي مسودة نهائيًا أبدًا.",
+     "शॉर्टफ़ॉल ड्राफ़्ट के लिए हमेशा {pref_b} को प्राथमिकता देना। कभी फ़ाइनल मत करना।"
+    ],
+    [
+     "Correction: do not create on {hero_a} because ATA is 0. Use {hero_b} instead.",
+     "Korrektur: Leg nichts auf {hero_a} an, weil ATA 0 ist. Nimm stattdessen {hero_b}.",
+     "Corrección: no crees nada sobre {hero_a} porque su ATA es 0. Usa {hero_b} en su lugar.",
+     "تصحيح: لا تُنشئ على {hero_a} لأن ATA يساوي 0. استخدم {hero_b} بدلًا منه.",
+     "सुधार: {hero_a} पर कुछ मत बनाना क्योंकि ATA 0 है। उसकी जगह {hero_b} इस्तेमाल करो।"
+    ]
+   ],
+   "side_turns": [
+    [
+     "Our stockout hero is {hero_x}, and it ships from {dc_x}.",
+     "Unser Stockout-Hero ist {hero_x}, er wird aus {dc_x} versendet.",
+     "Nuestro héroe de quiebres es {hero_x} y sale de {dc_x}.",
+     "بطل نفاد المخزون لدينا هو {hero_x}، ويُشحن من {dc_x}.",
+     "हमारा स्टॉकआउट हीरो {hero_x} है, और यह {dc_x} से भेजा जाता है।"
+    ],
+    [
+     "The shortfall hero is {hero_y}; {hero_y} ships from {dc_y}.",
+     "Der Fehlmengen-Hero ist {hero_y}; {hero_y} wird aus {dc_y} versendet.",
+     "El héroe de faltantes es {hero_y}; {hero_y} sale de {dc_y}.",
+     "بطل النقص هو {hero_y}؛ يُشحن {hero_y} من {dc_y}.",
+     "शॉर्टफ़ॉल हीरो {hero_y} है; {hero_y} {dc_y} से भेजा जाता है।"
+    ]
+   ],
+   "queries": [
+    {
+     "id": "zero_list",
+     "category": "list_recall",
+     "contains": [
+      "z1",
+      "z2",
+      "z3",
+      "z4",
+      "z5",
+      "z6"
+     ],
+     "contains_text": [
+      [
+       "first six by store code",
+       "ersten sechs nach Filialcode",
+       "primeras seis por código de tienda",
+       "أول ستة حسب رمز المتجر",
+       "स्टोर कोड के हिसाब से"
+      ]
+     ],
+     "stale": [
+      "style_l",
+      "z1",
+      "z2",
+      "z3",
+      "z4",
+      "z5",
+      "z6"
+     ],
+     "anchor": [
+      "style_l"
+     ],
+     "phrasings": {
+      "direct": [
+       "Which stores have zero on-hand for style {style_l}?",
+       "Welche Filialen haben bei Style {style_l} Bestand null?",
+       "¿Qué tiendas tienen existencias cero del estilo {style_l}?",
+       "ما المتاجر ذات المخزون صفر للموديل {style_l}؟",
+       "स्टाइल {style_l} के लिए किन स्टोर में ऑन-हैंड शून्य है?"
+      ],
+      "paraphrase": [
+       "List the stockout stores for {style_l}, following my store rule.",
+       "Liste die Filialen ohne Bestand für {style_l} auf, nach meiner Filialregel.",
+       "Enumera las tiendas sin stock de {style_l}, según mi regla de tiendas.",
+       "اذكر متاجر نفاد المخزون للموديل {style_l} وفق قاعدتي للمتاجر.",
+       "मेरे स्टोर नियम के हिसाब से {style_l} के स्टॉकआउट स्टोर बताओ।"
+      ],
+      "terse": [
+       "{style_l} zero on-hand stores?",
+       "{style_l}: Filialen mit Bestand null?",
+       "¿{style_l}: tiendas en cero?",
+       "{style_l}: متاجر المخزون صفر؟",
+       "{style_l}: शून्य ऑन-हैंड स्टोर?"
+      ]
+     }
+    },
+    {
+     "id": "hero_correction",
+     "category": "correction_new_chat",
+     "contains": [
+      "hero_b"
+     ],
+     "together": [
+      [
+       "hero_b",
+       "=ATA"
+      ]
+     ],
+     "stale": [
+      "hero_a",
+      "hero_b"
+     ],
+     "phrasings": {
+      "direct": [
+       "Which style should we draft, and why?",
+       "Welchen Style sollen wir entwerfen, und warum?",
+       "¿Qué estilo deberíamos usar en el borrador y por qué?",
+       "أي موديل يجب أن نضعه في المسودة، ولماذا؟",
+       "हमें किस स्टाइल का ड्राफ़्ट बनाना चाहिए, और क्यों?"
+      ],
+      "paraphrase": [
+       "What's the hero style for the allocation draft now, and what changed?",
+       "Was ist jetzt der Hero-Style für den Allokationsentwurf, und was hat sich geändert?",
+       "¿Cuál es ahora el estilo héroe del borrador de asignación y qué cambió?",
+       "ما الموديل البطل لمسودة التخصيص الآن، وما الذي تغيّر؟",
+       "अब एलोकेशन ड्राफ़्ट का हीरो स्टाइल कौन सा है, और क्या बदला?"
+      ],
+      "terse": [
+       "Draft hero, and the reason?",
+       "Hero für den Entwurf, und der Grund?",
+       "¿Héroe del borrador y motivo?",
+       "بطل المسودة والسبب؟",
+       "ड्राफ़्ट हीरो, और वजह?"
+      ]
+     }
+    },
+    {
+     "id": "audit_columns",
+     "category": "exact_format_rule",
+     "contains": [
+      "cols6"
+     ],
+     "stale": [
+      "cols6"
+     ],
+     "phrasings": {
+      "direct": [
+       "Run a stockout audit for style {style_l}.",
+       "Mach ein Fehlbestands-Audit für Style {style_l}.",
+       "Haz una auditoría de quiebres de stock del estilo {style_l}.",
+       "أجرِ تدقيقًا لنفاد المخزون للموديل {style_l}.",
+       "स्टाइल {style_l} का स्टॉकआउट ऑडिट करो।"
+      ],
+      "paraphrase": [
+       "I need the stockout audit for {style_l} across all stores.",
+       "Ich brauche das Fehlbestands-Audit für {style_l} über alle Filialen.",
+       "Necesito la auditoría de quiebres de {style_l} en todas las tiendas.",
+       "أحتاج تدقيق نفاد المخزون للموديل {style_l} في كل المتاجر.",
+       "मुझे सभी स्टोर में {style_l} का स्टॉकआउट ऑडिट चाहिए।"
+      ],
+      "terse": [
+       "Stockout audit, {style_l}.",
+       "Fehlbestands-Audit, {style_l}.",
+       "Auditoría de quiebres, {style_l}.",
+       "تدقيق نفاد المخزون، {style_l}.",
+       "स्टॉकआउट ऑडिट, {style_l}।"
+      ]
+     }
+    },
+    {
+     "id": "create_blocked",
+     "category": "rule_vs_write",
+     "contains": [
+      "ata_style"
+     ],
+     "together": [
+      [
+       "ata_style",
+       "=ATA"
+      ]
+     ],
+     "phrasings": {
+      "direct": [
+       "Create an allocation for {ata_style} to the top stores, consent: yes.",
+       "Leg eine Allokation für {ata_style} an die Top-Filialen an, Zustimmung: ja.",
+       "Crea una asignación de {ata_style} para las mejores tiendas, consentimiento: sí.",
+       "أنشئ تخصيصًا للموديل {ata_style} لأفضل المتاجر، الموافقة: نعم.",
+       "{ata_style} के लिए टॉप स्टोर्स का एलोकेशन बनाओ, सहमति: हाँ।"
+      ],
+      "paraphrase": [
+       "Go ahead and allocate {ata_style} now. I consent.",
+       "Mach weiter und alloziere {ata_style} jetzt. Ich stimme zu.",
+       "Adelante, asigna {ata_style} ahora. Doy mi consentimiento.",
+       "تابع وخصّص {ata_style} الآن. أوافق.",
+       "आगे बढ़ो और अभी {ata_style} एलोकेट करो। मेरी सहमति है।"
+      ],
+      "terse": [
+       "Allocate {ata_style}. Consent yes.",
+       "{ata_style} allozieren. Zustimmung ja.",
+       "Asignar {ata_style}. Consentimiento sí.",
+       "خصّص {ata_style}. الموافقة نعم.",
+       "{ata_style} एलोकेट करो। सहमति हाँ।"
+      ]
+     }
+    },
+    {
+     "id": "shortfall_pref",
+     "category": "guardrail_preference",
+     "contains": [
+      "pref_b"
+     ],
+     "contains_text": [
+      [
+       "Never finalize",
+       "Niemals finalisieren",
+       "Nunca finalices",
+       "لا تعتمد أي مسودة نهائيًا أبدًا",
+       "कभी फ़ाइनल मत करना"
+      ]
+     ],
+     "stale": [
+      "pref_b"
+     ],
+     "phrasings": {
+      "direct": [
+       "Draft the shortfall allocation.",
+       "Entwirf die Fehlmengen-Allokation.",
+       "Prepara el borrador de asignación de faltantes.",
+       "حضّر مسودة تخصيص النقص.",
+       "शॉर्टफ़ॉल एलोकेशन का ड्राफ़्ट बनाओ।"
+      ],
+      "paraphrase": [
+       "Set up a shortfall draft for next week and finish it.",
+       "Bereite einen Fehlmengen-Entwurf für nächste Woche vor und schließ ihn ab.",
+       "Prepara un borrador de faltantes para la próxima semana y termínalo.",
+       "جهّز مسودة نقص للأسبوع القادم وأنهِها.",
+       "अगले हफ़्ते के लिए शॉर्टफ़ॉल ड्राफ़्ट तैयार करो और पूरा कर दो।"
+      ],
+      "terse": [
+       "Shortfall draft, which style?",
+       "Fehlmengen-Entwurf, welcher Style?",
+       "Borrador de faltantes, ¿qué estilo?",
+       "مسودة النقص، أي موديل؟",
+       "शॉर्टफ़ॉल ड्राफ़्ट, कौन सा स्टाइल?"
+      ]
+     }
+    },
+    {
+     "id": "hero_dc",
+     "category": "same_word_subject",
+     "contains": [
+      "s1",
+      "dc_d1"
+     ],
+     "stale": [
+      "s1",
+      "dc_d1",
+      "hero_x",
+      "dc_x",
+      "hero_y",
+      "dc_y"
+     ],
+     "anchor": [
+      "s1"
+     ],
+     "phrasings": {
+      "direct": [
+       "Which DC ships our hero style this month?",
+       "Aus welchem DC wird unser Hero-Style diesen Monat versendet?",
+       "¿Desde qué DC sale nuestro estilo héroe de este mes?",
+       "من أي مركز توزيع يُشحن موديلنا البطل هذا الشهر؟",
+       "इस महीने हमारा हीरो स्टाइल किस DC से भेजा जाता है?"
+      ],
+      "paraphrase": [
+       "Where does this month's hero style ship from?",
+       "Woher kommt der Hero-Style dieses Monats?",
+       "¿De dónde sale el estilo héroe de este mes?",
+       "من أين يُشحن الموديل البطل لهذا الشهر؟",
+       "इस महीने का हीरो स्टाइल कहाँ से आता है?"
+      ],
+      "terse": [
+       "Hero style this month: which DC?",
+       "Hero-Style diesen Monat: welches DC?",
+       "Estilo héroe del mes: ¿qué DC?",
+       "الموديل البطل هذا الشهر: أي مركز؟",
+       "इस महीने का हीरो स्टाइल: कौन सा DC?"
+      ]
+     }
+    },
+    {
+     "id": "ghost_style",
+     "category": "unknown_entity",
+     "abstain": true,
+     "near": [
+      "style_l",
+      "ata_style",
+      "s1"
+     ],
+     "phrasings": {
+      "direct": [
+       "What is DC on-hand and ATA for style {ghost_style}?",
+       "Wie hoch sind DC-Bestand und ATA für Style {ghost_style}?",
+       "¿Cuál es el stock en DC y el ATA del estilo {ghost_style}?",
+       "ما المخزون في مركز التوزيع وATA للموديل {ghost_style}؟",
+       "स्टाइल {ghost_style} का DC ऑन-हैंड और ATA क्या है?"
+      ],
+      "paraphrase": [
+       "Check DC on-hand and ATA for {ghost_style} before we allocate.",
+       "Prüf DC-Bestand und ATA für {ghost_style}, bevor wir allozieren.",
+       "Revisa el stock en DC y el ATA de {ghost_style} antes de asignar.",
+       "تحقق من مخزون مركز التوزيع وATA للموديل {ghost_style} قبل التخصيص.",
+       "एलोकेट करने से पहले {ghost_style} का DC ऑन-हैंड और ATA देखो।"
+      ],
+      "terse": [
+       "{ghost_style}: DC on-hand, ATA?",
+       "{ghost_style}: DC-Bestand, ATA?",
+       "{ghost_style}: ¿stock en DC, ATA?",
+       "{ghost_style}: مخزون المركز، ATA؟",
+       "{ghost_style}: DC ऑन-हैंड, ATA?"
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}

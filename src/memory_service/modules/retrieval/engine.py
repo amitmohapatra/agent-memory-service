@@ -36,7 +36,7 @@ from memory_service.modules.retrieval import memory_ranking, slots
 from memory_service.modules.retrieval.memory_queries import plan_memory_queries
 from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
 from memory_service.observability.logging import get_logger
-from memory_service.observability.metrics import stage_seconds
+from memory_service.observability.metrics import llm_assist_total, stage_seconds
 from memory_service.observability.timings import Timings
 from memory_service.observability.tracing import span
 from memory_service.ports.search import (
@@ -995,6 +995,10 @@ class RetrievalEngine:
                 self._expand_query(query), self.cfg.query_expansion_timeout_ms / 1000
             )
         except TimeoutError:
+            # The abandoned call is cancelled inside LLMAssist, past its own accounting (a
+            # cancellation is not an Exception): counted here, or a model that always misses
+            # the deadline reads as a model never asked.
+            llm_assist_total.labels("query_expansion", "fallback").inc()
             diagnostics["query_expansion_timeout"] = True
             log.info(
                 "retrieval.query_expansion_timeout",
