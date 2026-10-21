@@ -8,6 +8,8 @@ import pytest
 
 from memory_service.adapters.cache.memory_cache import MemoryCache
 from memory_service.domain.revisions import RevisionKind
+from memory_service.domain.tools import SkillView, ToolHints
+from memory_service.modules.context.sections import Pinned, ToolsRequest
 from memory_service.modules.context.semantic_cache import SemanticBundleCache, guarded_signature
 from memory_service.modules.llm.policy import model_call_policy
 from tests.unit.test_context_datapath import CTX, _builder, _parts
@@ -146,3 +148,100 @@ async def test_corrupt_referenced_bundle_retrieves_again_instead_of_failing_the_
     second = await builder.build(CTX, "please my timezone")
     assert not second.cache_hit and builder.engine.calls == 2
     await builder.close()
+
+
+# --------------------------------------------------------------------------- with tools
+TOOLBOX = ["erp-create_po", "erp-get_stock", "mail-send", "calendar-list", "crm-find"]
+
+
+class _Sections:
+    """The pinned sections a toolbox brings: the skill learned for the task and the tool
+    hints, each found for the words of the question (its guarded signature), as the real
+    ``ContextSections`` finds them for its words."""
+
+    def __init__(self) -> None:
+        self.gathered = 0
+        self.hinted = 0
+
+    async def gather(self, ctx, query, visibility, *, procedures):
+        self.gathered += 1
+        found = [SkillView(id="proc_1", name=guarded_signature(query) or query)]
+        return Pinned(procedures=found if procedures else [])
+
+    async def tools(self, ctx, query, request, visibility, *, memories, profile, vectors):
+        self.hinted += 1
+        return ToolHints(next=sorted(request.available)[0], plan=None)
+
+
+def tooled_builder():
+    builder = semantic_builder()
+    builder.sections = _Sections()
+    return builder
+
+
+def _tools(names=TOOLBOX, **kwargs):
+    return ToolsRequest(available=list(names), **kwargs)
+
+
+async def test_a_request_with_tools_reuses_a_bundle_built_for_the_same_toolbox():
+    builder = tooled_builder()
+    first = await builder.build(CTX, "my timezone?", tools=_tools())
+    await builder.drain()
+    second = await builder.build(CTX, "please my timezone", tools=_tools(reversed(TOOLBOX)))
+    assert second.cache_hit and second.query == "please my timezone"
+    assert builder.engine.calls == 1 and builder.sections.gathered == 1
+    assert second.bundle_id != first.bundle_id
+    assert (second.tools, second.procedures) == (first.tools, first.procedures)
+    await builder.close()
+
+
+async def test_a_semantic_hit_with_tools_is_the_bundle_a_fresh_build_makes():
+    """What a hit answers is what building the question afresh answers: the skills and the
+    hints were found for the same words, the memories retrieved for them."""
+    cached = tooled_builder()
+    await cached.build(CTX, "my timezone?", tools=_tools())
+    await cached.drain()
+    hit = await cached.build(CTX, "please my timezone", tools=_tools())
+    fresh = await tooled_builder().build(CTX, "please my timezone", tools=_tools())
+    assert hit.cache_hit and not fresh.cache_hit
+
+    def content(bundle):  # what the caller reads (evidence timestamps are the build's own)
+        memories = [(m.item_id, m.text, m.citation) for m in bundle.memories]
+        return (
+            bundle.query,
+            memories,
+            bundle.tools,
+            bundle.procedures,
+            bundle.profile,
+            bundle.evidence.status,
+            bundle.token_estimate,
+        )
+
+    assert content(hit) == content(fresh)
+    await cached.close()
+
+
+@pytest.mark.parametrize(
+    "other",
+    [
+        _tools(TOOLBOX[:-1]),  # one tool fewer
+        _tools([*TOOLBOX, "erp-cancel_po"]),  # one more
+        _tools(k=3),  # fewer hints asked for
+        _tools(hints=False),  # the skills alone
+        None,  # no tools at all
+    ],
+)
+async def test_a_semantic_hit_needs_the_same_toolbox(other):
+    builder = tooled_builder()
+    await builder.build(CTX, "my timezone?", tools=_tools())
+    await builder.drain()
+    second = await builder.build(CTX, "please my timezone", tools=other)
+    assert not second.cache_hit and builder.engine.calls == 2
+    await builder.close()
+
+
+def test_the_tools_digest_is_the_toolbox_not_its_order_or_repeats():
+    digest = _tools().fingerprint()
+    assert _tools(reversed(TOOLBOX)).fingerprint() == digest
+    assert _tools([*TOOLBOX, TOOLBOX[0]]).fingerprint() == digest
+    assert _tools(TOOLBOX[:-1]).fingerprint() != digest

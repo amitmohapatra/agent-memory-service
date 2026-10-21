@@ -73,6 +73,7 @@ from memory_service.modules.memory.native import normalized_hash
 from memory_service.modules.memory.replacement import reinstate
 from memory_service.modules.memory.revisions import bump_memory_revisions, retract, supersede
 from memory_service.modules.memory.service import MemoryService
+from memory_service.modules.tools import approvals
 from memory_service.modules.tools.service import TASK_TOOLS_LEARN
 from memory_service.observability.logging import get_logger
 from memory_service.ports.tasks import JobSpec, Queue
@@ -293,9 +294,9 @@ class FeedbackService:
         own final status, citing nothing (the lowest-ranked word on a run, which never
         overrides a person or the judge); an owner's correction of a memory carrying new text
         (an edit, authorised as one by ``_authorize_memory_verdict``; a thumbs-down is a vote
-        and waits); a decision on a tool call (what is learned from it is a suggestion,
-        applied only once accepted); and what a tenant admin says, in person or through the
-        tenant's administrator credential (``trusted``).
+        and waits); a decision on a tool call (the rule a pattern of them supports is
+        accepted by the service itself, ADR 0042); and what a tenant admin says, in person or
+        through the tenant's administrator credential (``trusted``).
 
         A run's status is only as good as who reports it: the run id is the caller's own
         (``agent_run_id`` of the context), and the credential must be one that may act as that
@@ -799,9 +800,11 @@ class FeedbackService:
         self, uow: UnitOfWork, record: Feedback, *, now: datetime
     ) -> FeedbackProjection:
         """Approve, reject or edit of a tool call: counted on the tool and on the approval
-        pattern of (agent, tool, argument shape). The tool is ``metadata.tool`` and its
-        arguments ``metadata.args`` (the edit's replacement arguments when absent). The run's
-        outcome is not touched: that is what RUN feedback is for."""
+        pattern of (agent, tool, argument shape), whose rule the service then accepts on its
+        own once the decisions support it (``approvals.auto_accept``; the projection names
+        the rule). The tool is ``metadata.tool`` and its arguments ``metadata.args`` (the
+        edit's replacement arguments when absent). The run's outcome is not touched: that is
+        what RUN feedback is for."""
         tool = str(record.metadata.get("tool") or "").strip()
         if not tool:
             return FeedbackProjection(
@@ -813,15 +816,25 @@ class FeedbackService:
         args = record.metadata.get("args")
         if not isinstance(args, dict) and isinstance(record.correction, dict):
             args = record.correction
+        shape = arg_shape(args if isinstance(args, dict) else None)
         await uow.tools.count_verdict(record.tenant_id, tool, counter)
         await uow.tools.count_approval(
-            record.tenant_id,
-            record.agent_id or "",
-            tool,
-            arg_shape(args if isinstance(args, dict) else None),
-            counter,
+            record.tenant_id, record.agent_id or "", tool, shape, counter
         )
-        return FeedbackProjection(action=ProjectionAction.TOOL_CALL_COUNTED, projected_at=now)
+        rule = await approvals.auto_accept(
+            uow,
+            tenant_id=record.tenant_id,
+            agent_id=record.agent_id or "",
+            tool=tool,
+            shape=shape,
+            workspace_id=record.workspace_id,
+            now=now,
+        )
+        return FeedbackProjection(
+            action=ProjectionAction.TOOL_CALL_COUNTED,
+            approval_rule=rule.approve_when if rule is not None else None,
+            projected_at=now,
+        )
 
     async def _project_procedure(
         self, uow: UnitOfWork, record: Feedback, *, now: datetime

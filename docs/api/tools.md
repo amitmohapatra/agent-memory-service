@@ -44,6 +44,7 @@ run nobody labelled counts as a (weak) success only a day later, if none of its 
 | `POST /v1/feedback` (target `run`) | label a run successful or not | `ctx.feedback("run", run_id, "confirm", source="system")` |
 | `POST /v1/tools/hints` | the tools that fit, best first: confidence, success rate, next step, the arguments found and the ones missing; the plan | `ctx.tool_hints(task, available=…, k=…)` |
 | `GET /v1/tools/approval-suggestions?tool=…` | approval rules this agent's reviewed calls support, most supported first (cursor paged) | `ctx.advanced.tools.approval_suggestions(tool=…)` |
+| `GET /v1/tools/approval-suggestions/auto-accepted` | the rules the service accepted on its own, newest first: every agent's, or the agent's in scope (cursor paged) | `ctx.advanced.tools.auto_accepted_rules()` |
 | `POST /v1/tools/approval-suggestions/{suggestion_id}/accept` | accept one: its rule is written into the tool's `approve_when` | `ctx.advanced.tools.accept_suggestion(id)` |
 
 `POST /v1/context` answers the same hints inline when asked (`tools: {available, k}`; the SDK's
@@ -181,12 +182,24 @@ A verdict on a tool call (`POST /v1/feedback` with `target_kind: tool_call`, `me
 ideally, `metadata.args`; an `edit`'s correction stands in for the arguments) is counted per
 (agent, tool, argument shape). The shape is value-free: each argument with its kind, numbers by
 order of magnitude (`amount:num:1e4,supplier:str`). With at least 5 decisions, 95% approved
-suggests `auto_approve` and 50% or fewer `always_ask`. Nothing applies them on its own.
+suggests `auto_approve` and 50% or fewer `always_ask`.
+
+The service accepts a suggestion on its own as soon as the decisions support it
+([ADR 0042](../adr/0042-approval-rules-accepted-automatically.md)): the feedback projector
+composes it into the tool's `approve_when`, logs it (`approval_rule.auto_accepted`), names the
+resulting expression in the decision's `projection.approval_rule`, and marks the pattern
+(`auto_accepted_at` in the listing). Two kinds of tool wait for a person instead: an
+`irreversible` one, whose rules never change on their own in either direction, and one the
+catalog does not hold, whose risk is unknown. The service accepts a rule once: revoke it with
+the catalog update (`PUT /v1/tools/catalog`, `approve_when` without the rule's clause, or `""`)
+and later decisions do not bring it back.
 
 ```python
+for rule in await ctx.advanced.tools.auto_accepted_rules():
+    print(rule.agent_id, rule.tool, rule.arg_shape, rule.suggestion, rule.in_effect)
 for s in await ctx.advanced.tools.approval_suggestions(tool="erp-create_po"):
     print(s.id, s.arg_shape, s.suggestion, s.support, s.approve_rate, s.accepted)
-entry = await ctx.advanced.tools.accept_suggestion(s.id)  # the catalog entry, updated
+entry = await ctx.advanced.tools.accept_suggestion(s.id)  # an irreversible tool's, by a person
 print(entry.approve_when)
 ```
 

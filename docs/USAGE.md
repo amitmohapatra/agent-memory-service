@@ -204,7 +204,8 @@ print(
 | Label the run | `POST /v1/feedback` | `await ctx.feedback("run", ctx.scope.agent_run_id, "confirm", source="system")` |
 | Which tool, plan, arguments | `POST /v1/tools/hints` (or inline: `context(q, tools=[…])`) | `hints = await ctx.tool_hints(task, available=names)` |
 | Approval rules the decisions support | `GET /v1/tools/approval-suggestions` | `await ctx.advanced.tools.approval_suggestions(tool=…)` |
-| Adopt one | `POST /v1/tools/approval-suggestions/{id}/accept` | `await ctx.advanced.tools.accept_suggestion(s.id)` |
+| The rules the service accepted on its own | `GET /v1/tools/approval-suggestions/auto-accepted` | `await ctx.advanced.tools.auto_accepted_rules()` |
+| Adopt one (an irreversible tool's) | `POST /v1/tools/approval-suggestions/{id}/accept` | `await ctx.advanced.tools.accept_suggestion(s.id)` |
 | What each agent learned; stop one | `GET /v1/skills?agent=…`, `POST /v1/skills/{id}/dismiss` (administrator) | `await admin.advanced.skills.list(agent="support")`, `.dismiss(s.id)` |
 
 - The service never executes a tool. `task` is the question in words (it becomes the pattern
@@ -215,8 +216,11 @@ print(
 - Recording is idempotent on run + step + tool + arguments; `visibility` defaults to
   `PRIVATE`: learned per agent across all its users (share with `AGENT_GROUP`/`WORKSPACE`/
   `TENANT` to learn across agents).
-- A suggestion can be accepted only by the agent it was learned from (else `404`); `409` when
-  the decisions no longer support it, or when it would auto-approve an `irreversible` tool.
+- The service accepts a supported rule on its own, once, unless the tool is `irreversible` or
+  not in the catalog (ADR 0042); revoke one by taking it out of the tool's `approve_when`
+  (`PUT /v1/tools/catalog`). A person accepts the rest: only the agent a suggestion was
+  learned from (else `404`); `409` when the decisions no longer support it, or when it would
+  auto-approve an `irreversible` tool.
 
 ## 9. Agent tools for function-calling agents
 
@@ -379,7 +383,7 @@ shows one turn. Way 1: if your agent runs under
 | Tool catalog | `PUT /v1/tools/catalog` | `ctx.advanced.tools.put_catalog([...])` |
 | Record a tool call | `POST /v1/tools/invocations` | `ctx.record_tool(tool, args, …)` |
 | Tool hints | `POST /v1/tools/hints` | `ctx.tool_hints(task, available=…)` |
-| Approval suggestions | `GET …/approval-suggestions`, `POST …/{id}/accept` | `ctx.advanced.tools.approval_suggestions()`, `.accept_suggestion(id)` |
+| Approval suggestions | `GET …/approval-suggestions`, `GET …/approval-suggestions/auto-accepted`, `POST …/{id}/accept` | `ctx.advanced.tools.approval_suggestions()`, `.auto_accepted_rules()`, `.accept_suggestion(id)` |
 | Agent tools | `GET /v1/agent-tools`, `POST /v1/agent-tools/{name}` | `ctx.agent_tools()`, `ctx.call_agent_tool(name, args)` |
 | A verdict | `POST /v1/feedback` | `ctx.feedback(kind, id, verdict, …)` |
 | Review votes (admin) | `GET /v1/feedback?review=pending[&group=target]`, `POST …/approve`, `…/dismiss`, `POST /v1/feedback/approve`, `/dismiss` | `ctx.feedback.pending()`, `.approve(id)`, `.dismiss(id)`, `.approve_many(…)`, `.dismiss_many(…)` |

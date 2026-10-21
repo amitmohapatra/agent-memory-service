@@ -85,7 +85,7 @@ class ToolsRequest(BaseModel):
         return self.hints and (self.available is None or len(self.available) >= TOOL_HINTS_MIN)
 
     def fingerprint(self) -> str:
-        names = ",".join(sorted(self.available)) if self.available is not None else "*"
+        names = ",".join(sorted(set(self.available))) if self.available is not None else "*"
         # the default request keeps its key; only an opt-out of hints is a different bundle
         return f"tools:{self.k}:{names}" + ("" if self.hints else ":nohints")
 

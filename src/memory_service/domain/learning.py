@@ -7,6 +7,7 @@ Pure functions and the constants that tune them; the projectors and the ranking 
 from __future__ import annotations
 
 import math
+from datetime import datetime
 from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -67,6 +68,9 @@ class ApprovalCounts(BaseModel):
     approvals: int = 0
     rejections: int = 0
     edits: int = 0
+    #: when the service accepted the rule these decisions support on its own (``None``:
+    #: never). Set once: a rule a person revoked is not accepted again on its own.
+    auto_accepted_at: datetime | None = None
 
     @property
     def support(self) -> int:
@@ -77,7 +81,8 @@ class ApprovalCounts(BaseModel):
         return self.approvals / self.support if self.support else 0.0
 
     def suggestion(self) -> Suggestion | None:
-        """The rule these decisions support, if any: never applied by the service."""
+        """The rule these decisions support, if any (``modules.tools.approvals`` decides
+        whether the service applies it on its own)."""
         if self.support < APPROVAL_MIN_SUPPORT:
             return None
         if self.approve_rate >= AUTO_APPROVE_RATE:
@@ -85,3 +90,14 @@ class ApprovalCounts(BaseModel):
         if self.approve_rate <= ALWAYS_ASK_RATE:
             return "always_ask"
         return None
+
+
+class AcceptedRule(BaseModel):
+    """A rule the service accepted on its own (``modules.tools.approvals.auto_accept``): the
+    decisions it rests on, as they stand now, the rule, and when."""
+
+    model_config = ConfigDict(frozen=True)
+
+    counts: ApprovalCounts
+    suggestion: Suggestion
+    accepted_at: datetime

@@ -349,7 +349,10 @@ class ContextBuilder:
         cache_key = self._cache_key(ctx, bundle_id)
         prompt_key = f"ctxp:{cache_key}"
         full_key = f"ctxf:{cache_key}"
-        semantic = self._semantic_key(namespace, ctx, query) if tools is None else None
+        # the namespace binds the tools by their digest (``ToolsRequest.fingerprint``: the
+        # sorted names, k, hints), so a request with tools reuses only a bundle built for the
+        # same toolbox, whose hints and skills were found for the same words
+        semantic = self._semantic_key(namespace, ctx, query)
         scope_key = AuthorizationService.scope_cache_key(ctx, authz_fp)
         answer = {"prompt": prompt_key, "full": full_key}.get(output, cache_key)
         keys = [scope_key, answer, semantic]

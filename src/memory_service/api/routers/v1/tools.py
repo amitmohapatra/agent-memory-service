@@ -450,7 +450,8 @@ class ApprovalSuggestionBody(BaseModel):
     )
     suggestion: Suggestion = Field(
         description="auto_approve: nearly every decision approved calls of this shape; "
-        "always_ask: half or more were rejected or edited. Never applied by the service."
+        "always_ask: half or more were rejected or edited. The service accepts it on its own "
+        "(auto_accepted_at), except for an irreversible tool, whose rules wait for a person."
     )
     approvals: int = Field(description="How many calls of this shape were approved.")
     rejections: int = Field(description="How many were rejected.")
@@ -463,12 +464,45 @@ class ApprovalSuggestionBody(BaseModel):
         description="The agent whose decisions these are; null: the tenant's."
     )
     accepted: bool = Field(description="the rule is already part of the tool's approve_when")
+    auto_accepted_at: datetime | None = Field(
+        default=None,
+        description="When the service accepted the rule on its own (null: it did not; ADR "
+        "0042). It does so once: a rule revoked through the catalog stays revoked.",
+    )
 
 
 class ApprovalSuggestionsResponse(BaseModel):
     suggestions: list[ApprovalSuggestionBody] = Field(
         description="The rules offered, most supported first."
     )
+    next_cursor: str | None = Field(
+        default=None,
+        description="Pass as `cursor` for the next page (also in `Link`); null on the last.",
+    )
+
+
+class AutoAcceptedRuleBody(BaseModel):
+    agent_id: str | None = Field(
+        description="The agent whose decisions the rule rests on; null: the tenant's."
+    )
+    tool: str = Field(description="The tool the rule is for.")
+    arg_shape: str = Field(
+        description="argument names with their value kinds (numbers by magnitude)"
+    )
+    suggestion: Suggestion = Field(
+        description="auto_approve: calls of this shape stopped asking; always_ask: they ask."
+    )
+    accepted_at: datetime = Field(description="When the service accepted it (ISO 8601, UTC).")
+    in_effect: bool = Field(
+        description="the rule is still part of the tool's approve_when; false: a person "
+        "revoked it through the catalog (PUT /v1/tools/catalog)"
+    )
+    support: int = Field(description="The decisions the pattern holds now.")
+    approve_rate: float = Field(description="0..1, approvals / support, now.")
+
+
+class AutoAcceptedRulesResponse(BaseModel):
+    rules: list[AutoAcceptedRuleBody] = Field(description="Newest first.")
     next_cursor: str | None = Field(
         default=None,
         description="Pass as `cursor` for the next page (also in `Link`); null on the last.",
@@ -622,8 +656,8 @@ async def tool_hints(
     "/tools/approval-suggestions",
     response_model=ApprovalSuggestionsResponse,
     tags=["tools"],
-    summary="Approval rules this agent's approve / reject / edit decisions support "
-    "(suggestions only: never applied)",
+    summary="Approval rules this agent's approve / reject / edit decisions support (the service "
+    "accepts each on its own, ADR 0042, except an irreversible tool's)",
     responses=_ERRORS,
 )
 async def approval_suggestions(
@@ -682,9 +716,79 @@ async def approval_suggestions(
                 support=c.support,
                 approve_rate=round(c.approve_rate, 4),
                 agent_id=c.agent_id or None,
+                auto_accepted_at=c.auto_accepted_at,
             )
             for c in counts
             if (suggestion := approvals.offered(c, entries.get(c.tool))) is not None
+        ],
+    )
+
+
+@router.get(
+    "/tools/approval-suggestions/auto-accepted",
+    response_model=AutoAcceptedRulesResponse,
+    tags=["tools"],
+    summary="The approval rules the service accepted on its own, newest first: every agent's, "
+    "or the agent's in scope (agent_id)",
+    description="A rule people's decisions support is accepted by the service on its own (ADR "
+    "0042), except for a tool whose risk is irreversible, which waits for a person. "
+    "`in_effect` false: it was revoked through the catalog, and is not accepted again.",
+    responses=_ERRORS,
+)
+async def auto_accepted_rules(
+    request: Request,
+    response: Response,
+    ctx: HeaderContextDep,
+    container: ContainerDep,
+    cursor: CursorQuery = None,
+    limit: Annotated[
+        int, limit_query(APPROVAL_SUGGESTIONS_MAX, "rules")
+    ] = APPROVAL_SUGGESTIONS_MAX,
+) -> AutoAcceptedRulesResponse:
+    position = decode_cursor(
+        cursor, fields={"at": datetime, "agent": str, "tool": str, "shape": str}
+    )
+    after = (
+        (position["at"], position["agent"], position["tool"], position["shape"])
+        if position
+        else None
+    )
+    async with container.services["uow_factory"]() as uow:
+        rows = await uow.tools.auto_accepted_patterns(
+            ctx.tenant_id, agent_id=ctx.agent_id, limit=limit + 1, after=after
+        )
+        accepted, next_cursor = page(
+            rows,
+            limit=limit,
+            position=lambda r: {
+                "at": r.accepted_at.isoformat(),
+                "agent": r.counts.agent_id,
+                "tool": r.counts.tool,
+                "shape": r.counts.arg_shape,
+            },
+        )
+        names = sorted({r.counts.tool for r in accepted})
+        entries = {
+            e.name: e
+            for e in await uow.tools.catalog(
+                ctx.tenant_id, workspace_id=ctx.workspace_id, names=names, limit=len(names) + 1
+            )
+        }
+    link_next(request, response, next_cursor)
+    return AutoAcceptedRulesResponse(
+        next_cursor=next_cursor,
+        rules=[
+            AutoAcceptedRuleBody(
+                agent_id=r.counts.agent_id or None,
+                tool=r.counts.tool,
+                arg_shape=r.counts.arg_shape,
+                suggestion=r.suggestion,
+                accepted_at=r.accepted_at,
+                in_effect=approvals.accepted(entries.get(r.counts.tool), r.counts.arg_shape),
+                support=r.counts.support,
+                approve_rate=round(r.counts.approve_rate, 4),
+            )
+            for r in accepted
         ],
     )
 

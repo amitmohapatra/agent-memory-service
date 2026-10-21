@@ -21,7 +21,7 @@ statistics and changes nothing. A person counts once per target: a newer vote re
 earlier pending one (dismissed with ``replaced_by``), so repeated clicks are one vote. Applied as
 they arrive: the grounding judge's own verdict, a run reporting its own final status, an
 owner's correction of their memory carrying new text (an edit, not a vote), a decision on a
-tool call (what is learned from it is only ever a suggestion, applied once accepted), and
+tool call (the rule a pattern of them supports is accepted by the service, ADR 0042), and
 anything a tenant admin says. A thumbs-down on a memory is a vote like any other.
 """
 
@@ -35,6 +35,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 
 from memory_service.domain.evidence import EVIDENCE_SOURCE_DESCRIPTION, EvidenceSource
 from memory_service.domain.ids import is_valid_id, new_id
+from trellis.memory.approval import MAX_EXPRESSION_CHARS
 
 #: Bound on the serialised correction and metadata of one record.
 FEEDBACK_JSON_MAX_BYTES: Final = 16_000
@@ -219,6 +220,13 @@ class FeedbackProjection(BaseModel):
         default=None,
         description="The same voter's earlier applied vote on this target whose effect this "
         "one undid before applying its own (a flipped thumb counts once).",
+    )
+    approval_rule: str | None = Field(
+        default=None,
+        max_length=MAX_EXPRESSION_CHARS,
+        description="For TOOL_CALL_COUNTED: the tool's approve_when after the service accepted, "
+        "on its own, the rule this decision completed the support for (ADR 0042); null when "
+        "it accepted none.",
     )
     reason: str | None = Field(
         default=None, max_length=500, description="Why it did what it did (always set for none)."

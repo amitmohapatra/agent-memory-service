@@ -338,6 +338,19 @@
             "title": "Arg Shape",
             "type": "string"
           },
+          "auto_accepted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the service accepted the rule on its own (null: it did not; ADR 0042). It does so once: a rule revoked through the catalog stays revoked.",
+            "title": "Auto Accepted At"
+          },
           "edits": {
             "description": "How many had their arguments changed before approval.",
             "title": "Edits",
@@ -354,7 +367,7 @@
             "type": "integer"
           },
           "suggestion": {
-            "description": "auto_approve: nearly every decision approved calls of this shape; always_ask: half or more were rejected or edited. Never applied by the service.",
+            "description": "auto_approve: nearly every decision approved calls of this shape; always_ask: half or more were rejected or edited. The service accepts it on its own (auto_accepted_at), except for an irreversible tool, whose rules wait for a person.",
             "enum": [
               "auto_approve",
               "always_ask"
@@ -484,6 +497,103 @@
           "checksum"
         ],
         "title": "AttachmentIn",
+        "type": "object"
+      },
+      "AutoAcceptedRuleBody": {
+        "properties": {
+          "accepted_at": {
+            "description": "When the service accepted it (ISO 8601, UTC).",
+            "format": "date-time",
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The agent whose decisions the rule rests on; null: the tenant's.",
+            "title": "Agent Id"
+          },
+          "approve_rate": {
+            "description": "0..1, approvals / support, now.",
+            "title": "Approve Rate",
+            "type": "number"
+          },
+          "arg_shape": {
+            "description": "argument names with their value kinds (numbers by magnitude)",
+            "title": "Arg Shape",
+            "type": "string"
+          },
+          "in_effect": {
+            "description": "the rule is still part of the tool's approve_when; false: a person revoked it through the catalog (PUT /v1/tools/catalog)",
+            "title": "In Effect",
+            "type": "boolean"
+          },
+          "suggestion": {
+            "description": "auto_approve: calls of this shape stopped asking; always_ask: they ask.",
+            "enum": [
+              "auto_approve",
+              "always_ask"
+            ],
+            "title": "Suggestion",
+            "type": "string"
+          },
+          "support": {
+            "description": "The decisions the pattern holds now.",
+            "title": "Support",
+            "type": "integer"
+          },
+          "tool": {
+            "description": "The tool the rule is for.",
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "tool",
+          "arg_shape",
+          "suggestion",
+          "accepted_at",
+          "in_effect",
+          "support",
+          "approve_rate"
+        ],
+        "title": "AutoAcceptedRuleBody",
+        "type": "object"
+      },
+      "AutoAcceptedRulesResponse": {
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pass as `cursor` for the next page (also in `Link`); null on the last.",
+            "title": "Next Cursor"
+          },
+          "rules": {
+            "description": "Newest first.",
+            "items": {
+              "$ref": "#/components/schemas/AutoAcceptedRuleBody"
+            },
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules"
+        ],
+        "title": "AutoAcceptedRulesResponse",
         "type": "object"
       },
       "Body_documents_upload_document": {
@@ -3005,6 +3115,19 @@
           "action": {
             "$ref": "#/components/schemas/ProjectionAction",
             "description": "What the projector did: none (and why, in reason), memory_reinforced, memory_retracted, memory_superseded, run_labelled, tool_call_counted or procedure_rejected."
+          },
+          "approval_rule": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For TOOL_CALL_COUNTED: the tool's approve_when after the service accepted, on its own, the rule this decision completed the support for (ADR 0042); null when it accepted none.",
+            "title": "Approval Rule"
           },
           "memory_id": {
             "anyOf": [
@@ -36560,7 +36683,630 @@
             }
           }
         },
-        "summary": "Approval rules this agent's approve / reject / edit decisions support (suggestions only: never applied)",
+        "summary": "Approval rules this agent's approve / reject / edit decisions support (the service accepts each on its own, ADR 0042, except an irreversible tool's)",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/tools/approval-suggestions/auto-accepted": {
+      "get": {
+        "description": "A rule people's decisions support is accepted by the service on its own (ADR 0042), except for a tool whose risk is irreversible, which waits for a person. `in_effect` false: it was revoked through the catalog, and is not accepted again.",
+        "operationId": "tools.auto_accepted_rules",
+        "parameters": [
+          {
+            "description": "Opaque position of the next page, copied from the previous response (its `next_cursor` or `Link: <...>; rel=\"next\"`). Omit for the first page.",
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1024,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opaque position of the next page, copied from the previous response (its `next_cursor` or `Link: <...>; rel=\"next\"`). Omit for the first page.",
+              "title": "Cursor"
+            }
+          },
+          {
+            "description": "The most rules one page holds (1-100); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "description": "The most rules one page holds (1-100); the next page is named by `next_cursor` / `Link: rel=\"next\"`.",
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Thread Id"
+            }
+          },
+          {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Session Id"
+            }
+          },
+          {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "work_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Work Id"
+            }
+          },
+          {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "task_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Task Id"
+            }
+          },
+          {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Agent Id"
+            }
+          },
+          {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "agent_group_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Agent Group Id"
+            }
+          },
+          {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Agent Run Id"
+            }
+          },
+          {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "parent_agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Parent Agent Run Id"
+            }
+          },
+          {
+            "description": "W3C Trace Context to continue (00-<trace>-<span>-<flags>).",
+            "in": "header",
+            "name": "traceparent",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client request id; generated when absent or not an id (a letter or digit, then letters, digits and ._:-, at most 200 characters).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests; echoed when it is an id (a letter or digit, then letters, digits and ._:-, at most 200 characters), else replaced.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
+            "in": "header",
+            "name": "X-Trellis-Tenant",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The workspace (team) acted in; membership is checked.",
+            "in": "header",
+            "name": "X-Trellis-Workspace",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The end user acted for.",
+            "in": "header",
+            "name": "X-Trellis-User",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoAcceptedRulesResponse"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "AUTHENTICATION",
+                  "detail": "Missing or invalid credentials",
+                  "details": {},
+                  "instance": "/v1/tools/approval-suggestions/auto-accepted",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 401,
+                  "title": "Authentication required",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:authentication"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials",
+            "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "SCOPE_DENIED",
+                  "detail": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+                  "details": {},
+                  "instance": "/v1/tools/approval-suggestions/auto-accepted",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 403,
+                  "title": "Outside the caller's scope",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:scope-denied"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+            "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "NOT_FOUND",
+                  "detail": "Thread not found",
+                  "details": {},
+                  "instance": "/v1/tools/approval-suggestions/auto-accepted",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 404,
+                  "title": "Not found",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:not-found"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Thread not found",
+            "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "PAYLOAD_TOO_LARGE",
+                  "detail": "Body exceeds 26214400 bytes",
+                  "details": {},
+                  "instance": "/v1/tools/approval-suggestions/auto-accepted",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 413,
+                  "title": "Payload too large",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:payload-too-large"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body exceeds 26214400 bytes",
+            "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "VALIDATION",
+                  "detail": "Request validation failed",
+                  "details": {},
+                  "instance": "/v1/tools/approval-suggestions/auto-accepted",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 422,
+                  "title": "Invalid request",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:validation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request validation failed",
+            "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "RATE_LIMIT",
+                  "detail": "Too many requests",
+                  "details": {},
+                  "instance": "/v1/tools/approval-suggestions/auto-accepted",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 429,
+                  "title": "Too many requests",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:rate-limit"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests",
+            "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "DEPENDENCY_UNAVAILABLE",
+                  "detail": "PostgreSQL unavailable",
+                  "details": {},
+                  "instance": "/v1/tools/approval-suggestions/auto-accepted",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 503,
+                  "title": "A dependency is unavailable",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:dependency-unavailable"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable",
+            "headers": {
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          }
+        },
+        "summary": "The approval rules the service accepted on its own, newest first: every agent's, or the agent's in scope (agent_id)",
         "tags": [
           "tools"
         ]
