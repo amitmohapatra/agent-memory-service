@@ -376,8 +376,12 @@ def _unknown_code(question: str, evidence: Sequence[str]) -> str | None:
     codes = _codes(question)
     if not codes:
         return None
-    said = " ".join(_code_form(t) for t in evidence for t in re.split(r"\s+", t))
+    # a code a word of the evidence names is in ``flat`` too (each word's code form is a run
+    # of it): what ``flat`` does not hold no word names, however it is written
     flat = _code_form(" ".join(evidence))
+    unnamed = [c for c in codes if c not in flat]
+    if not unnamed:
+        return None
     kinds = {_shape(c) for t in evidence for c in _codes(t)}
-    missing = sorted(c for c in codes if c not in flat and c not in said and _shape(c) in kinds)
+    missing = sorted(c for c in unnamed if _shape(c) in kinds)
     return f"no evidence names {', '.join(missing)}" if missing else None

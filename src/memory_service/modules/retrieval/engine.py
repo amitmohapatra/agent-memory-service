@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import itertools
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
@@ -301,11 +301,15 @@ class RetrievalEngine:
         query_embedding: tuple[str, list[float]] | None = None,
         observed: ObservedRange | None = None,
         at: PointInTime | None = None,
+        on_encoded: Callable[[RoutedQuery, QueryVectors], None] | None = None,
     ) -> RetrievalResult:
         """Ranked candidates for ``query``. ``observed`` keeps only what was observed within
         the range, filtered in the store before ranking (a record with no observation time,
         a document passage, is out). ``at`` searches memories as of a past moment
-        (``PointInTime``) instead of now."""
+        (``PointInTime``) instead of now. ``on_encoded`` is told the final route and the
+        query's vectors as soon as they exist - the ones the result carries - so a caller can
+        start what needs only those (``ContextBuilder``'s standing rules) under the ranking
+        instead of after it."""
         at = at or PointInTime()
         explicit_limit = limit is not None
         limit = limit or self.cfg.final_k
@@ -398,6 +402,8 @@ class RetrievalEngine:
                 ]
                 with timings.stage("encode"):
                     encoded = await encode_task
+                if on_encoded is not None:
+                    on_encoded(routed, encoded)
                 diagnostics["query_script"] = encoded.script.value
                 # one store round trip per kind, concurrently; `wanted` order is kept so
                 # the interleave below is what it was when they ran one after another
