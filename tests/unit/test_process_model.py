@@ -423,3 +423,25 @@ def test_session_work_goes_direct_and_requests_through_the_pooler() -> None:
     assert database.sync_url == DB_URL, "migrations take locks: direct"
     plain = Settings(_env_file=None, database={"url": DB_URL}).database
     assert plain.direct_dsn == plain.dsn, "no pooler: one URL for everything"
+
+
+def test_compose_brings_every_long_running_service_back_on_its_own() -> None:
+    """A crash, or the host or Docker restarting, needs no one to run ``docker compose up``
+    again: every long-running service restarts unless an operator stopped it. The one-shots
+    (schema, models, backfill) are never restarted; their work is done or resumes at the next
+    ``up``."""
+    import yaml  # PyYAML: installed with the dev tools (pre-commit) and the models extra
+
+    services = yaml.safe_load((ROOT / "docker-compose.yml").read_text())["services"]
+    one_shots = {
+        "db-migrate",
+        "model-fetch",
+        "memory-backfill",
+        "openfga-migrate",
+        "openfga-db-init",
+    }
+    for name, service in services.items():
+        if name in one_shots:
+            assert service.get("restart", "no") == "no", name
+        elif not service.get("profiles"):  # optional profiles (validation, observability) aside
+            assert service.get("restart") == "unless-stopped", name

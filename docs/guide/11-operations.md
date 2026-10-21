@@ -321,7 +321,7 @@ try waits for a pool connection + the 30 s shutdown grace, and a heartbeat's 10 
 so it never takes the jobs of one that is riding an outage out; the price is that the jobs of a
 worker killed with -9 are re-queued after 145 s, not 30 s. Past 90 s (`worker.db_unavailable`), or when one of its pools
 stops on its own, the worker logs `worker.failed` and exits non-zero for its supervisor to
-restart it (compose: `restart: on-failure`). One pool timeout in a heartbeat, or one job-status
+restart it (compose: `restart: unless-stopped`, which also brings it back after a reboot). One pool timeout in a heartbeat, or one job-status
 write to a full disk, used to stop it, and the process exited as if asked to. A log line that
 cannot be written (stdout's disk full) is lost and counted (`memory_log_lines_dropped_total`),
 never raised into the code that logged it.
