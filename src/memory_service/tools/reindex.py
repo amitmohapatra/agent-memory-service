@@ -2,7 +2,8 @@
 
 PostgreSQL is the source of truth; Qdrant is a derived index. After an index loss, a
 model change (new embedding fingerprint = new collections) or corruption, this rebuilds
-every READY document's chunks and summaries and every CURRENT memory:
+every READY document's chunks and summaries, every CURRENT memory, every thread's episode and
+every tool catalog entry (tool search):
 
     uv run python -m memory_service.tools.reindex [--tenant acme] [--drop]
 
@@ -39,6 +40,7 @@ from memory_service.application.container import Container, build_container
 from memory_service.config.settings import Settings
 from memory_service.modules.ingestion.service import INDEX_FAILED
 from memory_service.modules.rag.indexer import INDEXED_STATUSES, KNOWLEDGE, MEMORIES
+from memory_service.modules.tools.index import TOOLS
 from memory_service.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -50,6 +52,7 @@ class ReindexReport:
     chunks: int = 0
     memories: int = 0
     episodes: int = 0
+    tools: int = 0
     dropped: list[str] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
 
@@ -63,6 +66,7 @@ class ReindexReport:
             "chunks": self.chunks,
             "memories": self.memories,
             "episodes": self.episodes,
+            "tools": self.tools,
             "dropped": self.dropped,
             "failures": self.failures,
         }
@@ -136,8 +140,23 @@ async def rebuild_search_index(
             report.episodes += int(await indexer.index_episode(tenant, thread_id))
         except Exception as exc:
             report.failures.append(f"episode {tenant}/{thread_id}: {type(exc).__name__}: {exc}")
+    await _rebuild_tools(container, report, tenant_id)
     log.info("reindex.done", **report.as_dict())
     return report
+
+
+async def _rebuild_tools(
+    container: Container, report: ReindexReport, tenant_id: str | None
+) -> None:
+    """Tool search's records, re-embedded from the catalog: after a model change its
+    collection is new and empty, and nothing else fills it."""
+    tool_index = container.services.get("tool_index")
+    if tool_index is None:
+        return
+    try:
+        report.tools = await tool_index.rebuild(tenant_id)
+    except Exception as exc:
+        report.failures.append(f"tools {tenant_id or '*'}: {type(exc).__name__}: {exc}")
 
 
 async def _drop(container: Container, indexer: Any, tenant_id: str | None) -> list[str]:
@@ -178,7 +197,9 @@ async def prune_retired_collections(container: Container, *, dry_run: bool = Tru
     was run.
     """
     indexer = container.services["indexer"]
-    live = {indexer.collection(base) for base in (KNOWLEDGE, MEMORIES)}
+    # every collection this build reads: tool search's too, which was once missing here and
+    # so was "retired" and dropped while live
+    live = {indexer.collection(base) for base in (KNOWLEDGE, MEMORIES, TOOLS)}
     retired = sorted(set(await container.search.list_collections()) - live)
     if not dry_run:
         for name in retired:

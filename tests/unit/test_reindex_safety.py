@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from memory_service.modules.rag.indexer import MEMORIES
+from memory_service.modules.tools.index import TOOLS
 from memory_service.ports.search import SearchFilter
 from memory_service.tools.reindex import prune_retired_collections, rebuild_search_index
 
@@ -98,3 +99,22 @@ async def test_an_empty_store_prunes_nothing() -> None:
     search = _Search([])
     assert await prune_retired_collections(_Container(search), dry_run=False) == []  # type: ignore[arg-type]
     assert search.dropped == []
+
+
+LIVE_TOOLS = "tools_st-model-torch-d384__bm25-v1"
+
+
+class _IndexerWithTools(_Indexer):
+    def collection(self, base: str) -> str:
+        return LIVE_TOOLS if base == TOOLS else super().collection(base)
+
+
+async def test_pruning_never_drops_the_live_tools_collection() -> None:
+    """Tool search's collection carries the same fingerprint; it is live, not retired."""
+    retired = ["tools_st-old-torch-d768__bm25-v1"]
+    search = _Search([LIVE_MEMORIES, LIVE_KNOWLEDGE, LIVE_TOOLS, *retired])
+    container = _Container(search)
+    container.services["indexer"] = _IndexerWithTools()
+    assert await prune_retired_collections(container, dry_run=True) == retired  # type: ignore[arg-type]
+    await prune_retired_collections(container, dry_run=False)  # type: ignore[arg-type]
+    assert search.dropped == retired

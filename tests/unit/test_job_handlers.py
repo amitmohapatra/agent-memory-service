@@ -534,6 +534,14 @@ async def test_tool_jobs_index_learn_and_fold_prefetch() -> None:
     assert agent_tools.calls == [("learn_prefetch", (), {})]
 
 
+async def test_tool_records_embedded_from_older_text_are_refreshed_on_a_schedule() -> None:
+    tool_index = _Service()
+    queue, _, _ = _wire({"tool_index": tool_index})
+    assert queue.periodic["periodic.tools_refresh"] == (Queue.EMBEDDING, "*/5 * * * *")
+    await queue.handlers["periodic.tools_refresh"]({})
+    assert tool_index.calls == [("refresh", (), {})]
+
+
 # --------------------------------------------------------------------------- system jobs
 
 

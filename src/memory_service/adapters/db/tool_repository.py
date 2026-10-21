@@ -255,6 +255,15 @@ class SqlToolRepository:
         ).scalars()
         return [_to_descriptor(r) for r in rows]
 
+    async def catalog_page(
+        self, *, tenant_id: str | None = None, after: str = "", limit: int
+    ) -> list[ToolDescriptor]:
+        stmt = select(ToolRow).where(ToolRow.tool_id > after)
+        if tenant_id is not None:
+            stmt = stmt.where(ToolRow.tenant_id == tenant_id)
+        rows = (await self.s.execute(stmt.order_by(ToolRow.tool_id).limit(limit))).scalars()
+        return [_to_descriptor(r) for r in rows]
+
     # ------------------------------------------------------------------ calls
     async def record(self, invocation: ToolInvocation) -> tuple[ToolInvocation, bool]:
         key = invocation.idempotency_key()

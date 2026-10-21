@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Final, Literal
 
@@ -60,6 +62,125 @@ class ToolAnnotations(BaseModel):
         alias="openWorldHint",
         description="MCP openWorldHint: the tool reaches outside systems (the web, third parties).",
     )
+
+
+#: The most characters of text a tool is searched by: the name and description lead, then the
+#: argument names, then the arguments' descriptions, each cut to fit what is left.
+INDEX_TEXT_MAX_CHARS: Final = 4000
+#: The most characters one argument's description adds, so one long description cannot take the
+#: room every other argument's needs.
+INDEX_ARGUMENT_MAX_CHARS: Final = 400
+#: How deep argument descriptions are read: 1 is the top-level arguments, 2 the properties of an
+#: object argument (or of an array argument's items), and so on.
+INDEX_SCHEMA_DEPTH: Final = 3
+_SPACES = re.compile(r"\s+")
+#: Where a schema keeps the definitions a local ``$ref`` (``#/$defs/Name``) points at.
+_DEFINITIONS: Final = ("definitions", "$defs")
+
+
+def _clip(text: str, limit: int) -> str:
+    """``text`` cut to ``limit`` characters, at the last space when one falls in the second half
+    of what is kept (a script written without spaces is cut at the limit)."""
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    space = cut.rfind(" ")
+    return (cut[:space] if space > limit // 2 else cut).rstrip()
+
+
+def _subschemas(schema: Mapping[str, Any], defs: Mapping[str, Any]) -> Iterator[Mapping[str, Any]]:
+    """The schema itself and what it stands for: the local ``$ref`` it names, the branches of
+    ``anyOf``/``oneOf``/``allOf`` and an array's ``items``, which describe the same argument."""
+    seen: set[int] = set()
+    pending = [schema]
+    while pending:
+        node = pending.pop(0)
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        yield node
+        ref = node.get("$ref")
+        if isinstance(ref, str):
+            where, _, name = ref.removeprefix("#/").partition("/")
+            target = defs.get(name) if where in _DEFINITIONS and ref.startswith("#/") else None
+            if isinstance(target, Mapping):
+                pending.append(target)
+        for key in ("anyOf", "oneOf", "allOf", "items", "prefixItems"):
+            branch = node.get(key)
+            branches = branch if isinstance(branch, list) else [branch]
+            pending.extend(b for b in branches if isinstance(b, Mapping))
+
+
+def argument_descriptions(
+    schema: Mapping[str, Any] | None,
+    *,
+    depth: int = INDEX_SCHEMA_DEPTH,
+    limit: int = INDEX_TEXT_MAX_CHARS,
+) -> list[str]:
+    """Every ``description`` an input schema gives its arguments, the top-level ones first and
+    then a level deeper (an object argument's properties, an array argument's items' ones), at
+    most ``depth`` levels; within a level by argument name, so the order does not depend on how
+    the schema's keys were stored. Reading stops once ``limit`` characters are found."""
+    if not isinstance(schema, Mapping):
+        return []
+    defs: dict[str, Any] = {}
+    for key in _DEFINITIONS:
+        table = schema.get(key)
+        if isinstance(table, Mapping):
+            defs.update(table)
+    out: list[str] = []
+    found = 0
+    level: list[Mapping[str, Any]] = [schema]
+    for _ in range(max(depth, 0)):
+        following: list[Mapping[str, Any]] = []
+        for parent in level:
+            for node in _subschemas(parent, defs):
+                properties = node.get("properties")
+                if not isinstance(properties, Mapping):
+                    continue
+                for name in sorted(properties, key=str):
+                    child = properties[name]
+                    if not isinstance(child, Mapping):
+                        continue
+                    for part in _subschemas(child, defs):
+                        text = part.get("description")
+                        if isinstance(text, str) and text.strip():
+                            out.append(text)
+                            found += len(text)
+                    if found >= limit:
+                        return out
+                    following.append(child)
+        level = following
+        if not level:
+            break
+    return out
+
+
+def bounded_text(parts: Sequence[str], limit: int = INDEX_TEXT_MAX_CHARS) -> str:
+    """``parts`` joined by spaces, whitespace collapsed, each distinct text once (compared
+    without case), and at most ``limit`` characters: a part that does not fit is cut and the
+    rest are left out."""
+    kept: list[str] = []
+    seen: set[str] = set()
+    room = limit
+    for raw in parts:
+        text = _SPACES.sub(" ", raw).strip()
+        key = text.casefold()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        if kept:
+            room -= 1  # the joining space
+        if room <= 0:
+            break
+        piece = _clip(text, room)
+        if not piece:
+            break
+        kept.append(piece)
+        room -= len(piece)
+        if len(piece) < len(text):
+            break
+    return " ".join(kept)
 
 
 def risk_tier(side_effects: SideEffects | None, annotations: ToolAnnotations) -> SideEffects:
@@ -151,9 +272,19 @@ class ToolDescriptor(BaseModel):
         return risk_tier(self.side_effects, self.annotations)
 
     def index_text(self) -> str:
-        """What the tool is searched by: its name, description and argument names."""
-        fields = sorted(((self.input_schema or {}).get("properties") or {}).keys())
-        return " ".join(filter(None, (self.name, self.description, " ".join(fields))))
+        """What the tool is searched by: its name, description and argument names, then what
+        the input schema says each argument is (``properties.<arg>.description``, nested
+        objects and array items included, ``INDEX_SCHEMA_DEPTH`` deep). Repeated text appears
+        once and the whole is at most ``INDEX_TEXT_MAX_CHARS``. A change here changes every
+        record's ``text_hash``, and ``ToolIndex.refresh`` re-indexes them."""
+        schema = self.input_schema or {}
+        properties = schema.get("properties")
+        fields = sorted(properties.keys(), key=str) if isinstance(properties, Mapping) else []
+        described = [
+            _clip(_SPACES.sub(" ", d).strip(), INDEX_ARGUMENT_MAX_CHARS)
+            for d in argument_descriptions(schema)
+        ]
+        return bounded_text([self.name, self.description, " ".join(fields), *described])
 
     def redacted_args(self, args: dict[str, Any]) -> dict[str, Any]:
         """Drop every configured path before the arguments are persisted or hashed for storage."""

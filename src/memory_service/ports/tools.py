@@ -59,6 +59,14 @@ class ToolRepository(Protocol):
         self, tenant_id: str, tool_ids: Sequence[str]
     ) -> list[ToolDescriptor]: ...
 
+    async def catalog_page(
+        self, *, tenant_id: str | None = None, after: str = "", limit: int
+    ) -> list[ToolDescriptor]:
+        """Every workspace's entries of ``tenant_id`` (of every tenant when None), by
+        ``tool_id`` after ``after`` (the last id of the previous page): the tool index's
+        refresh and rebuild read the whole catalog this way."""
+        ...
+
     # ------------------------------------------------------------------ calls
     async def record(self, invocation: ToolInvocation) -> tuple[ToolInvocation, bool]:
         """Insert once; a retry of the same key returns the stored row and False."""

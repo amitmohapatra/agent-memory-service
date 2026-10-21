@@ -94,6 +94,18 @@ def _enrichment(tenant_id: str) -> dict[str, Any]:
     return {"queue": Queue.GRAPH, "tenant_id": tenant_id}
 
 
+def _register_tools_refresh(queue: _AccountedQueue, container: Container) -> None:
+    """``periodic.tools_refresh``: re-index the tool records an earlier build embedded from
+    other text (``ToolIndex.refresh``: the first tick after a release does the work)."""
+
+    async def tools_refresh(payload: dict[str, Any]) -> None:
+        await container.services["tool_index"].refresh()
+
+    queue.register_periodic(
+        "periodic.tools_refresh", Queue.EMBEDDING, tools_refresh, cron="*/5 * * * *"
+    )
+
+
 def register_handlers(container: Container) -> None:
     if container.tasks is None:
         return
@@ -449,6 +461,7 @@ def register_handlers(container: Container) -> None:
         "periodic.profile_queries", Queue.RECONCILE, profile_queries, cron="*/5 * * * *"
     )
     queue.register(TASK_TOOLS_INDEX, Queue.EMBEDDING, tools_index, retries=5)
+    _register_tools_refresh(queue, container)
     queue.register_periodic(
         "periodic.prefetch_learn", Queue.RECONCILE, prefetch_learn, cron="*/5 * * * *"
     )

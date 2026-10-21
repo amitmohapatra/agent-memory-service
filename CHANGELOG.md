@@ -8,6 +8,21 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Fixed
+- Tool search reads the arguments' descriptions: a catalog entry is embedded with what its input
+  schema says each argument is (`properties.<arg>.description`, nested objects and array items
+  included, three levels deep), each distinct text once and at most 4,000 characters, so a tool
+  whose purpose only a parameter's description names is found. Each tool record carries the
+  hash of the text it was embedded from, and `periodic.tools_refresh` re-indexes the records an
+  earlier build wrote, so an existing deployment picks the new text up by itself. No new
+  setting.
+- `memory-reindex --prune` dropped the live tool-search collection: it counted only the
+  knowledge and memories collections as live. The tools collection is live now.
+- After a model change tool search stayed empty until each catalog entry changed: the reindex
+  tool never rebuilt the tools collection. It now re-embeds every catalog entry (of the
+  `--tenant` only, when given; `tools` in its report), and `periodic.tools_refresh` also
+  indexes any entry that has no record.
+- A tool first seen in a recorded call (a bare catalog entry `record` creates) was never
+  indexed; `periodic.tools_refresh` indexes it, so tool search can offer it by name.
 - Accumulated memory (ADR 0041, decision 10): statements that are links of a chain about one
   code ("Store 6474 belongs to Region G10" / "Region G10 is replenished from ...") no longer
   replace one another; a rule restated with a new code is stored, listed once and ranked
