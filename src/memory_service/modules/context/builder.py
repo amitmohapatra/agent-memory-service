@@ -230,6 +230,22 @@ class _Lookup:
     semantic: bytes | None = None
 
 
+class _StandingRead:
+    """The read of the standing rules and preferences that apply to a request
+    (``standing.standing_blocks``), started when the retrieval has the route and the query's
+    vectors (``RetrievalEngine.retrieve(on_encoded=...)``): it runs under the ranking."""
+
+    def __init__(self, engine: Any, query: str, visibility: Any) -> None:
+        self.engine, self.query, self.visibility = engine, query, visibility
+        self.task: asyncio.Future[list[ProfileBlockView]] | None = None
+
+    def start(self, routed: RoutedQuery, vectors: QueryVectors) -> None:
+        if STANDING and routed.needs_memories and self.task is None:
+            self.task = asyncio.ensure_future(
+                standing_blocks(self.engine, self.query, self.visibility, vectors)
+            )
+
+
 class ContextBuilder:
     def __init__(
         self,
@@ -496,14 +512,7 @@ class ContextBuilder:
         recent = asyncio.ensure_future(self._recent_messages(ctx) if window else _nothing())
         # the standing rules and preferences need only the route and the query's vectors:
         # read under the ranking, from the moment the vectors exist
-        standing: list[asyncio.Future[list[ProfileBlockView]]] = []
-
-        def start_standing(routed: RoutedQuery, vectors: QueryVectors) -> None:
-            if STANDING and routed.needs_memories and not standing:
-                standing.append(
-                    asyncio.ensure_future(standing_blocks(self.engine, query, visibility, vectors))
-                )
-
+        standing = _StandingRead(self.engine, query, visibility)
         try:
             with timings.stage("retrieve"):
                 result = await self.engine.retrieve(
@@ -512,25 +521,18 @@ class ContextBuilder:
                     document_ids=document_ids,
                     visibility=visibility,
                     query_embedding=(query, embedding) if embedding is not None else None,
-                    on_encoded=start_standing,
+                    on_encoded=standing.start,
                 )
-        except BaseException:
-            for side in (sections, recent, *standing):
-                if side is not None:
-                    side.cancel()
-            raise
-        try:
             with timings.stage("sections"):
                 pinned = await sections if sections is not None else Pinned()
                 conversation = self._window(ctx, await recent, after=pinned.covered_to)
         except BaseException:
-            for side in standing:
-                side.cancel()
+            for side in (sections, recent, standing.task):
+                if side is not None:
+                    side.cancel()
             raise
         with timings.stage("similarity"):
-            await self._similarity_and_standing(
-                query, visibility, result, pinned, standing[0] if standing else None
-            )
+            await self._similarity_and_standing(query, visibility, result, pinned, standing.task)
         await self._add_extras(ctx, query, tools, visibility, result, pinned, timings)
         # the engine's own stage split, plus what happened around it
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
