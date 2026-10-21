@@ -1,5 +1,11 @@
-"""Tool search: catalog entries embedded into the ``tools`` collection (name, description and
-argument names), searched with the same hybrid fusion as memories, per tenant and workspace.
+"""Tool search: catalog entries embedded into the ``tools`` collection (name, description,
+argument names and the arguments' schema descriptions: ``ToolDescriptor.index_text``),
+searched with the same hybrid fusion as memories, per tenant and workspace.
+
+Each record carries the ``text_hash`` of the text it was embedded from. A changed catalog
+entry is re-indexed by its own ``tools.index`` job; a release that changes what a tool is
+searched by changes the hash of entries nobody touched, and ``refresh`` (a periodic job)
+re-indexes those, so an existing deployment picks the new text up by itself.
 
 A tool record's audience is its catalog scope: ``tenant:<t>`` for a tenant-wide entry,
 ``workspace:<t>/<w>`` for a workspace's own; a search reads both, and a workspace's entry
@@ -8,6 +14,7 @@ shadows the tenant's of the same name.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Sequence
 from typing import Final
 
@@ -25,6 +32,12 @@ TOOLS: Final = "tools"
 #: Candidates one search asks the store for (before the caller's available set narrows them).
 SEARCH_LIMIT: Final = 32
 _RRF_K: Final = 1
+#: Catalog entries one ``refresh`` page compares with their records.
+REFRESH_BATCH: Final = 256
+#: How long a process trusts a ``refresh`` it already ran: a new release is a new process, so
+#: the first tick after a deploy compares every record; later ticks only catch a record an
+#: older process wrote during a rolling deploy.
+REFRESH_EVERY_SECONDS: Final = 6 * 3600
 
 
 def tool_audience(tenant_id: str, workspace_id: str | None) -> list[str]:
@@ -41,6 +54,8 @@ class ToolIndex:
         self.indexer = indexer
         self.store = store
         self._ensured: set[str] = set()
+        #: collection -> when this process last compared every record with its entry
+        self._refreshed: dict[str, float] = {}
 
     @property
     def collection(self) -> str:
@@ -49,6 +64,7 @@ class ToolIndex:
     def forget_collections(self) -> None:
         """The collection was dropped outside this index (a test reset): ensure it again."""
         self._ensured.clear()
+        self._refreshed.clear()
 
     async def ensure(self) -> None:
         if self.collection in self._ensured:
@@ -76,6 +92,44 @@ class ToolIndex:
         log.info("tools.indexed", tenant_id=tenant_id, count=len(entries))
         return len(entries)
 
+    async def refresh(self, *, force: bool = False) -> int:
+        """Re-embed every indexed entry whose record was embedded from other text than its
+        ``index_text`` gives now (a release changed what tools are searched by, or a record
+        predates ``text_hash``). Entries without a record are left to their own index job.
+        Runs once per process per ``REFRESH_EVERY_SECONDS`` unless ``force``; returns how
+        many records were re-indexed."""
+        collection = self.collection
+        started = time.monotonic()
+        last = self._refreshed.get(collection)
+        if not force and last is not None and started - last < REFRESH_EVERY_SECONDS:
+            return 0
+        await self.ensure()
+        refreshed, after = 0, ""
+        while True:
+            async with self.uow_factory() as uow:
+                entries = await uow.tools.catalog_page(after=after, limit=REFRESH_BATCH)
+            if not entries:
+                break
+            after = entries[-1].tool_id
+            indexed = {
+                r.record_id: r.payload.get("text_hash")
+                for r in await self.store.get(collection, [e.tool_id for e in entries])
+            }
+            stale = [
+                e
+                for e in entries
+                if e.tool_id in indexed and indexed[e.tool_id] != content_hash(e.index_text())
+            ]
+            if stale:
+                await self.store.upsert(await self._records(stale))
+                refreshed += len(stale)
+            if len(entries) < REFRESH_BATCH:
+                break
+        self._refreshed[collection] = started
+        if refreshed:
+            log.info("tools.refreshed", count=refreshed)
+        return refreshed
+
     async def _records(self, entries: Sequence[ToolDescriptor]) -> list[SearchRecord]:
         texts = [e.index_text() for e in entries]
         dense = await self.indexer.embed_cached(texts, [content_hash(t) + ":tool1" for t in texts])
@@ -90,6 +144,7 @@ class ToolIndex:
                 payload={
                     "kind": "tool",
                     "text": entry.name,
+                    "text_hash": content_hash(texts[i]),
                     "visibility_keys": tool_audience(entry.tenant_id, entry.workspace_id)[-1:],
                 },
             )

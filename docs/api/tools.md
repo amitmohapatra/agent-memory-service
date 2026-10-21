@@ -77,8 +77,12 @@ entries = await ctx.advanced.tools.catalog(names=["erp-create_po"])  # .side_eff
 
 An entry is one row per name in the caller's workspace (or tenant-wide without one); a
 workspace's own entry shadows the tenant's. A changed input schema is a new `version`; an
-unchanged entry is left as it is. Entries are embedded (name, description, argument names) into
-the `tools` search collection by a background job. `required` defaults to the input schema's.
+unchanged entry is left as it is. Entries are embedded (name, description, argument names, and
+what the input schema says each argument is: `properties.<arg>.description`, nested objects and
+array items included, three levels deep, each distinct text once, at most 4,000 characters) into
+the `tools` search collection by a background job, so a tool whose purpose only an argument's
+description names is found. When a release changes that text, `periodic.tools_refresh`
+re-indexes the entries already in the collection. `required` defaults to the input schema's.
 
 ## Recording a call
 
