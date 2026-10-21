@@ -65,6 +65,19 @@ log() { echo "[isolated-stack $(date +%T)] $*" >&2; }
 refuse() { log "refused: $*"; exit 2; }
 answers() { curl -s -m 2 -o /dev/null "http://127.0.0.1:$1/" 2>/dev/null; }
 psql_() { PGPASSWORD="$PGPASSWORD_" psql -h "$PGHOST_" -U "$PGUSER_" -d postgres -Atq "$@"; }
+# redis_ DB CMD: one argument-free command (dbsize, flushdb) against local Redis, through
+# redis-cli where it is installed, else the protocol over bash's /dev/tcp (CI's runner talks
+# to a Redis service container and has no redis-cli)
+redis_() {
+  if command -v redis-cli >/dev/null 2>&1; then redis-cli -n "$1" "$2"; return; fi
+  local reply
+  exec 9<>/dev/tcp/127.0.0.1/6379 || return 1
+  printf '*2\r\n$6\r\nSELECT\r\n$%d\r\n%s\r\n*1\r\n$%d\r\n%s\r\n' "${#1}" "$1" "${#2}" "$2" >&9
+  read -r reply <&9 && [ "${reply%$'\r'}" = +OK ] && read -r reply <&9
+  exec 9<&-
+  reply="${reply%$'\r'}"
+  case "$reply" in :*|+*) echo "${reply:1}" ;; *) return 1 ;; esac
+}
 
 # ------------------------------------------------------------------ refuse before creating
 [[ "$DB" =~ ^capeval[a-z0-9_]*$ ]] || refuse "database '$DB' does not match ^capeval"
@@ -112,7 +125,7 @@ disk() {
   echo "df_avail_mb=$(df -BM --output=avail / | tail -1 | tr -d ' M')"\
 " work_mb=$(du -sm "$WORK" 2>/dev/null | cut -f1 || echo 0)"\
 " db_exists=$(psql_ -c "select count(*) from pg_database where datname='$DB'" 2>/dev/null || echo ?)"\
-" redis_keys=$(redis-cli -n "$REDIS_DB" dbsize 2>/dev/null || echo ?)"
+" redis_keys=$(redis_ "$REDIS_DB" dbsize 2>/dev/null || echo ?)"
 }
 stop() {  # pid marker: SIGTERM, then SIGKILL if it has not exited (a worker draining a job
   # may never exit on its own, and would keep the stack's port for the next run)
@@ -152,7 +165,7 @@ teardown() {
   local db rdb work
   db="$(get db_created)" rdb="$(get redis_db)" work="$(get work_created)"
   [[ "$db" =~ ^capeval ]] && psql_ -c "drop database if exists $db with (force)" 2>/dev/null
-  [ -n "$rdb" ] && redis-cli -n "$rdb" flushdb >/dev/null 2>&1
+  [ -n "$rdb" ] && redis_ "$rdb" flushdb >/dev/null 2>&1
   work="$(realpath -m "${work:-/nonexistent}")"
   if [[ "$work" == /var/tmp/capeval* ]] && [[ "$LOGS" == /var/tmp/capeval* ]]; then
     mkdir -p "$LOGS" && cp "$work"/*.log "$LOGS"/ 2>/dev/null
@@ -171,7 +184,7 @@ fi
 [ -e "$WORK" ] && refuse "$WORK exists but no manifest names it: not ours to remove"
 [ "$(psql_ -c "select count(*) from pg_database where datname='$DB'")" = 0 ] \
   || refuse "database $DB exists but no manifest names it: not ours to drop"
-[ "$(redis-cli -n "$REDIS_DB" dbsize)" = 0 ] || refuse "Redis db $REDIS_DB is not empty"
+[ "$(redis_ "$REDIS_DB" dbsize)" = 0 ] || refuse "Redis db $REDIS_DB is not empty"
 
 log "disk before: $(disk)"
 # Memory this script's processes may still take, in MB: the host's MemAvailable, or less when a
