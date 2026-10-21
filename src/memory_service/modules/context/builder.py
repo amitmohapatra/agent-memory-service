@@ -25,6 +25,7 @@ from memory_service.domain.context_bundle import (
     ContextItem,
     ConversationWindow,
     EvidenceReport,
+    ProfileBlockView,
     ScoreKind,
     UnusedEvidence,
     WindowMessage,
@@ -57,11 +58,12 @@ from memory_service.modules.retrieval import slots
 from memory_service.modules.retrieval.engine import (
     UNUSED_MAX,
     Candidate,
+    QueryVectors,
     RetrievalEngine,
     RetrievalResult,
 )
 from memory_service.modules.retrieval.periods import months_dated
-from memory_service.modules.retrieval.router import QueryRouter
+from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import evidence_status_total, stage_seconds
 from memory_service.observability.timings import Timings
@@ -226,6 +228,22 @@ class _Lookup:
     bundle: bytes | None
     semantic_key: str | None = None
     semantic: bytes | None = None
+
+
+class _StandingRead:
+    """The read of the standing rules and preferences that apply to a request
+    (``standing.standing_blocks``), started when the retrieval has the route and the query's
+    vectors (``RetrievalEngine.retrieve(on_encoded=...)``): it runs under the ranking."""
+
+    def __init__(self, engine: Any, query: str, visibility: Any) -> None:
+        self.engine, self.query, self.visibility = engine, query, visibility
+        self.task: asyncio.Future[list[ProfileBlockView]] | None = None
+
+    def start(self, routed: RoutedQuery, vectors: QueryVectors) -> None:
+        if STANDING and routed.needs_memories and self.task is None:
+            self.task = asyncio.ensure_future(
+                standing_blocks(self.engine, self.query, self.visibility, vectors)
+            )
 
 
 class ContextBuilder:
@@ -492,6 +510,9 @@ class ContextBuilder:
             else None
         )
         recent = asyncio.ensure_future(self._recent_messages(ctx) if window else _nothing())
+        # the standing rules and preferences need only the route and the query's vectors:
+        # read under the ranking, from the moment the vectors exist
+        standing = _StandingRead(self.engine, query, visibility)
         try:
             with timings.stage("retrieve"):
                 result = await self.engine.retrieve(
@@ -500,17 +521,18 @@ class ContextBuilder:
                     document_ids=document_ids,
                     visibility=visibility,
                     query_embedding=(query, embedding) if embedding is not None else None,
+                    on_encoded=standing.start,
                 )
+            with timings.stage("sections"):
+                pinned = await sections if sections is not None else Pinned()
+                conversation = self._window(ctx, await recent, after=pinned.covered_to)
         except BaseException:
-            for side in (sections, recent):
+            for side in (sections, recent, standing.task):
                 if side is not None:
                     side.cancel()
             raise
-        with timings.stage("sections"):
-            pinned = await sections if sections is not None else Pinned()
-            conversation = self._window(ctx, await recent, after=pinned.covered_to)
         with timings.stage("similarity"):
-            await self._similarity_and_standing(query, visibility, result, pinned)
+            await self._similarity_and_standing(query, visibility, result, pinned, standing.task)
         await self._add_extras(ctx, query, tools, visibility, result, pinned, timings)
         # the engine's own stage split, plus what happened around it
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
@@ -534,12 +556,18 @@ class ContextBuilder:
         )
 
     async def _similarity_and_standing(
-        self, query: str, visibility: Any, result: RetrievalResult, pinned: Pinned
+        self,
+        query: str,
+        visibility: Any,
+        result: RetrievalResult,
+        pinned: Pinned,
+        started: asyncio.Future[list[ProfileBlockView]] | None = None,
     ) -> None:
         """Score the candidates' similarity and, beside it, read the user's standing rules
         and preferences that apply (``standing``) into the profile: one round trip, the
-        query's own vectors."""
-        standing = (
+        query's own vectors. ``started``: that read, already under way (``_fresh`` starts it
+        as soon as the retrieval has the query's vectors)."""
+        standing = started or (
             asyncio.ensure_future(
                 standing_blocks(self.engine, query, visibility, result.query_vectors)
             )

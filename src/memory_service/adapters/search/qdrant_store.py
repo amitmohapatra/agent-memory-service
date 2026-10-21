@@ -151,6 +151,12 @@ _PAYLOAD_INDEXES: dict[str, Any] = {
     "valid_from": models.PayloadSchemaType.DATETIME,
     "valid_to": models.PayloadSchemaType.DATETIME,
     "known_to": models.PayloadSchemaType.DATETIME,
+    # what the standing rules and preferences read filters on (``modules.context.standing``):
+    # unindexed, every one of its four searches per request read the payload of each point
+    # it considered (a long message's whole text) to test them
+    "category": models.PayloadSchemaType.KEYWORD,
+    "statement_kind": models.PayloadSchemaType.KEYWORD,
+    "standing_instruction": models.PayloadSchemaType.KEYWORD,
 }
 
 

@@ -348,11 +348,26 @@ def answers_as_list(slot: Slot, text: str) -> bool:
     stems = stemmed_terms(content_terms(text), slot.lang)
     if not all(_shares(forms, stems) for forms in slot.asked):
         return False
-    if not read(slot, text).names_all:
+    if not _names_in(slot, _flat(text)) or not read(slot, text).names_all:
         return False
     found = _anchors(text, slot.lang)
     held = {value for _, value in found.ids} | (found.names - slot.names)
     return max(len(held), len(numbers(text))) >= LIST_VALUES
+
+
+def _flat(text: str) -> str:
+    return " ".join(re.sub(r"[^\w]+", " ", text.lower()).split())
+
+
+def _names_in(slot: Slot, flat: str) -> bool:
+    """``slot``'s names are all in ``flat`` (``_flat`` of an item's text)."""
+    return all(" ".join(n.split()) in flat for n in slot.names)
+
+
+def _asked_in(slot: Slot, text: str) -> bool:
+    """``text`` shares the words ``slot`` asks with that it must (``Slot.needed``)."""
+    stems = stemmed_terms(content_terms(text), slot.lang)
+    return sum(_shares(forms, stems) for forms in slot.asked) >= slot.needed
 
 
 def read(slot: Slot, text: str) -> Reading:
@@ -360,13 +375,9 @@ def read(slot: Slot, text: str) -> Reading:
     found = _anchors(text, slot.lang)
     said = [_id_forms(label, value) for label, value in found.ids]
     held = frozenset().union(*said) if said else frozenset()
-    flat = " ".join(re.sub(r"[^\w]+", " ", text.lower()).split())
-    names_all = all(forms & held for forms in slot.ids) and all(
-        " ".join(n.split()) in flat for n in slot.names
-    )
+    names_all = all(forms & held for forms in slot.ids) and _names_in(slot, _flat(text))
     asked_ids = frozenset().union(*slot.ids) if slot.ids else frozenset()
     other_ids = frozenset(max(forms, key=len) for forms in said if not forms & asked_ids)
-    stems = stemmed_terms(content_terms(text), slot.lang)
     others = other_ids | {n for n in found.names if n not in slot.names}
     numbers = {
         n.replace(",", ".")
@@ -375,11 +386,19 @@ def read(slot: Slot, text: str) -> Reading:
     }
     return Reading(
         names_all=names_all,
-        asks=sum(_shares(forms, stems) for forms in slot.asked) >= slot.needed,
+        asks=_asked_in(slot, text),
         values=frozenset(others | numbers),
         others=frozenset(others),
         other_ids=other_ids,
     )
+
+
+def _may_hold(slot: Slot, text: str) -> bool:
+    """Whether ``read(slot, text)`` can name every thing ``slot`` names and share the words it
+    asks with: False only when it cannot. The two cheap parts of a reading - its names, its
+    words - decide most items, so the identifiers and names of a long message (``_anchors``,
+    the costly part) are read only for an item that passes both."""
+    return _names_in(slot, _flat(text)) and _asked_in(slot, text)
 
 
 def latest_values(question: str, candidates: Sequence[Any], *, newest_of: Any) -> list[Any]:
@@ -452,6 +471,8 @@ def _holders(question: str, slot: Slot, candidates: Sequence[Any]) -> list[tuple
     for c in candidates:
         if c.kind != "memory" or c.payload.get("earlier_value") or not c.payload.get("observed_at"):
             continue
+        if not _may_hold(slot, c.text):
+            continue  # ``read`` would say it does not name the slot's things or ask its words
         reading = read(slot, c.text)
         if (
             reading.names_all

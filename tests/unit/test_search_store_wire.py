@@ -650,6 +650,7 @@ async def test_an_old_tenant_index_is_rebuilt_with_the_flag() -> None:
     schema |= dict.fromkeys(
         ("current", "script", "observed_at", "valid_from", "valid_to", "known_to"), old
     )
+    schema |= dict.fromkeys(("category", "statement_kind", "standing_instruction"), old)
     client = _LayoutClient(schema=schema)
     store = _store(client)  # type: ignore[arg-type]
     await store.ensure_collection(CollectionSpec(name="knowledge", dense={VectorName.DENSE_ML: 4}))
