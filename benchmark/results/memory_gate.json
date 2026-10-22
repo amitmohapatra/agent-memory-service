@@ -160,12 +160,11 @@
       "id": "numbers_differ",
       "expected": "distinct",
       "decisions": [
-        "CREATE",
         "CREATE"
       ],
       "extracted": [
-        2,
-        2
+        1,
+        1
       ],
       "ok": true
     },
@@ -173,12 +172,11 @@
       "id": "numbers_differ_year",
       "expected": "distinct",
       "decisions": [
-        "CREATE",
         "CREATE"
       ],
       "extracted": [
-        2,
-        2
+        1,
+        1
       ],
       "ok": true
     },
@@ -186,12 +184,11 @@
       "id": "same_fact_repeated",
       "expected": "reinforce",
       "decisions": [
-        "REINFORCE",
         "REINFORCE"
       ],
       "extracted": [
-        2,
-        2
+        1,
+        1
       ],
       "ok": true
     },
@@ -199,12 +196,11 @@
       "id": "decision_distinct",
       "expected": "distinct",
       "decisions": [
-        "CREATE",
         "CREATE"
       ],
       "extracted": [
-        2,
-        2
+        1,
+        1
       ],
       "ok": true
     },
@@ -212,12 +208,11 @@
       "id": "decision_reversal",
       "expected": "supersede",
       "decisions": [
-        "SUPERSEDE",
-        "CREATE"
+        "SUPERSEDE"
       ],
       "extracted": [
-        2,
-        2
+        1,
+        1
       ],
       "ok": true
     },
@@ -225,12 +220,11 @@
       "id": "decision_same",
       "expected": "reinforce_or_distinct",
       "decisions": [
-        "REINFORCE",
-        "CREATE"
+        "REINFORCE"
       ],
       "extracted": [
-        2,
-        2
+        1,
+        1
       ],
       "ok": true
     },
@@ -238,12 +232,11 @@
       "id": "task_distinct",
       "expected": "distinct",
       "decisions": [
-        "CREATE",
         "CREATE"
       ],
       "extracted": [
-        2,
-        2
+        1,
+        1
       ],
       "ok": true
     },
@@ -251,12 +244,11 @@
       "id": "task_same",
       "expected": "reinforce",
       "decisions": [
-        "REINFORCE",
         "REINFORCE"
       ],
       "extracted": [
-        2,
-        2
+        1,
+        1
       ],
       "ok": true
     },
@@ -264,12 +256,11 @@
       "id": "event_distinct_day",
       "expected": "distinct",
       "decisions": [
-        "CREATE",
         "CREATE"
       ],
       "extracted": [
-        2,
-        2
+        1,
+        1
       ],
       "ok": true
     },
@@ -277,12 +268,11 @@
       "id": "event_same",
       "expected": "reinforce",
       "decisions": [
-        "REINFORCE",
         "REINFORCE"
       ],
       "extracted": [
-        2,
-        2
+        1,
+        1
       ],
       "ok": true
     },
@@ -290,12 +280,11 @@
       "id": "procedure_distinct",
       "expected": "distinct",
       "decisions": [
-        "CREATE",
         "CREATE"
       ],
       "extracted": [
-        2,
-        2
+        1,
+        1
       ],
       "ok": true
     },
@@ -375,12 +364,11 @@
       "id": "negation_only",
       "expected": "distinct",
       "decisions": [
-        "CREATE",
         "CREATE"
       ],
       "extracted": [
-        2,
-        2
+        1,
+        1
       ],
       "ok": true
     },
@@ -388,12 +376,11 @@
       "id": "similar_but_different_object",
       "expected": "distinct",
       "decisions": [
-        "CREATE",
         "CREATE"
       ],
       "extracted": [
-        2,
-        2
+        1,
+        1
       ],
       "ok": true
     },
@@ -447,16 +434,16 @@
     }
   ],
   "provenance": {
-    "timestamp": "2026-10-21T19:42:10.439389+00:00",
-    "git_commit": "0c2e4aea8d43345377a7e5903f33f9ca88a6fb53",
+    "timestamp": "2026-10-02T09:01:15.848130+00:00",
+    "git_commit": "13e7b065d30bba2757bf915f40fba84c6e919278",
     "host_load": {
-      "loadavg_1m": 5.27,
-      "loadavg_5m": 6.38,
-      "loadavg_15m": 6.73,
-      "load_per_core": 1.32
+      "loadavg_1m": 6.3,
+      "loadavg_5m": 5.5,
+      "loadavg_15m": 4.66,
+      "load_per_core": 1.57
     },
     "python": "3.13.14",
-    "platform": "Linux-6.18.44-fc-v140-x86_64-with-glibc2.39",
+    "platform": "Linux-6.18.44-fc-v51-x86_64-with-glibc2.39",
     "machine": "x86_64",
     "cpu_count": 4,
     "memory_gb": 15.7,
@@ -466,11 +453,11 @@
       "qdrant-client": "1.19.0",
       "procrastinate": "3.9.0",
       "zstandard": "0.25.0",
-      "sentence-transformers": "6.0.1",
-      "torch": "2.14.0+cpu",
-      "transformers": "5.17.0",
+      "sentence-transformers": "5.3.0",
+      "torch": "2.11.0",
+      "transformers": "5.3.0",
       "onnxruntime": "1.30.0",
-      "docling": "2.127.0"
+      "docling": "not-installed"
     },
     "models": {
       "bekko-embedding-v1-a8m": {
@@ -480,14 +467,6 @@
       "granite-embedding-small-english-r2": {
         "repo": "ibm-granite/granite-embedding-small-english-r2",
         "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
-      },
-      "mdeberta-v3-base-xnli-multilingual-nli-2mil7": {
-        "repo": "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7",
-        "revision": "b5113eb38ab63efdd7f280f8c144ea8b13f978ce"
-      },
-      "mxbai-edge-colbert-v0-32m": {
-        "repo": "mixedbread-ai/mxbai-edge-colbert-v0-32m",
-        "revision": "bb13a29ec9b1e7edd4ba8f7a0776c48b55cbad66"
       }
     },
     "llm": {
