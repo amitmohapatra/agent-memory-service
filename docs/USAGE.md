@@ -135,7 +135,9 @@ for job_id in ack.job_ids:
 
 - `context` returns `rendered`, `bundle_id`, `evidence_status` and `token_estimate` by
   default; items are cited by handle (`[m1]`, `[d2]`). `window=False` when your framework keeps
-  its own history.
+  its own history; `window_format="messages"` when it replays a conversation as messages: the
+  recent messages come verbatim, with their tool calls, in `conversation.messages`
+  ([context.md](api/context.md#the-two-forms)).
 - Memories are ranked by fixed weighted reciprocal-rank fusion of BM25, two dense spaces and
   ColBERT arms, then session/speaker/time/period rules (ADR 0026) — nothing to tune per call.
 - No read calls a model unless the tenant policy's `read_assist` is on and a key can pay

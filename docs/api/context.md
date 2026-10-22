@@ -14,7 +14,7 @@ sequenceDiagram
   participant C as POST /v1/context
   participant R as Retrievers
   participant G as Grounding
-  A->>C: {query, scope, token_budget?, window?, tools?, format?}
+  A->>C: {query, scope, token_budget?, window?, window_format?, tools?, format?}
   C->>R: conversation window · memories · document chunks · graph facts · summaries
   Note over R: audience-filtered in the store#59; memories: weighted RRF of BM25, two dense spaces and ColBERT arms, then session/speaker/time/period rules (ADR 0026)
   R-->>C: candidates
@@ -37,7 +37,7 @@ that cannot support it.
 
 | Route | Purpose | SDK |
 | --- | --- | --- |
-| `POST /v1/context` | the context for this turn: rendered for a prompt (`format="prompt"`, the default) or the same content as structured data (`format="full"`) | `ctx.context(query, token_budget=…, tools=[names], window=…, document_ids=…, format=…, debug=…)` |
+| `POST /v1/context` | the context for this turn: rendered for a prompt (`format="prompt"`, the default) or the same content as structured data (`format="full"`); `window_format="messages"` gives the conversation window verbatim, for the caller to replay | `ctx.context(query, token_budget=…, tools=[names], window=…, window_format=…, document_ids=…, format=…, debug=…)` |
 | `POST /v1/recall` | ranked, scope-filtered items, no bundle assembly | `ctx.search(query, limit=…, kinds=[…], time_from=…, time_to=…, as_of=…, known_at=…, document_ids=…)`; kinds: `memory`, `chunk`, `summary`, `episode`, `message` (this conversation's messages, then the user's earlier ones: [past conversations](../guide/04-retrieval.md#past-conversations)) |
 | `POST /v1/verify` | verify an answer claim by claim against the context it was given; with a run, recorded as the judge's RUN feedback | `ctx.verify(answer, bundle_id=…, run_id=…)` |
 | `GET /v1/threads/{id}` | one thread, with its durable `summary` once it has one | `ctx.history.thread()` |
@@ -125,6 +125,20 @@ companions are exempt. They are one indexed read each and run concurrently with 
 a model. Memories an agent's own pulls kept using for requests of the same pattern are
 pre-included ([agent-tools.md](agent-tools.md)). `window=False` leaves the conversation window
 out, for a framework that keeps its own history. The cache key includes the `tools` request.
+
+**The window as the conversation itself (`window_format="messages"`).** An agent whose
+framework replays a conversation as messages — LangGraph, the OpenAI Agents SDK — takes the
+window verbatim instead of as a `## Recent conversation` section: `conversation.messages`, oldest
+first, each `{id, role, text}`, an `ASSISTANT` message with the `tool_calls` it made
+(`{id, name, arguments}`) and each result as a `TOOL` message naming its call
+(`tool_call_id`), and `rendered` leaves the window out. It is the thread as written, read from
+the store: a message appended before the call is in it however far the worker is behind. It is
+cut to the conversation budget from the newest message back, never between a tool call and its
+results (a call left without its result, by a run stopped between them, comes without the call;
+a result whose call is not in the window, without the result), starts on a `USER` message when
+one is left, and always holds the newest message. Write the tool steps with the turn: the
+`ASSISTANT` message's `tool_calls` and each result as an `INTERNAL` `TOOL` message with its
+`tool_call_id` (`POST /v1/messages`).
 
 `rendered` presents memory as evidence to weigh with ids to cite — not as instructions to follow.
 That framing is deliberate: a retrieved passage is data, and an agent that treats it as a command

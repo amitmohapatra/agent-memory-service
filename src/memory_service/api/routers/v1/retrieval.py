@@ -14,7 +14,7 @@ from memory_service.api.schemas.context import ContextResponse, PromptContextRes
 from memory_service.application.container import Container
 from memory_service.domain.audit import ReadKind
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import QueryType
+from memory_service.domain.enums import QueryType, WindowFormat
 from memory_service.domain.instants import UTC_RULE, UtcDateTime
 from memory_service.modules.context.sections import ToolsRequest
 from memory_service.modules.retrieval.engine import PointInTime
@@ -192,6 +192,13 @@ class ContextRequest(BaseModel):
         "own history (a LangGraph checkpointer, an OpenAI session). The thread's summary "
         "comes either way",
     )
+    window_format: WindowFormat = Field(
+        default=WindowFormat.RENDERED,
+        description="rendered: the window is a section of the rendered text; messages: it "
+        "comes verbatim as conversation.messages (role, text, tool calls, oldest first, a "
+        "tool call never parted from its results) for the caller to replay as its own "
+        "conversation, and rendered leaves it out",
+    )
     format: Literal["prompt", "full"] = Field(
         default="prompt",
         description="prompt: what to put in front of the model (rendered, bundle_id, "
@@ -259,6 +266,7 @@ async def context(
             document_ids=body.document_ids,
             tools=body.tools,
             window=body.window,
+            window_format=body.window_format,
             output=body.format,
             debug=body.debug,
         )

@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from memory_service.api.schemas.conversation import ToolCallBody
 from memory_service.domain.enums import EvidenceStatus, MessageRole
 from memory_service.domain.grounding import ClaimVerdict, GroundingMethod
 
@@ -270,6 +271,12 @@ class WindowMessageBody(BaseModel):
         "that happened, told to the service)."
     )
     text: str = Field(description="What was said.")
+    tool_calls: list[ToolCallBody] | None = Field(
+        default=None, description="An ASSISTANT message's tool calls, when it made any."
+    )
+    tool_call_id: str | None = Field(
+        default=None, description="A TOOL message: the call (in the window) whose result it is."
+    )
 
 
 class ConversationBody(BaseModel):
@@ -277,7 +284,8 @@ class ConversationBody(BaseModel):
 
     thread_id: str | None = Field(default=None, description="The thread the window comes from.")
     messages: list[WindowMessageBody] = Field(
-        description="The thread's most recent messages after its summary, oldest first."
+        description="The thread's most recent messages after its summary, oldest first; a "
+        "tool call and its results are never parted."
     )
 
 
@@ -320,6 +328,11 @@ class PromptContextResponse(BaseModel):
     evidence_status: EvidenceStatus = Field(..., description=_EVIDENCE_STATUS)
     tools: list[ToolChoiceBrief] | None = Field(
         default=None, description="the tools that fit, best first (only when tools were given)"
+    )
+    conversation: ConversationBody | None = Field(
+        default=None,
+        description="window_format=messages: the thread's recent messages, verbatim, for the "
+        "caller to replay as its own conversation (they are then not in rendered)",
     )
     diagnostics: dict[str, Any] | None = Field(default=None, description="only with debug")
 

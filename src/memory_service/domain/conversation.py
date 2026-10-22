@@ -11,10 +11,15 @@ internal agent run       -> inherits tenant/workspace/user/thread/session/turn/t
 Visible UI history contains only USER/ASSISTANT messages of kind VISIBLE. Internal
 execution (planner, agent results, tool results) is recorded as INTERNAL messages
 and agent runs and never appears as visible chat automatically.
+
+A tool call an agent made is kept as the framework said it: the ASSISTANT message carries its
+``tool_calls`` and each result is an INTERNAL TOOL message naming the call it answers
+(``tool_call_id``), so the thread replays the way a framework's own checkpoint does.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -69,6 +74,29 @@ class Turn(BaseModel):
     custom_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class MessageToolCall(BaseModel):
+    """A tool an ASSISTANT message called: the call's id (the TOOL message answering it names
+    it), the tool and its arguments, verbatim."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str = Field(..., min_length=1, max_length=200)
+    name: str = Field(..., min_length=1, max_length=200)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+def tool_fields_problem(
+    role: MessageRole, tool_calls: Sequence[MessageToolCall], tool_call_id: str | None
+) -> str | None:
+    """Why a message may not carry these tool fields (``None``: it may): only an ASSISTANT
+    message makes calls, only a TOOL message answers one."""
+    if tool_calls and role is not MessageRole.ASSISTANT:
+        return "only an ASSISTANT message makes tool calls"
+    if tool_call_id is not None and role is not MessageRole.TOOL:
+        return "only a TOOL message answers a tool call (tool_call_id)"
+    return None
+
+
 class Attachment(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -99,6 +127,10 @@ class Message(BaseModel):
     agent_run_id: str | None = None
     parent_message_id: str | None = None
     attachments: list[Attachment] = Field(default_factory=list)
+    #: an ASSISTANT message's tool calls, in the order made
+    tool_calls: list[MessageToolCall] = Field(default_factory=list)
+    #: a TOOL message: the call (``MessageToolCall.id``) whose result it is
+    tool_call_id: str | None = None
     source_system: str | None = None
     source_message_id: str | None = None
     occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

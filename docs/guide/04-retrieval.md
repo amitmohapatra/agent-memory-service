@@ -315,7 +315,9 @@ answers went from 30.8 packed memories each to 0.9; at 0.25 the first evidence w
 
 **The budget.** The default `token_budget` is 8,000 (`ContextSettings`); the conversation
 window is the most recent messages after the thread summary, at most 20 and 2,000 tokens;
-`window=False` leaves it out for a framework that keeps its own history.
+`window=False` leaves it out for a framework that keeps its own history, and
+`window_format="messages"` gives it verbatim — tool calls with their results, never parted —
+for a framework that replays it as its own conversation (`modules/context/window.py`).
 
 **The rendering** (`ContextBundle.render`, `domain/context_bundle.py`):
 

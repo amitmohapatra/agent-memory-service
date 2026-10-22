@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from memory_service.domain.enums import Visibility
+from memory_service.domain.enums import Visibility, WindowFormat
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.jobs.registry import register_handlers
 from tests.integration.conftest import requires_pg
@@ -28,7 +28,9 @@ def container_overrides() -> dict:
 
 
 async def _served(builder, ctx, query: str) -> bool:
-    found = await builder._lookup(ctx, query, builder.cfg.token_budget, None, None, True)
+    found = await builder._lookup(
+        ctx, query, builder.cfg.token_budget, None, None, WindowFormat.RENDERED
+    )
     return found.bundle is not None
 
 
