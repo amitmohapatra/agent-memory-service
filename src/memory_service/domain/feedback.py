@@ -35,7 +35,6 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validato
 
 from memory_service.domain.evidence import EVIDENCE_SOURCE_DESCRIPTION, EvidenceSource
 from memory_service.domain.ids import is_valid_id, new_id
-from trellis.memory.approval import MAX_EXPRESSION_CHARS
 
 #: Bound on the serialised correction and metadata of one record.
 FEEDBACK_JSON_MAX_BYTES: Final = 16_000
@@ -223,7 +222,6 @@ class FeedbackProjection(BaseModel):
     )
     approval_rule: str | None = Field(
         default=None,
-        max_length=MAX_EXPRESSION_CHARS,
         description="For TOOL_CALL_COUNTED: the tool's approve_when after the service accepted, "
         "on its own, the rule this decision completed the support for (ADR 0042); null when "
         "it accepted none.",
