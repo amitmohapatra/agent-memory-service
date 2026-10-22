@@ -105,6 +105,12 @@ class MessageRepository(Protocol):
         before_sequence: int | None = None,
         include_internal: bool = False,
     ) -> list[Message]: ...
+    async def list_window(self, tenant_id: str, thread_id: str, *, limit: int) -> list[Message]:
+        """The thread's newest ``limit`` messages a window replays - the visible ones and the
+        tool results that name their call (INTERNAL TOOL with a ``tool_call_id``) - oldest
+        first."""
+        ...
+
     async def list_after(
         self, tenant_id: str, thread_id: str, *, after_sequence: int, limit: int
     ) -> list[Message]:

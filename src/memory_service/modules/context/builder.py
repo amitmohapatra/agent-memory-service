@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Coroutine, Sequence
+from collections.abc import Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 import orjson
 
@@ -31,7 +31,7 @@ from memory_service.domain.context_bundle import (
     WindowMessage,
 )
 from memory_service.domain.conversation import Message
-from memory_service.domain.enums import EvidenceStatus, MessageKind, QueryType
+from memory_service.domain.enums import EvidenceStatus, MessageKind, QueryType, WindowFormat
 from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.ids import stable_key
 from memory_service.domain.memory import unverified_representation
@@ -49,6 +49,7 @@ from memory_service.modules.context.sections import (
 from memory_service.modules.context.semantic_cache import SemanticBundleCache, semantic_key
 from memory_service.modules.context.standing import standing_blocks
 from memory_service.modules.context.views import full_view, prompt_view
+from memory_service.modules.context.window import replay_window
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.llm.assist import LLMAssist
@@ -308,7 +309,7 @@ class ContextBuilder:
         budget: int,
         document_ids: Sequence[str] | None,
         tools: ToolsRequest | None,
-        window: bool,
+        window: WindowFormat | None,
         output: ContextFormat | Literal["record"] = "record",
     ) -> _Lookup:
         """Everything the cache decision needs: one database round trip, one cache read.
@@ -343,7 +344,7 @@ class ContextBuilder:
             str(budget),
             ",".join(document_ids or []),
             tools.fingerprint() if tools else "",
-            "window" if window else "no-window",
+            WINDOW_KEYS[window],
         )
         bundle_id = stable_key(namespace, query)
         cache_key = self._cache_key(ctx, bundle_id)
@@ -416,20 +417,22 @@ class ContextBuilder:
         document_ids: Sequence[str] | None = None,
         tools: ToolsRequest | None = None,
         window: bool = True,
+        window_format: WindowFormat = WindowFormat.RENDERED,
     ) -> ContextBundle:
         """The bundle itself, for in-process readers (the profile job, the benchmarks)."""
         budget = token_budget or self.cfg.token_budget
+        form = window_format if window else None
         with (
             span("context.build", tenant_id=ctx.tenant_id),
             stage_seconds.labels("context.build").time(),
         ):
             timings = Timings()
             with timings.stage("scope"):
-                found = await self._lookup(ctx, query, budget, document_ids, tools, window)
+                found = await self._lookup(ctx, query, budget, document_ids, tools, form)
             if found.bundle is not None:
                 return ContextBundle.model_validate_json(found.bundle)
             bundle = await self._fresh(
-                ctx, query, budget, document_ids, tools, window, found, timings
+                ctx, query, budget, document_ids, tools, form, found, timings
             )
         evidence_status_total.labels(bundle.evidence.status.value).inc()
         self._after_build(ctx, bundle, found)
@@ -444,6 +447,7 @@ class ContextBuilder:
         document_ids: Sequence[str] | None = None,
         tools: ToolsRequest | None = None,
         window: bool = True,
+        window_format: WindowFormat = WindowFormat.RENDERED,
         output: ContextFormat = "prompt",
         debug: bool = False,
     ) -> bytes:
@@ -455,18 +459,19 @@ class ContextBuilder:
         served from the cache. Callers that need the ContextBundle itself use ``build``.
         """
         budget = token_budget or self.cfg.token_budget
+        form = window_format if window else None
         with (
             span("context.build", tenant_id=ctx.tenant_id),
             stage_seconds.labels("context.build").time(),
         ):
             timings = Timings()
             with timings.stage("scope"):
-                found = await self._lookup(ctx, query, budget, document_ids, tools, window, output)
+                found = await self._lookup(ctx, query, budget, document_ids, tools, form, output)
             if found.bundle is not None and not debug:
                 self._track(self.records.given(ctx, found.bundle_id))
                 return found.bundle
             bundle = await self._fresh(
-                ctx, query, budget, document_ids, tools, window, found, timings
+                ctx, query, budget, document_ids, tools, form, found, timings
             )
         evidence_status_total.labels(bundle.evidence.status.value).inc()
         self._after_build(ctx, bundle, found)
@@ -482,11 +487,12 @@ class ContextBuilder:
         budget: int,
         document_ids: Sequence[str] | None,
         tools: ToolsRequest | None,
-        window: bool,
+        window: WindowFormat | None,
         found: _Lookup,
         timings: Timings,
     ) -> ContextBundle:
-        """Retrieve, window and assemble - the cache-miss half of a build."""
+        """Retrieve, window (in the form asked for; ``None``: none) and assemble - the
+        cache-miss half of a build."""
         cached, embedding = await self._semantic_lookup(found, query)
         if cached is not None:
             return cached
@@ -509,7 +515,9 @@ class ContextBuilder:
             if self.sections is not None
             else None
         )
-        recent = asyncio.ensure_future(self._recent_messages(ctx) if window else _nothing())
+        recent = asyncio.ensure_future(
+            self._recent_messages(ctx, window) if window is not None else _nothing()
+        )
         # the standing rules and preferences need only the route and the query's vectors:
         # read under the ranking, from the moment the vectors exist
         standing = _StandingRead(self.engine, query, visibility)
@@ -525,7 +533,9 @@ class ContextBuilder:
                 )
             with timings.stage("sections"):
                 pinned = await sections if sections is not None else Pinned()
-                conversation = self._window(ctx, await recent, after=pinned.covered_to)
+                conversation = self._window(
+                    ctx, await recent, after=pinned.covered_to, form=window or WindowFormat.RENDERED
+                )
         except BaseException:
             for side in (sections, recent, standing.task):
                 if side is not None:
@@ -806,30 +816,38 @@ class ContextBuilder:
         """Tenant, the caller's security scope, and the bundle. All three, always."""
         return f"ctx:{ctx.tenant_id}:{ctx.scope_fingerprint()}:{bundle_id}"
 
-    async def _recent_messages(self, ctx: MemoryExecutionContext) -> list[Any]:
+    async def _recent_messages(
+        self, ctx: MemoryExecutionContext, form: WindowFormat
+    ) -> list[Message]:
         """The thread's most recent messages, read while retrieval runs. A caller that keeps
         no history of its own (``window``) gets them whatever the question: the turn before
-        is what a follow-up means, and the route cannot know what it refers to."""
+        is what a follow-up means, and the route cannot know what it refers to. The messages
+        form reads the tool results of the calls in it too."""
         if not ctx.thread_id:
             return []
+        limit = self.cfg.conversation_max_messages
         async with self.uow_factory() as uow:
+            if form is WindowFormat.MESSAGES:
+                return await self.conversation.window_messages(uow, ctx, ctx.thread_id, limit=limit)
             thread = await uow.threads.get(ctx.tenant_id, ctx.thread_id)
             if thread is None:
                 return []
-            return list(
-                await self.conversation.list_messages(
-                    uow, ctx, ctx.thread_id, limit=self.cfg.conversation_max_messages
-                )
-            )
+            return list(await self.conversation.list_messages(uow, ctx, ctx.thread_id, limit=limit))
 
     def _window(
-        self, ctx: MemoryExecutionContext, messages: Sequence[Any], *, after: int
+        self,
+        ctx: MemoryExecutionContext,
+        messages: Sequence[Message],
+        *,
+        after: int,
+        form: WindowFormat,
     ) -> ConversationWindow:
         """The messages after the thread's durable summary (which covers everything up to
-        ``after``) that fit the conversation budget."""
+        ``after``) that fit the conversation budget, in the form asked for."""
         if not ctx.thread_id or not messages:
-            return ConversationWindow(thread_id=ctx.thread_id)
-        return render_window(
+            return ConversationWindow(thread_id=ctx.thread_id, form=form)
+        cut = WINDOW_CUTS[form]
+        return cut(
             ctx.thread_id,
             [m for m in messages if m.sequence > after],
             self.cfg.conversation_token_budget,
@@ -1167,5 +1185,21 @@ def render_window(
     )
 
 
-async def _nothing() -> list[Any]:
+async def _nothing() -> list[Message]:
     return []
+
+
+#: How each form cuts the window from the thread's recent messages.
+WINDOW_CUTS: Final[
+    Mapping[WindowFormat, Callable[[str, Sequence[Message], int], ConversationWindow]]
+] = {
+    WindowFormat.RENDERED: render_window,
+    WindowFormat.MESSAGES: replay_window,
+}
+#: What each window (``None``: none) adds to a bundle's cache key; the rendered form's is the
+#: key it always had.
+WINDOW_KEYS: Final[Mapping[WindowFormat | None, str]] = {
+    None: "no-window",
+    WindowFormat.RENDERED: "window",
+    WindowFormat.MESSAGES: "window:messages",
+}

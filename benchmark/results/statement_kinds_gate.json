@@ -1,8 +1,8 @@
 {
   "gate": "statement_kinds",
   "golden_set": "statement_kinds_v1",
-  "representative": true,
-  "nli_provider": "nli-onnx-b867968c260265cf8b1f55da",
+  "representative": false,
+  "nli_provider": null,
   "threshold": {
     "english_test_macro_f1": 0.85,
     "false_rules": 0,
@@ -11,77 +11,77 @@
   },
   "dev": {
     "n": 361,
-    "macro_f1": 0.9513,
-    "macro_f1_with_none": 0.946,
-    "accuracy": 0.9446,
+    "macro_f1": 0.9296,
+    "macro_f1_with_none": 0.9358,
+    "accuracy": 0.9363,
     "per_kind_f1": {
-      "FACT": 0.9508,
-      "RULE": 0.9792,
-      "CONDITIONAL_RULE": 0.8696,
+      "FACT": 0.8722,
+      "RULE": 0.9231,
+      "CONDITIONAL_RULE": 0.8974,
       "STATUS": 1.0,
-      "CORRECTION": 0.95,
-      "LIFECYCLE": 0.9583,
-      "NONE": 0.9143
+      "CORRECTION": 0.9367,
+      "LIFECYCLE": 0.9485,
+      "NONE": 0.973
     },
     "per_language": {
       "ar": {
         "n": 52,
-        "macro_f1": 0.8948,
-        "macro_f1_with_none": 0.8873,
-        "accuracy": 0.8846,
+        "macro_f1": 0.9045,
+        "macro_f1_with_none": 0.9181,
+        "accuracy": 0.9231,
         "per_kind_f1": {
-          "FACT": 0.8889,
-          "RULE": 0.9231,
-          "CONDITIONAL_RULE": 0.7143,
+          "FACT": 0.8421,
+          "RULE": 0.8333,
+          "CONDITIONAL_RULE": 0.9091,
           "STATUS": 1.0,
           "CORRECTION": 0.9091,
           "LIFECYCLE": 0.9333,
-          "NONE": 0.8421
+          "NONE": 1.0
         }
       },
       "de": {
         "n": 52,
-        "macro_f1": 0.9255,
-        "macro_f1_with_none": 0.9218,
-        "accuracy": 0.9231,
+        "macro_f1": 0.8273,
+        "macro_f1_with_none": 0.8519,
+        "accuracy": 0.8654,
         "per_kind_f1": {
-          "FACT": 0.9412,
-          "RULE": 1.0,
-          "CONDITIONAL_RULE": 0.7692,
+          "FACT": 0.7273,
+          "RULE": 0.7273,
+          "CONDITIONAL_RULE": 0.6667,
           "STATUS": 1.0,
           "CORRECTION": 0.9091,
           "LIFECYCLE": 0.9333,
-          "NONE": 0.9
+          "NONE": 1.0
         }
       },
       "en": {
         "n": 152,
-        "macro_f1": 0.9798,
-        "macro_f1_with_none": 0.9757,
+        "macro_f1": 0.9725,
+        "macro_f1_with_none": 0.9741,
         "accuracy": 0.9737,
         "per_kind_f1": {
-          "FACT": 0.9804,
+          "FACT": 0.9434,
           "RULE": 0.9756,
-          "CONDITIONAL_RULE": 0.9231,
+          "CONDITIONAL_RULE": 0.9714,
           "STATUS": 1.0,
-          "CORRECTION": 1.0,
-          "LIFECYCLE": 1.0,
-          "NONE": 0.9508
+          "CORRECTION": 0.9714,
+          "LIFECYCLE": 0.973,
+          "NONE": 0.9841
         }
       },
       "es": {
         "n": 53,
-        "macro_f1": 0.9443,
-        "macro_f1_with_none": 0.9297,
-        "accuracy": 0.9245,
+        "macro_f1": 0.8914,
+        "macro_f1_with_none": 0.8926,
+        "accuracy": 0.8868,
         "per_kind_f1": {
-          "FACT": 0.9,
-          "RULE": 1.0,
-          "CONDITIONAL_RULE": 0.9231,
+          "FACT": 0.7826,
+          "RULE": 0.9231,
+          "CONDITIONAL_RULE": 0.8,
           "STATUS": 1.0,
           "CORRECTION": 0.9091,
           "LIFECYCLE": 0.9333,
-          "NONE": 0.8421
+          "NONE": 0.9
         }
       },
       "hi": {
@@ -100,18 +100,17 @@
         }
       }
     },
-    "rules_on_none": 10,
+    "rules_on_none": 1,
     "false_rules": 0,
     "false_rule_items": [],
-    "false_rule_kinds": 10,
+    "false_rule_kinds": 1,
     "sources": {
-      "lexicon": 331,
-      "nli": 30
+      "lexicon": 361
     },
     "latency_ms_per_sentence": {
-      "p50": 0.165,
-      "p95": 48.763,
-      "mean": 4.432
+      "p50": 0.141,
+      "p95": 0.306,
+      "mean": 0.148
     },
     "errors": [
       {
@@ -119,15 +118,71 @@
         "lang": "en",
         "gold": "RULE",
         "predicted": "FACT",
-        "source": "nli",
+        "source": "lexicon",
         "text": "We never ship hazardous goods on Fridays."
+      },
+      {
+        "id": "dev-en-063",
+        "lang": "en",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "If the forklift is out of service, route heavy pallets to Dock 3."
+      },
+      {
+        "id": "dev-en-086",
+        "lang": "en",
+        "gold": "CORRECTION",
+        "predicted": "LIFECYCLE",
+        "source": "lexicon",
+        "text": "Actually, we terminated our contract with Uline yesterday due to pricing."
+      },
+      {
+        "id": "dev-de-008",
+        "lang": "de",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Formatiere Bestandsprüfungen immer als Markdown-Tabelle."
+      },
+      {
+        "id": "dev-de-010",
+        "lang": "de",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Schlage mir niemals Rezepte mit Koriander vor."
+      },
+      {
+        "id": "dev-de-014",
+        "lang": "de",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Antworte mir künftig immer auf Deutsch."
+      },
+      {
+        "id": "dev-de-015",
+        "lang": "de",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Nimm niemals Artikel mit Bestand null in die Übersicht auf, es sei denn, ich schreibe 'mit Fehlbestand'."
+      },
+      {
+        "id": "dev-de-018",
+        "lang": "de",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Falls die Temperatur im Kühlraum über 5 Grad steigt, alarmiere mich sofort."
       },
       {
         "id": "dev-de-020",
         "lang": "de",
         "gold": "CONDITIONAL_RULE",
         "predicted": "FACT",
-        "source": "nli",
+        "source": "lexicon",
         "text": "Runde Preise immer auf ,99, außer bei Abverkaufsware."
       },
       {
@@ -135,15 +190,39 @@
         "lang": "de",
         "gold": "CORRECTION",
         "predicted": "LIFECYCLE",
-        "source": "nli",
+        "source": "lexicon",
         "text": "Eigentlich haben wir den Vertrag mit Uline gestern gekündigt."
+      },
+      {
+        "id": "dev-es-014",
+        "lang": "es",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "De ahora en adelante, redondea las cifras a dos decimales."
+      },
+      {
+        "id": "dev-es-018",
+        "lang": "es",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Si la temperatura de la cámara frigorífica supera los 5 grados, avísame de inmediato."
+      },
+      {
+        "id": "dev-es-020",
+        "lang": "es",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "Redondea siempre los precios a ,99 excepto en los artículos de liquidación."
       },
       {
         "id": "dev-es-029",
         "lang": "es",
         "gold": "CORRECTION",
         "predicted": "LIFECYCLE",
-        "source": "nli",
+        "source": "lexicon",
         "text": "En realidad, ayer rescindimos el contrato con Uline."
       },
       {
@@ -151,15 +230,23 @@
         "lang": "ar",
         "gold": "RULE",
         "predicted": "FACT",
-        "source": "nli",
+        "source": "lexicon",
         "text": "أجب دائمًا باللغة العربية."
+      },
+      {
+        "id": "dev-ar-014",
+        "lang": "ar",
+        "gold": "RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "في كل مرة أرفع فيها سجل استلام، ضع علامة على أرقام الفواتير الناقصة."
       },
       {
         "id": "dev-ar-020",
         "lang": "ar",
         "gold": "CONDITIONAL_RULE",
         "predicted": "FACT",
-        "source": "nli",
+        "source": "lexicon",
         "text": "قرّب الأسعار دائمًا إلى .99 باستثناء أصناف التصفية."
       },
       {
@@ -167,7 +254,7 @@
         "lang": "ar",
         "gold": "CORRECTION",
         "predicted": "LIFECYCLE",
-        "source": "nli",
+        "source": "lexicon",
         "text": "في الواقع، أنهينا عقدنا مع Uline أمس."
       },
       {
@@ -175,48 +262,16 @@
         "lang": "hi",
         "gold": "CORRECTION",
         "predicted": "LIFECYCLE",
-        "source": "nli",
+        "source": "lexicon",
         "text": "दरअसल, हमने कल Uline के साथ अपना कॉन्ट्रैक्ट खत्म कर दिया।"
-      },
-      {
-        "id": "dev-oneoff-en-01",
-        "lang": "en",
-        "gold": "NONE",
-        "predicted": "CONDITIONAL_RULE",
-        "source": "nli",
-        "text": "Please send the report when it's ready."
       },
       {
         "id": "dev-oneoff-en-02",
         "lang": "en",
         "gold": "NONE",
-        "predicted": "CONDITIONAL_RULE",
-        "source": "nli",
+        "predicted": "FACT",
+        "source": "lexicon",
         "text": "Let me know when the shipment arrives."
-      },
-      {
-        "id": "dev-oneoff-en-03",
-        "lang": "en",
-        "gold": "NONE",
-        "predicted": "CONDITIONAL_RULE",
-        "source": "nli",
-        "text": "Tell me if the price drops."
-      },
-      {
-        "id": "dev-oneoff-de-03",
-        "lang": "de",
-        "gold": "NONE",
-        "predicted": "CONDITIONAL_RULE",
-        "source": "nli",
-        "text": "Gib mir Bescheid, wenn die Lieferung ankommt."
-      },
-      {
-        "id": "dev-oneoff-de-04",
-        "lang": "de",
-        "gold": "NONE",
-        "predicted": "CONDITIONAL_RULE",
-        "source": "nli",
-        "text": "Erinnere mich daran, wenn es Zeit zum Gehen ist."
       },
       {
         "id": "dev-oneoff-es-02",
@@ -227,44 +282,12 @@
         "text": "Llámame cuando leas esto."
       },
       {
-        "id": "dev-oneoff-es-03",
-        "lang": "es",
-        "gold": "NONE",
-        "predicted": "CONDITIONAL_RULE",
-        "source": "nli",
-        "text": "Avísame cuando llegue el pedido."
-      },
-      {
         "id": "dev-oneoff-es-04",
         "lang": "es",
         "gold": "NONE",
         "predicted": "FACT",
-        "source": "nli",
+        "source": "lexicon",
         "text": "Mándame el informe cuando esté listo."
-      },
-      {
-        "id": "dev-oneoff-ar-01",
-        "lang": "ar",
-        "gold": "NONE",
-        "predicted": "CONDITIONAL_RULE",
-        "source": "nli",
-        "text": "أخبرني عندما تصل."
-      },
-      {
-        "id": "dev-oneoff-ar-03",
-        "lang": "ar",
-        "gold": "NONE",
-        "predicted": "CONDITIONAL_RULE",
-        "source": "nli",
-        "text": "أرسل لي التقرير عندما يكون جاهزًا."
-      },
-      {
-        "id": "dev-oneoff-ar-04",
-        "lang": "ar",
-        "gold": "NONE",
-        "predicted": "CONDITIONAL_RULE",
-        "source": "nli",
-        "text": "أخبرني إذا انخفض السعر."
       },
       {
         "id": "dev-oneoff-hi-04",
@@ -278,13 +301,13 @@
   },
   "test": {
     "n": 154,
-    "macro_f1": 0.9616,
-    "macro_f1_with_none": 0.9671,
-    "accuracy": 0.9675,
+    "macro_f1": 0.9548,
+    "macro_f1_with_none": 0.9612,
+    "accuracy": 0.961,
     "per_kind_f1": {
-      "FACT": 0.898,
+      "FACT": 0.88,
       "RULE": 1.0,
-      "CONDITIONAL_RULE": 1.0,
+      "CONDITIONAL_RULE": 0.9767,
       "STATUS": 1.0,
       "CORRECTION": 0.8718,
       "LIFECYCLE": 1.0,
@@ -323,13 +346,13 @@
       },
       "en": {
         "n": 70,
-        "macro_f1": 0.9833,
-        "macro_f1_with_none": 0.9857,
-        "accuracy": 0.9857,
+        "macro_f1": 0.9673,
+        "macro_f1_with_none": 0.972,
+        "accuracy": 0.9714,
         "per_kind_f1": {
-          "FACT": 0.9524,
+          "FACT": 0.9091,
           "RULE": 1.0,
-          "CONDITIONAL_RULE": 1.0,
+          "CONDITIONAL_RULE": 0.9474,
           "STATUS": 1.0,
           "CORRECTION": 0.9474,
           "LIFECYCLE": 1.0,
@@ -372,21 +395,28 @@
     "false_rule_items": [],
     "false_rule_kinds": 0,
     "sources": {
-      "lexicon": 148,
-      "nli": 6
+      "lexicon": 154
     },
     "latency_ms_per_sentence": {
-      "p50": 0.149,
-      "p95": 0.474,
-      "mean": 2.05
+      "p50": 0.12,
+      "p95": 0.295,
+      "mean": 0.135
     },
     "errors": [
+      {
+        "id": "test-en-030",
+        "lang": "en",
+        "gold": "CONDITIONAL_RULE",
+        "predicted": "FACT",
+        "source": "lexicon",
+        "text": "If inventory of milk falls under 20 cartons, reorder it automatically."
+      },
       {
         "id": "test-en-041",
         "lang": "en",
         "gold": "CORRECTION",
         "predicted": "FACT",
-        "source": "nli",
+        "source": "lexicon",
         "text": "Actually, the meeting was moved to Thursday."
       },
       {
@@ -394,7 +424,7 @@
         "lang": "de",
         "gold": "CORRECTION",
         "predicted": "FACT",
-        "source": "nli",
+        "source": "lexicon",
         "text": "Eigentlich wurde das Meeting auf Donnerstag verschoben."
       },
       {
@@ -402,7 +432,7 @@
         "lang": "es",
         "gold": "CORRECTION",
         "predicted": "FACT",
-        "source": "nli",
+        "source": "lexicon",
         "text": "En realidad, la reunión se cambió al jueves."
       },
       {
@@ -410,7 +440,7 @@
         "lang": "ar",
         "gold": "CORRECTION",
         "predicted": "FACT",
-        "source": "nli",
+        "source": "lexicon",
         "text": "في الواقع، تم نقل الاجتماع إلى يوم الخميس."
       },
       {
@@ -418,7 +448,7 @@
         "lang": "hi",
         "gold": "CORRECTION",
         "predicted": "FACT",
-        "source": "nli",
+        "source": "lexicon",
         "text": "दरअसल, मीटिंग गुरुवार को शिफ्ट कर दी गई है।"
       }
     ]
@@ -429,73 +459,73 @@
       "noise_rate": 0.228,
       "labeller": {
         "n": 254,
-        "macro_f1": 0.8935,
-        "macro_f1_with_none": 0.8943,
-        "accuracy": 0.8898,
+        "macro_f1": 0.8804,
+        "macro_f1_with_none": 0.8785,
+        "accuracy": 0.874,
         "per_kind_f1": {
-          "FACT": 0.7907,
-          "RULE": 0.8679,
-          "CONDITIONAL_RULE": 0.8571,
+          "FACT": 0.8,
+          "RULE": 0.8235,
+          "CONDITIONAL_RULE": 0.8136,
           "STATUS": 0.9351,
           "CORRECTION": 0.9434,
           "LIFECYCLE": 0.9667,
-          "NONE": 0.8991
+          "NONE": 0.8673
         },
         "per_language": {
           "ar": {
             "n": 42,
-            "macro_f1": 0.7601,
-            "macro_f1_with_none": 0.7825,
-            "accuracy": 0.8571,
+            "macro_f1": 0.6902,
+            "macro_f1_with_none": 0.7173,
+            "accuracy": 0.8095,
             "per_kind_f1": {
-              "FACT": 0.8696,
+              "FACT": 0.8,
               "RULE": 0.0,
-              "CONDITIONAL_RULE": 0.75,
+              "CONDITIONAL_RULE": 0.4,
               "STATUS": 0.9412,
               "CORRECTION": 1.0,
               "LIFECYCLE": 1.0,
-              "NONE": 0.9167
+              "NONE": 0.88
             }
           },
           "de": {
             "n": 55,
-            "macro_f1": 0.8358,
-            "macro_f1_with_none": 0.8367,
-            "accuracy": 0.8364,
+            "macro_f1": 0.8069,
+            "macro_f1_with_none": 0.8059,
+            "accuracy": 0.8182,
             "per_kind_f1": {
-              "FACT": 0.75,
-              "RULE": 0.75,
-              "CONDITIONAL_RULE": 0.8889,
+              "FACT": 0.7692,
+              "RULE": 0.5714,
+              "CONDITIONAL_RULE": 0.875,
               "STATUS": 0.7692,
               "CORRECTION": 0.9231,
               "LIFECYCLE": 0.9333,
-              "NONE": 0.8421
+              "NONE": 0.8
             }
           },
           "en": {
             "n": 65,
-            "macro_f1": 0.9712,
-            "macro_f1_with_none": 0.9669,
-            "accuracy": 0.9692,
+            "macro_f1": 0.9388,
+            "macro_f1_with_none": 0.9317,
+            "accuracy": 0.9385,
             "per_kind_f1": {
-              "FACT": 0.875,
+              "FACT": 0.8235,
               "RULE": 1.0,
-              "CONDITIONAL_RULE": 1.0,
+              "CONDITIONAL_RULE": 0.8571,
               "STATUS": 1.0,
               "CORRECTION": 0.9524,
               "LIFECYCLE": 1.0,
-              "NONE": 0.9412
+              "NONE": 0.8889
             }
           },
           "es": {
             "n": 54,
-            "macro_f1": 0.8928,
-            "macro_f1_with_none": 0.9081,
-            "accuracy": 0.9074,
+            "macro_f1": 0.932,
+            "macro_f1_with_none": 0.9417,
+            "accuracy": 0.9444,
             "per_kind_f1": {
-              "FACT": 0.8,
-              "RULE": 0.9333,
-              "CONDITIONAL_RULE": 0.7143,
+              "FACT": 0.9167,
+              "RULE": 0.8571,
+              "CONDITIONAL_RULE": 0.9091,
               "STATUS": 1.0,
               "CORRECTION": 0.9091,
               "LIFECYCLE": 1.0,
@@ -504,34 +534,49 @@
           },
           "hi": {
             "n": 38,
-            "macro_f1": 0.9223,
-            "macro_f1_with_none": 0.6483,
-            "accuracy": 0.8421,
+            "macro_f1": 0.9003,
+            "macro_f1_with_none": 0.6321,
+            "accuracy": 0.8158,
             "per_kind_f1": {
               "FACT": 0.0,
               "RULE": 0.0,
-              "CONDITIONAL_RULE": 0.8571,
+              "CONDITIONAL_RULE": 0.7692,
               "STATUS": 0.9231,
               "CORRECTION": 1.0,
               "LIFECYCLE": 0.9091,
-              "NONE": 0.8485
+              "NONE": 0.8235
             }
           }
         },
         "rules_on_none": 0,
         "false_rules": 0,
         "false_rule_items": [],
-        "false_rule_kinds": 4,
+        "false_rule_kinds": 0,
         "sources": {
-          "lexicon": 236,
-          "nli": 18
+          "lexicon": 254
         },
         "latency_ms_per_sentence": {
-          "p50": 0.189,
-          "p95": 54.04,
-          "mean": 4.292
+          "p50": 0.145,
+          "p95": 0.437,
+          "mean": 0.17
         },
         "errors": [
+          {
+            "id": "blind1-019",
+            "lang": "en",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "When the store is exceptionally busy, prioritize customer inquiries over other tasks."
+          },
+          {
+            "id": "blind1-022",
+            "lang": "en",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "Send alerts if the client's location deviates from their usual routine."
+          },
           {
             "id": "blind1-055",
             "lang": "en",
@@ -549,6 +594,14 @@
             "text": "Auf keinen Fall die aktuelle Produkt-Roadmap missen, wenn wir Diskussionen darüber führen."
           },
           {
+            "id": "blind1-068",
+            "lang": "de",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Aufkläre mich immer, wenn ein neuer Artikel eintreten würde."
+          },
+          {
             "id": "blind1-070",
             "lang": "de",
             "gold": "RULE",
@@ -557,12 +610,12 @@
             "text": "Erinnere mich bitte, jeden Bestellvorgang nachzuprüfen, bevor ich abschließe."
           },
           {
-            "id": "blind1-078",
+            "id": "blind1-071",
             "lang": "de",
-            "gold": "FACT",
-            "predicted": "CONDITIONAL_RULE",
-            "source": "nli",
-            "text": "Sobald die Bestände knapp werden, bin ich für dich bereit."
+            "gold": "RULE",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "Wende das stets, wenn ich die Warenverfügbarkeit prüfen möchte."
           },
           {
             "id": "blind1-085",
@@ -585,7 +638,7 @@
             "lang": "de",
             "gold": "CORRECTION",
             "predicted": "FACT",
-            "source": "nli",
+            "source": "lexicon",
             "text": "Tatsächlich sollten wir den Blutdruckmessung durchführen, bevor wir zur nächsten Ebene gehen."
           },
           {
@@ -613,36 +666,20 @@
             "text": "Vielen Dank, wichtig ist es, diese Code-Modifikation jetzt durchzuführen."
           },
           {
+            "id": "blind1-122",
+            "lang": "es",
+            "gold": "RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Desde ahora, siempre se actualiza la información en tiempo real."
+          },
+          {
             "id": "blind1-126",
             "lang": "es",
             "gold": "RULE",
             "predicted": "CONDITIONAL_RULE",
             "source": "lexicon",
             "text": "Siempre informa cualquier desperdicio o daño en los productos cada vez que realices una inspección."
-          },
-          {
-            "id": "blind1-132",
-            "lang": "es",
-            "gold": "FACT",
-            "predicted": "CONDITIONAL_RULE",
-            "source": "nli",
-            "text": "Cuando un paciente no se presente para su cita, envío un recordatorio por SMS."
-          },
-          {
-            "id": "blind1-133",
-            "lang": "es",
-            "gold": "FACT",
-            "predicted": "CONDITIONAL_RULE",
-            "source": "nli",
-            "text": "Si el sistema de la clinica falla y no puedo acceder a los registros del paciente, pongo en contacto al departamento de TI."
-          },
-          {
-            "id": "blind1-134",
-            "lang": "es",
-            "gold": "FACT",
-            "predicted": "CONDITIONAL_RULE",
-            "source": "nli",
-            "text": "Si el tiempo se vuelve extremadamente frío y los pacientes tienen miedo de ir a la clínica, envío un correo electrónico a la comunidad local para informar sobre nuestros protocolos de seguridad."
           },
           {
             "id": "blind1-148",
@@ -672,8 +709,8 @@
             "id": "blind1-180",
             "lang": "ar",
             "gold": "RULE",
-            "predicted": "CONDITIONAL_RULE",
-            "source": "nli",
+            "predicted": "NONE",
+            "source": "lexicon",
             "text": "لا تتجنب التحقق من دواء المريض عند استخدام الروبوت"
           },
           {
@@ -683,6 +720,22 @@
             "predicted": "NONE",
             "source": "lexicon",
             "text": "لا تقلل من تقييم الأعراض في تقييمنا باستخدام الروبوت"
+          },
+          {
+            "id": "blind1-183",
+            "lang": "ar",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "إذا انتقل التفاعل العملي للعمليات إلى المستوى العالي، تذكيري بتحديث البيانات في الزمن الفعلي."
+          },
+          {
+            "id": "blind1-184",
+            "lang": "ar",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "إذا تجاوزت أسعار السهم في الأسواق نسبة 10٪، اتذكر استبعاد الأصناف المتبقية عن المحتوى."
           },
           {
             "id": "blind1-193",
@@ -699,6 +752,14 @@
             "predicted": "NONE",
             "source": "lexicon",
             "text": "لا تنسى، الاستعلامات المستمرة تساعد في تحسين الخدمة والرضا الضيف"
+          },
+          {
+            "id": "blind1-236",
+            "lang": "hi",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "AI, यदि स्टॉक ड्यूट नीचे आ जाता है तो वित्तीय समाचारों की निगरानी करें।"
           },
           {
             "id": "blind1-238",
@@ -850,51 +911,53 @@
           }
         }
       },
-      "below_baseline": []
+      "below_baseline": [
+        "ar NONE: 0.88 < 0.9"
+      ]
     },
     "blind2": {
       "role": "held_out",
       "noise_rate": 0.245,
       "labeller": {
         "n": 241,
-        "macro_f1": 0.8292,
-        "macro_f1_with_none": 0.8409,
-        "accuracy": 0.8133,
+        "macro_f1": 0.7766,
+        "macro_f1_with_none": 0.7877,
+        "accuracy": 0.7593,
         "per_kind_f1": {
-          "FACT": 0.6154,
-          "RULE": 0.9545,
-          "CONDITIONAL_RULE": 0.8308,
-          "STATUS": 0.8254,
-          "CORRECTION": 0.878,
+          "FACT": 0.5873,
+          "RULE": 0.9048,
+          "CONDITIONAL_RULE": 0.6182,
+          "STATUS": 0.8065,
+          "CORRECTION": 0.8718,
           "LIFECYCLE": 0.871,
-          "NONE": 0.9111
+          "NONE": 0.8542
         },
         "per_language": {
           "ar": {
             "n": 36,
-            "macro_f1": 0.6099,
-            "macro_f1_with_none": 0.6581,
-            "accuracy": 0.7222,
+            "macro_f1": 0.5599,
+            "macro_f1_with_none": 0.6085,
+            "accuracy": 0.6944,
             "per_kind_f1": {
               "FACT": 0.6429,
-              "RULE": 0.8,
+              "RULE": 0.5,
               "CONDITIONAL_RULE": 0.0,
               "STATUS": 0.75,
               "CORRECTION": 0.8,
               "LIFECYCLE": 0.6667,
-              "NONE": 0.9474
+              "NONE": 0.9
             }
           },
           "de": {
             "n": 53,
-            "macro_f1": 0.8084,
-            "macro_f1_with_none": 0.8199,
-            "accuracy": 0.8113,
+            "macro_f1": 0.7733,
+            "macro_f1_with_none": 0.7898,
+            "accuracy": 0.7736,
             "per_kind_f1": {
-              "FACT": 0.5,
+              "FACT": 0.4545,
               "RULE": 0.8889,
-              "CONDITIONAL_RULE": 1.0,
-              "STATUS": 0.7143,
+              "CONDITIONAL_RULE": 0.9333,
+              "STATUS": 0.6154,
               "CORRECTION": 0.8,
               "LIFECYCLE": 0.9474,
               "NONE": 0.8889
@@ -902,13 +965,13 @@
           },
           "en": {
             "n": 54,
-            "macro_f1": 0.9606,
-            "macro_f1_with_none": 0.9662,
-            "accuracy": 0.963,
+            "macro_f1": 0.8639,
+            "macro_f1_with_none": 0.8834,
+            "accuracy": 0.8704,
             "per_kind_f1": {
-              "FACT": 0.875,
-              "RULE": 1.0,
-              "CONDITIONAL_RULE": 0.9474,
+              "FACT": 0.6667,
+              "RULE": 0.9091,
+              "CONDITIONAL_RULE": 0.6667,
               "STATUS": 0.9412,
               "CORRECTION": 1.0,
               "LIFECYCLE": 1.0,
@@ -917,32 +980,32 @@
           },
           "es": {
             "n": 56,
-            "macro_f1": 0.7865,
-            "macro_f1_with_none": 0.8011,
+            "macro_f1": 0.7849,
+            "macro_f1_with_none": 0.7931,
             "accuracy": 0.7679,
             "per_kind_f1": {
-              "FACT": 0.6286,
+              "FACT": 0.6667,
               "RULE": 1.0,
-              "CONDITIONAL_RULE": 0.5,
+              "CONDITIONAL_RULE": 0.3636,
               "STATUS": 0.9333,
-              "CORRECTION": 0.8,
+              "CORRECTION": 0.8889,
               "LIFECYCLE": 0.8571,
-              "NONE": 0.8889
+              "NONE": 0.8421
             }
           },
           "hi": {
             "n": 42,
-            "macro_f1": 0.7852,
-            "macro_f1_with_none": 0.7933,
-            "accuracy": 0.7619,
+            "macro_f1": 0.6591,
+            "macro_f1_with_none": 0.6643,
+            "accuracy": 0.6429,
             "per_kind_f1": {
-              "FACT": 0.4444,
+              "FACT": 0.4211,
               "RULE": 1.0,
-              "CONDITIONAL_RULE": 1.0,
+              "CONDITIONAL_RULE": 0.6,
               "STATUS": 0.6667,
-              "CORRECTION": 1.0,
+              "CORRECTION": 0.6667,
               "LIFECYCLE": 0.6,
-              "NONE": 0.8421
+              "NONE": 0.6957
             }
           }
         },
@@ -951,15 +1014,38 @@
         "false_rule_items": [],
         "false_rule_kinds": 0,
         "sources": {
-          "lexicon": 218,
-          "nli": 23
+          "lexicon": 241
         },
         "latency_ms_per_sentence": {
-          "p50": 0.203,
-          "p95": 52.019,
-          "mean": 5.373
+          "p50": 0.148,
+          "p95": 0.362,
+          "mean": 0.175
         },
         "errors": [
+          {
+            "id": "blind2-008",
+            "lang": "en",
+            "gold": "RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "From now on, always ask for my account balance before processing any transaction."
+          },
+          {
+            "id": "blind2-016",
+            "lang": "en",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "If the stock drops below 50, re-evaluate our inventory management strategy."
+          },
+          {
+            "id": "blind2-018",
+            "lang": "en",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "If customer reviews on this product drop below 4 stars, consider offering a discount to boost sales."
+          },
           {
             "id": "blind2-019",
             "lang": "en",
@@ -969,11 +1055,27 @@
             "text": "Unless there's a major sale, maintain the current pricing strategy for our best-sellers."
           },
           {
+            "id": "blind2-021",
+            "lang": "en",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "If the bank's online portal is down, schedule the appointment for tomorrow."
+          },
+          {
+            "id": "blind2-023",
+            "lang": "en",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "If the deposit slips are misread, re-scan the slip and try again."
+          },
+          {
             "id": "blind2-029",
             "lang": "en",
             "gold": "STATUS",
             "predicted": "FACT",
-            "source": "nli",
+            "source": "lexicon",
             "text": "The point-of-sale system has gone unavailable."
           },
           {
@@ -993,6 +1095,14 @@
             "text": "Die neue Route für den Express-Transport nach Oslo wird ab nächster Woche starten."
           },
           {
+            "id": "blind2-061",
+            "lang": "de",
+            "gold": "STATUS",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Das Problem mit dem Lastwagen in Wuppertal ist gelöst und er wird nächste Woche wieder in Diensten stehen."
+          },
+          {
             "id": "blind2-064",
             "lang": "de",
             "gold": "RULE",
@@ -1007,6 +1117,14 @@
             "predicted": "FACT",
             "source": "lexicon",
             "text": "Müsste ich immer vor jeder Neuanschaffung ein Fahrzeugprüfergebnis einholen."
+          },
+          {
+            "id": "blind2-073",
+            "lang": "de",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Wenn der Preis fällt, sollten Sie mir regelmäßig die Markttrends mitteilen."
           },
           {
             "id": "blind2-082",
@@ -1037,7 +1155,7 @@
             "lang": "de",
             "gold": "CORRECTION",
             "predicted": "FACT",
-            "source": "nli",
+            "source": "lexicon",
             "text": "Tatsächlich meine ich..."
           },
           {
@@ -1045,7 +1163,7 @@
             "lang": "de",
             "gold": "CORRECTION",
             "predicted": "FACT",
-            "source": "nli",
+            "source": "lexicon",
             "text": "Tatsächlich müssen Sie Ihre Rezeptur vor dem Zahnarzt abgeben."
           },
           {
@@ -1057,12 +1175,12 @@
             "text": "Ihr Verstoß gegen die Medikamentenverordnung ist korrekt, danke für den Hinweis."
           },
           {
-            "id": "blind2-117",
+            "id": "blind2-126",
             "lang": "es",
-            "gold": "FACT",
-            "predicted": "CORRECTION",
-            "source": "nli",
-            "text": "La máquina de soldadura ha generado un error de 2% en la tasa de soldadura."
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "Informe si la stock del producto blanco disminuye"
           },
           {
             "id": "blind2-127",
@@ -1117,7 +1235,7 @@
             "lang": "es",
             "gold": "STATUS",
             "predicted": "FACT",
-            "source": "nli",
+            "source": "lexicon",
             "text": "El sistema de rastreo de envídos está funcionando nuevamente."
           },
           {
@@ -1133,7 +1251,7 @@
             "lang": "es",
             "gold": "NONE",
             "predicted": "FACT",
-            "source": "nli",
+            "source": "lexicon",
             "text": "Realmente, debo ver el estado actual de la entrega 12345."
           },
           {
@@ -1159,6 +1277,14 @@
             "predicted": "FACT",
             "source": "lexicon",
             "text": "El sistema de diagnóstico del software se ha decomisado."
+          },
+          {
+            "id": "blind2-174",
+            "lang": "ar",
+            "gold": "RULE",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "لا تزيد الآني عدد المنتجات المرسلة إلى العملاء، كلما طلبت ذلك"
           },
           {
             "id": "blind2-176",
@@ -1213,7 +1339,7 @@
             "lang": "ar",
             "gold": "CORRECTION",
             "predicted": "FACT",
-            "source": "nli",
+            "source": "lexicon",
             "text": "في الواقع، تحتاج إلى تصليح الأشبات الأمامية."
           },
           {
@@ -1249,6 +1375,38 @@
             "text": "मेरे कार्यालय में आज ही 'एसएमए' की 100 पैकेट आएंगे, जानें"
           },
           {
+            "id": "blind2-241",
+            "lang": "hi",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "AI, अगर दुकान की स्टॉक में कमी आती है तो ग्राहकों को सूचित करें"
+          },
+          {
+            "id": "blind2-242",
+            "lang": "hi",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "AI, जब बैंक संचालन में अप्रत्याशित वित्तीय प्रक्रिया का सामना करने का मामला हो, तो वास्तविक समय डेटा के साथ प्रोटोकॉल को अपडेट करें।"
+          },
+          {
+            "id": "blind2-243",
+            "lang": "hi",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "AI, यदि हेल्दी का शेयर मूल्य नीचे आ जाता है, तो निवेश पोर्टफोलियो को समायोजित करने के लिए संवाद करें।"
+          },
+          {
+            "id": "blind2-245",
+            "lang": "hi",
+            "gold": "CONDITIONAL_RULE",
+            "predicted": "NONE",
+            "source": "lexicon",
+            "text": "AI, अगर भुगतान प्रसंस्करण में त्रुटि आती है, तो ग्राहकों को तत्काल अलर्ट भेजें और समस्या का समाधान करें।"
+          },
+          {
             "id": "blind2-247",
             "lang": "hi",
             "gold": "STATUS",
@@ -1269,8 +1427,16 @@
             "lang": "hi",
             "gold": "STATUS",
             "predicted": "FACT",
-            "source": "nli",
+            "source": "lexicon",
             "text": "ATM मशीन अप्रत्याशित रूप से बंद है"
+          },
+          {
+            "id": "blind2-259",
+            "lang": "hi",
+            "gold": "CORRECTION",
+            "predicted": "FACT",
+            "source": "lexicon",
+            "text": "Actually, आपने गलती की। नवीनीकरण प्रक्रिया में कार्बन स्क्रीन महत्वपूर्ण है, न कि फिल्म।"
           },
           {
             "id": "blind2-261",
@@ -1293,7 +1459,7 @@
             "lang": "hi",
             "gold": "LIFECYCLE",
             "predicted": "FACT",
-            "source": "nli",
+            "source": "lexicon",
             "text": "शॉप बंद हो गया अंतिम रूप से."
           },
           {
@@ -1414,20 +1580,23 @@
           }
         }
       },
-      "below_baseline": []
+      "below_baseline": [
+        "es NONE: 0.8421 < 0.8889",
+        "hi NONE: 0.6957 < 0.7143"
+      ]
     }
   },
   "provenance": {
-    "timestamp": "2026-10-11T04:05:33.027700+00:00",
-    "git_commit": "8c1a893aabaaf151af953943f7e8fcad5187f916",
+    "timestamp": "2026-10-21T19:42:14.838396+00:00",
+    "git_commit": "0c2e4aea8d43345377a7e5903f33f9ca88a6fb53",
     "host_load": {
-      "loadavg_1m": 1.85,
-      "loadavg_5m": 2.08,
-      "loadavg_15m": 2.21,
-      "load_per_core": 0.46
+      "loadavg_1m": 5.24,
+      "loadavg_5m": 6.35,
+      "loadavg_15m": 6.72,
+      "load_per_core": 1.31
     },
     "python": "3.13.14",
-    "platform": "Linux-6.18.44-fc-v114-x86_64-with-glibc2.39",
+    "platform": "Linux-6.18.44-fc-v140-x86_64-with-glibc2.39",
     "machine": "x86_64",
     "cpu_count": 4,
     "memory_gb": 15.7,

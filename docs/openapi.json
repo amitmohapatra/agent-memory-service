@@ -1491,6 +1491,11 @@
             "description": "carry the thread's recent messages; false when the framework keeps its own history (a LangGraph checkpointer, an OpenAI session). The thread's summary comes either way",
             "title": "Window",
             "type": "boolean"
+          },
+          "window_format": {
+            "$ref": "#/components/schemas/WindowFormat",
+            "default": "rendered",
+            "description": "rendered: the window is a section of the rendered text; messages: it comes verbatim as conversation.messages (role, text, tool calls, oldest first, a tool call never parted from its results) for the caller to replay as its own conversation, and rendered leaves it out"
           }
         },
         "required": [
@@ -1730,7 +1735,7 @@
         "additionalProperties": false,
         "properties": {
           "messages": {
-            "description": "The thread's most recent messages after its summary, oldest first.",
+            "description": "The thread's most recent messages after its summary, oldest first; a tool call and its results are never parted.",
             "items": {
               "$ref": "#/components/schemas/WindowMessageBody"
             },
@@ -4789,6 +4794,38 @@
               "slack"
             ],
             "title": "Source System"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A TOOL message (kind=INTERNAL): the id of the call whose result it is. The conversation window gives the call and its result back together.",
+            "examples": [
+              "call_7f3a"
+            ],
+            "title": "Tool Call Id"
+          },
+          "tool_calls": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ToolCallBody"
+                },
+                "maxItems": 64,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An ASSISTANT message's tool calls, in the order made (at most 64); its content is what it said with them, often nothing.",
+            "title": "Tool Calls"
           }
         },
         "required": [
@@ -4952,6 +4989,33 @@
             "description": "The thread it belongs to.",
             "title": "Thread Id",
             "type": "string"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A TOOL message: the call whose result it is.",
+            "title": "Tool Call Id"
+          },
+          "tool_calls": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ToolCallBody"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An ASSISTANT message's tool calls, when it made any.",
+            "title": "Tool Calls"
           },
           "turn_id": {
             "description": "The turn it belongs to.",
@@ -5470,6 +5534,17 @@
             "description": "for /v1/verify and for resolving the handles",
             "title": "Bundle Id",
             "type": "string"
+          },
+          "conversation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationBody"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "window_format=messages: the thread's recent messages, verbatim, for the caller to replay as its own conversation (they are then not in rendered)"
           },
           "diagnostics": {
             "anyOf": [
@@ -6987,6 +7062,49 @@
         "title": "ToolAnnotations",
         "type": "object"
       },
+      "ToolCallBody": {
+        "additionalProperties": false,
+        "description": "A tool an ASSISTANT message called, as its framework said it.",
+        "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "description": "The arguments it was called with.",
+            "examples": [
+              {
+                "order_id": "QX-4471"
+              }
+            ],
+            "title": "Arguments",
+            "type": "object"
+          },
+          "id": {
+            "description": "The call's id: the TOOL message with its result names it (tool_call_id).",
+            "examples": [
+              "call_7f3a"
+            ],
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "The tool called.",
+            "examples": [
+              "get_order"
+            ],
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ToolCallBody",
+        "type": "object"
+      },
       "ToolChoiceBody": {
         "additionalProperties": false,
         "description": "A tool that fits the task: how well, how it has done, and its arguments.",
@@ -7702,6 +7820,15 @@
         "title": "Visibility",
         "type": "string"
       },
+      "WindowFormat": {
+        "description": "How the context gives the thread's recent messages back: ``rendered`` - as a section\nof the rendered text (``## Recent conversation``); ``messages`` - verbatim, as the\nmessages they were (role, text, tool calls), for a caller that replays them to its model\nas its own conversation, the way a framework's checkpoint does.",
+        "enum": [
+          "rendered",
+          "messages"
+        ],
+        "title": "WindowFormat",
+        "type": "string"
+      },
       "WindowMessageBody": {
         "additionalProperties": false,
         "properties": {
@@ -7718,6 +7845,33 @@
             "description": "What was said.",
             "title": "Text",
             "type": "string"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A TOOL message: the call (in the window) whose result it is.",
+            "title": "Tool Call Id"
+          },
+          "tool_calls": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ToolCallBody"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An ASSISTANT message's tool calls, when it made any.",
+            "title": "Tool Calls"
           }
         },
         "required": [

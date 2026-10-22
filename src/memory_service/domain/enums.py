@@ -127,6 +127,16 @@ class MessageRole(StrEnum):
     EVENT = "EVENT"
 
 
+class WindowFormat(StrEnum):
+    """How the context gives the thread's recent messages back: ``rendered`` - as a section
+    of the rendered text (``## Recent conversation``); ``messages`` - verbatim, as the
+    messages they were (role, text, tool calls), for a caller that replays them to its model
+    as its own conversation, the way a framework's checkpoint does."""
+
+    RENDERED = "rendered"
+    MESSAGES = "messages"
+
+
 class MessageKind(StrEnum):
     """Visible UI history contains only VISIBLE messages; internal execution is INTERNAL."""
 

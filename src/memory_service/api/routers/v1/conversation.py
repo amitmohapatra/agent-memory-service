@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
+import orjson
 from fastapi import APIRouter, Query, Request, Response
 
 from memory_service.api.deps import (
@@ -27,15 +28,17 @@ from memory_service.api.schemas.conversation import (
     CreateMessagesRequest,
     JobResponse,
     MessageAckResponse,
+    MessageIn,
     MessageListResponse,
     MessageResponse,
     MessagesAckResponse,
     PatchThreadRequest,
     ThreadResponse,
     ThreadSummaryBody,
+    ToolCallBody,
 )
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.conversation import Attachment, Message, Thread
+from memory_service.domain.conversation import Attachment, Message, MessageToolCall, Thread
 from memory_service.domain.enums import ArchiveStatus, JobStatus
 from memory_service.domain.errors import NotFound, ValidationFailed
 from memory_service.domain.profile import ThreadSummary
@@ -79,6 +82,8 @@ def _message_response(m: Message) -> MessageResponse:
         archive_status=m.archive_status,
         attachments=[a.model_dump(exclude={"attachment_id", "message_id"}) for a in m.attachments],  # type: ignore[misc]
         custom_metadata=m.custom_metadata,
+        tool_calls=[ToolCallBody(**c.model_dump()) for c in m.tool_calls] or None,
+        tool_call_id=m.tool_call_id,
     )
 
 
@@ -267,6 +272,7 @@ async def create_messages(
         *(
             f"{m.role.value}\x1f{m.kind.value}\x1f{m.content}\x1f"
             + (m.occurred_at.isoformat() if m.occurred_at and ctx.turn_id is None else "")
+            + _tool_identity(m)
             for m in body.messages
         ),
     )
@@ -294,6 +300,8 @@ async def create_messages(
                     source_system=m.source_system,
                     source_message_id=m.source_message_id,
                     parent_message_id=m.parent_message_id,
+                    tool_calls=[MessageToolCall(**c.model_dump()) for c in m.tool_calls or ()],
+                    tool_call_id=m.tool_call_id,
                     may_write=may_write,
                 )
             )
@@ -316,6 +324,18 @@ async def create_messages(
         handler=handler,
         location=_first_message_job,
     )
+
+
+def _tool_identity(m: MessageIn) -> str:
+    """What a message's tool calls add to its identity: two results of the same text that
+    answer different calls are two messages."""
+    if not m.tool_calls and m.tool_call_id is None:
+        return ""
+    calls = ",".join(
+        f"{c.id}:{c.name}:{orjson.dumps(c.arguments, option=orjson.OPT_SORT_KEYS).decode()}"
+        for c in m.tool_calls or ()
+    )
+    return f"\x1f{m.tool_call_id or ''}\x1f{calls}"
 
 
 def _first_message_job(body: dict[str, Any]) -> str | None:

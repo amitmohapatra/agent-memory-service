@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +28,7 @@ from memory_service.domain.conversation import (
     AgentRun,
     Attachment,
     Message,
+    MessageToolCall,
     Session,
     Thread,
     Turn,
@@ -270,6 +271,8 @@ def _row_to_message(r: MessageRow, attachments: Sequence[MessageAttachmentRow] =
         archive_status=ArchiveStatus(r.archive_status),
         system_metadata=r.system_metadata or {},
         custom_metadata=r.custom_metadata or {},
+        tool_calls=[MessageToolCall.model_validate(c) for c in r.tool_calls or ()],
+        tool_call_id=r.tool_call_id,
         deleted_at=r.deleted_at,
     )
 
@@ -308,6 +311,8 @@ class SqlMessageRepository:
                 archive_status=message.archive_status.value,
                 system_metadata=message.system_metadata,
                 custom_metadata=message.custom_metadata,
+                tool_calls=[c.model_dump(mode="json") for c in message.tool_calls] or None,
+                tool_call_id=message.tool_call_id,
             )
         )
         for att in message.attachments:
@@ -367,6 +372,30 @@ class SqlMessageRepository:
             stmt = stmt.where(MessageRow.kind == MessageKind.VISIBLE.value)
         if before_sequence is not None:
             stmt = stmt.where(MessageRow.sequence < before_sequence)
+        return await self._oldest_first(stmt)
+
+    async def list_window(self, tenant_id: str, thread_id: str, *, limit: int) -> list[Message]:
+        stmt = (
+            select(MessageRow)
+            .where(
+                MessageRow.tenant_id == tenant_id,
+                MessageRow.thread_id == thread_id,
+                MessageRow.deleted_at.is_(None),
+                or_(
+                    MessageRow.kind == MessageKind.VISIBLE.value,
+                    and_(
+                        MessageRow.role == MessageRole.TOOL.value,
+                        MessageRow.tool_call_id.is_not(None),
+                    ),
+                ),
+            )
+            .order_by(MessageRow.sequence.desc())
+            .limit(limit)
+        )
+        return await self._oldest_first(stmt)
+
+    async def _oldest_first(self, stmt: Any) -> list[Message]:
+        """The messages a newest-first ``stmt`` selects, oldest first, with attachments."""
         rows = list((await self.s.execute(stmt)).scalars().all())
         rows.reverse()
         if not rows:

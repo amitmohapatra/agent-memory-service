@@ -17,7 +17,7 @@ import pytest
 from benchmark.common import submit_observation
 
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import ObservationKind
+from memory_service.domain.enums import ObservationKind, WindowFormat
 from memory_service.domain.ids import new_id
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.jobs.registry import TASK_MEMORY_INDEX
@@ -93,7 +93,9 @@ async def test_indexing_moves_the_revisions_again_so_a_bundle_cached_mid_write_i
 async def _served(builder, ctx, query: str) -> bool:
     """Whether ``query`` would be served from the bundle cache right now: the cache decision
     alone (the revisions are part of the key), without building on a miss."""
-    found = await builder._lookup(ctx, query, builder.cfg.token_budget, None, None, True)
+    found = await builder._lookup(
+        ctx, query, builder.cfg.token_budget, None, None, WindowFormat.RENDERED
+    )
     return found.bundle is not None
 
 

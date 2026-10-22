@@ -173,6 +173,9 @@ class MessageRow(Base):
     custom_metadata: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default="{}"
     )
+    # an ASSISTANT message's tool calls ([{id, name, arguments}]); a TOOL message's call
+    tool_calls: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    tool_call_id: Mapped[str | None] = mapped_column(String(200))
     deleted_at: Mapped[datetime | None]
 
     __table_args__ = (
