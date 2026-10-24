@@ -48,6 +48,7 @@ from memory_service.domain.feedback import (
     FeedbackVerdict,
     ProjectionAction,
     ReviewState,
+    outcome_teaches,
 )
 from memory_service.domain.learning import (
     CITED_CONFIDENCE_STEP,
@@ -774,12 +775,16 @@ class FeedbackService:
         The run's outcome follows the verdict unless a higher-ranked source already decided
         it (``OUTCOME_PRECEDENCE``: a person over the judge over the run's own status). The
         memories the verdict cites (its evidence references) gain or lose confidence, and a
-        confirmed run marks them used for prefetch learning."""
+        confirmed run marks them used for prefetch learning - unless the verdict is the run's
+        own unverified success, which is its outcome only (``outcome_teaches``)."""
         affirmed = record.verdict in AFFIRMING_VERDICTS
-        adjusted = await self._adjust_cited(uow, record, affirmed=affirmed, now=now)
+        teaches = outcome_teaches(record.source, success=affirmed)
+        adjusted = (
+            await self._adjust_cited(uow, record, affirmed=affirmed, now=now) if teaches else []
+        )
         if affirmed and adjusted:
             await uow.pulls.mark_used(record.tenant_id, record.target_id, adjusted)
-        labelled = await self._label_run(uow, record, success=affirmed, now=now)
+        labelled = await self._label_run(uow, record, success=affirmed, learn=teaches, now=now)
         if not labelled and not adjusted:
             return FeedbackProjection(
                 action=ProjectionAction.NONE,
@@ -881,11 +886,12 @@ class FeedbackService:
         return sorted(m.memory_id for m in memories)
 
     async def _label_run(
-        self, uow: UnitOfWork, record: Feedback, *, success: bool, now: datetime
+        self, uow: UnitOfWork, record: Feedback, *, success: bool, learn: bool, now: datetime
     ) -> bool:
-        """Set the run's outcome unless a higher-ranked source decided it, and queue the
-        run's calls to be learned again: a label is what turns a trajectory into evidence for
-        a procedure. Serialised per run, so two verdicts apply one after the other."""
+        """Set the run's outcome unless a higher-ranked source decided it, and - when it is
+        evidence (``learn``) - queue the run's calls to be learned again: a label is what
+        turns a trajectory into evidence for a procedure. Serialised per run, so two verdicts
+        apply one after the other."""
         run_id = record.target_id
         await uow.serialize(f"run-outcome:{record.tenant_id}:{run_id}")
         existing = await uow.tools.outcome(record.tenant_id, run_id)
@@ -902,6 +908,8 @@ class FeedbackService:
                 recorded_at=now,
             )
         )
+        if not learn:
+            return True
         await uow.enqueue(
             JobSpec(
                 task_name=TASK_TOOLS_LEARN,

@@ -16,7 +16,12 @@ from tests.conftest import (  # noqa: E402  (one definition, see tests/conftest.
     _test_overrides,
 )
 
-REDIS_URL = os.environ.get("MEMORY__CACHE__URL", "redis://localhost:6379/0")
+#: ``MEMORY_TEST_CACHE_URL`` (the suite's own namespace, which the root conftest keeps) first:
+#: ``MEMORY__CACHE__URL`` is stripped there, so without it the probe always reached DB 0, which
+#: a shared host's live service may own.
+REDIS_URL = os.environ.get("MEMORY_TEST_CACHE_URL") or os.environ.get(
+    "MEMORY__CACHE__URL", "redis://localhost:6379/0"
+)
 
 TABLES = [
     "feedback",
@@ -86,7 +91,8 @@ requires_pg = pytest.mark.skipif(
     not PG_AVAILABLE, reason="PostgreSQL not reachable at MEMORY_TEST_DATABASE_URL"
 )
 requires_redis = pytest.mark.skipif(
-    not REDIS_AVAILABLE, reason="Redis/Dragonfly not reachable at MEMORY__CACHE__URL"
+    not REDIS_AVAILABLE,
+    reason="Redis/Dragonfly not reachable at MEMORY_TEST_CACHE_URL or MEMORY__CACHE__URL",
 )
 
 

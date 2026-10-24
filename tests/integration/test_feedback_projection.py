@@ -334,6 +334,51 @@ async def test_a_run_verdict_moves_the_cited_memories_and_labels_the_run(
     assert kept is not None and kept.success and kept.source == "human"
 
 
+async def test_a_runs_own_success_is_its_outcome_only_until_a_judge_confirms_it(
+    container, uow_factory
+) -> None:
+    """The run's own ``confirm`` (``system``, unverified) is recorded as its outcome and is
+    no evidence (``teaches``); the judge's verdict on the same run is, and moves the memories
+    it cites."""
+    memory = await _first_memory(container, uow_factory)
+    agent = ALICE.model_copy(update={"agent_id": "helper", "agent_run_id": "run_self_1"})
+    cited = [{"source_type": "memory", "source_id": memory.memory_id}]
+    run = {"target_kind": FeedbackTargetKind.RUN, "target_id": "run_self_1"}
+    own = await _submit(  # as the harness sends it: citing nothing, applied at once
+        container,
+        uow_factory,
+        agent,
+        verdict=FeedbackVerdict.CONFIRM,
+        source=FeedbackSource.SYSTEM,
+        **run,
+    )
+    assert own.review is None
+    assert own.projection is not None
+    assert own.projection.action is ProjectionAction.RUN_LABELLED
+    assert own.projection.memory_ids == []
+    async with uow_factory() as uow:
+        same = await uow.memories.get("acme", memory.memory_id)
+        outcome = await uow.tools.outcome("acme", "run_self_1")
+    assert same is not None and same.confidence == memory.confidence
+    assert outcome is not None and outcome.success and not outcome.teaches
+
+    judged = await _submit(
+        container,
+        uow_factory,
+        agent,
+        verdict=FeedbackVerdict.CONFIRM,
+        source=FeedbackSource.JUDGE,
+        evidence_refs=cited,
+        **run,
+    )
+    assert judged.projection is not None and judged.projection.memory_ids == [memory.memory_id]
+    async with uow_factory() as uow:
+        raised = await uow.memories.get("acme", memory.memory_id)
+        outcome = await uow.tools.outcome("acme", "run_self_1")
+    assert raised is not None and raised.confidence > memory.confidence
+    assert outcome is not None and outcome.teaches and outcome.source == "judge"
+
+
 async def test_a_run_verdict_may_only_cite_memories_its_reviewer_can_read(
     container, uow_factory
 ) -> None:

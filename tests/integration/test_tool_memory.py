@@ -45,7 +45,14 @@ async def _keys(container, ctx: MemoryExecutionContext) -> list[str]:
 
 
 async def _run_once(
-    container, *, run: str, quote: str, sku: str, success: bool = True, user: str = "u1"
+    container,
+    *,
+    run: str,
+    quote: str,
+    sku: str,
+    success: bool = True,
+    user: str = "u1",
+    source: FeedbackSource = FeedbackSource.JUDGE,
 ) -> None:
     """One two-step run for ``user``: look the price up, then write it onto the quote. The
     quote id flows from the first output into the second call's arguments."""
@@ -75,12 +82,20 @@ async def _run_once(
             latency_ms=90.0,
         )
         await uow.commit()
-    await _label(container, ctx, run=run, success=success)
+    await _label(container, ctx, run=run, success=success, source=source)
 
 
-async def _label(container, ctx: MemoryExecutionContext, *, run: str, success: bool) -> None:
-    """The run's outcome: RUN feedback from its final status (what the harness sends),
-    projected right away rather than by the queued job."""
+async def _label(
+    container,
+    ctx: MemoryExecutionContext,
+    *,
+    run: str,
+    success: bool,
+    source: FeedbackSource = FeedbackSource.JUDGE,
+) -> None:
+    """The run's verified outcome: the grounding judge's RUN feedback (what ``/v1/verify``
+    records; ``source=SYSTEM`` is the run's own word on its final status), projected right
+    away rather than by the queued job."""
     feedback = container.services["feedback"]
     async with container.services["uow_factory"]() as uow:
         stored, _ = await feedback.submit(
@@ -91,9 +106,11 @@ async def _label(container, ctx: MemoryExecutionContext, *, run: str, success: b
                 target_kind=FeedbackTargetKind.RUN,
                 target_id=run,
                 verdict=FeedbackVerdict.CONFIRM if success else FeedbackVerdict.REJECT,
-                source=FeedbackSource.SYSTEM,
+                source=source,
             ),
-            # the harness's key may act as the agent: its run's status is taken (ADR 0039)
+            # the judge records on the service's own authority (``grounding.judge``); the
+            # harness's key may act as the agent: its run's status is taken (ADR 0039)
+            trusted=source is FeedbackSource.JUDGE,
             run_vouched=True,
         )
         await uow.commit()
@@ -181,6 +198,22 @@ async def test_the_learning_job_stores_a_procedure_only_once_enough_runs_support
     binding = next(b for b in procedure.bindings if b["argument"] == "quote_id")
     assert binding["step"] == 1 and binding["source_step"] == 0
     assert await learning.learn() == 0, "everything was learned"
+
+
+async def test_a_runs_own_success_teaches_no_procedure(container, uow_factory) -> None:
+    """Runs that only reported their own success (unverified) are their outcomes only: no
+    procedure rests on them; the judge's verdict on the same runs teaches one."""
+    learning = container.services["tool_learning"]
+    for i in range(2):
+        await _run_once(
+            container, run=f"run_{i}", quote=f"Q-{i}", sku=f"S-{i}", source=FeedbackSource.SYSTEM
+        )
+    await learning.learn()
+    assert await _procedures(container, _ctx()) == []
+    for i in range(2):
+        await _label(container, _ctx(f"run_{i}"), run=f"run_{i}", success=True)
+    await learning.learn()
+    assert await _procedures(container, _ctx())
 
 
 async def test_relabelling_a_run_relearns_its_pattern(container, uow_factory) -> None:
