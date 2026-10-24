@@ -8,6 +8,12 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- The SDK's public API is held by CI: `sdk/python/public_api.json` is a snapshot of every name
+  `trellis.memory` exports (signatures, model fields, enum members), and
+  `sdk/python/tests/test_public_api.py` fails on any change to it until the snapshot is
+  regenerated (`python scripts/sdk_api.py --update`), which it is only under a new SDK version
+  that this CHANGELOG names. On a pull request, `scripts/sdk_api.py --check-base` holds the
+  snapshot to the base branch's the same way. SDK and service unchanged.
 - The conversation window as the conversation itself: `POST /v1/context` with
   `window_format="messages"` (SDK `ctx.context(..., window_format="messages")`) returns the
   thread's recent messages verbatim in `conversation.messages` — oldest first, tool calls with

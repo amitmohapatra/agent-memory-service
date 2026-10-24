@@ -65,6 +65,13 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pyright
       - run: uv run pytest tests/unit sdk/python/tests -m "not docker and not models" -q
+      # the SDK's public API against the base branch's: a changed signature needs a new SDK
+      # version and a CHANGELOG entry naming it (sdk/python/tests/test_public_api.py holds the
+      # snapshot to the code; this holds it to the base, so a hand-edited snapshot is caught)
+      - if: github.event_name == 'pull_request'
+        run: |
+          git fetch --depth 1 origin "${{ github.base_ref }}"
+          uv run python scripts/sdk_api.py --check-base FETCH_HEAD
       # ``bifrost``: the live-gateway tests, which need a running gateway and its key; models
       # as on every other step (the runner has Docker, so the OpenFGA contract stays in)
       - run: uv run pytest tests/contract -m "not bifrost and not models" -q
