@@ -14,7 +14,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from memory_service.domain.enums import EvidenceStatus, QueryType, Representation
+from memory_service.domain.conversation import MessageToolCall
+from memory_service.domain.enums import EvidenceStatus, QueryType, Representation, WindowFormat
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.grounding import GroundingReport
 from memory_service.domain.memory import aggregate_statement, unverified_representation
@@ -84,10 +85,15 @@ class WindowMessage(BaseModel):
     message_id: str
     role: str
     text: str
+    #: an ASSISTANT message's tool calls; a TOOL message's call (``WindowFormat.MESSAGES``)
+    tool_calls: list[MessageToolCall] = Field(default_factory=list)
+    tool_call_id: str | None = None
 
 
 class ConversationWindow(BaseModel):
-    """The thread's messages after its durable summary, the most recent that fit."""
+    """The thread's messages after its durable summary, the most recent that fit. ``form``:
+    whether the rendered context shows them (``rendered``) or the caller replays them as its
+    own conversation (``messages``)."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -96,6 +102,13 @@ class ConversationWindow(BaseModel):
     messages: list[WindowMessage] = Field(default_factory=list)
     rendered: str = ""
     token_estimate: int = 0
+    form: WindowFormat = WindowFormat.RENDERED
+
+    @property
+    def shown(self) -> bool:
+        """Whether the rendered context shows the window: not in the messages form, which
+        the caller replays as its own conversation."""
+        return bool(self.rendered) and self.form is WindowFormat.RENDERED
 
 
 class ProfileBlockView(BaseModel):
@@ -486,7 +499,7 @@ class ContextBundle(BaseModel):
         shown twice: what ``redundant`` names is left out."""
         refs = {item_id: handle for handle, item_id in self.handles().items()}
         parts = pinned_sections(self.profile, self.thread_summary, self.procedures, self.tools)
-        if self.conversation.rendered:
+        if self.conversation.shown:
             parts.append(f"## Recent conversation\n{self.conversation.rendered}")
         repeated = self.redundant()
         memories = [m for m in self.memories if m.item_id not in repeated]

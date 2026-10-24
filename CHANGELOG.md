@@ -7,6 +7,18 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added
+- The conversation window as the conversation itself: `POST /v1/context` with
+  `window_format="messages"` (SDK `ctx.context(..., window_format="messages")`) returns the
+  thread's recent messages verbatim in `conversation.messages` — oldest first, tool calls with
+  their results, never parted — and leaves them out of `rendered`, for a framework that replays
+  them as its own messages, as its checkpoint would. Read from the store, so a turn written
+  before is in the next window with the worker down. Messages carry their tool calls:
+  `tool_calls` (`{id, name, arguments}`) on an `ASSISTANT` message and `tool_call_id` on an
+  `INTERNAL` `TOOL` message, stored as written (migration `0029_message_tool_calls`, two
+  nullable columns) and returned by the message reads. Service and SDK; the default
+  (`rendered`) is unchanged.
+
 ### Fixed
 - Tool search reads the arguments' descriptions: a catalog entry is embedded with what its input
   schema says each argument is (`properties.<arg>.description`, nested objects and array items

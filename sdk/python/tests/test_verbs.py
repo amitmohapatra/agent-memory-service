@@ -9,7 +9,14 @@ import pytest
 import respx
 from pydantic import BaseModel
 
-from trellis.memory import ContextBundle, MemoryClient, Message, PromptContext, ToolHints
+from trellis.memory import (
+    ContextBundle,
+    MemoryClient,
+    Message,
+    PromptContext,
+    ToolCall,
+    ToolHints,
+)
 
 BASE = "http://memory.test"
 
@@ -93,6 +100,60 @@ async def test_context_is_the_prompt_by_default(ctx) -> None:
     assert pushed.tools is not None and pushed.tools[0].confidence == 0.74
     await ctx.context("order paper", tools=["erp-create_po"], hints=False)
     assert _body(route)["tools"] == {"available": ["erp-create_po"], "k": 8, "hints": False}
+
+
+@respx.mock
+async def test_the_window_comes_as_messages_when_asked(ctx) -> None:
+    route = respx.post(f"{BASE}/v1/context").respond(
+        200,
+        json={
+            "rendered": "## Memories\n- [m1] Prefers email.",
+            "bundle_id": "b1",
+            "token_estimate": 12,
+            "evidence_status": "COMPLETE",
+            "conversation": {
+                "thread_id": "thr_1",
+                "messages": [
+                    {"id": "msg_1", "role": "USER", "text": "Stock of a?"},
+                    {
+                        "id": "msg_2",
+                        "role": "ASSISTANT",
+                        "text": "",
+                        "tool_calls": [{"id": "c1", "name": "stock", "arguments": {"sku": "a"}}],
+                    },
+                    {"id": "msg_3", "role": "TOOL", "text": "7", "tool_call_id": "c1"},
+                ],
+            },
+        },
+    )
+    pushed = await ctx.context("and b?", window_format="messages")
+    assert _body(route)["window_format"] == "messages" and _body(route)["window"] is True
+    assert pushed.conversation is not None
+    user, called, result = pushed.conversation.messages
+    assert user.tool_calls == [] and user.tool_call_id is None
+    assert called.tool_calls[0].name == "stock" and called.tool_calls[0].arguments == {"sku": "a"}
+    assert result.tool_call_id == "c1"
+    await ctx.context("and b?")
+    assert "window_format" not in _body(route)  # the service's default, rendered
+
+
+@respx.mock
+async def test_a_message_carries_its_tool_calls(ctx) -> None:
+    route = respx.post(f"{BASE}/v1/messages").respond(202, json={"messages": []})
+    await ctx.history.add(
+        [
+            Message(
+                role="ASSISTANT",
+                content="",
+                tool_calls=[ToolCall(id="c1", name="stock", arguments={"sku": "a"})],
+            ),
+            {"role": "TOOL", "kind": "INTERNAL", "content": "7", "tool_call_id": "c1"},
+        ]
+    )
+    called, result = _body(route)["messages"]
+    assert called["tool_calls"] == [{"id": "c1", "name": "stock", "arguments": {"sku": "a"}}]
+    assert "tool_call_id" not in called and result["tool_call_id"] == "c1"
+    assert "tool_calls" not in result
 
 
 @respx.mock

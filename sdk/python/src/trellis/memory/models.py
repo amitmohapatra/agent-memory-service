@@ -104,6 +104,9 @@ EvidenceStatus = Literal["COMPLETE", "INCOMPLETE", "INSUFFICIENT"]
 #: EVENT: something that happened, told to the service to learn from (always INTERNAL)
 MessageRole = Literal["USER", "ASSISTANT", "SYSTEM", "TOOL", "AGENT", "EVENT"]
 MessageKind = Literal["VISIBLE", "INTERNAL"]
+#: How the context gives the thread's recent messages: in ``rendered``, or verbatim as
+#: ``conversation.messages`` for the caller to replay
+WindowFormat = Literal["rendered", "messages"]
 JobStatus = Literal["PENDING", "RUNNING", "SUCCEEDED", "FAILED", "RETRYING", "CANCELLED"]
 DocumentStatus = Literal["STAGED", "READY", "FAILED"]
 ArchiveStatus = Literal["STAGED", "ARCHIVING", "ARCHIVED", "PURGED"]
@@ -389,16 +392,33 @@ class ContextSummary(BaseModel):
     relevance: float
 
 
+class ToolCall(BaseModel):
+    """A tool an ASSISTANT message called: the call's id (the TOOL message with its result
+    names it), the tool and its arguments."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    id: str
+    name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
 class WindowMessage(BaseModel):
+    """One message of the conversation window, verbatim: an ASSISTANT message's tool calls
+    and a TOOL message's call (``tool_call_id``) come with it."""
+
     model_config = ConfigDict(frozen=True, extra="allow")
 
     id: str
     role: MessageRole
     text: str
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+    tool_call_id: str | None = None
 
 
 class Conversation(BaseModel):
-    """The thread's recent messages a full context carries."""
+    """The thread's recent messages, oldest first, a tool call never parted from its results
+    (the full context; the prompt context with ``window_format="messages"``)."""
 
     model_config = ConfigDict(frozen=True, extra="allow")
 
@@ -489,6 +509,9 @@ class PromptContext(BaseModel):
     evidence_status: EvidenceStatus = "COMPLETE"
     #: the tools that fit the task, best first (only when ``tools`` were given)
     tools: list[ToolChoiceBrief] | None = None
+    #: ``window_format="messages"``: the thread's recent messages, verbatim, for the caller to
+    #: replay as its own conversation (they are then not in ``rendered``)
+    conversation: Conversation | None = None
     #: the build's diagnostics (only with ``debug=True``)
     diagnostics: dict[str, Any] | None = None
 
@@ -572,6 +595,10 @@ class Message(BaseModel):
     source_system: str | None = None
     source_message_id: str | None = None
     parent_message_id: str | None = None
+    #: an ASSISTANT message's tool calls
+    tool_calls: list[ToolCall] | None = None
+    #: a TOOL message (kind INTERNAL): the call whose result it is
+    tool_call_id: str | None = None
 
 
 class MessageInfo(BaseModel):

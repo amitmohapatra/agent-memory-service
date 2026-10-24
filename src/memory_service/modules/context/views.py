@@ -21,8 +21,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from memory_service.domain.context_bundle import ContextBundle, ContextItem
-from memory_service.domain.enums import Representation
+from memory_service.domain.context_bundle import ContextBundle, ContextItem, ConversationWindow
+from memory_service.domain.enums import Representation, WindowFormat
 from memory_service.domain.tools import SkillView, ToolHints
 
 #: Decimal places of every 0..1 number on the wire.
@@ -41,6 +41,9 @@ def prompt_view(bundle: ContextBundle) -> dict[str, Any]:
         body["tools"] = [
             {"name": c.name, "confidence": c.confidence} for c in bundle.tools.candidates
         ]
+    if bundle.conversation.form is WindowFormat.MESSAGES:
+        # replayed by the caller as its own conversation, so not in ``rendered``
+        _put(body, "conversation", conversation_body(bundle.conversation))
     return body
 
 
@@ -53,14 +56,7 @@ def full_view(bundle: ContextBundle) -> dict[str, Any]:
         "token_estimate": bundle.token_estimate,
     }
     _put(body, "missing_evidence", list(bundle.evidence.missing_groups))
-    window = bundle.conversation
-    if window.messages:
-        body["conversation"] = {
-            "thread_id": window.thread_id,
-            "messages": [
-                {"id": m.message_id, "role": m.role, "text": m.text} for m in window.messages
-            ],
-        }
+    _put(body, "conversation", conversation_body(bundle.conversation))
     if bundle.thread_summary is not None:
         body["thread_summary"] = bundle.thread_summary.text
     _put(body, "profile", [{"block": b.block, "text": b.text} for b in bundle.profile])
@@ -73,6 +69,20 @@ def full_view(bundle: ContextBundle) -> dict[str, Any]:
     _put(body, "summaries", [_summary(s) for s in bundle.summaries])
     _put(body, "history", [_memory(m) for m in bundle.history])
     return body
+
+
+def conversation_body(window: ConversationWindow) -> dict[str, Any] | None:
+    """The window's messages, oldest first, each with its tool calls or the call it answers
+    when it has them; ``None`` for an empty window."""
+    if not window.messages:
+        return None
+    messages: list[dict[str, Any]] = []
+    for m in window.messages:
+        message: dict[str, Any] = {"id": m.message_id, "role": m.role, "text": m.text}
+        _put(message, "tool_calls", [c.model_dump(mode="json") for c in m.tool_calls])
+        _put(message, "tool_call_id", m.tool_call_id)
+        messages.append(message)
+    return {"thread_id": window.thread_id, "messages": messages}
 
 
 def tool_choices(hints: ToolHints) -> list[dict[str, Any]]:

@@ -61,6 +61,7 @@ from trellis.memory.models import (
     ToolStatus,
     VerifyReport,
     Visibility,
+    WindowFormat,
 )
 from trellis.memory.transport import Transport
 
@@ -219,6 +220,7 @@ class MemoryContext:
         tools: Sequence[str] | None = ...,
         hints: bool = ...,
         window: bool = ...,
+        window_format: WindowFormat = ...,
         document_ids: Sequence[str] | None = ...,
         format: Literal["prompt"] = ...,
         debug: bool = ...,
@@ -234,6 +236,7 @@ class MemoryContext:
         tools: Sequence[str] | None = ...,
         hints: bool = ...,
         window: bool = ...,
+        window_format: WindowFormat = ...,
         document_ids: Sequence[str] | None = ...,
         format: Literal["full"],
         debug: bool = ...,
@@ -248,6 +251,7 @@ class MemoryContext:
         tools: Sequence[str] | None = None,
         hints: bool = True,
         window: bool = True,
+        window_format: WindowFormat = "rendered",
         document_ids: Sequence[str] | None = None,
         format: Literal["prompt", "full"] = "prompt",
         debug: bool = False,
@@ -264,6 +268,9 @@ class MemoryContext:
         values found and the required ones missing; the prompt form returns the fitting tools
         in ``tools``. ``hints=False`` keeps the learned skills and leaves the hints out (for a
         caller that offers the model every tool anyway).
+        ``window_format="messages"`` gives the recent messages verbatim as
+        ``conversation.messages`` (role, text, tool calls, oldest first) instead of in
+        ``rendered``, for a caller that replays them to its model as its own conversation.
         ``format="full"`` returns the same content as structured data, without the rendering.
         ``timeout`` replaces the client's for this call, e.g. a turn's own latency budget."""
         payload: dict[str, Any] = {
@@ -275,6 +282,8 @@ class MemoryContext:
         }
         if token_budget is not None:
             payload["token_budget"] = token_budget
+        if window_format != "rendered":
+            payload["window_format"] = window_format
         if document_ids is not None:
             payload["document_ids"] = list(document_ids)
         if tools is not None:

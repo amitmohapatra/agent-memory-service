@@ -22,7 +22,16 @@ from datetime import UTC, datetime
 from typing import Any
 
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.conversation import AgentRun, Attachment, Message, Session, Thread, Turn
+from memory_service.domain.conversation import (
+    AgentRun,
+    Attachment,
+    Message,
+    MessageToolCall,
+    Session,
+    Thread,
+    Turn,
+    tool_fields_problem,
+)
 from memory_service.domain.enums import MessageKind, MessageRole, ObservationKind
 from memory_service.domain.errors import NotFound, ScopeDenied, ValidationFailed
 from memory_service.domain.ids import content_hash, new_id, thread_session_id, thread_turn_id
@@ -212,10 +221,13 @@ class ConversationService:
         source_system: str | None = None,
         source_message_id: str | None = None,
         parent_message_id: str | None = None,
+        tool_calls: Sequence[MessageToolCall] = (),
+        tool_call_id: str | None = None,
         may_write: bool | None = None,
     ) -> AppendResult:
         """Append one message. An EVENT is internal evidence: it is kept in the transcript and
-        learned from as an event, never shown as chat.
+        learned from as an event, never shown as chat. ``tool_calls`` are an ASSISTANT
+        message's calls; ``tool_call_id`` names the call a TOOL message answers.
 
         ``may_write`` is ``may_write_thread`` for this thread, asked by the caller before it
         opened the unit of work. The check used to run here, after the per-thread advisory
@@ -237,6 +249,8 @@ class ConversationService:
             raise ValidationFailed("visible messages must have role USER, ASSISTANT or SYSTEM")
         if kind is MessageKind.INTERNAL and ctx.agent_id is None and role in (MessageRole.AGENT,):
             raise ValidationFailed("internal AGENT messages require agent_id in the scope")
+        if problem := tool_fields_problem(role, tool_calls, tool_call_id):
+            raise ValidationFailed(problem)
 
         if may_write is None:
             may_write = await self.may_write_thread(ctx, ctx.thread_id)
@@ -294,6 +308,8 @@ class ConversationService:
                 agent_run_id=ctx.agent_run_id,
                 parent_message_id=parent_message_id,
                 attachments=list(attachments),
+                tool_calls=list(tool_calls),
+                tool_call_id=tool_call_id,
                 source_system=source_system,
                 source_message_id=source_message_id,
                 occurred_at=occurred_at or now,
@@ -412,6 +428,18 @@ class ConversationService:
         if newest:
             await self.hot.refill(ctx.tenant_id, thread_id, messages, revision=thread.revision)
         return messages
+
+    async def window_messages(
+        self, uow: UnitOfWork, ctx: MemoryExecutionContext, thread_id: str, *, limit: int
+    ) -> list[Message]:
+        """The thread's newest ``limit`` messages a window replays, oldest first: the visible
+        chat and the results of its tool calls. Read from the store, so a message appended
+        before is there however far the worker is behind; ``[]`` for a thread not created
+        yet (nothing was said in it)."""
+        if await uow.threads.get(ctx.tenant_id, thread_id) is None:
+            return []
+        await self.authz.require(ctx, "can_read", "thread", thread_id)
+        return await uow.messages.list_window(ctx.tenant_id, thread_id, limit=limit)
 
     async def get_message(
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, message_id: str

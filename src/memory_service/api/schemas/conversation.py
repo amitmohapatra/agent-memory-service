@@ -38,6 +38,28 @@ class AttachmentIn(BaseModel):
     )
 
 
+class ToolCallBody(BaseModel):
+    """A tool an ASSISTANT message called, as its framework said it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        examples=["call_7f3a"],
+        description="The call's id: the TOOL message with its result names it (tool_call_id).",
+    )
+    name: str = Field(
+        ..., min_length=1, max_length=200, examples=["get_order"], description="The tool called."
+    )
+    arguments: dict[str, Any] = Field(
+        default_factory=dict,
+        examples=[{"order_id": "QX-4471"}],
+        description="The arguments it was called with.",
+    )
+
+
 class PatchThreadRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -115,6 +137,10 @@ class ThreadResponse(BaseModel):
     )
 
 
+#: Tool calls one message carries.
+TOOL_CALLS_MAX = 64
+
+
 class MessageIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -165,6 +191,19 @@ class MessageIn(BaseModel):
     )
     parent_message_id: str | None = Field(
         default=None, description="The message this one answers or continues, when threaded."
+    )
+    tool_calls: list[ToolCallBody] | None = Field(
+        default=None,
+        max_length=TOOL_CALLS_MAX,
+        description="An ASSISTANT message's tool calls, in the order made (at most "
+        f"{TOOL_CALLS_MAX}); its content is what it said with them, often nothing.",
+    )
+    tool_call_id: str | None = Field(
+        default=None,
+        max_length=200,
+        examples=["call_7f3a"],
+        description="A TOOL message (kind=INTERNAL): the id of the call whose result it is. "
+        "The conversation window gives the call and its result back together.",
     )
 
     @model_validator(mode="after")
@@ -311,6 +350,12 @@ class MessageResponse(BaseModel):
     )
     custom_metadata: dict[str, Any] = Field(
         default_factory=dict, description="The caller-defined JSON set on the message."
+    )
+    tool_calls: list[ToolCallBody] | None = Field(
+        default=None, description="An ASSISTANT message's tool calls, when it made any."
+    )
+    tool_call_id: str | None = Field(
+        default=None, description="A TOOL message: the call whose result it is."
     )
 
 
