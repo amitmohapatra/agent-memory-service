@@ -37,16 +37,16 @@
     "undeclared_tool_suggestions": 0
   },
   "provenance": {
-    "timestamp": "2026-10-24T19:24:02.524900+00:00",
-    "git_commit": "b02effe81b05c9565fa114ecd5ea5cf4d9fef868",
+    "timestamp": "2026-10-02T09:01:20.684738+00:00",
+    "git_commit": "13e7b065d30bba2757bf915f40fba84c6e919278",
     "host_load": {
-      "loadavg_1m": 1.05,
-      "loadavg_5m": 1.05,
-      "loadavg_15m": 0.99,
-      "load_per_core": 0.26
+      "loadavg_1m": 6.36,
+      "loadavg_5m": 5.53,
+      "loadavg_15m": 4.68,
+      "load_per_core": 1.59
     },
     "python": "3.13.14",
-    "platform": "Linux-6.18.44-fc-v153-x86_64-with-glibc2.39",
+    "platform": "Linux-6.18.44-fc-v51-x86_64-with-glibc2.39",
     "machine": "x86_64",
     "cpu_count": 4,
     "memory_gb": 15.7,
@@ -56,11 +56,11 @@
       "qdrant-client": "1.19.0",
       "procrastinate": "3.9.0",
       "zstandard": "0.25.0",
-      "sentence-transformers": "6.0.1",
-      "torch": "2.14.0+cpu",
-      "transformers": "5.17.0",
+      "sentence-transformers": "5.3.0",
+      "torch": "2.11.0",
+      "transformers": "5.3.0",
       "onnxruntime": "1.30.0",
-      "docling": "2.127.0"
+      "docling": "not-installed"
     },
     "models": {
       "bekko-embedding-v1-a8m": {
@@ -70,14 +70,6 @@
       "granite-embedding-small-english-r2": {
         "repo": "ibm-granite/granite-embedding-small-english-r2",
         "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
-      },
-      "mdeberta-v3-base-xnli-multilingual-nli-2mil7": {
-        "repo": "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7",
-        "revision": "b5113eb38ab63efdd7f280f8c144ea8b13f978ce"
-      },
-      "mxbai-edge-colbert-v0-32m": {
-        "repo": "mixedbread-ai/mxbai-edge-colbert-v0-32m",
-        "revision": "bb13a29ec9b1e7edd4ba8f7a0776c48b55cbad66"
       }
     },
     "llm": {
