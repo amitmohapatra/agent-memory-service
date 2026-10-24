@@ -18,6 +18,7 @@ from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from memory_service.domain.feedback import outcome_teaches
 from memory_service.domain.ids import new_id
 
 ToolStatus = Literal["ok", "error", "timeout", "rejected", "cancelled"]
@@ -384,6 +385,11 @@ class RunOutcome(BaseModel):
     #: the feedback source that decided it (``domain.feedback.OUTCOME_PRECEDENCE``)
     source: Literal["system", "judge", "interrupt", "human"] = "system"
     recorded_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    @property
+    def teaches(self) -> bool:
+        """Whether learning may use it (``domain.feedback.outcome_teaches``)."""
+        return outcome_teaches(self.source, success=self.success)
 
 
 class ToolStats(BaseModel):

@@ -85,7 +85,7 @@ standing — confidence and reinforcement — is part of the retrieval ranking: 
 | --- | --- |
 | `target_kind` | `run` · `memory` · `tool_call` · `procedure` |
 | `verdict` | `confirm` · `reject` · `correct` · `approve` · `edit` |
-| `source` | `human` · `judge` · `interrupt` · `system` (a run's own final status, as the harness reports it) |
+| `source` | `human` · `judge` · `interrupt` · `system` (a run's own final status, as the harness reports it; its success is the run's outcome only, no evidence for learning until a judge or a person confirms it) |
 
 `approve` and `edit` are the interrupt vocabulary: a person approving a tool call, or approving it
 with different arguments, is feedback as much as a thumbs-up is — and recording it that way is what

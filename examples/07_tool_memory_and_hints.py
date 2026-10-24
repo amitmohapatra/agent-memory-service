@@ -1,7 +1,7 @@
 """07 · Tool memory: publish the catalog, record what ran, and get a plan back.
 
 The service never runs a tool. It keeps a catalog, records each call a run made, and learns
-from runs labelled successful: the procedure (which tool after which) and where each
+from runs confirmed successful (by a person or the grounding judge): the procedure (which tool after which) and where each
 argument came from. ``tool_hints`` reads it back: the next step and its arguments, bound
 from an earlier step's output.
 
@@ -41,8 +41,10 @@ async def main() -> None:
                 task=TASK,
                 step=1,
             )
-            # only a run labelled successful teaches a procedure
-            await run.feedback("run", run.scope.agent_run_id, "confirm", source="system")
+            # only a run confirmed by a person or by the grounding judge teaches a procedure:
+            # the run's own source="system" confirm is its outcome only. A person's verdict waits
+            # for a tenant admin; this example's key administers the tenant, so it applies now
+            await user.feedback("run", run.scope.agent_run_id, "confirm")
 
         hints = await user.agent("ops").tool_hints(TASK, available=NAMES)
         assert hints.plan is not None and hints.next is not None

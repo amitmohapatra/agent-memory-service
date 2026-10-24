@@ -144,6 +144,24 @@ def test_an_unlabelled_run_is_a_weak_positive_only_once_old_and_clean() -> None:
     assert succeeded(label, clean, NOW) is False
 
 
+@pytest.mark.parametrize(
+    ("source", "success", "expected"),
+    [
+        ("system", True, None),  # the run's own word: its outcome only
+        ("system", False, False),  # its own failure is evidence
+        ("judge", True, True),
+        ("human", True, True),
+        ("human", False, False),
+    ],
+)
+def test_a_runs_own_unverified_success_is_no_evidence(
+    source: str, success: bool, expected: bool | None
+) -> None:
+    clean = [_call("a", 0, occurred_at=NOW - timedelta(hours=25))]
+    label = RunOutcome(tenant_id="acme", run_id="run_1", success=success, source=source)
+    assert succeeded(label, clean, NOW) is expected
+
+
 def _trajectories(n: int, *, success: bool = True):
     runs = []
     for i in range(n):

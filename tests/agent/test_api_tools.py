@@ -72,9 +72,11 @@ async def _harness(app, tenant_id: str = "acme"):
     return admin, sdk(app, service.token)
 
 
-async def _one_successful_run(agent, quote: str = "Q-1183") -> str:
+async def _one_successful_run(agent, quote: str = "Q-1183", *, confirmed_by=None) -> str:
     """Record the two calls of a run and label the run successful, as an adapter would. The
-    quote id flows from the lookup's output into the update's arguments."""
+    quote id flows from the lookup's output into the update's arguments. The run's own
+    ``system`` confirm is its outcome only; ``confirmed_by`` (a tenant admin's binding)
+    confirms it as a person does, which is what procedures learn from."""
     first = await agent.record_tool(
         LOOKUP,
         {"sku": "SKU-22", "region": "EMEA"},
@@ -94,6 +96,9 @@ async def _one_successful_run(agent, quote: str = "Q-1183") -> str:
     run_id = str(agent.scope.agent_run_id)
     outcome = await agent.feedback("run", run_id, "confirm", source="system", comment="accepted")
     assert outcome.target_kind == "run" and outcome.target_id == run_id
+    if confirmed_by is not None:
+        verdict = await confirmed_by.feedback("run", run_id, "confirm")
+        assert verdict.review is None, "a tenant admin's verdict applies as it arrives"
     return run_id
 
 
@@ -156,7 +161,8 @@ async def test_an_agent_publishes_its_catalog_and_reads_it_back_with_statistics(
 async def test_labelled_runs_become_a_plan_with_the_next_step_and_its_arguments(
     app, running
 ) -> None:
-    _, harness = await _harness(app)
+    admin_key, harness = await _harness(app)
+    admin = admin_key.bind(tenant_id="acme")
     user = harness.bind(user_id="u1")
     await user.agent("quote-bot").advanced.tools.put_catalog(CATALOG)
 
@@ -165,7 +171,7 @@ async def test_labelled_runs_become_a_plan_with_the_next_step_and_its_arguments(
     assert {c.name for c in cold.tools} <= {LOOKUP, UPDATE}
 
     for quote in ("Q-1183", "Q-2001"):
-        await _one_successful_run(user.agent("quote-bot"), quote)
+        await _one_successful_run(user.agent("quote-bot"), quote, confirmed_by=admin)
 
     fresh = user.agent("quote-bot")
     hints = await fresh.tool_hints(TASK, available=[LOOKUP, UPDATE])
@@ -273,7 +279,7 @@ async def test_an_agent_learns_a_skill_from_its_runs_and_is_offered_it(make_sett
         await bot("u1").advanced.tools.put_catalog(CATALOG)
         assert await admin.advanced.skills.list() == [], "nothing learned yet"
         for quote in ("Q-1183", "Q-2001"):
-            await _one_successful_run(bot("u1"), quote)
+            await _one_successful_run(bot("u1"), quote, confirmed_by=admin)
 
         [mine] = await offered("u1")
         assert (mine.steps, mine.runs, mine.success_rate) == ([LOOKUP, UPDATE], 2, 1.0)
@@ -283,7 +289,7 @@ async def test_an_agent_learns_a_skill_from_its_runs_and_is_offered_it(make_sett
         assert "## Tools" not in prompt.rendered, "two tools earn no tool hints"
         assert await offered("u2") == [], "u1's wording reaches nobody else"
 
-        await _one_successful_run(bot("u2"), "Q-3000")
+        await _one_successful_run(bot("u2"), "Q-3000", confirmed_by=admin)
         [shared] = await offered("u3")
         assert shared.id == mine.id and shared.runs == 3
         assert await offered("u3", "other-bot") == []

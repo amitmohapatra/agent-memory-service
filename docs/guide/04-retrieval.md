@@ -297,7 +297,10 @@ budget, the document filter, the tools and the window flag (`_lookup`). A write 
 revision, so a cached bundle can never outlive the data it summarises (chapter 10). A
 separate **semantic cache** reuses a bundle only for a deliberately narrow equivalence —
 the same question minus polite framing and punctuation — and refuses any question that names
-"now", "today", "latest" or quotes (`modules/context/semantic_cache.py`).
+"now", "today", "latest" or quotes (`modules/context/semantic_cache.py`). It sits under the same
+key, so a request with tools reuses only a bundle built for the same toolbox (the tools'
+digest: the sorted names, `k` and `hints`), whose skills and hints were found for the same
+words.
 
 **Pinned sections first.** The profile blocks, the thread summary, the skills the agent
 learned for the task ([api/skills.md](../api/skills.md)) and the tool hints open the prompt, in

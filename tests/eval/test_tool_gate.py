@@ -66,14 +66,15 @@ async def _replay(container, service, run: dict) -> None:
                     Visibility.AGENT_GROUP if ctx.agent_id == "ops-agent" else Visibility.RUN
                 ),
             )
-        # The run's label, as a system verdict on the run sets it (feedback's _label_run):
+        # The run's verified label, as the judge's verdict on the run sets it (feedback's
+        # _label_run; a run's own system confirm is its outcome only and teaches nothing):
         # the outcome route this replay used was removed, and the label is a store write.
         await uow.tools.set_outcome(
             RunOutcome(
                 tenant_id=ctx.tenant_id,
                 run_id=run["run_id"],
                 success=run["success"],
-                source="system",
+                source="judge",
                 recorded_at=datetime.now(UTC),
             )
         )

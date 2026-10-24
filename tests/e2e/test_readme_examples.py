@@ -125,8 +125,11 @@ async def test_readme_tool_memory_walkthrough(app, client) -> None:
             task=TASK,
             step=1,
         )
-        # only a run labelled successful validates a procedure
-        await run.feedback("run", run.scope.agent_run_id, "confirm", source="system")
+        # only a run confirmed by a person or by the grounding judge validates a procedure:
+        # the run's own source="system" confirm is its outcome only. A person's verdict waits
+        # for a tenant admin; this key administers the tenant, so it applies at once
+        verdict = await ctx.feedback("run", run.scope.agent_run_id, "confirm")
+        assert verdict.review is None
 
     hints = await agent.tool_hints(TASK, available=[t["name"] for t in TOOLS])
     assert hints.plan is not None and hints.next is not None

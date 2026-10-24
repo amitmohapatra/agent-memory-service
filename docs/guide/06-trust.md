@@ -156,7 +156,7 @@ memory, a run, a tool call or a procedure, from a `human`, a `judge`, an `interr
 | memory | `confirm`, `approve` | reinforcement + 1, confidence + 0.1 (capped at 1.0) |
 | memory | `reject` | retracted: `RETRACTED`, validity closed, index entry removed |
 | memory | `correct`, `edit` | a corrected memory supersedes it (chapter 3) |
-| run | any | the run's explicit outcome; each memory its answer cited moves ± 0.05 confidence (at most 20, `CITED_CONFIDENCE_STEP` in `domain/learning.py`) |
+| run | any | the run's explicit outcome; each memory its answer cited moves ± 0.05 confidence (at most 20, `CITED_CONFIDENCE_STEP` in `domain/learning.py`). A run's own `system` success is its outcome only (`outcome_teaches` in `domain/feedback.py`): unverified, it moves no confidence and no learned skill until the judge or a person confirms it |
 | tool call | any | tool statistics and the approval pattern; an approval *suggestion* changes nothing until accepted |
 | procedure | `reject` | the procedure is no longer offered until its steps change |
 

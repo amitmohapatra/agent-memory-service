@@ -78,11 +78,14 @@ _DISTIL_SYSTEM = (
 )
 
 
-def succeeded(outcome: RunOutcome | None, calls: Sequence[ToolInvocation], now: datetime) -> bool:
+def succeeded(
+    outcome: RunOutcome | None, calls: Sequence[ToolInvocation], now: datetime
+) -> bool | None:
     """A run is a success when labelled so, or - as a weak positive - when it is older than
-    the window and none of its calls failed."""
+    the window and none of its calls failed. ``None``: the run is no evidence either way, its
+    label being its own unverified report of success (``RunOutcome.teaches``)."""
     if outcome is not None:
-        return outcome.success
+        return outcome.success if outcome.teaches else None
     if not calls or any(not c.succeeded for c in calls):
         return False
     newest = max(c.occurred_at for c in calls)
@@ -311,9 +314,11 @@ class ToolLearning:
                 by_run[call.run_id].append(call)
         outcomes = await uow.tools.outcomes(tenant_id, list(by_run))
         now = datetime.now(UTC)
+        labelled = {run: succeeded(outcomes.get(run), runs, now) for run, runs in by_run.items()}
         return [
-            build_trajectory(run, runs, succeeded=succeeded(outcomes.get(run), runs, now))
-            for run, runs in by_run.items()
+            build_trajectory(run, by_run[run], succeeded=success)
+            for run, success in labelled.items()
+            if success is not None
         ]
 
     async def _distil(self, procedure: StoredProcedure, trajectories: Sequence[Trajectory]) -> None:

@@ -11,7 +11,9 @@ did in ``projection``.
 A run's outcome is a projection of its feedback: the harness sends RUN feedback with
 ``source=system`` from the run's final status, ``/v1/verify`` writes it with ``source=judge``,
 and a person overrides both. ``OUTCOME_PRECEDENCE`` orders them; a verdict never replaces an
-outcome a higher-ranked source already gave.
+outcome a higher-ranked source already gave. A run's own word that it succeeded is its outcome
+only (``outcome_teaches``): it says the run finished, not that its answer held up, so it moves
+no memory's confidence and no learned skill until a judge or a person confirms it.
 
 A vote is not applied on its word (ADR 0028, amended by ADR 0039). A thumbs-up or -down can
 be wrong, or cast to move a memory, so a verdict that would change what the platform learned
@@ -77,6 +79,14 @@ OUTCOME_PRECEDENCE: Final = {
     FeedbackSource.INTERRUPT: 3,
     FeedbackSource.HUMAN: 3,
 }
+
+
+def outcome_teaches(source: str, *, success: bool) -> bool:
+    """Whether a run's outcome is evidence learning may use (the confidence of the memories
+    the run cited, the procedures its calls support): any outcome a judge or a person gave,
+    and a run's own report of failure. A run's own report of success (``system``, unverified)
+    is recorded as its outcome only."""
+    return not success or source != FeedbackSource.SYSTEM
 
 
 class ReviewState(StrEnum):

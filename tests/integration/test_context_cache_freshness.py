@@ -20,6 +20,8 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ObservationKind, WindowFormat
 from memory_service.domain.ids import new_id
 from memory_service.domain.revisions import RevisionKind
+from memory_service.domain.tools import ToolDescriptor
+from memory_service.modules.context.sections import ToolsRequest
 from memory_service.modules.jobs.registry import TASK_MEMORY_INDEX
 from tests.integration.conftest import requires_pg
 
@@ -361,3 +363,62 @@ async def test_graph_enrichment_moves_only_the_audience_of_the_facts_it_wrote(
     assert after == before, "a USER memory's facts moved a tenant-wide revision"
     assert not await _served(builder, U1, query)
     assert await _served(builder, U2, query), "a reader of none of the facts lost its cache"
+
+
+TOOLBOX = [
+    "erp-create_po",
+    "erp-get_stock",
+    "erp-cancel_po",
+    "mail-send",
+    "calendar-list_events",
+]
+
+
+async def test_semantic_cache_with_tools_serves_what_a_fresh_build_does(container) -> None:
+    """The semantic cache with tools (it used to skip every request that sent them): a
+    request with the same toolbox and the same guarded words reuses the bundle, its skills and
+    hints included, and the bundle is the one building the question afresh gives."""
+    ctx = _ctx()
+    builder = container.services["context_builder"]
+    factory = container.services["uow_factory"]
+    async with factory() as uow:
+        await container.services["conversation"].create_thread(uow, ctx)
+        await submit_observation(
+            uow, ctx, kind=ObservationKind.EVENT, content="We buy our steel from Acme Steel."
+        )
+        await container.services["tool_memory"].put_catalog(
+            uow,
+            ctx,
+            [
+                (ToolDescriptor(tenant_id=ctx.tenant_id, name=name, description=name), frozenset())
+                for name in TOOLBOX
+            ],
+        )
+        await uow.commit()
+    await container.tasks.drain()
+    tools = ToolsRequest(available=TOOLBOX)
+    first = await builder.build(ctx, "where do we buy steel?", tools=tools)
+    await builder.drain()
+    assert first.memories and first.tools is not None and not first.cache_hit
+
+    hit = await builder.build(
+        ctx, "where do we buy steel!", tools=ToolsRequest(available=TOOLBOX[::-1])
+    )
+    assert hit.cache_hit and hit.query == "where do we buy steel!"
+    other = await builder.build(
+        ctx, "where do we buy steel!", tools=ToolsRequest(available=TOOLBOX[1:])
+    )
+    assert not other.cache_hit, "another toolbox is another bundle"
+
+    async with factory() as uow:  # nothing that holds content changes: the next build is fresh
+        await uow.revisions.bump(ctx.tenant_id, RevisionKind.TENANT)
+        await uow.commit()
+    fresh = await builder.build(ctx, "where do we buy steel!", tools=tools)
+    assert not fresh.cache_hit
+    assert [m.item_id for m in hit.memories] == [m.item_id for m in fresh.memories]
+    assert (hit.tools, hit.procedures, hit.profile) == (
+        fresh.tools,
+        fresh.procedures,
+        fresh.profile,
+    )
+    assert hit.evidence.status == fresh.evidence.status
