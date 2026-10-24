@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy import Text, and_, func, literal, or_, select, tuple_, update
 from sqlalchemy import false as sa_false
@@ -27,7 +27,7 @@ from memory_service.adapters.db.orm import (
     ToolStatsRow,
 )
 from memory_service.domain.ids import new_id
-from memory_service.domain.learning import AcceptedRule, ApprovalCounts, Suggestion
+from memory_service.domain.learning import ApprovalCounts
 from memory_service.domain.tools import (
     RunOutcome,
     StoredProcedure,
@@ -501,64 +501,6 @@ class SqlToolRepository:
         stmt = stmt.order_by(support.desc(), row.tool_name, row.arg_shape).limit(limit)
         return [_to_counts(r) for r in (await self.s.execute(stmt)).scalars()]
 
-    async def mark_auto_accepted(
-        self,
-        tenant_id: str,
-        agent_id: str,
-        tool_name: str,
-        arg_shape: str,
-        suggestion: Suggestion,
-        at: datetime,
-    ) -> None:
-        row = ApprovalPatternRow
-        await self.s.execute(
-            update(row)
-            .where(
-                row.tenant_id == tenant_id,
-                row.agent_id == agent_id,
-                row.tool_name == tool_name,
-                row.arg_shape == arg_shape,
-                row.auto_accepted_at.is_(None),
-            )
-            .values(auto_accepted=suggestion, auto_accepted_at=at)
-        )
-
-    async def auto_accepted_patterns(
-        self,
-        tenant_id: str,
-        *,
-        agent_id: str | None,
-        limit: int,
-        after: tuple[datetime, str, str, str] | None = None,
-    ) -> list[AcceptedRule]:
-        row = ApprovalPatternRow
-        stmt = select(row).where(row.tenant_id == tenant_id, row.auto_accepted_at.is_not(None))
-        if agent_id is not None:
-            stmt = stmt.where(row.agent_id == agent_id)
-        if after is not None:
-            last_at, last_agent, last_tool, last_shape = after
-            stmt = stmt.where(
-                or_(
-                    row.auto_accepted_at < last_at,
-                    and_(
-                        row.auto_accepted_at == last_at,
-                        tuple_(row.agent_id, row.tool_name, row.arg_shape)
-                        > tuple_(literal(last_agent), literal(last_tool), literal(last_shape)),
-                    ),
-                )
-            )
-        stmt = stmt.order_by(
-            row.auto_accepted_at.desc(), row.agent_id, row.tool_name, row.arg_shape
-        ).limit(limit)
-        return [
-            AcceptedRule(
-                counts=_to_counts(r),
-                suggestion=cast("Suggestion", r.auto_accepted),  # written with its time
-                accepted_at=cast("datetime", r.auto_accepted_at),
-            )
-            for r in (await self.s.execute(stmt)).scalars()
-        ]
-
 
 def _to_counts(row: ApprovalPatternRow) -> ApprovalCounts:
     return ApprovalCounts(
@@ -568,7 +510,6 @@ def _to_counts(row: ApprovalPatternRow) -> ApprovalCounts:
         approvals=row.approvals,
         rejections=row.rejections,
         edits=row.edits,
-        auto_accepted_at=row.auto_accepted_at,
     )
 
 

@@ -877,14 +877,6 @@ class ApprovalPatternRow(Base):
     """Approve / reject / edit decisions per (agent, tool, argument shape)."""
 
     __tablename__ = "approval_patterns"
-    __table_args__ = (
-        Index(
-            "ix_approval_patterns_auto_accepted",
-            "tenant_id",
-            text("auto_accepted_at DESC"),
-            postgresql_where=text("auto_accepted_at IS NOT NULL"),
-        ),
-    )
 
     tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
     agent_id: Mapped[str] = mapped_column(String(200), primary_key=True)
@@ -894,9 +886,6 @@ class ApprovalPatternRow(Base):
     rejections: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     edits: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     updated_at: Mapped[datetime] = mapped_column(server_default=_now())
-    #: the rule the service accepted on its own from these decisions, and when (null: never)
-    auto_accepted: Mapped[str | None] = mapped_column(String(20))
-    auto_accepted_at: Mapped[datetime | None]
 
 
 class ProcedureRow(Base):

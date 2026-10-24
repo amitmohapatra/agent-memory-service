@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
-from memory_service.domain.learning import AcceptedRule, ApprovalCounts, Suggestion
+from memory_service.domain.learning import ApprovalCounts
 from memory_service.domain.tools import (
     RunOutcome,
     StoredProcedure,
@@ -135,31 +135,6 @@ class ToolRepository(Protocol):
     ) -> list[ApprovalCounts]:
         """Patterns with at least ``min_support`` decisions, most supported first, then by
         tool and shape; ``after`` is the (support, tool, shape) of the previous page's last."""
-        ...
-
-    async def mark_auto_accepted(
-        self,
-        tenant_id: str,
-        agent_id: str,
-        tool_name: str,
-        arg_shape: str,
-        suggestion: Suggestion,
-        at: datetime,
-    ) -> None:
-        """Record that the service accepted this pattern's rule on its own (once)."""
-        ...
-
-    async def auto_accepted_patterns(
-        self,
-        tenant_id: str,
-        *,
-        agent_id: str | None,
-        limit: int,
-        after: tuple[datetime, str, str, str] | None = None,
-    ) -> list[AcceptedRule]:
-        """The rules the service accepted on its own, newest first: every
-        agent's (``agent_id`` None) or one agent's; ``after`` is the (accepted at, agent, tool,
-        shape) of the previous page's last."""
         ...
 
 

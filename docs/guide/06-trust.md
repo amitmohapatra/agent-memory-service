@@ -157,7 +157,7 @@ memory, a run, a tool call or a procedure, from a `human`, a `judge`, an `interr
 | memory | `reject` | retracted: `RETRACTED`, validity closed, index entry removed |
 | memory | `correct`, `edit` | a corrected memory supersedes it (chapter 3) |
 | run | any | the run's explicit outcome; each memory its answer cited moves ± 0.05 confidence (at most 20, `CITED_CONFIDENCE_STEP` in `domain/learning.py`) |
-| tool call | any | tool statistics and the approval pattern, whose supported rule the service accepts on its own, once (an `irreversible` tool's waits for a person; ADR 0042) |
+| tool call | any | tool statistics and the approval pattern; an approval *suggestion* changes nothing until accepted |
 | procedure | `reject` | the procedure is no longer offered until its steps change |
 
 Confidence and reinforcement feed the ranking (the ±15% standing factor, chapter 4) and

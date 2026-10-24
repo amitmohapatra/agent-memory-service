@@ -375,7 +375,7 @@ TOOLBOX = [
 
 
 async def test_semantic_cache_with_tools_serves_what_a_fresh_build_does(container) -> None:
-    """ADR 0042's companion (gap: the semantic cache skipped every request with tools): a
+    """The semantic cache with tools (it used to skip every request that sent them): a
     request with the same toolbox and the same guarded words reuses the bundle, its skills and
     hints included, and the bundle is the one building the question afresh gives."""
     ctx = _ctx()

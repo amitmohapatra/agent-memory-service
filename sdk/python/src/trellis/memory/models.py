@@ -742,9 +742,8 @@ class CatalogTool(BaseModel):
 
 
 class ApprovalSuggestion(BaseModel):
-    """A rule the approvals given so far support. The service accepts it on its own
-    (``auto_accepted_at``), except an irreversible tool's, which a person accepts
-    (``tools.accept_suggestion``)."""
+    """A rule the approvals given so far support; the service applies it only when it is
+    accepted (``tools.accept_suggestion``)."""
 
     model_config = ConfigDict(frozen=True, extra="allow")
 
@@ -759,25 +758,6 @@ class ApprovalSuggestion(BaseModel):
     support: int
     approve_rate: float
     agent_id: str | None = None
-    #: when the service accepted the rule on its own (``None``: it did not)
-    auto_accepted_at: datetime | None = None
-
-
-class AutoAcceptedRule(BaseModel):
-    """A rule the service accepted on its own from people's decisions
-    (``tools.auto_accepted_rules``): ``in_effect`` False once a person revoked it through the
-    catalog."""
-
-    model_config = ConfigDict(frozen=True, extra="allow")
-
-    agent_id: str | None = None
-    tool: str
-    arg_shape: str
-    suggestion: Literal["auto_approve", "always_ask"]
-    accepted_at: datetime
-    in_effect: bool
-    support: int
-    approve_rate: float
 
 
 class LearnedSkill(BaseModel):

@@ -195,70 +195,33 @@ async def test_labelled_runs_become_a_plan_with_the_next_step_and_its_arguments(
 
 
 @pytest.mark.covers(
-    "feedback.submit_feedback",
-    "tools.approval_suggestions",
-    "tools.auto_accepted_rules",
-    "tools.accept_approval_suggestion",
+    "feedback.submit_feedback", "tools.approval_suggestions", "tools.accept_approval_suggestion"
 )
-async def test_approvals_become_a_rule_the_service_accepts_once(app, running) -> None:
-    """ADR 0042: the decisions' rule is accepted on its own, listed, revoked through the
-    catalog, and not brought back by the decisions that follow; a person may still accept it."""
+async def test_approvals_become_a_rule_that_applies_once_accepted(app, running) -> None:
     _, harness = await _harness(app)
     agent = harness.bind(user_id="u1").agent("quote-bot")
-    asking = [
-        {**entry, "approve_when": "true"} if entry["name"] == UPDATE else entry for entry in CATALOG
-    ]
-    await agent.advanced.tools.put_catalog(asking)
-
-    async def decide(i: int) -> None:
+    await agent.advanced.tools.put_catalog(CATALOG)
+    for i in range(5):
         await agent.feedback(
             "tool_call",
             f"call_{i}",
             "approve",
             metadata={"tool": UPDATE, "args": {"quote": f"Q-{i}", "price": 1200 + i}},
         )
-
-    for i in range(4):
-        await decide(i)
-    assert await agent.advanced.tools.approval_suggestions() == [], "four decisions: no rule"
-    assert (await agent.advanced.tools.catalog(names=[UPDATE]))[0].approve_when == "true"
-
-    await decide(4)  # the fifth completes the support: the service accepts the rule itself
-    entry = (await agent.advanced.tools.catalog(names=[UPDATE]))[0]
-    assert entry.approve_when and entry.approve_when != "true"
-    # calls of the learned shape stop asking; any other shape still asks
-    assert evaluate(entry.approve_when, {"quote": "Q-9", "price": 1500}) is False
-    assert evaluate(entry.approve_when, {"quote": "Q-9", "price": 15}) is True
-    [suggestion] = await agent.advanced.tools.approval_suggestions()
-    assert (suggestion.tool, suggestion.suggestion, suggestion.support) == (
-        UPDATE,
-        "auto_approve",
-        5,
-    )
-    assert suggestion.arg_shape == "price:num:1e3,quote:str" and suggestion.accepted
-    assert suggestion.auto_accepted_at is not None
-    [rule] = await agent.advanced.tools.auto_accepted_rules()
-    assert (rule.agent_id, rule.tool, rule.suggestion, rule.in_effect) == (
-        "quote-bot",
-        UPDATE,
-        "auto_approve",
-        True,
-    )
-    # the tenant's own listing (no agent in scope) holds every agent's
-    tenant_wide = await harness.bind(user_id="u1").advanced.tools.auto_accepted_rules()
-    assert [r.tool for r in tenant_wide] == [UPDATE]
+    suggestions = await agent.advanced.tools.approval_suggestions()
+    assert [(s.tool, s.suggestion, s.support) for s in suggestions] == [(UPDATE, "auto_approve", 5)]
+    suggestion = suggestions[0]
+    assert suggestion.arg_shape == "price:num:1e3,quote:str" and not suggestion.accepted
     assert await agent.advanced.tools.approval_suggestions(tool=LOOKUP) == []
+    before = (await agent.advanced.tools.catalog(names=[UPDATE]))[0]
+    assert before.approve_when is None, "a suggestion is never applied on its own"
 
-    # a person revokes it through the catalog; the next decisions do not bring it back
-    await agent.advanced.tools.put_catalog([{"name": UPDATE, "approve_when": "true"}])
-    await decide(5)
-    assert (await agent.advanced.tools.catalog(names=[UPDATE]))[0].approve_when == "true"
-    [revoked] = await agent.advanced.tools.auto_accepted_rules()
-    assert revoked.in_effect is False and revoked.support == 6
-
-    # a person may still accept it; accepting again is the same rule, not a second clause
-    accepted = await agent.advanced.tools.accept_suggestion(suggestion.id)
-    assert accepted.approve_when == entry.approve_when
+    entry = await agent.advanced.tools.accept_suggestion(suggestion.id)
+    assert entry.name == UPDATE and entry.approve_when
+    # calls of the learned shape stop asking; any other shape still follows the tool's tier
+    assert evaluate(entry.approve_when, {"quote": "Q-9", "price": 1500}) is False
+    assert (await agent.advanced.tools.approval_suggestions())[0].accepted is True
+    # accepting again is the same rule, not a second clause
     assert (await agent.advanced.tools.accept_suggestion(suggestion.id)).approve_when == (
         entry.approve_when
     )
@@ -269,34 +232,6 @@ async def test_approvals_become_a_rule_the_service_accepts_once(app, running) ->
             .advanced.tools.accept_suggestion(suggestion.id)
         )
     assert other_agent.value.status == 404
-
-
-async def test_an_irreversible_tools_rule_waits_for_a_person(app, running) -> None:
-    """The strictest tier is never changed on the service's own word, in either direction."""
-    _, harness = await _harness(app)
-    agent = harness.bind(user_id="u1").agent("quote-bot")
-    await agent.advanced.tools.put_catalog(
-        [
-            {**entry, "side_effects": "irreversible", "approve_when": "price > 5000"}
-            if entry["name"] == UPDATE
-            else entry
-            for entry in CATALOG
-        ]
-    )
-    for i in range(5):
-        await agent.feedback(
-            "tool_call",
-            f"call_{i}",
-            "reject" if i else "approve",
-            metadata={"tool": UPDATE, "args": {"quote": f"Q-{i}", "price": 1200 + i}},
-        )
-    [suggestion] = await agent.advanced.tools.approval_suggestions()
-    assert suggestion.suggestion == "always_ask" and not suggestion.accepted
-    assert suggestion.auto_accepted_at is None
-    assert (await agent.advanced.tools.catalog(names=[UPDATE]))[0].approve_when == "price > 5000"
-    assert await agent.advanced.tools.auto_accepted_rules() == []
-    entry = await agent.advanced.tools.accept_suggestion(suggestion.id)  # a person's call
-    assert evaluate(entry.approve_when or "", {"quote": "Q-9", "price": 1500}) is True
 
 
 @pytest.mark.covers("skills.learned_skills", "skills.dismiss_learned_skill")
@@ -409,7 +344,6 @@ async def test_an_agent_registers_rotates_and_revokes_its_own_model_key(app, run
     "tools.put_catalog",
     "tools.list_tools",
     "tools.approval_suggestions",
-    "tools.auto_accepted_rules",
     "tools.accept_approval_suggestion",
     "agents.set_key",
     "agents.key_status",
@@ -432,7 +366,6 @@ async def test_another_tenant_reaches_no_tool_memory_and_no_agent_key(app, runni
         claiming.advanced.tools.put_catalog(CATALOG),
         claiming.advanced.tools.catalog(),
         claiming.advanced.tools.approval_suggestions(),
-        claiming.advanced.tools.auto_accepted_rules(),
         claiming.advanced.tools.accept_suggestion("sug_x"),
         claiming.advanced.model_keys.set("vk-stolen"),
         claiming.advanced.model_keys.status(),

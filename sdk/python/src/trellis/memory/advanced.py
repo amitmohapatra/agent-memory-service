@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING, Any
 from trellis.memory.models import (
     AgentKeyStatus,
     ApprovalSuggestion,
-    AutoAcceptedRule,
     CatalogTool,
     DocumentInfo,
     EntityProfile,
@@ -240,27 +239,11 @@ class ToolCatalogAPI:
         return [CatalogTool.model_validate(t) for t in data.get("tools", [])]
 
     async def approval_suggestions(self, *, tool: str | None = None) -> list[ApprovalSuggestion]:
-        """Rules the approve/reject/edit decisions on this agent's tool calls support. The
-        service accepts each on its own (``auto_accepted_at``), except an irreversible
-        tool's: :meth:`accept_suggestion` is how a person accepts that."""
+        """Rules the approve/reject/edit decisions on this agent's tool calls support. They
+        are suggestions until accepted."""
         params = {"tool": tool} if tool else {}
         data = await self._ctx._request("GET", "/v1/tools/approval-suggestions", params=params)
         return [ApprovalSuggestion.model_validate(s) for s in data.get("suggestions", [])]
-
-    async def auto_accepted_rules(self) -> list[AutoAcceptedRule]:
-        """The rules the service accepted on its own, newest first: this agent's, or every
-        agent's in a scope that names none. ``in_effect`` False: a person revoked it through
-        the catalog (:meth:`put_catalog` with the rule taken out of ``approve_when``)."""
-        params: dict[str, Any] = {}
-        rules: list[AutoAcceptedRule] = []
-        while True:
-            data = await self._ctx._request(
-                "GET", "/v1/tools/approval-suggestions/auto-accepted", params=params
-            )
-            rules += [AutoAcceptedRule.model_validate(r) for r in data.get("rules", [])]
-            if not data.get("next_cursor"):
-                return rules
-            params = {"cursor": data["next_cursor"]}
 
     async def accept_suggestion(self, suggestion_id: str) -> CatalogTool:
         """Write a suggestion's rule into its tool's ``approve_when``."""
