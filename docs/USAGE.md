@@ -203,7 +203,8 @@ print(
 | Describe your tools (once, idempotent) | `PUT /v1/tools/catalog` | `await ctx.advanced.tools.put_catalog([{"name": "erp-create_po", "description": "…", "side_effects": "write"}])` |
 | Read the catalog with statistics | `GET /v1/tools?names=…` | `await ctx.advanced.tools.catalog(names=[…])` |
 | Record each call | `POST /v1/tools/invocations` | `await ctx.record_tool("erp-get_stock", {"sku": "A4"}, output={…}, task=question, step=0)` |
-| Label the run | `POST /v1/feedback` | `await ctx.feedback("run", ctx.scope.agent_run_id, "confirm", source="system")` |
+| Label the run (its own status: the outcome only, no evidence for learning) | `POST /v1/feedback` | `await ctx.feedback("run", ctx.scope.agent_run_id, "confirm", source="system")` |
+| Confirm it (what procedures learn from: a person's verdict, applied once a tenant admin approves it, or the judge's, `POST /v1/verify`) | `POST /v1/feedback` | `await ctx.feedback("run", run_id, "confirm")` |
 | Which tool, plan, arguments | `POST /v1/tools/hints` (or inline: `context(q, tools=[…])`) | `hints = await ctx.tool_hints(task, available=names)` |
 | Approval rules the decisions support | `GET /v1/tools/approval-suggestions` | `await ctx.advanced.tools.approval_suggestions(tool=…)` |
 | Adopt one | `POST /v1/tools/approval-suggestions/{id}/accept` | `await ctx.advanced.tools.accept_suggestion(s.id)` |
@@ -251,7 +252,8 @@ The six tools: `memory_search`, `memory_remember`, `memory_update`, `memory_forg
 | Decide in bulk (tenant admin key) | `POST /v1/feedback/approve`, `/dismiss` (ids, or a target) | `admin_ctx.feedback.approve_many(ids)`, `.dismiss_many(target_kind=…, target_id=…)` |
 
 **Applied immediately:** the service's own grounding judge (`/v1/verify`); a run reporting its
-own status (`source="system"`, target = the calling `agent_run_id`, citing no memories); an
+own status (`source="system"`, target = the calling `agent_run_id`, citing no memories: its
+outcome only — a `confirm` from it teaches no procedure and moves no confidence); an
 owner's `correct`/`edit` of their own memory carrying new text; any `tool_call` verdict;
 anything sent with the tenant admin key or by a tenant admin user in person.
 

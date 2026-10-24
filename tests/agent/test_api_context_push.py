@@ -59,20 +59,24 @@ async def _tenant(app, tenant_id: str = "acme"):
     return admin, sdk(app, service.token)
 
 
-async def _learned_run(agent, quote: str) -> None:
+async def _learned_run(agent, admin, quote: str) -> None:
+    """A run whose calls teach a skill: its own ``system`` confirm is its outcome only, a
+    tenant admin's confirm (a person's verdict, applied as it arrives) is what teaches."""
     await agent.record_tool(
         LOOKUP, {"sku": "SKU-22", "region": "EMEA"}, output={"quote": quote}, task=TASK, step=0
     )
     await agent.record_tool(UPDATE, {"quote": quote, "price": 1200}, task=TASK, step=1)
     await agent.feedback("run", str(agent.scope.agent_run_id), "confirm", source="system")
+    await admin.feedback("run", str(agent.scope.agent_run_id), "confirm")
 
 
 async def _seeded(app):
-    _, harness = await _tenant(app)
+    admin_key, harness = await _tenant(app)
+    admin = admin_key.bind(tenant_id="acme")
     user = harness.bind(user_id="u1", thread_id="thr_push")
     await user.agent("quote-bot").advanced.tools.put_catalog(CATALOG)
     for quote in ("Q-1", "Q-2"):
-        await _learned_run(user.agent("quote-bot"), quote)
+        await _learned_run(user.agent("quote-bot"), admin, quote)
     agent = user.agent("quote-bot")
     await agent.profile.edit("user", "name: Ann\nregion: EMEA")
     await agent.remember(MEMORY, visibility="USER")
