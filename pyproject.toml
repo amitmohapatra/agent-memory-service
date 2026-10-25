@@ -9,6 +9,7 @@ authors = [{ name = "Memory Service Team" }]
 keywords = ["memory", "rag", "agents", "fastapi", "qdrant", "openfga"]
 classifiers = [
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Framework :: FastAPI",
   "License :: OSI Approved :: Apache Software License",
 ]

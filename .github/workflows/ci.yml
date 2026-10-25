@@ -8,6 +8,11 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    # requires-python is ">=3.12": every supported minor version is proven, not just the oldest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
     services:
       postgres:
         image: postgres:16-alpine
@@ -51,7 +56,7 @@ jobs:
       - run: make vendor BIFROST_SDK=.bifrost-sdk
       - uses: astral-sh/setup-uv@v6
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           enable-cache: true
       # the light extras whose tests otherwise skip here: gcp (the GCS blob store), hindsight
       # (its SDK contract), eval (datasets, to fetch the SciFact distractor corpus below)
