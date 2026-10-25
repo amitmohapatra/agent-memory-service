@@ -34,7 +34,7 @@ from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.memory import CanonicalMemory, earlier_value, replaced_by
 from memory_service.modules.context.handles import record_of
 from memory_service.modules.context.views import _memory as memory_view
-from memory_service.modules.context.views import full_view
+from memory_service.modules.context.views import full_view, prompt_view
 from memory_service.modules.memory.replacement import (
     RELATED_COSINE,
     CrossConversationReplacement,
@@ -945,6 +945,8 @@ def test_a_sentence_shown_whole_in_its_turn_is_not_shown_again() -> None:
     bundle = _bundle(memories=[turn, reading, elsewhere])
     assert bundle.redundant() == {"fact"}, "the same words from another message stay"
     assert bundle.render().count("Owen Pike has left.") == 2
+    # the prompt form's ids are the memories it shows: a verdict cites what the model saw
+    assert prompt_view(bundle)["memory_ids"] == ["turn", "other"]
 
 
 def test_a_mention_the_history_names_is_not_a_current_fact() -> None:

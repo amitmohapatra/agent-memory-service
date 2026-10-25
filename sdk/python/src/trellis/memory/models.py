@@ -507,6 +507,9 @@ class PromptContext(BaseModel):
     token_estimate: int
     #: INSUFFICIENT: the memory holds nothing for this question - say you do not know
     evidence_status: EvidenceStatus = "COMPLETE"
+    #: the ids of the memories ``rendered`` shows, in bundle order: what a verdict on the
+    #: answer cites (``evidence_refs``), so it moves their confidence
+    memory_ids: list[str] = Field(default_factory=list)
     #: the tools that fit the task, best first (only when ``tools`` were given)
     tools: list[ToolChoiceBrief] | None = None
     #: ``window_format="messages"``: the thread's recent messages, verbatim, for the caller to

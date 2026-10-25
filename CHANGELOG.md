@@ -8,6 +8,12 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- The prompt form of the context names the memories it shows: `POST /v1/context`
+  (`format="prompt"`) returns `memory_ids`, the ids of the memories `rendered` shows, in bundle
+  order (absent when none). A person's verdict on the answer cites them (`evidence_refs`), so it
+  moves their confidence when no grounding verdict has cited the answer's memories; the harness
+  keeps them with the run. SDK `trellis-memory` 0.5.0: `PromptContext.memory_ids`. Additive:
+  an SDK 0.4.0 client reads it as an extra field.
 - The SDK's public API is held by CI: `sdk/python/public_api.json` is a snapshot of every name
   `trellis.memory` exports (signatures, model fields, enum members), and
   `sdk/python/tests/test_public_api.py` fails on any change to it until the snapshot is

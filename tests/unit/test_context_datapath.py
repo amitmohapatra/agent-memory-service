@@ -561,12 +561,21 @@ async def test_a_cache_hit_returns_the_stored_bytes(output) -> None:
     assert ("rendered" in orjson.loads(again)) is (output == "prompt")
 
 
-async def test_the_prompt_form_is_four_fields_and_debug_is_never_a_cache_hit() -> None:
+async def test_the_prompt_form_is_five_fields_and_debug_is_never_a_cache_hit() -> None:
     cache = MemoryCache()
     builder = _builder(cache)
     prompt = orjson.loads(await builder.build_api(CTX, QUERY))
     # evidence_status: a caller that reads only the prompt form can still abstain
-    assert set(prompt) == {"rendered", "bundle_id", "token_estimate", "evidence_status"}
+    assert set(prompt) == {
+        "rendered",
+        "bundle_id",
+        "token_estimate",
+        "evidence_status",
+        "memory_ids",
+    }
+    # the memories it shows, by id: what a person's verdict on the answer cites
+    full = orjson.loads(await builder.build_api(CTX, QUERY, output="full"))
+    assert prompt["memory_ids"] == [m["id"] for m in full["memories"]]
     assert prompt["evidence_status"] in {"COMPLETE", "INCOMPLETE", "INSUFFICIENT"}
     await builder.drain()
     debug = orjson.loads(await builder.build_api(CTX, QUERY, output="full", debug=True))
@@ -736,7 +745,13 @@ def test_the_context_route_sends_the_builder_bytes(settings: Any, overrides: Any
     assert response.status_code == 200, response.text
     assert response.headers["content-type"].startswith("application/json")
     assert response.content == sent[0], "the route re-serialised what the builder had built"
-    assert set(response.json()) == {"rendered", "bundle_id", "token_estimate", "evidence_status"}
+    assert set(response.json()) == {
+        "rendered",
+        "bundle_id",
+        "token_estimate",
+        "evidence_status",
+        "memory_ids",
+    }
 
 
 async def test_a_ranked_memory_under_the_relevance_floor_is_not_packed() -> None:

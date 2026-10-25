@@ -1013,6 +1013,7 @@
     "conversation": "Conversation | None = None",
     "diagnostics": "dict[str, Any] | None = None",
     "evidence_status": "Literal['COMPLETE', 'INCOMPLETE', 'INSUFFICIENT'] = 'COMPLETE'",
+    "memory_ids": "list[str] = ...",
     "rendered": "str (required)",
     "token_estimate": "int (required)",
     "tools": "list[ToolChoiceBrief] | None = None"
@@ -1421,5 +1422,5 @@
    "signature": "() -> 'MemoryContext | None'"
   }
  },
- "version": "0.4.0"
+ "version": "0.5.0"
 }
