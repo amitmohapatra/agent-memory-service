@@ -314,6 +314,7 @@ class PromptContextResponse(BaseModel):
                     "priya: We buy steel from Acme Steel.",
                     "token_estimate": 180,
                     "evidence_status": "COMPLETE",
+                    "memory_ids": ["mem_01J9ZK7Q4ACME"],
                     "tools": [{"name": "erp-create_po", "confidence": 0.74}],
                 }
             ]
@@ -326,6 +327,11 @@ class PromptContextResponse(BaseModel):
         description="Approximate tokens of the rendered text (what it costs in the prompt)."
     )
     evidence_status: EvidenceStatus = Field(..., description=_EVIDENCE_STATUS)
+    memory_ids: list[str] | None = Field(
+        default=None,
+        description="the ids of the memories rendered shows, in bundle order (absent when none): "
+        "what a verdict on the answer cites (evidence_refs), so it moves their confidence",
+    )
     tools: list[ToolChoiceBrief] | None = Field(
         default=None, description="the tools that fit, best first (only when tools were given)"
     )

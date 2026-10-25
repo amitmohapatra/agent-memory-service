@@ -8,7 +8,7 @@ Trellis packages work together. The history itself is the [CHANGELOG](../CHANGEL
 | Thing | Where the version is | Now |
 |---|---|---|
 | The service, `trellis-memory-service` | `pyproject.toml`, `src/memory_service/__about__.py`, `GET /version`, the OpenAPI `info.version` | 0.3.0 |
-| The SDK, `trellis-memory` (`trellis.memory`) | `sdk/python/pyproject.toml` | 0.4.0 |
+| The SDK, `trellis-memory` (`trellis.memory`) | `sdk/python/pyproject.toml` | 0.5.0 |
 | The HTTP API | the path prefix | `/v1` |
 | The database schema | Alembic revisions in `migrations/versions/` | `0024_online_candidate_index` |
 | The search index | the collection name: the fingerprint of every encoder and the key layout | changes with a model |
@@ -37,6 +37,9 @@ unprefixed names, the `X-Trellis-*` headers, the problem `code` values, the oper
 - `docs/openapi.json` must equal the contract the code exports (the build diffs them), so any
   change to the HTTP surface is a reviewed change to that file;
 - the SDK's `Literal` vocabularies must equal the service's enums;
+- the SDK's public API must equal `sdk/python/public_api.json`, which changes only with a new
+  SDK version the CHANGELOG names (`python scripts/sdk_api.py --update`; on a pull request,
+  `--check-base` holds it to the base branch);
 - every setting must be in [configuration.md](configuration.md) and `.env.example`.
 
 There is no deprecation window promised before 1.0: read the CHANGELOG before upgrading.

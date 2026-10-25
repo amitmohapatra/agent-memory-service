@@ -114,7 +114,7 @@ work together.
 
 Each block works both ways:
 
-- **Way 1, wrapped.** `h = Harness(); agent = h.wrap(my_agent)`. With `MEMORY_URL` and
+- **Way 1, wrapped.** `h = Harness(); agent = h.wrap(my_agent, id="my-agent")`. With `MEMORY_URL` and
   `TRELLIS_API_KEY` set, the harness binds each run's scope and makes every call below: it
   pushes `context()` into the framework's input, adds the six pull tools, records the transcript
   and every tool call, sends the run's outcome and each approval as feedback, and verifies a

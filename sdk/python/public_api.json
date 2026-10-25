@@ -1,0 +1,1426 @@
+{
+ "api": {
+  "AdminAPI": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, client: 'MemoryClient') -> 'None'",
+    "create_tenant": "(self, name: 'str', *, tenant_id: 'str | None' = None, retention_days: 'int | None' = None, rate_limit_per_minute: 'int | None' = None, admission_gate: 'bool' = False, idempotency_key: 'str | None' = None) -> 'CreatedTenant'",
+    "get_tenant": "(self, tenant_id: 'str') -> 'TenantInfo'",
+    "tenants": "(self, *, limit: 'int' = 100, cursor: 'str | None' = None) -> 'list[TenantInfo]'",
+    "tenants_page": "(self, *, limit: 'int' = 100, cursor: 'str | None' = None) -> 'Page[TenantInfo]'",
+    "update_tenant": "(self, tenant_id: 'str', **changes: 'Any') -> 'TenantInfo'"
+   }
+  },
+  "AdvancedAPI": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, ctx: 'MemoryContext') -> 'None'",
+    "admin": "property",
+    "job": "(self, job_id: 'str') -> 'JobHandle'",
+    "tenant": "property"
+   }
+  },
+  "AgentKeyStatus": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "registered": "bool (required)",
+    "revision": "int (required)",
+    "revoked": "bool (required)",
+    "updated_at": "datetime | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "AgentTool": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "description": "str (required)",
+    "input_schema": "dict[str, Any] (required)",
+    "name": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ApiKeyInfo": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "created_at": "datetime (required)",
+    "created_by": "str (required)",
+    "expires_at": "datetime | None = None",
+    "key_id": "str (required)",
+    "last_used_at": "datetime | None = None",
+    "may_act_as": "list[str] = ...",
+    "name": "str (required)",
+    "revoked_at": "datetime | None = None",
+    "role": "Literal['admin', 'service'] (required)",
+    "tenant_id": "str (required)",
+    "workspace_id": "str | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ApprovalSuggestion": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "accepted": "bool = False",
+    "agent_id": "str | None = None",
+    "approvals": "int (required)",
+    "approve_rate": "float (required)",
+    "arg_shape": "str (required)",
+    "edits": "int (required)",
+    "id": "str (required)",
+    "rejections": "int (required)",
+    "suggestion": "Literal['auto_approve', 'always_ask'] (required)",
+    "support": "int (required)",
+    "tool": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "AuthenticationError": {
+   "bases": [
+    "MemoryError"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, message: 'str', *, code: 'str' = 'INTERNAL', status: 'int' = 500, retryable: 'bool' = False, trace_id: 'str | None' = None, request_id: 'str | None' = None, details: 'dict[str, Any] | None' = None, retry_after: 'float | None' = None) -> 'None'"
+   }
+  },
+  "AuthorizationError": {
+   "bases": [
+    "MemoryError"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, message: 'str', *, code: 'str' = 'INTERNAL', status: 'int' = 500, retryable: 'bool' = False, trace_id: 'str | None' = None, request_id: 'str | None' = None, details: 'dict[str, Any] | None' = None, retry_after: 'float | None' = None) -> 'None'"
+   }
+  },
+  "CatalogTool": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "annotations": "dict[str, bool] = ...",
+    "approve_when": "str | None = None",
+    "argument_entity_types": "dict[str, str] = ...",
+    "description": "str = ''",
+    "examples": "list[dict[str, Any]] = ...",
+    "input_schema": "dict[str, Any] = ...",
+    "name": "str (required)",
+    "required": "list[str] = ...",
+    "risk": "Literal['read', 'write', 'irreversible'] = 'write'",
+    "schema_hash": "str = ''",
+    "server": "str | None = None",
+    "side_effects": "Optional[Literal['read', 'write', 'irreversible']] = None",
+    "source": "Literal['manual', 'local', 'mcp', 'memory', 'openapi', 'a2a'] = 'manual'",
+    "stats": "ToolStats = ...",
+    "tool_id": "str (required)",
+    "version": "int = 1",
+    "workspace_id": "str | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "CircuitBreaker": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, threshold: 'int' = 5, open_seconds: 'float' = 30.0, *, clock: 'Callable[[], float]' = <built-in function monotonic>) -> 'None'",
+    "acquire": "(self) -> 'bool'",
+    "record_failure": "(self) -> 'None'",
+    "record_success": "(self) -> 'None'",
+    "release": "(self) -> 'None'",
+    "state": "property"
+   }
+  },
+  "CircuitOpenError": {
+   "bases": [
+    "DependencyUnavailableError"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, message: 'str', *, code: 'str' = 'INTERNAL', status: 'int' = 500, retryable: 'bool' = False, trace_id: 'str | None' = None, request_id: 'str | None' = None, details: 'dict[str, Any] | None' = None, retry_after: 'float | None' = None) -> 'None'"
+   }
+  },
+  "ClaimVerdict": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "citations": "list[str] = ...",
+    "claim": "str (required)",
+    "contradicted_by": "list[str] = ...",
+    "contradiction": "float = 0.0",
+    "evidence_ids": "list[str] = ...",
+    "method": "Literal['citation', 'nli', 'judge'] = 'nli'",
+    "notes": "list[str] = ...",
+    "support": "float = 0.0",
+    "verdict": "Literal['supported', 'unsupported', 'contradicted', 'borderline'] (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ConflictError": {
+   "bases": [
+    "MemoryError"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, message: 'str', *, code: 'str' = 'INTERNAL', status: 'int' = 500, retryable: 'bool' = False, trace_id: 'str | None' = None, request_id: 'str | None' = None, details: 'dict[str, Any] | None' = None, retry_after: 'float | None' = None) -> 'None'"
+   }
+  },
+  "ContextBundle": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "bundle_id": "str (required)",
+    "conversation": "Conversation | None = None",
+    "diagnostics": "dict[str, Any] | None = None",
+    "evidence_status": "Literal['COMPLETE', 'INCOMPLETE', 'INSUFFICIENT'] (required)",
+    "graph_facts": "list[ContextFact] = ...",
+    "history": "list[ContextMemory] = ...",
+    "knowledge": "list[ContextPassage] = ...",
+    "memories": "list[ContextMemory] = ...",
+    "missing_evidence": "list[str] = ...",
+    "profile": "list[PinnedBlock] = ...",
+    "skills": "list[SkillView] = ...",
+    "summaries": "list[ContextSummary] = ...",
+    "thread_summary": "str | None = None",
+    "token_estimate": "int (required)",
+    "tools": "list[ToolChoice] = ..."
+   },
+   "kind": "model",
+   "members": {
+    "insufficient": "property"
+   }
+  },
+  "ContextFact": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "document_id": "str | None = None",
+    "id": "str (required)",
+    "object": "str (required)",
+    "observed_at": "str | None = None",
+    "predicate": "str (required)",
+    "relevance": "float (required)",
+    "subject": "str (required)",
+    "valid_from": "str | None = None",
+    "valid_to": "str | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ContextMemory": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "dates": "list[dict[str, str]] = ...",
+    "id": "str (required)",
+    "observed_at": "str | None = None",
+    "relevance": "float (required)",
+    "sources": "list[str] = ...",
+    "subject": "str | None = None",
+    "superseded": "bool | None = None",
+    "text": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ContextPassage": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "document_id": "str | None = None",
+    "id": "str (required)",
+    "kind": "Optional[Literal['relation', 'memory']] = None",
+    "page": "int | None = None",
+    "relevance": "float (required)",
+    "section": "str | None = None",
+    "text": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ContextSummary": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "id": "str (required)",
+    "relevance": "float (required)",
+    "text": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "Conversation": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "messages": "list[WindowMessage] = ...",
+    "thread_id": "str | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "CreatedTenant": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "admin_key": "IssuedKey (required)",
+    "tenant": "TenantInfo (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "DependencyUnavailableError": {
+   "bases": [
+    "MemoryError"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, message: 'str', *, code: 'str' = 'INTERNAL', status: 'int' = 500, retryable: 'bool' = False, trace_id: 'str | None' = None, request_id: 'str | None' = None, details: 'dict[str, Any] | None' = None, retry_after: 'float | None' = None) -> 'None'"
+   }
+  },
+  "DocumentInfo": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "archive_status": "Literal['STAGED', 'ARCHIVING', 'ARCHIVED', 'PURGED'] (required)",
+    "checksum": "str (required)",
+    "current_version_id": "str | None = None",
+    "document_id": "str (required)",
+    "filename": "str (required)",
+    "media_type": "str (required)",
+    "size_bytes": "int (required)",
+    "status": "Literal['STAGED', 'READY', 'FAILED'] (required)",
+    "thread_id": "str | None = None",
+    "title": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "DocumentStatus": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "DocumentsAPI": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, ctx: 'MemoryContext') -> 'None'",
+    "add": "(self, file: 'Any', *, message_id: 'str | None' = None, filename: 'str | None' = None, media_type: 'str | None' = None, title: 'str | None' = None, visibility: 'Visibility | None' = None, idempotency_key: 'str | None' = None, **metadata: 'Any') -> 'FileHandle'",
+    "document": "(self, document_id: 'str') -> 'DocumentInfo'",
+    "wait_ready": "(self, document_id: 'str', *, max_wait: 'float' = 60.0, interval: 'float' = 0.5) -> 'DocumentInfo'"
+   }
+  },
+  "EntityProfile": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "current": "list[EntityValue] = ...",
+    "entity": "GraphEntity (required)",
+    "evidence": "list[EvidenceRef] = ...",
+    "history": "list[GraphFact] = ...",
+    "neighborhood": "GraphNeighborhood | None = None",
+    "relations": "list[GraphFact] = ..."
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "EntityValue": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "observed_at": "datetime (required)",
+    "predicate": "str (required)",
+    "relation_id": "str (required)",
+    "valid_from": "datetime | None = None",
+    "value": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "EvidenceRef": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "chunk_id": "str | None = None",
+    "document_id": "str | None = None",
+    "message_id": "str | None = None",
+    "observed_at": "datetime | None = None",
+    "page": "int | None = None",
+    "source_id": "str (required)",
+    "source_type": "Literal['message', 'file', 'document_chunk', 'agent_result', 'tool_result', 'import', 'observation', 'statement', 'memory', 'graph_fact', 'summary', 'episode', 'feedback'] (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "Feedback": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "agent_id": "str | None = None",
+    "agent_run_id": "str | None = None",
+    "author_record": "dict[str, int] | None = None",
+    "comment": "str | None = None",
+    "correction": "Any = None",
+    "created_at": "datetime (required)",
+    "evidence_refs": "list[EvidenceRef] = ...",
+    "feedback_id": "str (required)",
+    "metadata": "dict[str, Any] = ...",
+    "projection": "FeedbackProjection | None = None",
+    "review": "FeedbackReview | None = None",
+    "reviewer": "str | None = None",
+    "score": "float | None = None",
+    "source": "Literal['human', 'interrupt', 'judge', 'system'] = 'human'",
+    "target_id": "str (required)",
+    "target_kind": "Literal['run', 'memory', 'tool_call', 'procedure'] (required)",
+    "tenant_id": "str (required)",
+    "trace_id": "str | None = None",
+    "user_id": "str | None = None",
+    "verdict": "Literal['confirm', 'reject', 'correct', 'approve', 'edit'] (required)",
+    "workspace_id": "str | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "FeedbackAPI": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__call__": "(self, target: 'Any', target_id: 'str | None' = None, verdict: 'FeedbackVerdict | None' = None, *, correction: 'Any' = None, score: 'float | None' = None, comment: 'str | None' = None, reviewer: 'str | None' = None, source: 'FeedbackSource' = 'human', evidence_refs: 'Sequence[EvidenceRef]' = (), metadata: 'dict[str, Any] | None' = None, feedback_id: 'str | None' = None, idempotency_key: 'str | None' = None) -> 'Feedback'",
+    "__init__": "(self, ctx: 'MemoryContext') -> 'None'",
+    "approve": "(self, feedback_id: 'str', *, note: 'str | None' = None) -> 'Feedback'",
+    "approve_many": "(self, feedback_ids: 'Sequence[str]' = (), *, target_kind: 'FeedbackTargetKind | str | None' = None, target_id: 'str | None' = None, note: 'str | None' = None) -> 'FeedbackBulkReview'",
+    "dismiss": "(self, feedback_id: 'str', *, note: 'str | None' = None) -> 'Feedback'",
+    "dismiss_many": "(self, feedback_ids: 'Sequence[str]' = (), *, target_kind: 'FeedbackTargetKind | str | None' = None, target_id: 'str | None' = None, note: 'str | None' = None) -> 'FeedbackBulkReview'",
+    "get": "(self, feedback_id: 'str') -> 'Feedback'",
+    "page_for": "(self, target_kind: 'FeedbackTargetKind | str', target_id: 'str', *, limit: 'int' = 100, cursor: 'str | None' = None) -> 'Page[Feedback]'",
+    "pending": "(self, *, group: \"Literal['target'] | None\" = None, review: 'ReviewState' = 'pending', limit: 'int' = 100, cursor: 'str | None' = None) -> 'Page[Feedback] | Page[FeedbackTargetGroup]'"
+   }
+  },
+  "FeedbackBulkReview": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "decided": "list[str] = ...",
+    "more": "bool = False",
+    "state": "Literal['pending', 'approved', 'dismissed'] (required)",
+    "unchanged": "list[FeedbackUnchanged] = ..."
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "FeedbackProjection": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "action": "Literal['none', 'memory_reinforced', 'memory_retracted', 'memory_superseded', 'run_labelled', 'tool_call_counted', 'procedure_rejected'] (required)",
+    "memory_id": "str | None = None",
+    "memory_ids": "list[str] = ...",
+    "projected_at": "datetime (required)",
+    "reason": "str | None = None",
+    "reversed": "str | None = None",
+    "run_id": "str | None = None",
+    "superseded_by": "str | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "FeedbackReview": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "note": "str | None = None",
+    "replaced_by": "str | None = None",
+    "reviewed_at": "datetime | None = None",
+    "reviewed_by": "str | None = None",
+    "state": "Literal['pending', 'approved', 'dismissed'] (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "FeedbackSource": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "FeedbackTargetGroup": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "latest_at": "datetime (required)",
+    "target_id": "str (required)",
+    "target_kind": "Literal['run', 'memory', 'tool_call', 'procedure'] (required)",
+    "thumbs_down": "int (required)",
+    "thumbs_up": "int (required)",
+    "voters": "int (required)",
+    "votes": "int (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "FeedbackTargetKind": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "FeedbackVerdict": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "FileHandle": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "checksum": "str (required)",
+    "deduplicated": "bool = False",
+    "document_id": "str (required)",
+    "filename": "str (required)",
+    "job_ids": "list[str] = ...",
+    "size_bytes": "int (required)"
+   },
+   "kind": "model",
+   "members": {
+    "job_id": "property"
+   }
+  },
+  "GraphAPI": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, ctx: 'MemoryContext') -> 'None'",
+    "entities": "(self, query: 'str | None' = None, *, entity_type: 'str | None' = None, limit: 'int' = 20) -> 'list[GraphEntity]'",
+    "entity": "(self, entity_id: 'str', *, depth: 'int' = 0, as_of: 'datetime | None' = None, valid_at: 'datetime | None' = None, layers: 'Sequence[GraphLayer] | None' = None) -> 'EntityProfile'"
+   }
+  },
+  "GraphEntity": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "aliases": "list[str] = ...",
+    "canonical_name": "str (required)",
+    "entity_id": "str (required)",
+    "entity_type": "str = 'THING'",
+    "mention_count": "int = 1",
+    "name": "str (required)",
+    "summary": "str = ''"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "GraphFact": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "attributes": "dict[str, Any] = ...",
+    "confidence": "float = 0.5",
+    "document_id": "str | None = None",
+    "evidence": "list[EvidenceRef] = ...",
+    "fact_text": "str = ''",
+    "layer": "Literal['entity', 'temporal', 'causal', 'structural', 'procedural'] = 'entity'",
+    "memory_id": "str | None = None",
+    "object": "str (required)",
+    "observed_at": "datetime | None = None",
+    "predicate": "str (required)",
+    "relation_id": "str (required)",
+    "status": "Literal['CURRENT', 'SUPERSEDED', 'RETRACTED', 'INVALIDATED'] = 'CURRENT'",
+    "subject": "str (required)",
+    "valid_from": "datetime | None = None",
+    "valid_to": "datetime | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "GraphLayer": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "GraphNeighborhood": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "entities": "list[GraphEntity] = ...",
+    "facts": "list[GraphFact] = ...",
+    "visited": "int = 0"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "GroundingReport": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "borderline": "int = 0",
+    "claims": "list[ClaimVerdict] = ...",
+    "contradicted": "int = 0",
+    "evidence_count": "int = 0",
+    "judge_consulted": "int = 0",
+    "llm_tokens": "int = 0",
+    "nli_provider": "str = ''",
+    "notes": "list[str] = ...",
+    "per_claim_hallucination_rate": "float = 0.0",
+    "representative": "bool = False",
+    "supported": "int = 0",
+    "unsupported": "int = 0",
+    "unused_count": "int = 0"
+   },
+   "kind": "model",
+   "members": {
+    "grounded": "property",
+    "score": "property"
+   }
+  },
+  "HistoryAPI": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__call__": "(self, *, limit: 'int' = 50, include_internal: 'bool' = False) -> 'list[MessageInfo]'",
+    "__init__": "(self, ctx: 'MemoryContext') -> 'None'",
+    "add": "(self, messages: 'Sequence[Message | Mapping[str, Any] | tuple[str, str]]', *, idempotency_key: 'str | None' = None) -> 'list[MessageAck]'",
+    "delete": "(self) -> 'None'",
+    "message": "(self, message_id: 'str') -> 'MessageInfo'",
+    "thread": "(self) -> 'ThreadInfo'",
+    "update": "(self, *, title: 'str | None' = None, metadata: 'dict[str, Any] | None' = None) -> 'ThreadInfo'"
+   }
+  },
+  "IssuedKey": {
+   "bases": [
+    "ApiKeyInfo"
+   ],
+   "fields": {
+    "created_at": "datetime (required)",
+    "created_by": "str (required)",
+    "expires_at": "datetime | None = None",
+    "key_id": "str (required)",
+    "last_used_at": "datetime | None = None",
+    "may_act_as": "list[str] = ...",
+    "name": "str (required)",
+    "revoked_at": "datetime | None = None",
+    "role": "Literal['admin', 'service'] (required)",
+    "tenant_id": "str (required)",
+    "token": "str | None = None",
+    "workspace_id": "str | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "JobHandle": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "attempts": "int = 0",
+    "job_id": "str (required)",
+    "last_error": "str | None = None",
+    "status": "Literal['PENDING', 'RUNNING', 'SUCCEEDED', 'FAILED', 'RETRYING', 'CANCELLED'] (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "JobStatus": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "KeyInfo": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "key_id": "str (required)",
+    "may_act_as": "list[str] = ...",
+    "principal": "str (required)",
+    "role": "Literal['platform', 'admin', 'service', 'trusted_dev', 'jwt'] (required)",
+    "tenant_id": "str | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "KeyRole": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "LearnedSkill": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "agent_id": "str | None = None",
+    "fixes": "list[str] = ...",
+    "id": "str (required)",
+    "name": "str (required)",
+    "pattern": "str (required)",
+    "runs": "int = 0",
+    "status": "Literal['active', 'retired', 'dismissed'] (required)",
+    "steps": "list[str] = ...",
+    "success_rate": "float = 0.0",
+    "updated_at": "datetime | None = None",
+    "users": "int = 0",
+    "with_skill": "str | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "Lifetime": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "MemberRole": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "MemoriesAPI": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, ctx: 'MemoryContext') -> 'None'",
+    "get": "(self, memory_id: 'str') -> 'MemoryResult'",
+    "iter": "(self, *, memory_types: 'Sequence[MemoryType] | None' = None, include_superseded: 'bool' = False, page_size: 'int' = 100) -> 'AsyncIterator[MemoryResult]'",
+    "page": "(self, *, memory_types: 'Sequence[MemoryType] | None' = None, include_superseded: 'bool' = False, limit: 'int' = 100, cursor: 'str | None' = None) -> 'Page[MemoryResult]'",
+    "restore": "(self, memory_id: 'str') -> 'MemoryResult'"
+   }
+  },
+  "MemoryClient": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, base_url: 'str | None' = None, *, api_key: 'str | None' = None, bearer_token: 'str | None' = None, timeout: 'float | httpx.Timeout' = 10.0, max_retries: 'int' = 3, http_client: 'httpx.AsyncClient | None' = None) -> 'None'",
+    "aclose": "(self) -> 'None'",
+    "administer": "(self, tenant_id: 'str') -> 'TenantAPI'",
+    "alive": "(self) -> 'dict[str, Any]'",
+    "bind": "(self, **scope: 'Any') -> 'MemoryContext'",
+    "health": "(self) -> 'dict[str, Any]'",
+    "metrics": "(self) -> 'str'",
+    "transport": "property",
+    "version": "(self) -> 'dict[str, Any]'"
+   }
+  },
+  "MemoryContext": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, client: 'MemoryClient', scope: 'Scope') -> 'None'",
+    "agent": "(self, agent_id: 'str', *, agent_run_id: 'str | None' = None, agent_group_id: 'str | None' = None) -> 'MemoryContext'",
+    "agent_tools": "(self) -> 'list[AgentTool]'",
+    "call_agent_tool": "(self, name: 'str', args: 'Mapping[str, Any]', *, toolbox: 'Sequence[str] | None' = None) -> 'Any'",
+    "client": "property",
+    "context": "(self, query: 'str', *, token_budget: 'int | None' = None, tools: 'Sequence[str] | None' = None, hints: 'bool' = True, window: 'bool' = True, window_format: 'WindowFormat' = 'rendered', document_ids: 'Sequence[str] | None' = None, format: \"Literal['prompt', 'full']\" = 'prompt', debug: 'bool' = False, timeout: 'float | None' = None) -> 'PromptContext | ContextBundle'",
+    "forget": "(self, memory: 'str', *, bundle_id: 'str | None' = None) -> 'None'",
+    "record_tool": "(self, tool: 'str', args: 'dict[str, Any]', *, output: 'Any' = None, status: 'ToolStatus' = 'ok', error_class: 'str | None' = None, latency_ms: 'float | None' = None, cost: 'float | None' = None, task: 'str | None' = '', step: 'int | None' = None, visibility: 'Visibility' = 'PRIVATE') -> 'ToolResult'",
+    "remember": "(self, content: 'str', *, memory_type: 'MemoryType' = 'SEMANTIC', lifetime: 'Lifetime' = 'LONG_TERM', visibility: 'Visibility | None' = None, subject: 'str | None' = None, entities: 'Sequence[str]' = (), valid_from: 'datetime | None' = None, valid_to: 'datetime | None' = None, idempotency_key: 'str | None' = None, **metadata: 'Any') -> 'RememberAck'",
+    "scope_payload": "(self) -> 'dict[str, Any]'",
+    "search": "(self, query: 'str', *, limit: 'int' = 20, kinds: 'Sequence[SearchKind] | None' = None, time_from: 'datetime | None' = None, time_to: 'datetime | None' = None, as_of: 'datetime | None' = None, known_at: 'datetime | None' = None, document_ids: 'Sequence[str] | None' = None, debug: 'bool' = False, timeout: 'float | None' = None) -> 'list[SearchItem]'",
+    "tool_hints": "(self, task: 'str', *, available: 'Sequence[str] | None' = None, k: 'int' = 8) -> 'ToolHints'",
+    "update": "(self, memory: 'str', content: 'str', *, reason: 'str' = '', bundle_id: 'str | None' = None, idempotency_key: 'str | None' = None) -> 'SupersedeAck'",
+    "verify": "(self, answer: 'str', *, bundle_id: 'str', run_id: 'str | None' = None) -> 'VerifyReport'"
+   }
+  },
+  "MemoryError": {
+   "bases": [
+    "Exception"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, message: 'str', *, code: 'str' = 'INTERNAL', status: 'int' = 500, retryable: 'bool' = False, trace_id: 'str | None' = None, request_id: 'str | None' = None, details: 'dict[str, Any] | None' = None, retry_after: 'float | None' = None) -> 'None'"
+   }
+  },
+  "MemoryResult": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "category": "str | None = None",
+    "confidence": "float | None = None",
+    "content": "str (required)",
+    "contradicts": "list[str] = ...",
+    "contributors": "list[str] = ...",
+    "echoes": "int = 0",
+    "evidence": "list[EvidenceRef] = ...",
+    "importance": "float | None = None",
+    "lifetime": "Literal['EPHEMERAL', 'SHORT_TERM', 'LONG_TERM', 'ARCHIVAL'] (required)",
+    "memory_id": "str (required)",
+    "memory_type": "Literal['WORKING', 'CONVERSATION', 'EPISODIC', 'SEMANTIC', 'PROCEDURAL', 'USER', 'PREFERENCE', 'AGENT', 'SHARED', 'TASK', 'WORK', 'TOOL', 'SKILL', 'DECISION', 'FAILURE', 'OUTCOME', 'ARTIFACT', 'KNOWLEDGE_RAG', 'SUMMARY', 'DERIVED', 'POLICY', 'OBSERVATION', 'BELIEF', 'ENTITY_SUMMARY', 'CUSTOM'] (required)",
+    "object": "str | None = None",
+    "owner_principal": "str | None = None",
+    "predicate": "str | None = None",
+    "reinforcement_count": "int = 1",
+    "scope_level": "Optional[Literal['AGENT', 'AGENT_GROUP', 'THREAD', 'USER', 'WORKSPACE', 'TENANT']] = None",
+    "score": "float | None = None",
+    "subject": "str | None = None",
+    "superseded_by": "str | None = None",
+    "supersedes": "str | None = None",
+    "temporal_status": "Literal['CURRENT', 'SUPERSEDED', 'EXPIRED', 'CONTRADICTED', 'RETRACTED', 'ARCHIVED'] = 'CURRENT'",
+    "visibility": "Literal['PRIVATE', 'USER', 'AGENT_GROUP', 'RUN', 'THREAD', 'WORKSPACE', 'TENANT'] (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "MemoryType": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "Message": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "attachments": "list[dict[str, Any]] = ...",
+    "content": "str (required)",
+    "custom_metadata": "dict[str, Any] = ...",
+    "kind": "Literal['VISIBLE', 'INTERNAL'] = 'VISIBLE'",
+    "occurred_at": "datetime | None = None",
+    "parent_message_id": "str | None = None",
+    "role": "Literal['USER', 'ASSISTANT', 'SYSTEM', 'TOOL', 'AGENT', 'EVENT'] (required)",
+    "source_message_id": "str | None = None",
+    "source_system": "str | None = None",
+    "tool_call_id": "str | None = None",
+    "tool_calls": "list[ToolCall] | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "MessageAck": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "deduplicated": "bool = False",
+    "job_ids": "list[str] = ...",
+    "message_id": "str (required)",
+    "sequence": "int (required)",
+    "session_id": "str (required)",
+    "thread_id": "str (required)",
+    "turn_id": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "MessageInfo": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "content": "str (required)",
+    "kind": "Literal['VISIBLE', 'INTERNAL'] (required)",
+    "message_id": "str (required)",
+    "occurred_at": "datetime | None = None",
+    "role": "Literal['USER', 'ASSISTANT', 'SYSTEM', 'TOOL', 'AGENT', 'EVENT'] (required)",
+    "sequence": "int (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "MessageKind": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "MessageRole": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "MissingArgument": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "arg": "str (required)",
+    "entity_type": "str | None = None",
+    "question": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ModelKeysAPI": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, ctx: 'MemoryContext') -> 'None'",
+    "revoke": "(self, *, idempotency_key: 'str | None' = None) -> 'AgentKeyStatus'",
+    "set": "(self, virtual_key: 'str', *, idempotency_key: 'str | None' = None) -> 'AgentKeyStatus'",
+    "status": "(self) -> 'AgentKeyStatus'"
+   }
+  },
+  "ModelPolicy": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "models": "dict[str, str] = ...",
+    "read_assist": "bool (required)",
+    "revision": "int (required)",
+    "stored": "bool (required)",
+    "updated_at": "datetime | None = None",
+    "uses": "list[str] (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ModelUsage": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "days": "list[ModelUsageDay] = ...",
+    "since": "date (required)",
+    "until": "date (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ModelUsageDay": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "calls": "int (required)",
+    "day": "date (required)",
+    "tokens": "int (required)",
+    "use": "Literal['contextual_extraction', 'relation_extraction', 'entity_resolution', 'conflict_adjudication', 'summaries', 'reflection', 'memory_connections', 'query_expansion', 'chunk_context', 'memory_restatement', 'grounding_judge', 'procedure_abstraction'] (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "NotFoundError": {
+   "bases": [
+    "MemoryError"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, message: 'str', *, code: 'str' = 'INTERNAL', status: 'int' = 500, retryable: 'bool' = False, trace_id: 'str | None' = None, request_id: 'str | None' = None, details: 'dict[str, Any] | None' = None, retry_after: 'float | None' = None) -> 'None'"
+   }
+  },
+  "Page": {
+   "bases": [
+    "BaseModel",
+    "Generic"
+   ],
+   "fields": {
+    "items": "list[T] (required)",
+    "next_cursor": "str | None = None"
+   },
+   "kind": "model",
+   "members": {
+    "has_more": "property"
+   }
+  },
+  "PayloadTooLargeError": {
+   "bases": [
+    "ValidationError"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, message: 'str', *, code: 'str' = 'INTERNAL', status: 'int' = 500, retryable: 'bool' = False, trace_id: 'str | None' = None, request_id: 'str | None' = None, details: 'dict[str, Any] | None' = None, retry_after: 'float | None' = None) -> 'None'"
+   }
+  },
+  "PinnedBlock": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "block": "str (required)",
+    "text": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ProfileAPI": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__call__": "(self) -> 'list[ProfileBlock]'",
+    "__init__": "(self, ctx: 'MemoryContext') -> 'None'",
+    "edit": "(self, block: 'str', new: 'str | None' = None, *, old: 'str' = '', source_query: 'str | None' = <object object>) -> 'ProfileBlock'"
+   }
+  },
+  "ProfileBlock": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "block": "str (required)",
+    "source_query": "str | None = None",
+    "text": "str (required)",
+    "updated_at": "datetime | None = None",
+    "version": "int (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ProjectionAction": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "PromptContext": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "bundle_id": "str (required)",
+    "conversation": "Conversation | None = None",
+    "diagnostics": "dict[str, Any] | None = None",
+    "evidence_status": "Literal['COMPLETE', 'INCOMPLETE', 'INSUFFICIENT'] = 'COMPLETE'",
+    "memory_ids": "list[str] = ...",
+    "rendered": "str (required)",
+    "token_estimate": "int (required)",
+    "tools": "list[ToolChoiceBrief] | None = None"
+   },
+   "kind": "model",
+   "members": {
+    "tool_names": "property"
+   }
+  },
+  "RateLimitedError": {
+   "bases": [
+    "MemoryError"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, message: 'str', *, code: 'str' = 'INTERNAL', status: 'int' = 500, retryable: 'bool' = False, trace_id: 'str | None' = None, request_id: 'str | None' = None, details: 'dict[str, Any] | None' = None, retry_after: 'float | None' = None) -> 'None'"
+   }
+  },
+  "ReadAuditRecord": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "at": "datetime (required)",
+    "credential": "str (required)",
+    "kind": "Literal['recall', 'context'] (required)",
+    "principal": "str (required)",
+    "query_hash": "str (required)",
+    "record_ids": "list[str] (required)",
+    "scope_fingerprint": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "RelationStatus": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "RememberAck": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "deduplicated": "bool = False",
+    "job_ids": "list[str] = ...",
+    "memory_id": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "Scope": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "agent_group_id": "str | None = None",
+    "agent_id": "str | None = None",
+    "agent_run_id": "str | None = None",
+    "correlation_id": "str | None = None",
+    "custom_metadata": "dict[str, Any] = ...",
+    "parent_agent_run_id": "str | None = None",
+    "session_id": "str | None = None",
+    "task_id": "str | None = None",
+    "tenant_id": "str | None = None",
+    "thread_id": "str | None = None",
+    "trace_id": "str | None = None",
+    "turn_id": "str | None = None",
+    "user_id": "str | None = None",
+    "work_id": "str | None = None",
+    "workspace_id": "str | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "SearchItem": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "debug": "dict[str, Any] | None = None",
+    "document_id": "str | None = None",
+    "id": "str (required)",
+    "kind": "Literal['memory', 'chunk', 'summary', 'episode', 'message'] (required)",
+    "observed_on": "str | None = None",
+    "page": "int | None = None",
+    "superseded": "bool | None = None",
+    "text": "str (required)",
+    "thread_id": "str | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "SearchKind": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "SideEffects": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "SkillView": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "fixes": "list[str] = ...",
+    "id": "str (required)",
+    "name": "str = ''",
+    "runs": "int = 0",
+    "steps": "list[str] = ...",
+    "success_rate": "float = 0.0",
+    "with_skill": "str | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "SkillsAPI": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, ctx: 'MemoryContext') -> 'None'",
+    "dismiss": "(self, skill_id: 'str', *, idempotency_key: 'str | None' = None) -> 'LearnedSkill'",
+    "list": "(self, *, agent: 'str | None' = None) -> 'list[LearnedSkill]'"
+   }
+  },
+  "SupersedeAck": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "memory_id": "str (required)",
+    "supersedes": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "TemporalStatus": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "TenantAPI": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, client: 'MemoryClient', *, tenant_id: 'str | None' = None) -> 'None'",
+    "model_key_status": "(self) -> 'AgentKeyStatus'",
+    "model_policy": "(self) -> 'ModelPolicy'",
+    "model_usage": "(self, *, since: 'date | None' = None, until: 'date | None' = None) -> 'ModelUsage'",
+    "reads": "(self, *, since: 'Any' = None, before: 'Any' = None, limit: 'int' = 100, cursor: 'str | None' = None) -> 'list[ReadAuditRecord]'",
+    "reads_page": "(self, *, since: 'Any' = None, before: 'Any' = None, limit: 'int' = 100, cursor: 'str | None' = None) -> 'Page[ReadAuditRecord]'",
+    "revoke_model_key": "(self, *, idempotency_key: 'str | None' = None) -> 'AgentKeyStatus'",
+    "set_model_key": "(self, virtual_key: 'str', *, idempotency_key: 'str | None' = None) -> 'AgentKeyStatus'",
+    "set_model_policy": "(self, uses: 'Sequence[str]', *, read_assist: 'bool', models: 'Mapping[str, str] | None' = None, idempotency_key: 'str | None' = None) -> 'ModelPolicy'"
+   }
+  },
+  "TenantInfo": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "admission_gate": "bool = False",
+    "created_at": "datetime (required)",
+    "name": "str (required)",
+    "rate_limit_per_minute": "int | None = None",
+    "retention_days": "int | None = None",
+    "status": "Literal['active', 'suspended'] (required)",
+    "tenant_id": "str (required)",
+    "updated_at": "datetime (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "TenantStatus": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "ThreadInfo": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "created_at": "datetime | None = None",
+    "custom_metadata": "dict[str, Any] = ...",
+    "summary": "ThreadSummary | None = None",
+    "tenant_id": "str (required)",
+    "thread_id": "str (required)",
+    "title": "str | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ThreadSummary": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "covers_to_sequence": "int (required)",
+    "created_at": "datetime | None = None",
+    "model": "str | None = None",
+    "text": "str (required)",
+    "thread_id": "str | None = None",
+    "version": "int (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "TimeoutError": {
+   "bases": [
+    "MemoryError"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, message: 'str', *, code: 'str' = 'INTERNAL', status: 'int' = 500, retryable: 'bool' = False, trace_id: 'str | None' = None, request_id: 'str | None' = None, details: 'dict[str, Any] | None' = None, retry_after: 'float | None' = None) -> 'None'"
+   }
+  },
+  "ToolCall": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "arguments": "dict[str, Any] = ...",
+    "id": "str (required)",
+    "name": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ToolCatalogAPI": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, ctx: 'MemoryContext') -> 'None'",
+    "accept_suggestion": "(self, suggestion_id: 'str') -> 'CatalogTool'",
+    "approval_suggestions": "(self, *, tool: 'str | None' = None) -> 'list[ApprovalSuggestion]'",
+    "catalog": "(self, names: 'Sequence[str] | None' = None) -> 'list[CatalogTool]'",
+    "catalog_if_changed": "(self, names: 'Sequence[str] | None' = None, *, etag: 'str | None' = None) -> 'tuple[list[CatalogTool] | None, str | None]'",
+    "put_catalog": "(self, tools: 'Sequence[dict[str, Any]]', *, idempotency_key: 'str | None' = None) -> 'list[CatalogTool]'"
+   }
+  },
+  "ToolChoice": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "args": "dict[str, Any] = ...",
+    "confidence": "float (required)",
+    "missing": "list[MissingArgument] = ...",
+    "name": "str (required)",
+    "next": "bool = False",
+    "success_rate": "float | None = None"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ToolChoiceBrief": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "confidence": "float (required)",
+    "name": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ToolHints": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "plan": "SkillView | None = None",
+    "tools": "list[ToolChoice] = ..."
+   },
+   "kind": "model",
+   "members": {
+    "next": "property"
+   }
+  },
+  "ToolResult": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "args_hash": "str = ''",
+    "invocation_id": "str (required)",
+    "recorded": "bool = True",
+    "step": "int = 0"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ToolStats": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "approvals": "int = 0",
+    "avg_latency_ms": "float | None = None",
+    "calls": "int = 0",
+    "edits": "int = 0",
+    "failures": "int = 0",
+    "last_used_at": "datetime | None = None",
+    "rejections": "int = 0",
+    "success_rate": "float | None = None",
+    "successes": "int = 0"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ToolStatus": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "ValidationError": {
+   "bases": [
+    "MemoryError"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, message: 'str', *, code: 'str' = 'INTERNAL', status: 'int' = 500, retryable: 'bool' = False, trace_id: 'str | None' = None, request_id: 'str | None' = None, details: 'dict[str, Any] | None' = None, retry_after: 'float | None' = None) -> 'None'"
+   }
+  },
+  "VerifyReport": {
+   "bases": [
+    "GroundingReport"
+   ],
+   "fields": {
+    "borderline": "int = 0",
+    "claims": "list[ClaimVerdict] = ...",
+    "contradicted": "int = 0",
+    "evidence_count": "int = 0",
+    "feedback_id": "str | None = None",
+    "judge_consulted": "int = 0",
+    "llm_tokens": "int = 0",
+    "nli_provider": "str = ''",
+    "notes": "list[str] = ...",
+    "per_claim_hallucination_rate": "float = 0.0",
+    "representative": "bool = False",
+    "supported": "int = 0",
+    "unsupported": "int = 0",
+    "unused_count": "int = 0"
+   },
+   "kind": "model",
+   "members": {
+    "grounded": "property",
+    "score": "property"
+   }
+  },
+  "Visibility": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "WindowFormat": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
+  },
+  "WindowMessage": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "id": "str (required)",
+    "role": "Literal['USER', 'ASSISTANT', 'SYSTEM', 'TOOL', 'AGENT', 'EVENT'] (required)",
+    "text": "str (required)",
+    "tool_call_id": "str | None = None",
+    "tool_calls": "list[ToolCall] = ..."
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "WorkspaceInfo": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "created_at": "datetime (required)",
+    "name": "str (required)",
+    "tenant_id": "str (required)",
+    "workspace_id": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "WorkspaceMemberInfo": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "added_at": "datetime (required)",
+    "added_by": "str (required)",
+    "principal": "str (required)",
+    "role": "Literal['admin', 'member', 'viewer'] (required)",
+    "workspace_id": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "current_context": {
+   "kind": "function",
+   "signature": "() -> 'MemoryContext | None'"
+  }
+ },
+ "version": "0.5.0"
+}

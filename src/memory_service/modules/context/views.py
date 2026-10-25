@@ -4,7 +4,9 @@ Two forms, each holding only what its reader uses and nothing twice:
 
 - **prompt** (what an agent puts in front of its model): ``rendered``, the ``bundle_id`` that
   ``/v1/verify`` and the handles refer to, its size, whether there is evidence to answer from,
-  and - when tools were given - the tools that fit, with a confidence the caller can narrow on;
+  the ids of the memories it shows (``memory_ids``: what a person's verdict on the answer
+  cites, so the verdict moves their confidence), and - when tools were given - the tools that
+  fit, with a confidence the caller can narrow on;
 - **full** (for a caller that builds its own prompt): the same content as structured data -
   the conversation window, the pinned sections, the memories, document passages, graph facts
   and summaries, the earlier values a later statement replaced (``history``), the procedures
@@ -37,6 +39,8 @@ def prompt_view(bundle: ContextBundle) -> dict[str, Any]:
         "token_estimate": bundle.token_estimate,
         "evidence_status": str(bundle.evidence.status),
     }
+    repeated = bundle.redundant()
+    _put(body, "memory_ids", [m.item_id for m in bundle.memories if m.item_id not in repeated])
     if bundle.tools is not None:
         body["tools"] = [
             {"name": c.name, "confidence": c.confidence} for c in bundle.tools.candidates

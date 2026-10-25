@@ -5519,6 +5519,9 @@
           {
             "bundle_id": "6f1c0e2a9b",
             "evidence_status": "COMPLETE",
+            "memory_ids": [
+              "mem_01J9ZK7Q4ACME"
+            ],
             "rendered": "## Tools\n- erp-create_po (confidence 0.74, next step): amount = 700, cost_centre = 'CC-7'; missing supplier_id: Which supplier id should erp-create_po use?\n\n## Memories\n- [m1] 2026-10-04 Sun priya: We buy steel from Acme Steel.",
             "token_estimate": 180,
             "tools": [
@@ -5562,6 +5565,21 @@
           "evidence_status": {
             "$ref": "#/components/schemas/EvidenceStatus",
             "description": "COMPLETE, INCOMPLETE (evidence for part of the question, or about someone else) or INSUFFICIENT (nothing to go on: answer that you do not know rather than guess)"
+          },
+          "memory_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the ids of the memories rendered shows, in bundle order (absent when none): what a verdict on the answer cites (evidence_refs), so it moves their confidence",
+            "title": "Memory Ids"
           },
           "rendered": {
             "description": "prompt-ready; items are cited by handle ([m1], [d2]...)",
