@@ -180,6 +180,14 @@ def _changes(entry: ToolDescriptor | None) -> bool:
     return entry is None or entry.risk != "read"
 
 
+def _may_lead(tool: str | None, task: str, entries: dict[str, ToolDescriptor]) -> str | None:
+    """``tool`` as the next step, unless it changes something and the task is a question: a
+    question is answered before anything is changed."""
+    if tool is None or asks_change(task) or not _changes(entries.get(tool)):
+        return tool
+    return None
+
+
 def asks_change(task: str) -> bool:
     """Whether the task asks for something to be done rather than asks a question."""
     return not any(mark in task for mark in _QUESTION_MARKS)
@@ -316,14 +324,9 @@ class ToolHintsService:
                 if ctx.agent_run_id
                 else []
             )
-        step = next_tool(plan, done)
-        change = asks_change(task)
-        if step is not None and not change and _changes(entries.get(step)):
-            step = None  # a question is answered before anything is changed
+        step = _may_lead(next_tool(plan, done), task, entries)
         candidates = _candidates(found, plan, step, stats, available, min(k, HINTS_K_MAX))
-        tool = step or next(
-            (c.name for c in candidates if change or not _changes(entries.get(c.name))), None
-        )
+        tool = step or next((c.name for c in candidates if _may_lead(c.name, task, entries)), None)
         # every candidate's arguments, not only the next step's: the caller may take another
         prefill, missing = await self._every_argument(
             [

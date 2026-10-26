@@ -262,20 +262,12 @@ def _bindings(
         step = steps[ordinal]
         if step.tool_name != tool:
             continue
-        about = tuple(sorted({v.casefold() for _, v in task_slots(trajectory.task)}))
+        about = _about(trajectory)
         for path, value in flatten(step.args_redacted).items():
             observed[path].append(value)
             named[path].add(about)
-            if path in sources:
-                continue
-            for earlier_index in range(ordinal):
-                earlier = steps[earlier_index]
-                for out_path, out_value in (earlier.output_fields or {}).items():
-                    if _same(out_value, value):
-                        sources[path] = (earlier_index, out_path)
-                        break
-                if path in sources:
-                    break
+            if path not in sources and (found := _source(steps[:ordinal], value)) is not None:
+                sources[path] = found
     bindings: list[Binding] = []
     for path, values in sorted(observed.items()):
         if path in sources:
@@ -288,6 +280,20 @@ def _bindings(
         else:
             bindings.append(Binding(argument=path, literal=None))
     return bindings
+
+
+def _about(trajectory: Trajectory) -> tuple[str, ...]:
+    """What the run's task was about: the values it named."""
+    return tuple(sorted({v.casefold() for _, v in task_slots(trajectory.task)}))
+
+
+def _source(earlier: Sequence[ToolInvocation], value: Any) -> tuple[int, str] | None:
+    """The first earlier step's output field that holds ``value``: (its ordinal, its path)."""
+    for index, step in enumerate(earlier):
+        for out_path, out_value in (step.output_fields or {}).items():
+            if _same(out_value, value):
+                return index, out_path
+    return None
 
 
 def _constant(value: Any, tasks: set[tuple[str, ...]]) -> bool:

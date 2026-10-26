@@ -302,6 +302,21 @@ class ObservationPipeline:
         #: the spellings a candidate's subject may be stored under (candidate generation)
         self.subjects = subjects or SubjectMatcher()
 
+    async def _to_process(self, observation: Observation) -> bool:
+        """Whether memories are formed from ``observation``: not one processed already (an
+        idempotent replay), and not one that was not told (``_told``), which is marked
+        processed with none."""
+        if observation.processed_at is not None:
+            return False
+        if _told(observation):
+            return True
+        async with self.uow_factory() as uow:
+            await uow.observations.mark_processed(
+                observation.tenant_id, observation.observation_id, status="NO_MEMORY"
+            )
+            await uow.commit()
+        return False
+
     async def run(self, payload: dict[str, Any]) -> list[ConsolidationOutcome]:
         tenant_id, observation_id = payload["tenant_id"], payload["observation_id"]
         async with self.uow_factory() as uow:
@@ -309,12 +324,7 @@ class ObservationPipeline:
         if observation is None:
             log.warning("memory.observation_missing", tenant_id=tenant_id, id=observation_id)
             return []
-        if observation.processed_at is not None:
-            return []  # idempotent replay
-        if not _told(observation):
-            async with self.uow_factory() as uow:
-                await uow.observations.mark_processed(tenant_id, observation_id, status="NO_MEMORY")
-                await uow.commit()
+        if not await self._to_process(observation):
             return []
         ctx = context_from_observation(observation)
         preceding = await self._preceding_turn(observation)
