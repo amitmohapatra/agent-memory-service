@@ -9,12 +9,14 @@ from datetime import UTC, datetime
 
 import pytest
 
-from memory_service.domain.context_bundle import skills_section
+from memory_service.domain.context_bundle import pinned_sections, skills_section
 from memory_service.domain.errors import NotFound
 from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.tools import (
     SkillView,
     StoredProcedure,
+    ToolCandidate,
+    ToolHints,
     ToolInvocation,
     agent_audience,
 )
@@ -239,6 +241,36 @@ def test_the_context_shows_each_skill_in_full_and_an_addition_as_one() -> None:
     assert "  - if update_quote on Locked: ask the owner to unlock it" in text
     assert "- adds to your skill refund-policy: find_order -> refund" in text
     assert skills_section([]) is None
+
+
+def test_the_learned_plan_is_spelled_out_once() -> None:
+    """B7: the plan was rendered in full under Learned skills and again, as its tools, under
+    Tools. Its steps are now the tools listed first under Tools, in its order; its skill line
+    keeps the name, the track record and the fixes. Another skill is shown in full."""
+    plan = skill_view(_procedure())
+    other = skill_view(_procedure(procedure_id="prc_2", **_with_skill_steps()))
+    hints = ToolHints(
+        candidates=[
+            ToolCandidate(name=n, score=s, confidence=0.5)
+            for n, s in [("search", 2.0), ("update_quote", 1.5), ("mail", 1.4)]
+        ]
+        + [ToolCandidate(name="lookup_price", score=1.0, confidence=0.4)],
+        plan=plan,
+        next="lookup_price",
+    )
+    skills, tools = pinned_sections([], None, [plan, other], hints)
+    assert "lookup_price -> update_quote" not in skills
+    assert "- update-a-quote-s-regional-price: the first 2 tools under Tools, in that order" in (
+        skills
+    )
+    assert "  - if update_quote on Locked: ask the owner to unlock it" in skills
+    assert "- adds to your skill refund-policy: find_order -> refund" in skills
+    lines = tools.splitlines()[1:]
+    assert [line.split(" (")[0] for line in lines] == [
+        "- lookup_price",
+        "- update_quote",
+        "- search",
+    ]
 
 
 # --- which toolbox earns tool hints ------------------------------------------------------
