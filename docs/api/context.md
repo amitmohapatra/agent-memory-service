@@ -170,7 +170,7 @@ The cascade is deterministic first: citations are resolved, then an NLI head sco
 against its best premises, and a contradiction scan runs. Only the borderline band is a candidate
 for a model, and only when the policy allows `grounding_judge` with `read_assist` on and a key
 can pay. With a run (`run_id`, or the scope's agent run) the verdict is recorded as RUN feedback
-from the service's own judge (`source="judge"`, applied without review —
+from the service's own judge (`source="judge"`, pending until a tenant admin approves it —
 [feedback.md](feedback.md)); `report.feedback_id` names it. This is the same endpoint the
 harness's grounded judge uses before it is willing to spend anything on an LLM judge.
 

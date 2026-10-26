@@ -137,11 +137,14 @@ artifact says so: `nli_provider: lexical-nli-v2`, `representative: false`
 **Recorded on a run.** With a `run_id` (or the scope's agent run), the report is written as
 the service's own judge feedback on that run (`modules/grounding/judge.py`): `confirm` when no
 claim is unsupported or contradicted, else `reject`; score `1 − per_claim_hallucination_rate`;
-the memories behind supported claims as its evidence. An answer with no checkable claim, or a
-context that held no evidence, records nothing: against nothing every claim is unsupported,
-one the run's own tools returned too. Its id is derived from the run, the
-bundle and the answer, so verifying the same answer twice records one verdict. This is the
-one verdict applied without review (next section), because the service wrote it.
+as its evidence, only on a `reject`, the memories that contradict a claim — never one a
+supported claim rests on, and none when the run recorded tool calls (its answer rests on their
+results, which the context never held). A `confirm` cites nothing: the answer was checked
+against the memories it was given, so raising them would only echo them back. An answer with
+no checkable claim, or a context that held no evidence, records nothing: against nothing every
+claim is unsupported, one the run's own tools returned too. Its id is derived from the run, the
+bundle and the answer, so verifying the same answer twice records one verdict. It waits for a
+tenant admin like a vote (next section): a model's word is never applied on its own.
 
 ---
 
@@ -156,7 +159,7 @@ memory, a run, a tool call or a procedure, from a `human`, a `judge`, an `interr
 | memory | `confirm`, `approve` | reinforcement + 1, confidence + 0.1 (capped at 1.0) |
 | memory | `reject` | retracted: `RETRACTED`, validity closed, index entry removed |
 | memory | `correct`, `edit` | a corrected memory supersedes it (chapter 3) |
-| run | any | the run's explicit outcome; each memory its answer cited moves ± 0.05 confidence (at most 20, `CITED_CONFIDENCE_STEP` in `domain/learning.py`). A run's own `system` success is its outcome only (`outcome_teaches` in `domain/feedback.py`): unverified, it moves no confidence and no learned skill until the judge or a person confirms it |
+| run | any | the run's explicit outcome; when the verdict sets it (a higher-ranked source's outcome stands otherwise, and nothing moves), each memory the verdict cited moves ± 0.05 confidence (at most 20, `CITED_CONFIDENCE_STEP` in `domain/learning.py`). A run's own `system` success is its outcome only (`outcome_teaches` in `domain/feedback.py`): unverified, it moves no confidence and no learned skill until the judge or a person confirms it |
 | tool call | any | tool statistics and the approval pattern; an approval *suggestion* changes nothing until accepted |
 | procedure | `reject` | the procedure is no longer offered until its steps change |
 
@@ -177,11 +180,11 @@ flowchart TB
   TC -->|yes| APPLY
   TC -->|no| OW{"correct / edit of a memory carrying new text?<br/>(already limited to its owner,<br/>the user an agent acts for, or an admin)"}
   OW -->|yes| APPLY
-  OW -->|no| PEND["pending: stored, changes nothing<br/>(a thumbs-up or -down, even the owner's;<br/>a client-claimed source=judge)<br/>the voter's earlier pending vote: dismissed,<br/>replaced_by the new one"]
+  OW -->|no| PEND["pending: stored, changes nothing<br/>(a thumbs-up or -down, even the owner's;<br/>every source=judge verdict)<br/>the voter's earlier pending vote: dismissed,<br/>replaced_by the new one"]
   PEND --> Q["GET /v1/feedback?review=pending[&group=target]<br/>(admin key, with author_record)"]
   Q --> AP["approve (one, or in bulk by ids or target):<br/>projected as if it had just arrived"]
   Q --> DI["dismiss (one, or in bulk): kept for statistics, never applied"]
-  J["the service's own judge, from /v1/verify"] --> APPLY
+  J["the service's own judge, from /v1/verify"] --> PEND
 ```
 
 A verdict is decided once (`409` after that). Every record keeps who voted, on what, when, the

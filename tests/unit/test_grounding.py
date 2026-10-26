@@ -30,7 +30,7 @@ from memory_service.modules.grounding.cascade import (
     record_evidence,
     resolve_citation,
 )
-from memory_service.modules.grounding.judge import judge_run
+from memory_service.modules.grounding.judge import cited, judge_run
 from memory_service.modules.grounding.lexical import conflicts, coverage
 from memory_service.modules.llm.cost import llm_accounting
 from memory_service.ports.models import NLIScore
@@ -341,12 +341,29 @@ class _Feedback:
     def __init__(self) -> None:
         self.submitted: list[Any] = []
 
-    async def submit(self, uow: Any, ctx: Any, record: Any, *, trusted: bool) -> tuple[Any, Any]:
-        self.submitted.append((record, trusted))
+    async def submit(
+        self, uow: Any, ctx: Any, record: Any, *, trusted: bool, run_vouched: bool
+    ) -> tuple[Any, Any]:
+        self.submitted.append((record, trusted, run_vouched))
         return record, None
 
 
+class _Tools:
+    def __init__(self, calls: list[Any]) -> None:
+        self.calls = calls
+
+    async def invocations_for_run(self, tenant_id: str, run_id: str) -> list[Any]:
+        return self.calls
+
+
 class _Uow:
+    """A unit of work whose run recorded ``calls`` tool calls."""
+
+    calls: list[Any] = []
+
+    def __init__(self) -> None:
+        self.tools = _Tools(self.calls)
+
     async def __aenter__(self) -> _Uow:
         return self
 
@@ -355,6 +372,10 @@ class _Uow:
 
     async def commit(self) -> None:
         return None
+
+
+class _UowWithTools(_Uow):
+    calls = ["a recorded tool call"]
 
 
 def _unsupported(evidence_count: int) -> GroundingReport:
@@ -383,7 +404,6 @@ async def test_a_context_with_no_evidence_is_no_verdict_on_the_run() -> None:
         "ctx_1",
         "refunded pay-O-1",
         _unsupported(0),
-        [],
     )
     assert found is None and feedback.submitted == []
 
@@ -395,12 +415,65 @@ async def test_a_context_with_no_evidence_is_no_verdict_on_the_run() -> None:
         "ctx_1",
         "refunded pay-O-1",
         _unsupported(2),
-        [],
     )
-    [(record, trusted)] = feedback.submitted
-    assert judged == record.feedback_id and trusted
+    [(record, trusted, _)] = feedback.submitted
+    assert judged == record.feedback_id and not trusted
     assert (record.target_id, record.verdict, record.source) == (
         "run_1",
         FeedbackVerdict.REJECT,
         FeedbackSource.JUDGE,
     )
+
+
+def _report(*claims: ClaimReport) -> GroundingReport:
+    counts = {v: sum(c.verdict == v for c in claims) for v in ("supported", "contradicted")}
+    return GroundingReport(
+        claims=list(claims),
+        supported=counts["supported"],
+        contradicted=counts["contradicted"],
+        unsupported=len(claims) - sum(counts.values()),
+        evidence_count=3,
+    )
+
+
+SUPPORTED = ClaimReport(claim="S12 sells 10 a week.", verdict="supported", evidence_ids=["mem_s"])
+CONTRADICTED = ClaimReport(
+    claim="S40 sells 90 a week.",
+    verdict="contradicted",
+    evidence_ids=["mem_c"],
+    contradicted_by=["mem_d", "mem_s", "chk_1"],
+)
+UNSUPPORTED = ClaimReport(
+    claim="Zeta takes 12 days.", verdict="unsupported", evidence_ids=["mem_u"]
+)
+
+
+def test_a_reject_cites_only_what_contradicts_a_claim_and_a_confirm_cites_nothing() -> None:
+    """B1/B2: a verdict never raises - nor, on a reject, lowers - a memory the answer rested
+    on; a reject moves only the memories that contradict one of its claims."""
+    assert cited(_report(SUPPORTED, CONTRADICTED, UNSUPPORTED)) == ["mem_c", "mem_d"]
+    assert cited(_report(SUPPORTED, UNSUPPORTED)) == []
+    assert cited(_report(SUPPORTED)) == []
+
+
+async def test_the_judges_verdict_waits_for_review_and_is_no_persons_vote() -> None:
+    feedback: Any = _Feedback()
+    factory: Any = _Uow
+    ctx = MemoryExecutionContext(tenant_id="acme", user_id="u1")
+    await judge_run(
+        feedback, factory, ctx, "run_1", "ctx_1", "S40", _report(SUPPORTED, CONTRADICTED)
+    )
+    [(record, trusted, run_vouched)] = feedback.submitted
+    assert (trusted, run_vouched) == (False, True)
+    assert record.cited_memory_ids(10) == ["mem_c", "mem_d"]
+
+
+async def test_a_run_that_called_tools_is_judged_without_moving_any_memory() -> None:
+    """B4: the answer rests on the run's own tool results, which the context the judge
+    checked against never held: its verdict labels the run (after review) and cites nothing."""
+    feedback: Any = _Feedback()
+    factory: Any = _UowWithTools
+    ctx = MemoryExecutionContext(tenant_id="acme", user_id="u1")
+    await judge_run(feedback, factory, ctx, "run_1", "ctx_1", "140 units", _report(CONTRADICTED))
+    [(record, _, _)] = feedback.submitted
+    assert record.verdict is FeedbackVerdict.REJECT and record.cited_memory_ids(10) == []
