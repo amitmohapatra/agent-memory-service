@@ -113,3 +113,17 @@ async def test_a_suggestion_with_no_support_touches_no_catalog_entry() -> None:
         with pytest.raises(Conflict, match="no longer support"):
             await approvals.accept(uow, CTX, approvals.suggestion_id(AUTO))
         assert not tools.ensured and tools.upserted is None
+
+
+async def test_a_learned_rule_never_relaxes_an_administrators_approve_when() -> None:
+    """B6: an administrator's ``approve_when: "true"`` on a tool became "never ask for this
+    shape" once the learned suggestion was accepted. Approving automatically is offered only
+    while the tool has no approve_when; asking more still is."""
+    ruled = _tool("write").model_copy(update={"approve_when": "true"})
+    assert approvals.offered(AUTO, ruled) is None
+    assert approvals.offered(ASK, ruled) == "always_ask"
+    with pytest.raises(Conflict, match="approve_when"):
+        await _accept(AUTO, ruled)
+    # the rule this very suggestion wrote is still listed (as accepted)
+    own = approvals.compose(None, "write", "auto_approve", SHAPE)
+    assert approvals.offered(AUTO, _tool("write").model_copy(update={"approve_when": own}))

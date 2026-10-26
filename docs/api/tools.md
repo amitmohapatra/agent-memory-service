@@ -204,6 +204,15 @@ ideally, `metadata.args`; an `edit`'s correction stands in for the arguments) is
 order of magnitude (`amount:num:1e4,supplier:str`). With at least 5 decisions, 95% approved
 suggests `auto_approve` and 50% or fewer `always_ask`. Nothing applies them on its own.
 
+Only a real decision counts: one on an interrupt (`metadata.interrupt_id`) of the calling run
+(`agent_run_id`), naming its `reviewer`, counted once per interrupt however many feedback ids
+carry it; and an approval only once that run recorded the call it approved — that tool with
+those arguments. An approval sent before the approved call is recorded (the harness sends it as
+the run resumes) is looked at again every 30 seconds, ten times, then counts nothing. A
+rejection or an edit only makes the tool ask more, so it needs no recorded call. And
+`auto_approve` is offered only for a tool without an `approve_when`: an administrator's rule (or
+one accepted before) is never relaxed by what was learned; `always_ask` may still be added.
+
 ```python
 for s in await ctx.advanced.tools.approval_suggestions(tool="erp-create_po"):
     print(s.id, s.arg_shape, s.suggestion, s.support, s.approve_rate, s.accepted)

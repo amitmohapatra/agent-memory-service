@@ -4,7 +4,8 @@ accepting one into the catalog as the tool's ``approve_when``.
 A suggestion is never applied by the service on its own: it is listed, and a person accepts
 it. Accepting composes the rule with what the tool already asks for (its ``approve_when``, or
 its risk tier when it has none), so an accepted rule narrows or widens exactly the calls of
-that argument shape and nothing else.
+that argument shape and nothing else. A rule that would make the tool ask less is offered only
+while the tool has no ``approve_when``: an administrator's rule is never relaxed by learning.
 """
 
 from __future__ import annotations
@@ -55,10 +56,15 @@ def compose(existing: str | None, risk: SideEffects, suggestion: Suggestion, sha
 def offered(counts: ApprovalCounts, entry: ToolDescriptor | None) -> Suggestion | None:
     """The rule these decisions support that may be offered for this tool. Never "approve
     automatically" for an irreversible tool: however often a deletion or a payment was
-    approved, the next one is still asked about. "Always ask" is offered for any tier."""
+    approved, the next one is still asked about; and never for a tool that has an
+    ``approve_when`` already (an administrator's rule, or one accepted before): what the
+    decisions learned may make it ask more, never less. "Always ask" is offered for any tier."""
     suggestion = counts.suggestion()
-    if suggestion == "auto_approve" and entry is not None and entry.risk == "irreversible":
-        return None
+    if suggestion == "auto_approve" and entry is not None:
+        if entry.risk == "irreversible":
+            return None
+        if entry.approve_when and not accepted(entry, counts.arg_shape):
+            return None
     return suggestion
 
 
@@ -81,7 +87,10 @@ async def accept(uow: UnitOfWork, ctx: MemoryExecutionContext, identifier: str) 
     ) or await uow.tools.ensure(ctx.tenant_id, tool)
     suggestion = offered(counts, entry)
     if suggestion is None:
-        raise Conflict(f"{tool} is irreversible: its calls are always asked about")
+        raise Conflict(
+            f"{tool} is irreversible or has an approve_when already: a learned rule never makes "
+            "it ask less"
+        )
     if accepted(entry, shape):
         return entry
     expression = compose(entry.approve_when, entry.risk, suggestion, shape)

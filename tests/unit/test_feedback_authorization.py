@@ -17,12 +17,15 @@ from memory_service.domain.feedback import (
     FeedbackSource,
     FeedbackTargetKind,
     FeedbackVerdict,
+    ProjectionAction,
     ReviewState,
 )
+from memory_service.domain.grounding import ClaimReport, GroundingReport
 from memory_service.domain.memory import CanonicalMemory, Scope, TemporalState
-from memory_service.domain.tools import RunOutcome
-from memory_service.modules.feedback.service import FeedbackService
+from memory_service.domain.tools import RunOutcome, ToolInvocation, stable_hash
+from memory_service.modules.feedback.service import CALL_RECORD_CHECKS, FeedbackService
 from memory_service.modules.feedback.votes import ALREADY_COUNTED_REASON, is_vote
+from memory_service.modules.grounding.judge import judge_run
 
 OWNER = MemoryExecutionContext(tenant_id="acme", user_id="alice", workspace_id="fin")
 READER = MemoryExecutionContext(tenant_id="acme", user_id="carol", workspace_id="fin")
@@ -92,6 +95,13 @@ class _FeedbackRepo:
             and (not votes_only or is_vote(r))
         ]
         return sorted(found, key=lambda r: (r.created_at, r.feedback_id))[:limit]
+
+    async def list_for(self, tenant_id, *, target_kind, target_id, limit=100):
+        return [
+            r
+            for (t, _), r in self.rows.items()
+            if t == tenant_id and r.target_kind is target_kind and r.target_id == target_id
+        ]
 
     async def applied_votes(
         self, tenant_id, *, target_kind, target_id, user_id, agent_id, limit=20
@@ -625,6 +635,8 @@ class _Run:
     def __init__(self) -> None:
         self.outcomes: dict[str, RunOutcome] = {}
         self.confidence = {"mem_1": 0.9}
+        self.calls: list[ToolInvocation] = []
+        self.counted: list[tuple[str, str, str]] = []
 
     async def outcome(self, tenant_id, run_id):
         return self.outcomes.get(run_id)
@@ -643,6 +655,15 @@ class _Run:
 
     async def mark_used(self, *_: object) -> None:
         return None
+
+    async def invocations_for_run(self, tenant_id, run_id) -> list:
+        return [c for c in self.calls if c.run_id == run_id]
+
+    async def count_verdict(self, *_: object) -> None:
+        return None
+
+    async def count_approval(self, tenant_id, agent_id, tool, shape, counter) -> None:
+        self.counted.append((tool, shape, counter))
 
 
 def _memory(memory_id: str, confidence: float) -> CanonicalMemory:
@@ -682,10 +703,11 @@ class _ProjectingUow(_Uow):
 
 
 def _projecting() -> tuple[FeedbackService, _Run, _ProjectingUow]:
-    run, repo = _Run(), _FeedbackRepo()
+    run = _Run()
+    uow = _ProjectingUow(run, _FeedbackRepo())
     service = _service({"carol"})
-    service.uow_factory = lambda: _ProjectingUow(run, repo)
-    return service, run, _ProjectingUow(run, repo)
+    service.uow_factory = lambda: uow
+    return service, run, uow
 
 
 def _judge(verdict: FeedbackVerdict, feedback_id: str) -> Feedback:
@@ -736,3 +758,91 @@ async def test_an_outranked_judge_verdict_moves_no_memory() -> None:
     projection = await service.project("acme", "fb_j3")
     assert projection is not None and projection.memory_ids == []
     assert run.outcomes["run_9"].success and run.confidence == {"mem_1": 0.9}
+
+
+async def test_the_judges_verdict_is_no_vote_of_the_user_it_judged_for() -> None:
+    """The /v1/verify call is made in the user's scope, but the judge's verdict is not that
+    user's vote: it neither replaces their pending thumb on the run nor is replaced by it,
+    and it waits on its own."""
+    service, _, uow = _projecting()
+    ctx = OWNER.model_copy(update={"agent_id": "ref", "agent_run_id": "run_9"})
+    thumb, _ = await service.submit(uow, OWNER, _run_vote(FeedbackVerdict.CONFIRM))
+    report = GroundingReport(
+        claims=[ClaimReport(claim="S40 sells 90 a week.", verdict="unsupported")],
+        unsupported=1,
+        evidence_count=2,
+    )
+    judged = await judge_run(service, lambda: uow, ctx, "run_9", "ctx_1", "90", report)  # type: ignore[arg-type,return-value]
+    again, _ = await service.submit(uow, OWNER, _run_vote(FeedbackVerdict.REJECT))
+    states = await _states(uow)
+    assert judged is not None and states[judged] == "pending"
+    assert uow.feedback.rows[("acme", judged)].vote is False
+    assert (states[thumb.feedback_id], states[again.feedback_id]) == ("replaced", "pending")
+
+
+# ---------------------------------------------------------------- what an approval decision teaches
+
+ARGS = {"from": "W1", "to": "S12", "units": 4}
+
+
+def _decision(verdict: FeedbackVerdict, feedback_id: str, **metadata) -> Feedback:
+    return Feedback(
+        feedback_id=feedback_id,
+        tenant_id="acme",
+        target_kind=FeedbackTargetKind.TOOL_CALL,
+        target_id="call_transfer",
+        verdict=verdict,
+        source=FeedbackSource.INTERRUPT,
+        reviewer="user:lead",
+        metadata={"tool": "transfer_stock", "args": ARGS, **metadata},
+    )
+
+
+async def test_an_approval_counts_once_and_only_for_a_call_its_run_recorded() -> None:
+    """B6: a key that may act as the agent sent approvals with forged ids (no interrupt, no
+    call) and replayed one interrupt under new feedback ids: five of them made a learned rule
+    that stopped an administrator's question. An approval now counts only on an interrupt of
+    a run that recorded the call it approved, once per interrupt."""
+    service, run, uow = _projecting()
+    ctx = OWNER.model_copy(update={"agent_id": "ops", "agent_run_id": "run_7"})
+
+    async def decided(verdict, feedback_id, **metadata):
+        await service.submit(uow, ctx, _decision(verdict, feedback_id, **metadata))
+        return await service.project("acme", feedback_id, attempt=CALL_RECORD_CHECKS)
+
+    forged = await decided(FeedbackVerdict.APPROVE, "fb_forged")
+    assert forged is not None and forged.action is ProjectionAction.NONE
+    unbacked = await decided(FeedbackVerdict.APPROVE, "fb_unbacked", interrupt_id="int_1")
+    assert unbacked is not None and unbacked.action is ProjectionAction.NONE
+    assert run.counted == []
+
+    run.calls.append(
+        ToolInvocation(
+            tenant_id="acme",
+            tool_id="tol_t",
+            tool_name="transfer_stock",
+            run_id="run_7",
+            args_hash=stable_hash(ARGS),
+        )
+    )
+    backed = await decided(FeedbackVerdict.APPROVE, "fb_backed", interrupt_id="int_2")
+    replayed = await decided(FeedbackVerdict.APPROVE, "fb_replayed", interrupt_id="int_2")
+    assert backed is not None and backed.action is ProjectionAction.TOOL_CALL_COUNTED
+    assert replayed is not None and replayed.action is ProjectionAction.NONE
+    # a rejection only makes the tool ask more: it needs no recorded call
+    rejected = await decided(FeedbackVerdict.REJECT, "fb_rejected", interrupt_id="int_3")
+    assert rejected is not None and rejected.action is ProjectionAction.TOOL_CALL_COUNTED
+    assert [c for _, _, c in run.counted] == ["approvals", "rejections"]
+
+
+async def test_an_approval_before_its_call_is_recorded_is_looked_at_again() -> None:
+    """The decision is sent as the run resumes, before the approved call runs: its projection
+    waits, scheduled again, rather than counting nothing for good."""
+    service, run, uow = _projecting()
+    ctx = OWNER.model_copy(update={"agent_id": "ops", "agent_run_id": "run_7"})
+    await service.submit(uow, ctx, _decision(FeedbackVerdict.APPROVE, "fb_a", interrupt_id="i"))
+    uow.jobs.clear()
+    assert await service.project("acme", "fb_a") is None
+    [job] = uow.jobs
+    assert job.payload["attempt"] == 1 and job.schedule_in_seconds
+    assert uow.feedback.rows[("acme", "fb_a")].projection is None and run.counted == []

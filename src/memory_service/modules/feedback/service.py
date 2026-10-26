@@ -8,7 +8,9 @@ the record, so a verdict is never lost and never slows the request that carried 
 - run: the run's outcome, unless a higher-ranked source decided it (a person over the judge
   over the run's own status); only then do the memories the verdict cites gain or lose
   confidence;
-- tool call: counted on the tool's statistics and on its approval pattern;
+- tool call: counted on the tool's statistics and on its approval pattern - only a person's
+  decision on an interrupt of a run, once per interrupt, and an approval only once the run
+  recorded the call it approved (``_project_tool_call``);
 - procedure: a rejection takes it out of what is offered.
 
 A verdict that would change what was learned on a person's, an agent's or the grounding
@@ -59,7 +61,7 @@ from memory_service.domain.learning import (
 )
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.revisions import RevisionKind
-from memory_service.domain.tools import RunOutcome
+from memory_service.domain.tools import RunOutcome, stable_hash
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.feedback.votes import (
     ALREADY_COUNTED_REASON,
@@ -89,6 +91,11 @@ TASK_FEEDBACK_PROJECT = "feedback.project"
 REINFORCEMENT_STEP: Final = 0.1
 #: How many verdicts one bulk review decides at most (ids sent, or pending on one target).
 BULK_REVIEW_MAX: Final = 500
+#: How often an approval is looked at again while the call it approved is not recorded yet
+#: (the decision is sent as the run resumes, before the approved call has run), and how far
+#: apart; after that it counts nothing.
+CALL_RECORD_CHECKS: Final = 10
+CALL_RECORD_WAIT_SECONDS: Final = 30
 #: The record fields the trusted headers decide; a body that disagrees is refused.
 IDENTITY_FIELDS: Final = ("tenant_id", "workspace_id", "user_id")
 EVIDENCE_SOURCE: Final = EvidenceSource.FEEDBACK
@@ -329,13 +336,19 @@ class FeedbackService:
         return ctx.is_agent or not await self.authz.is_tenant_admin(ctx)
 
     @staticmethod
-    async def _schedule(uow: UnitOfWork, record: Feedback) -> None:
+    async def _schedule(uow: UnitOfWork, record: Feedback, *, attempt: int = 0) -> None:
+        key = f"feedback:{record.tenant_id}:{record.feedback_id}"
         await uow.enqueue(
             JobSpec(
                 task_name=TASK_FEEDBACK_PROJECT,
                 queue=Queue.RECONCILE,
-                payload={"tenant_id": record.tenant_id, "feedback_id": record.feedback_id},
-                idempotency_key=f"feedback:{record.tenant_id}:{record.feedback_id}",
+                payload={
+                    "tenant_id": record.tenant_id,
+                    "feedback_id": record.feedback_id,
+                    **({"attempt": attempt} if attempt else {}),
+                },
+                idempotency_key=f"{key}:{attempt}" if attempt else key,
+                schedule_in_seconds=CALL_RECORD_WAIT_SECONDS if attempt else None,
                 tenant_id=record.tenant_id,
             )
         )
@@ -580,10 +593,14 @@ class FeedbackService:
         return ctx.workspace_id is not None and record.workspace_id == ctx.workspace_id
 
     # ------------------------------------------------------------------ projector
-    async def project(self, tenant_id: str, feedback_id: str) -> FeedbackProjection | None:
+    async def project(
+        self, tenant_id: str, feedback_id: str, *, attempt: int = 0
+    ) -> FeedbackProjection | None:
         """The ``feedback.project`` job. Idempotent and serialised: the record and, for a
         memory target, the memory are locked for the transaction, so a re-dispatched job or
-        two verdicts on one memory apply one after another and never fork the chain."""
+        two verdicts on one memory apply one after another and never fork the chain. An
+        approval of a call the run has not recorded yet is looked at again later
+        (``attempt``, at most ``CALL_RECORD_CHECKS`` times)."""
         async with self.uow_factory() as uow:
             await uow.serialize(f"feedback:{tenant_id}:{feedback_id}")
             record = await uow.feedback.get(tenant_id, feedback_id)
@@ -594,6 +611,14 @@ class FeedbackService:
                 return record.projection
             if record.pending:
                 # waits for a reviewer; approval schedules this job again
+                return None
+            if (
+                attempt < CALL_RECORD_CHECKS
+                and _approves(record)
+                and not await _backed(uow, record)
+            ):
+                await self._schedule(uow, record, attempt=attempt + 1)
+                await uow.commit()
                 return None
             if record.target_kind is FeedbackTargetKind.MEMORY:
                 await uow.serialize(f"memory:{tenant_id}:{record.target_id}")
@@ -812,12 +837,37 @@ class FeedbackService:
         """Approve, reject or edit of a tool call: counted on the tool and on the approval
         pattern of (agent, tool, argument shape). The tool is ``metadata.tool`` and its
         arguments ``metadata.args`` (the edit's replacement arguments when absent). The run's
-        outcome is not touched: that is what RUN feedback is for."""
+        outcome is not touched: that is what RUN feedback is for.
+
+        A learned approval rule stops a person being asked, so only a decision that is one
+        counts: a reviewer's on an interrupt (``metadata.interrupt_id``) of a run, once per
+        interrupt whatever feedback id carries it again, and an approval only when the run
+        recorded the call it approved, that tool with those arguments (``_backed``). A
+        rejection or an edit only makes the tool ask more, so it needs no recorded call."""
         tool = str(record.metadata.get("tool") or "").strip()
         if not tool:
             return FeedbackProjection(
                 action=ProjectionAction.NONE,
                 reason="the verdict names no tool (metadata.tool)",
+                projected_at=now,
+            )
+        interrupt = record.metadata.get("interrupt_id")
+        if not (record.agent_run_id and interrupt and record.reviewer):
+            return FeedbackProjection(
+                action=ProjectionAction.NONE,
+                reason="a decision counts only on an interrupt of a run, with its reviewer",
+                projected_at=now,
+            )
+        if await _counted_before(uow, record):
+            return FeedbackProjection(
+                action=ProjectionAction.NONE,
+                reason="a decision on this interrupt was counted already",
+                projected_at=now,
+            )
+        if _approves(record) and not await _backed(uow, record):
+            return FeedbackProjection(
+                action=ProjectionAction.NONE,
+                reason="the run recorded no call of that tool with those arguments",
                 projected_at=now,
             )
         counter = APPROVAL_COUNTER[record.verdict]
@@ -1034,3 +1084,36 @@ class FeedbackService:
             )
         )
         await bump_memory_revisions(uow, memories)
+
+
+def _approves(record: Feedback) -> bool:
+    """Whether ``record`` approves a tool call: the decision a learned rule relaxes on."""
+    return (
+        record.target_kind is FeedbackTargetKind.TOOL_CALL
+        and APPROVAL_COUNTER[record.verdict] == "approvals"
+    )
+
+
+async def _backed(uow: UnitOfWork, record: Feedback) -> bool:
+    """Whether the decision's run recorded the call it decided: its tool, its arguments."""
+    args = record.metadata.get("args")
+    if not record.agent_run_id or not isinstance(args, dict):
+        return False
+    tool, wanted = record.metadata.get("tool"), stable_hash(args)
+    calls = await uow.tools.invocations_for_run(record.tenant_id, record.agent_run_id)
+    return any(c.tool_name == tool and c.args_hash == wanted for c in calls)
+
+
+async def _counted_before(uow: UnitOfWork, record: Feedback) -> bool:
+    """Whether another decision on the same interrupt of the same run was counted."""
+    interrupt = record.metadata.get("interrupt_id")
+    return any(
+        other.feedback_id != record.feedback_id
+        and other.agent_run_id == record.agent_run_id
+        and other.metadata.get("interrupt_id") == interrupt
+        and other.projection is not None
+        and other.projection.action is ProjectionAction.TOOL_CALL_COUNTED
+        for other in await uow.feedback.list_for(
+            record.tenant_id, target_kind=record.target_kind, target_id=record.target_id
+        )
+    )
