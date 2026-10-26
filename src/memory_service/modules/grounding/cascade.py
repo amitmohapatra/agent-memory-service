@@ -23,6 +23,7 @@ from typing import Any, Literal
 from memory_service.config.constants import LLM, NLISettings
 from memory_service.domain.context_bundle import ContextBundle
 from memory_service.domain.grounding import ClaimReport, ClaimVerdict, GroundingReport
+from memory_service.domain.language import writing_script
 from memory_service.domain.text import ACKNOWLEDGEMENT, SENTENCE_BREAK
 from memory_service.modules.context.handles import BundleRecord, record_of
 from memory_service.modules.grounding.lexical import content_tokens, coverage, words
@@ -56,6 +57,9 @@ _ID_LIKE = re.compile(
 HEDGE_MAX_WORDS = 8
 DISCOURSE_MAX_WORDS = 8
 CLAUSE_MIN_TOKENS = 4
+#: The share of a claim's content words a passage must contain to contradict it: one about
+#: something else (the user's own sentence against an unrelated figure) refutes nothing.
+CONTRADICTION_MIN_COVERAGE = 0.2
 
 _JUDGE_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -419,7 +423,12 @@ class GroundingCascade:
         # the best-supporting premise decides; a contradiction only wins when nothing supports
         # the claim above the band (a second passage with other figures is not a refutation)
         supported = support >= threshold and support > scores[best_e].contradiction
-        if not supported and _contradicts(scores[best_c], high) and support <= high:
+        if (
+            not supported
+            and _contradicts(scores[best_c], high)
+            and support <= high
+            and _about(claim.text, premises[best_c].text)
+        ):
             verdict = "contradicted"
             ids = [premises[best_c].item_id]
         elif cited:
@@ -503,7 +512,7 @@ class GroundingCascade:
         against = [
             e.item_id
             for e, s in zip(candidates, scores, strict=True)
-            if _contradicts(s, self.cfg.borderline_band[1])
+            if _contradicts(s, self.cfg.borderline_band[1]) and _about(claim.text, e.text)
         ]
         if not against:
             return report
@@ -517,6 +526,15 @@ class GroundingCascade:
                 max(s.contradiction for s in scores if s.contradiction), 4
             )
         return report.model_copy(update=update)
+
+
+def _about(claim: str, passage: str) -> bool:
+    """Whether ``passage`` is about what ``claim`` says (``CONTRADICTION_MIN_COVERAGE`` of its
+    words), so that it may contradict it. Across scripts no word is shared whatever is said:
+    there the model alone decides, as before."""
+    if writing_script(claim) is not writing_script(passage):
+        return True
+    return coverage(claim, passage) >= CONTRADICTION_MIN_COVERAGE
 
 
 _VERDICTS: tuple[ClaimVerdict, ...] = ("supported", "unsupported", "contradicted", "borderline")
