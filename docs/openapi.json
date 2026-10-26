@@ -896,6 +896,18 @@
             "title": "Examples",
             "type": "array"
           },
+          "indexed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether tool search finds it as it is now (`GET /v1/tools` only): false right after it was published or changed, until it is indexed - a harness waits for it before its first hints; null where the catalog has no search index.",
+            "title": "Indexed"
+          },
           "input_schema": {
             "additionalProperties": true,
             "description": "The JSON Schema of its arguments.",
