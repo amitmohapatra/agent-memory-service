@@ -1515,7 +1515,10 @@
      "expect": {
       "contains": [
        "iam-reset_mfa",
-       "mail-send_notice"
+       "mail-send_notice",
+       {
+        "re": "iam-lookup_user iam-reset_mfa mail-send_notice"
+       }
       ],
       "answer": {
        "contains": [
