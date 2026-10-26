@@ -262,3 +262,18 @@ def test_a_promoted_memory_is_not_gathered_so_every_body_appears_once() -> None:
     assert sum(SHOWN_ABOVE in line for line in timeline) == MOST_RELEVANT_MAX
     # the two that were not promoted are gathered into one block; every body still once
     assert sum(rendered.count(f"body {i}.") for i in range(len(memories))) == len(memories)
+
+
+def test_memorys_insufficiency_is_not_shown_when_a_hinted_tool_answers() -> None:
+    """S4: "Evidence status INSUFFICIENT" on a question a hinted tool answers drove the model
+    into memory_search loops. Shown only when no hinted tool fits the question."""
+    from memory_service.domain.tools import ToolCandidate, ToolHints
+
+    empty = _bundle([]).model_copy(
+        update={"evidence": EvidenceReport(status=EvidenceStatus.INSUFFICIENT)}
+    )
+    assert "## Evidence status\nINSUFFICIENT" in empty.render()
+    fits = ToolHints(candidates=[ToolCandidate(name="travel_policy", score=1.0, confidence=0.63)])
+    assert "## Evidence status" not in empty.model_copy(update={"tools": fits}).render()
+    weak = ToolHints(candidates=[ToolCandidate(name="app_help", score=0.1, confidence=0.1)])
+    assert "## Evidence status" in empty.model_copy(update={"tools": weak}).render()

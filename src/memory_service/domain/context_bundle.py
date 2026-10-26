@@ -26,6 +26,10 @@ from memory_service.domain.tools import SkillView, ToolCandidate, ToolHints
 MENTIONS = "mentions"
 #: Tool candidates the rendered Tools section shows (the next step is shown even past it).
 TOOLS_SHOWN_MAX = 3
+#: The confidence from which a hinted tool is taken to answer the question: memory's own
+#: evidence status is then not shown (an INSUFFICIENT drove the model to search memory in
+#: loops on questions its tools answer).
+TOOL_ANSWERS_CONFIDENCE = 0.5
 
 #: What produced ``ContextItem.score``; the scales are not comparable across kinds.
 ScoreKind = Literal["fusion", "exact"]
@@ -553,7 +557,7 @@ class ContextBundle(BaseModel):
                     for k in self.knowledge
                 )
             )
-        if self.evidence.status is not EvidenceStatus.COMPLETE:
+        if self.evidence.status is not EvidenceStatus.COMPLETE and not tool_answers(self.tools):
             parts.append(f"## Evidence status\n{self.evidence.status}")
         return "\n\n".join(parts)
 
@@ -607,6 +611,13 @@ def skills_section(skills: Sequence[SkillView], tools: ToolHints | None = None) 
         lines.append(f"- {what}: {steps} (worked {skill.success_rate:.0%} of {skill.support} runs)")
         lines.extend(f"  - if {fix}" for fix in skill.fixes)
     return "## Learned skills for this task\n" + "\n".join(lines)
+
+
+def tool_answers(hints: ToolHints | None) -> bool:
+    """Whether a hinted tool fits the question well enough to answer it."""
+    return hints is not None and any(
+        c.confidence >= TOOL_ANSWERS_CONFIDENCE for c in hints.candidates
+    )
 
 
 def planned(hints: ToolHints | None) -> bool:
