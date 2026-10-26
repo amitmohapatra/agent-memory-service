@@ -10,10 +10,17 @@ import pytest
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.graph import IDENTIFIED_BY, USED_ENTITY, layer_for
 from memory_service.domain.learning import ApprovalCounts
-from memory_service.domain.tools import RunOutcome, StoredProcedure, ToolDescriptor, ToolInvocation
+from memory_service.domain.tools import (
+    Prefill,
+    RunOutcome,
+    StoredProcedure,
+    ToolDescriptor,
+    ToolInvocation,
+)
 from memory_service.modules.tools.edges import tool_edges
 from memory_service.modules.tools.hints import (
     ToolHintsService,
+    _as_declared,
     _candidates,
     _from_memories,
     _from_procedure,
@@ -500,3 +507,176 @@ async def test_numbers_are_cast_only_for_number_arguments() -> None:
     assert prefill["pay.total"].value == 1200.5
     assert prefill["pay.count"].value == 3
     assert prefill["pay.ref"].value == "INV-42", "a string argument keeps its text"
+
+
+# ------------------------------------------------------------------ which tools, and the next step
+
+
+def test_nothing_matched_and_no_plan_is_no_candidates() -> None:
+    """B13: an index not built yet scores every tool 0: no candidate (they were the toolbox's
+    first names in alphabetical order), and so no next step. A learned plan still leads."""
+    found = [("billing-list", 0.0)]
+    assert _candidates(found, None, None, {}, ["allocatable_stock", "app_help"], 5) == []
+    plan = _procedure("p", ["store_demand"])
+    ranked = _candidates([], plan, "store_demand", {}, ["store_demand", "app_help"], 5)
+    assert [c.name for c in ranked][:1] == ["store_demand"]
+
+
+def test_a_general_view_is_no_candidate_below_a_specific_tool() -> None:
+    """S3: the dashboard ranked under the specific tools the task asks for is dropped; ranked
+    first it is what the task asked for; a step of the learned plan always stays."""
+    found = [("tickets_by_priority", 1.0), ("sla_breaches", 0.8), ("desk_dashboard", 0.6)]
+    names = [n for n, _ in found]
+    assert [c.name for c in _candidates(found, None, None, {}, names, 5)] == names[:2]
+    first = [("desk_dashboard", 1.0), ("tickets_by_priority", 0.8)]
+    assert _candidates(first, None, None, {}, names, 5)[0].name == "desk_dashboard"
+    plan = _procedure("p", ["tickets_by_priority", "desk_dashboard"])
+    kept = _candidates(found, plan, None, {}, names, 5)
+    assert "desk_dashboard" in [c.name for c in kept]
+
+
+class _HintsUow:
+    def __init__(self, entries: list[ToolDescriptor]) -> None:
+        self.entries = entries
+        self.tools = self
+        self.procedures = self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
+
+    async def visible(self, *_: object, **__: object) -> list:
+        return []
+
+    async def catalog(self, tenant_id, *, workspace_id, names, limit):
+        return [e for e in self.entries if e.name in names]
+
+    async def stats(self, tenant_id, names) -> dict:
+        return {}
+
+
+class _Index:
+    def __init__(self, found: list[tuple[str, float]]) -> None:
+        self.found = found
+
+    async def search(self, *_: object, **__: object) -> list[tuple[str, float]]:
+        return self.found
+
+
+async def test_a_tool_that_changes_something_is_no_next_step_for_a_question() -> None:
+    """S3: "Before I create any stock rule: how many units ... a week?" ranks the rule first;
+    the next step is the read that answers it. Asked to create one, the rule is next."""
+    rule = ToolDescriptor(tenant_id="acme", name="create_stock_rule", side_effects="irreversible")
+    demand = ToolDescriptor(tenant_id="acme", name="store_demand", side_effects="read")
+    service = ToolHintsService(
+        lambda: _HintsUow([rule, demand]),  # type: ignore[arg-type,return-value]
+        _Index([("create_stock_rule", 1.0), ("store_demand", 0.8)]),  # type: ignore[arg-type]
+        None,
+    )
+    ctx = MemoryExecutionContext(tenant_id="acme", user_id="u1")
+    names = ["create_stock_rule", "store_demand"]
+    asked = await service.hints(
+        ctx,
+        "Before I create any stock rule: how many units of ST-101 does S12 sell a week?",
+        available=names,
+        k=5,
+        scope_keys=["k"],
+    )
+    assert asked.candidates[0].name == "create_stock_rule" and asked.next == "store_demand"
+    told = await service.hints(
+        ctx, "Create a stock rule for ST-101 at S12.", available=names, k=5, scope_keys=["k"]
+    )
+    assert told.next == "create_stock_rule"
+
+
+# ------------------------------------------------------------------ which value, for which argument
+
+
+def _described(name: str, **args: tuple[str, str]) -> ToolDescriptor:
+    """A tool whose arguments are (type, description), all required."""
+    return ToolDescriptor(
+        tenant_id="acme",
+        name=name,
+        input_schema={
+            "properties": {a: {"type": t, "description": d} for a, (t, d) in args.items()}
+        },
+        required=list(args),
+    )
+
+
+ASSET_OWNER = _described("asset_owner", asset_tag=("string", "The tag, such as LT-2231."))
+RESET = _described("reset_password", user_id=("string", "The user's id, such as u-77."))
+DEMAND = _described(
+    "store_demand",
+    store=("string", "The store's id, such as S12."),
+    style=("string", "The style's id, such as ST-101."),
+)
+RULE = _described(
+    "create_stock_rule",
+    store=("string", "The store's id, such as S12."),
+    style=("string", "The style's id, such as ST-101."),
+    min_units=("integer", "The fewest units."),
+    max_units=("integer", "The most units."),
+)
+TICKETS = _described(
+    "tickets_by_priority",
+    team=("string", "The team's name, such as network or desktop."),
+    priority=("string", "high, medium or low."),
+)
+
+
+async def _hinted(task: str, *tools: ToolDescriptor) -> tuple[dict, dict]:
+    service = ToolHintsService(None, None, None)  # type: ignore[arg-type]
+    prefill, missing = await service._every_argument([_job(t, task=task) for t in tools])
+    values = {k: p.value for k, p in prefill.items()}
+    return values, {(m.tool, m.arg) for m in missing}
+
+
+async def test_an_identifier_fills_only_an_argument_whose_own_words_it_matches() -> None:
+    """S1: the asset tag of the task is the asset owner's, never the password reset's
+    ``user_id`` because that argument asks for an identifier."""
+    task = "Before anyone resets anything: who is laptop LT-2290 assigned to?"
+    values, missing = await _hinted(task, ASSET_OWNER, RESET)
+    assert values == {"asset_owner.asset_tag": "LT-2290"}
+    assert ("asset_owner", "asset_tag") not in missing
+
+
+async def test_a_value_of_the_argument_s_example_shape_fills_it() -> None:
+    """S2: "S12" and "ST-101", named with no argument word before them, and the S7 of
+    "Store S7", fill the arguments whose examples they look like: no false "missing"."""
+    task = "Before I create any stock rule: how many units of ST-101 does S12 sell a week?"
+    values, missing = await _hinted(task, DEMAND)
+    assert values == {"store_demand.store": "S12", "store_demand.style": "ST-101"}
+    assert not missing
+    values, _ = await _hinted("Store S7: how is it doing overall?", DEMAND)
+    assert values["store_demand.store"] == "S7"
+
+
+async def test_a_number_is_never_read_out_of_an_identifier() -> None:
+    """S1: "units of ST-101" is no max_units of -101."""
+    task = "Before I create any stock rule: how many units of ST-101 does S12 sell a week?"
+    values, missing = await _hinted(task, RULE)
+    assert "create_stock_rule.max_units" not in values
+    assert values["create_stock_rule.style"] == "ST-101"
+    assert {("create_stock_rule", "min_units"), ("create_stock_rule", "max_units")} <= missing
+    found = Prefill(tool="create_stock_rule", value="ST-101", source="task")
+    assert _as_declared(found, RULE, "max_units").value == "ST-101"
+
+
+async def test_described_free_text_is_the_model_s_to_word_never_missing() -> None:
+    """S2: a team or a priority the request words ("the network team", "high-priority") is
+    no value the hints can extract, so the described argument is not asked for as missing;
+    an undescribed one still is."""
+    task = "Which high-priority tickets does the network team have open?"
+    _, missing = await _hinted(task, TICKETS)
+    assert missing == set()
+    approve = ToolDescriptor(
+        tenant_id="acme",
+        name="approve",
+        input_schema={"properties": {"approver": {"type": "string"}}},
+        required=["approver"],
+    )
+    _, missing = await _hinted(task, approve)
+    assert missing == {("approve", "approver")}

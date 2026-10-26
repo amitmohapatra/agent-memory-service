@@ -137,9 +137,15 @@ hints.plan  # the learned procedure: .steps (tool names), .success_rate, .runs |
   callable tool the search missed still competes on its record), scored by relevance × how
   well the tool has worked, with a bonus for the plan's tools, its next step, and recent use.
   `confidence` is that score as 0..1 (`1 - e^-score`, same order); `success_rate` is the share
-  of the tool's recorded calls that succeeded (absent: never called).
+  of the tool's recorded calls that succeeded (absent: never called). When nothing matched the
+  task (the catalog is not indexed yet) and no plan is learned, there are no candidates and no
+  `next`: a ranking of zeros is the toolbox in alphabetical order, no hint. A general view —
+  a tool whose name says `overview`, `summary` or `dashboard` — is left out when it ranks
+  below a specific tool (ranked first, it is what the task asked for; a plan step stays).
 - **plan / next** — the stored procedure whose pattern matches the task and whose tools are all
-  callable; `next: true` marks the step this run has not done yet.
+  callable; `next: true` marks the step this run has not done yet (without a plan, the best
+  candidate). A tool that changes something (its catalog risk is not `read`) is never `next`
+  for a task that is a question: the best candidate that only reads is.
 - **args** — every candidate's arguments, first found wins: the procedure's binding (an
   earlier step's output in this run, or the constant every successful run used, unless the
   task names another value of its kind) → the
@@ -149,12 +155,18 @@ hints.plan  # the learned procedure: .steps (tool names), .success_rate, .runs |
   hand names right after the argument's words ("their supplier id is SUP-40" for
   `supplier_id`). A value named right after an argument's own words fills that argument and no
   other ("for cost centre CC-7" is `cost_centre`, never `supplier_id`), as does an identifier
-  that spells it (`SKU-22` is `sku`, never the quote `Q-1183`); a name is never an `…id`
-  argument's (it is left for the argument that takes a name). Each value is used once, a
-  currency on either side of an amount is the amount's (`700 EUR`), and a value for a number
-  argument is a number (`"700 EUR"` → `700`).
+  that spells it (`SKU-22` is `sku`, never the quote `Q-1183`) and one of the shape of the
+  example the argument's schema gives (`"The store's id, such as S12."`: `S40`, and the `S7` of
+  "Store S7"; `examples` count too); a name is never an `…id` argument's (it is left for the
+  argument that takes a name), and an identifier never fills an argument only because its name
+  asks for one (the asset tag `LT-2290` is no `user_id`). Each value is used once, a currency
+  on either side of an amount is the amount's (`700 EUR`), a value for a number argument is a
+  number (`"700 EUR"` → `700`), and no number is read out of an identifier (`ST-101` is no
+  `max_units`).
 - **missing** — required arguments nothing filled, with the question to ask (and the
-  `entity_type` the argument names, when the catalog says).
+  `entity_type` the argument names, when the catalog says) — but not a free-text argument the
+  catalog describes (a team's name, a question, with no identifier, number or entity to find):
+  the request says it in words the hints do not extract, and the model words it from there.
 
 ## Procedures and the learning job
 
