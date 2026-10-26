@@ -18,6 +18,7 @@ from memory_service.domain.enums import (
     DedupDecision,
     Lifetime,
     MemoryType,
+    MessageRole,
     ObservationKind,
     ScopeLevel,
     TemporalStatus,
@@ -25,7 +26,7 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.fiscal import FiscalCalendar
 from memory_service.domain.memory import AdmissionDecision, CanonicalMemory, Scope, TemporalState
-from memory_service.domain.observation import Observation
+from memory_service.domain.observation import AGENT_ROLES, Observation
 from memory_service.modules.authz.visibility import readable_by
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.llm.assist import LLMAssist
@@ -262,6 +263,20 @@ async def _replace(
     return {memory.memory_id, target.memory_id, *(t.memory_id for t in twins)}
 
 
+def _told(observation: Observation) -> bool:
+    """Whether a message is something the service was told, which memories are formed from:
+    not a tool's result (its errors, its raw JSON) and not an agent run's own words (its
+    answer, a hedge included). Both stay in the transcript; a fact the agent wants kept goes
+    through ``memory_remember``. A person's words, an event and a document are told, and so
+    is what an agent submits as an observation of its own (``AGENT_RESULT``)."""
+    if observation.kind is not ObservationKind.MESSAGE:
+        return True
+    role = str((observation.custom_metadata or {}).get("role", "")).upper()
+    if role == MessageRole.TOOL:
+        return False
+    return not (observation.agent_run_id and role in AGENT_ROLES)
+
+
 class ObservationPipeline:
     def __init__(
         self,
@@ -296,6 +311,11 @@ class ObservationPipeline:
             return []
         if observation.processed_at is not None:
             return []  # idempotent replay
+        if not _told(observation):
+            async with self.uow_factory() as uow:
+                await uow.observations.mark_processed(tenant_id, observation_id, status="NO_MEMORY")
+                await uow.commit()
+            return []
         ctx = context_from_observation(observation)
         preceding = await self._preceding_turn(observation)
         async with self.assist.bound(identity_of(ctx)):

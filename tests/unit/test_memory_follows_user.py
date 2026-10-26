@@ -30,7 +30,7 @@ from memory_service.modules.memory.native import (
     said_by_user,
     verbatim_windows,
 )
-from memory_service.modules.memory.pipeline import build_memory
+from memory_service.modules.memory.pipeline import ObservationPipeline, _told, build_memory
 from memory_service.modules.retrieval.engine import (
     Candidate,
     _dedup,
@@ -304,3 +304,65 @@ def test_an_expansion_does_not_add_the_copy_of_a_statement_in_hand() -> None:
     )
     assert turn.payload["owner_principal"] == "agent:u1/harness"
     assert not_in_hand([fact, other], [turn]) == [other]
+
+
+# --- what a run's transcript forms ---------------------------------------------------------
+
+
+class _Observations:
+    def __init__(self, observation: Observation) -> None:
+        self.observation, self.status = observation, None
+
+    async def get(self, tenant_id, observation_id):
+        return self.observation if self.status is None else None
+
+    async def mark_processed(self, tenant_id, observation_id, *, status) -> None:
+        self.status = status
+
+
+class _Uow:
+    def __init__(self, observations: _Observations) -> None:
+        self.observations = observations
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
+
+    async def commit(self) -> None:
+        return None
+
+
+class _Unreachable:
+    async def extract(self, *_: object) -> list:
+        raise AssertionError("nothing is extracted from it")
+
+
+@pytest.mark.parametrize(
+    ("role", "text"),
+    [
+        ("ASSISTANT", "The supplier system is unavailable, so we cannot determine the ETA."),
+        ("TOOL", "supplier_eta failed: the supplier system is unavailable"),
+        ("TOOL", '[{"id": "mem_1", "kind": "memory", "text": "S12 sells 10 a week"}]'),
+    ],
+)
+async def test_an_agent_runs_own_words_and_its_tools_results_form_no_memory(role, text) -> None:
+    """B15: replayed into a fresh tenant, a real run's transcript stored its answers, hedges,
+    tool errors and raw tool JSON as facts. They stay in the transcript, and form nothing."""
+    observations = _Observations(_obs(text, HARNESS, role=role))
+    pipeline = ObservationPipeline(
+        lambda: _Uow(observations),  # type: ignore[arg-type,return-value]
+        _Unreachable(),  # type: ignore[arg-type]
+        settings=MemoryIntelligenceSettings(),
+    )
+    assert await pipeline.run({"tenant_id": "acme", "observation_id": "obs_1"}) == []
+    assert observations.status == "NO_MEMORY"
+
+
+def test_a_persons_words_an_event_and_an_agents_result_still_form_memories() -> None:
+    assert _told(_obs(CODE, HARNESS)), "the user's turn the harness relays"
+    assert _told(_obs("Deploy finished.", HARNESS, role="EVENT"))
+    assert _told(_obs(CODE, role="ASSISTANT")), "a chat app's assistant, outside any run"
+    assert _told(_obs("Draft plan.", HARNESS, kind=ObservationKind.AGENT_RESULT, role=None))
+    assert not _told(_obs("Thinking: UTC.", HARNESS, role="AGENT"))
