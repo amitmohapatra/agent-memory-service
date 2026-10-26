@@ -229,6 +229,93 @@ def test_a_procedure_is_admitted_with_support_and_kept_on_a_delta() -> None:
     assert merge(None, None, tenant_id="acme", audience="k", owner=owner) is None
 
 
+def test_a_failed_call_and_its_retry_are_one_step() -> None:
+    """B10: lookup, reset (TimeoutError), reset (ok) in two confirmed runs is the two-step
+    procedure lookup -> reset with both runs' support, not support 0."""
+    runs = [
+        build_trajectory(
+            f"r{i}",
+            [
+                _call("lookup", 0, run=f"r{i}", output_fields={"user": f"u-{i}"}),
+                _call("reset", 1, run=f"r{i}", status="error", error_class="TimeoutError"),
+                _call("reset", 2, run=f"r{i}", args_redacted={"user": f"u-{i}"}),
+            ],
+            succeeded=True,
+        )
+        for i in range(2)
+    ]
+    mined = mine_procedure("p", runs)
+    assert mined is not None and mined.tools == ["lookup", "reset"]
+    assert (mined.support, mined.success_rate) == (2, 1.0)
+    [binding] = mined.steps[1].bindings
+    assert (binding.source_step, binding.source_field) == (0, "user"), "the retry that worked"
+
+
+def _style_runs(*styles: str) -> list:
+    return [
+        build_trajectory(
+            f"r{i}",
+            [
+                _call(
+                    "style_stock",
+                    0,
+                    run=f"r{i}",
+                    args_redacted={"style": "ST-101", "warehouse": "W1"},
+                    task=f"How many units of style {style} are there?",
+                )
+            ],
+            succeeded=True,
+        )
+        for i, style in enumerate(styles)
+    ]
+
+
+def test_a_value_is_a_learned_literal_only_when_constant_across_different_tasks() -> None:
+    """B11: three runs about ST-101 all used style='ST-101': the task's value, not the
+    procedure's, so no literal. 'W1', the same in runs about two different styles and named
+    by none of them, is a constant."""
+    same = mine_procedure("p", _style_runs("ST-101", "ST-101", "ST-101"))
+    assert same is not None
+    assert {b.argument: b.literal for b in same.steps[0].bindings} == {
+        "style": None,
+        "warehouse": None,
+    }, "runs about one style teach no constant"
+    mixed = mine_procedure("p", _style_runs("ST-101", "ST-205", "ST-101"))
+    assert mixed is not None
+    literals = {b.argument: b.literal for b in mixed.steps[0].bindings}
+    assert literals == {"style": None, "warehouse": "W1"}
+
+
+def test_code_mode_meta_tools_are_no_procedure_steps() -> None:
+    """B17: a Code Mode run records the meta-tools it called and the nested calls the gateway
+    logged; the procedure is the nested tools, the ones the task needed."""
+    calls = [
+        _call("list_tool_files", 0),
+        _call("execute_tool_code", 1),
+        _call("wiki-search_pages", 2, output_fields={"page": "Hooks"}),
+        _call("wiki-read_page", 3, args_redacted={"page": "Hooks"}),
+    ]
+    runs = [build_trajectory(f"r{i}", calls, succeeded=True) for i in range(2)]
+    mined = mine_procedure("p", runs)
+    assert mined is not None and mined.tools == ["wiki-search_pages", "wiki-read_page"]
+
+
+def test_a_learned_literal_never_fills_an_argument_the_task_names_another_value_for() -> None:
+    """B11: the plan learned style='ST-101'; a task about ZZ999999 gets no 'ST-101'."""
+    tool = ToolDescriptor(tenant_id="acme", name="style_stock", required=["style"])
+    plan = _procedure(
+        "p",
+        ["style_stock"],
+        bindings=[{"step": 0, "argument": "style", "source_step": None, "literal": "ST-101"}],
+    )
+    other = _job(tool, plan=plan, task="How many units of style ZZ999999 are there?")
+    assert _from_procedure(other, "style") is None
+    same = _job(tool, plan=plan, task="How many units of style ST-101 are there?")
+    assert _from_procedure(same, "style").value == "ST-101"  # type: ignore[union-attr]
+    unnamed = _job(tool, plan=plan, task="How many units are there?")
+    assert _from_procedure(unnamed, "style").value == "ST-101"  # type: ignore[union-attr]
+
+
 def test_only_a_complete_distillation_is_accepted() -> None:
     assert accept_distilled(None) is None
     assert accept_distilled({"title": "", "strategy": "x", "avoid": ""}) is None

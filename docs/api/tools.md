@@ -141,7 +141,8 @@ hints.plan  # the learned procedure: .steps (tool names), .success_rate, .runs |
 - **plan / next** — the stored procedure whose pattern matches the task and whose tools are all
   callable; `next: true` marks the step this run has not done yet.
 - **args** — every candidate's arguments, first found wins: the procedure's binding (an
-  earlier step's output in this run, or the literal every successful run used) → the
+  earlier step's output in this run, or the constant every successful run used, unless the
+  task names another value of its kind) → the
   knowledge graph (an entity of the argument's type named in the task; for an `…id` argument,
   the id a tool returned for it) → a `name: value` line of a pinned profile block, or a memory
   whose predicate is the argument's name → a value the task itself names → a value a memory in
@@ -159,9 +160,15 @@ hints.plan  # the learned procedure: .steps (tool names), .success_rate, .runs |
 
 `tools.learn` runs after every outcome label and every five minutes. It reads the calls not
 learned yet (a partial index), re-mines every task pattern they touch from that pattern's newest
-calls (the prefix-tree miner: coverage first, then length; retries collapse; failures are kept
-as the step's failure modes) and updates that pattern's one stored procedure — a delta, never a
-rewrite of the others. A procedure is **active** (offered) once at least 2 runs support it and
+calls (the prefix-tree miner: coverage first, then length; a failed call and its retry of the
+same tool are one step, which the call that worked stands for; failures are kept as the step's
+failure modes) and updates that pattern's one stored procedure — a delta, never a rewrite of the
+others. A step's argument is a learned literal only when it is a constant of the task: the same
+value in runs about at least two different things (the values their tasks named) and named by
+none of them — a value each run took from its own task (`style ST-101`) is the next task's to
+give, and a literal is never prefilled for a task that names another value of its kind. Under
+Code Mode the steps are the tools the script called (recorded from the gateway's log), never the
+meta-tools (`list_tool_files`, `read_tool_file`, `get_tool_docs`, `execute_tool_code`). A procedure is **active** (offered) once at least 2 runs support it and
 at least 60% succeeded; it is **retired** when that stops holding and **rejected** by a
 `reject` verdict on it (`target_kind: procedure`) or a [dismissal](skills.md) until its steps
 change. An active procedure is the agent's **learned skill** for that kind of task: the

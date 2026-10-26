@@ -373,7 +373,8 @@ class ToolHintsService:
 
 def _from_procedure(job: _Resolution, arg: str) -> Prefill | None:
     """A binding of the plan's step for this tool: an earlier step's output in this run, or
-    the literal every successful run used."""
+    the literal every successful run used - never for a task that names another value of
+    the literal's kind ("style ZZ999999" against a learned 'ST-101'): the task's own wins."""
     if job.plan is None or job.tool.name not in job.plan.tools:
         return None
     ordinal = job.plan.tools.index(job.tool.name)
@@ -385,9 +386,17 @@ def _from_procedure(job: _Resolution, arg: str) -> Prefill | None:
         return None
     if binding.get("source_step") is not None:
         return _from_earlier_step(job, arg, binding)
-    if binding.get("literal") is not None:
-        return Prefill(tool=job.tool.name, value=binding["literal"], source="procedure")
+    literal = binding.get("literal")
+    if literal is not None and not _names_another(job.task, literal):
+        return Prefill(tool=job.tool.name, value=literal, source="procedure")
     return None
+
+
+def _names_another(task: str, literal: Any) -> bool:
+    """Whether ``task`` names a value of the kind ``literal`` is, other than it."""
+    kinds = {kind for kind, _ in task_slots(str(literal))}
+    named = {value.casefold() for kind, value in task_slots(task) if kind in kinds}
+    return bool(named) and str(literal).casefold() not in named
 
 
 def _from_earlier_step(job: _Resolution, arg: str, binding: dict[str, Any]) -> Prefill | None:

@@ -9,7 +9,8 @@ Mem^p update rules are followed literally:
 
 *validation* only a run labelled successful contributes a procedure;
 *adjustment*  a step that failed is corrected in place (the correction recorded on the edge),
-              never duplicated into a second competing procedure;
+              never duplicated into a second competing procedure: a failed call and its retry
+              of the same tool are one step;
 *decay*       a procedure that stops being used, or starts failing, loses score and is
               archived rather than deleted.
 
@@ -28,6 +29,7 @@ from math import ceil
 from typing import Any
 
 from memory_service.domain.tools import ToolInvocation
+from memory_service.modules.tools.patterns import task_slots
 from memory_service.modules.tools.trajectories import EdgeSupport, Trajectory, accumulate, flatten
 
 # ranking weights (documented in docs/adr/0018-tool-memory.md)
@@ -161,8 +163,8 @@ def mine_procedure(pattern: str, trajectories: list[Trajectory]) -> Procedure | 
             )
         steps.append(step)
 
-    matching = [t for t in successful if t.tool_sequence[: len(best_sequence)] == best_sequence]
-    total = [t for t in trajectories if t.tool_sequence[: len(best_sequence)] == best_sequence]
+    matching = [t for t in successful if _follows(t, best_sequence)]
+    total = [t for t in trajectories if _follows(t, best_sequence)]
     last_used = max(
         (s.occurred_at for t in total for s in t.steps),
         default=None,
@@ -191,7 +193,7 @@ def _best_sequence(trajectories: list[Trajectory]) -> list[str]:
     """
     counts: dict[tuple[str, ...], int] = defaultdict(int)
     for trajectory in trajectories:
-        sequence = tuple(_collapse_retries(trajectory.tool_sequence))
+        sequence = tuple(s.tool_name for s in _steps(trajectory))
         for length in range(1, len(sequence) + 1):
             counts[sequence[:length]] += 1
     if not counts:
@@ -204,14 +206,22 @@ def _best_sequence(trajectories: list[Trajectory]) -> list[str]:
     return list(best[0])
 
 
-def _collapse_retries(sequence: Sequence[str]) -> list[str]:
-    """Consecutive calls to the same tool are one step of the chain: a retry is an adjustment
-    within a step, not an extra step, and counting it as one would fork the prefix tree."""
-    out: list[str] = []
-    for tool in sequence:
-        if not out or out[-1] != tool:
-            out.append(tool)
+def _steps(trajectory: Trajectory) -> list[ToolInvocation]:
+    """The run's steps, consecutive calls to the same tool being one: a retry is an
+    adjustment within a step, not an extra step, and counting it as one would fork the prefix
+    tree. The step is the call that worked, when one did (else the last)."""
+    out: list[ToolInvocation] = []
+    for call in trajectory.steps:
+        if out and out[-1].tool_name == call.tool_name:
+            if call.succeeded or not out[-1].succeeded:
+                out[-1] = call
+            continue
+        out.append(call)
     return out
+
+
+def _follows(trajectory: Trajectory, sequence: Sequence[str]) -> bool:
+    return [s.tool_name for s in _steps(trajectory)][: len(sequence)] == list(sequence)
 
 
 def _apply_edge_stats(
@@ -238,23 +248,28 @@ def _bindings(
     tool: str, ordinal: int, sequence: list[str], trajectories: list[Trajectory]
 ) -> list[Binding]:
     """Arguments of ``tool`` at this position, bound to an earlier step's output whenever the
-    value was observed to come from there, otherwise kept as the literal that recurred."""
+    value was observed to come from there, otherwise kept as the literal that recurred - only
+    when it is a constant of the task: the same in runs about two or more different things
+    (the values their tasks named), and never one of those values. A value every run took
+    from its own task ("style ST-101") is the task's, not the procedure's."""
     observed: dict[str, list[Any]] = defaultdict(list)
+    named: dict[str, set[tuple[str, ...]]] = defaultdict(set)
     sources: dict[str, tuple[int, str]] = {}
     for trajectory in trajectories:
-        if trajectory.tool_sequence[: len(sequence)] != sequence:
+        steps = _steps(trajectory)
+        if not _follows(trajectory, sequence) or ordinal >= len(steps):
             continue
-        if ordinal >= len(trajectory.steps):
-            continue
-        step = trajectory.steps[ordinal]
+        step = steps[ordinal]
         if step.tool_name != tool:
             continue
+        about = tuple(sorted({v.casefold() for _, v in task_slots(trajectory.task)}))
         for path, value in flatten(step.args_redacted).items():
             observed[path].append(value)
+            named[path].add(about)
             if path in sources:
                 continue
             for earlier_index in range(ordinal):
-                earlier = trajectory.steps[earlier_index]
+                earlier = steps[earlier_index]
                 for out_path, out_value in (earlier.output_fields or {}).items():
                     if _same(out_value, value):
                         sources[path] = (earlier_index, out_path)
@@ -268,11 +283,17 @@ def _bindings(
             bindings.append(
                 Binding(argument=path, source_step=source_step, source_field=source_field)
             )
-        elif len(set(map(str, values))) == 1:
+        elif len(set(map(str, values))) == 1 and _constant(values[0], named[path]):
             bindings.append(Binding(argument=path, literal=values[0]))
         else:
             bindings.append(Binding(argument=path, literal=None))
     return bindings
+
+
+def _constant(value: Any, tasks: set[tuple[str, ...]]) -> bool:
+    """Whether ``value``, the same in every run, is a constant of the task: the runs were about
+    at least two different things, and none of them named it."""
+    return len(tasks) >= 2 and not any(str(value).casefold() in about for about in tasks)
 
 
 def _same(left: Any, right: Any) -> bool:

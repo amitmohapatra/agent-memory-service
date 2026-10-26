@@ -16,10 +16,16 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Final
 
 from memory_service.domain.tools import ToolInvocation
 
+#: The harness's Code Mode meta-tools: how a script reached the tools, not steps of the task.
+#: The calls the script made are recorded as the run's own (the gateway's log, read back),
+#: and those are the steps a procedure learns.
+CODE_MODE_TOOLS: Final = frozenset(
+    {"list_tool_files", "read_tool_file", "get_tool_docs", "execute_tool_code"}
+)
 MAX_DEPTH = 6
 MAX_FIELDS = 200
 _MIN_VALUE_LEN = 3
@@ -92,7 +98,11 @@ class Trajectory:
 def build_trajectory(
     run_id: str, invocations: Sequence[ToolInvocation], *, succeeded: bool = False
 ) -> Trajectory:
-    steps = sorted(invocations, key=lambda i: (i.step, i.occurred_at))
+    """The run's calls in step order, less the Code Mode meta-tools (``CODE_MODE_TOOLS``)."""
+    steps = sorted(
+        (i for i in invocations if i.tool_name not in CODE_MODE_TOOLS),
+        key=lambda i: (i.step, i.occurred_at),
+    )
     task = next((s.task for s in steps if s.task), "")
     pattern = next((s.task_pattern for s in steps if s.task_pattern), None)
     return Trajectory(
