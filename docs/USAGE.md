@@ -213,8 +213,9 @@ print(
 
 - The service never executes a tool. `task` is the question in words (it becomes the pattern
   procedures are keyed on), not an id.
-- A procedure needs ≥ 2 supporting runs and ≥ 60 % success; an unlabelled run counts as a weak
-  success only after a day without failed calls. An active one is the agent's learned skill,
+- A procedure needs ≥ 2 supporting runs and ≥ 60 % success; an unlabelled run is no evidence
+  unless one of its calls failed, and neither is a `system` reject of a run whose calls all
+  worked (a time limit, a model error). An active one is the agent's learned skill,
   offered in its context on its own ([api/skills.md](api/skills.md)).
 - Recording is idempotent on run + step + tool + arguments; `visibility` defaults to
   `PRIVATE`: learned per agent across all its users (share with `AGENT_GROUP`/`WORKSPACE`/

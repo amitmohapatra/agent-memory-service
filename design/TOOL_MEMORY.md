@@ -267,8 +267,8 @@ script, in order, with argument bindings.
 message was recorded with evidence status COMPLETE and no tool error was left unresolved,
 or explicitly by RUN feedback (`ctx.feedback("run", run_id, "confirm"|"reject")`: the
 harness's `system` verdict from the final status, a judge's, or a person's — human > judge >
-system). Unlabelled runs count as weak positives only
-after they are older than a configurable window with no correction.
+system). An unlabelled run is no evidence unless one of its calls failed, and a `system`
+failure of a run whose calls all worked (a time limit, a model error) is none either.
 
 **Step 4 — chains are mined, deterministically.** Per run, consecutive records form a
 trajectory. A `feeds` edge is created from step *i* to step *j>i* when a value in step *j*'s

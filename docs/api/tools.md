@@ -31,8 +31,10 @@ sequenceDiagram
 ```
 
 The run's verdict is what makes this work (the harness sends a `system` verdict from the
-run's final status; a judge or a person overrides it, human > judge > system): only a successful run validates a procedure, and a
-run nobody labelled counts as a (weak) success only a day later, if none of its calls failed.
+run's final status; a judge or a person overrides it, human > judge > system): only a successful run validates a procedure. A
+run nobody labelled is no evidence unless one of its calls failed, and a `system` reject of a
+run whose calls all worked (a time limit, a model error, a stall) is none either: the run
+failed, not its procedure.
 
 ## Routes
 

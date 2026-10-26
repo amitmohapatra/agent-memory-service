@@ -135,13 +135,30 @@ def test_an_untyped_redacted_or_failed_call_adds_nothing_it_cannot_stand_behind(
 # ------------------------------------------------------------------ learning
 
 
-def test_an_unlabelled_run_is_a_weak_positive_only_once_old_and_clean() -> None:
-    clean = [_call("a", 0, occurred_at=NOW - timedelta(hours=25))]
-    assert succeeded(None, clean, NOW) is True
-    assert succeeded(None, [_call("a", 0)], NOW) is False
-    assert succeeded(None, [*clean, _call("b", 1, status="error")], NOW) is False
-    label = RunOutcome(tenant_id="acme", run_id="run_1", success=False)
-    assert succeeded(label, clean, NOW) is False
+def test_an_unlabelled_clean_run_is_no_evidence_however_old() -> None:
+    """B5: an unlabelled run whose calls all worked is neither a success nor - while it is
+    fresh - a failure; one with a failed call is a failure."""
+    old = [_call("a", 0, occurred_at=NOW - timedelta(hours=25))]
+    assert succeeded(None, old) is None
+    assert succeeded(None, [_call("a", 0)]) is None
+    assert succeeded(None, [*old, _call("b", 1, status="error")]) is False
+    label = RunOutcome(tenant_id="acme", run_id="run_1", success=False, source="human")
+    assert succeeded(label, old) is False
+
+
+def test_a_failure_the_system_reported_on_a_run_whose_calls_worked_is_no_evidence() -> None:
+    """B3: the harness reports a time limit, a model error or a stall as the run's ``system``
+    reject; with every call of the run working that is the run's failure, not its
+    procedure's. A failed call, or a judge's or a person's reject, still counts."""
+    clean, failed = [_call("a", 0)], [_call("a", 0, status="timeout")]
+
+    def label(source: str) -> RunOutcome:
+        return RunOutcome(tenant_id="acme", run_id="run_1", success=False, source=source)
+
+    assert succeeded(label("system"), clean) is None
+    assert succeeded(label("system"), failed) is False
+    assert succeeded(label("judge"), clean) is False
+    assert succeeded(label("human"), clean) is False
 
 
 @pytest.mark.parametrize(
@@ -157,9 +174,9 @@ def test_an_unlabelled_run_is_a_weak_positive_only_once_old_and_clean() -> None:
 def test_a_runs_own_unverified_success_is_no_evidence(
     source: str, success: bool, expected: bool | None
 ) -> None:
-    clean = [_call("a", 0, occurred_at=NOW - timedelta(hours=25))]
+    calls = [_call("a", 0, status="ok" if success else "error")]
     label = RunOutcome(tenant_id="acme", run_id="run_1", success=success, source=source)
-    assert succeeded(label, clean, NOW) is expected
+    assert succeeded(label, calls) is expected
 
 
 def _trajectories(n: int, *, success: bool = True):
