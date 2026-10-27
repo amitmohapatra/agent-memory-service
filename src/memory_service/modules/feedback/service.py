@@ -1104,26 +1104,36 @@ def _approves(record: Feedback) -> bool:
     )
 
 
+async def _recorded(uow: UnitOfWork, record: Feedback) -> int:
+    """How many calls of the decided tool with those arguments the decision's agent recorded
+    in its run. A run id is the client's: two agents of one tenant may send the same one, so
+    a call another agent recorded under it backs no decision of this one."""
+    run_id, tool = record.agent_run_id or "", record.metadata.get("tool")
+    wanted = stable_hash(record.metadata.get("args"))
+    calls = await uow.tools.invocations_for_run(record.tenant_id, run_id)
+    return sum(
+        c.agent_id == record.agent_id and c.tool_name == tool and c.args_hash == wanted
+        for c in calls
+    )
+
+
 async def _backed(uow: UnitOfWork, record: Feedback) -> bool:
-    """Whether the decision's run recorded the call it decided: its tool, its arguments."""
-    args = record.metadata.get("args")
-    if not record.agent_run_id or not isinstance(args, dict):
+    """Whether the decision's agent recorded, in its run, the call it decided: its tool,
+    its arguments."""
+    if not record.agent_run_id or not isinstance(record.metadata.get("args"), dict):
         return False
-    tool, wanted = record.metadata.get("tool"), stable_hash(args)
-    calls = await uow.tools.invocations_for_run(record.tenant_id, record.agent_run_id)
-    return any(c.tool_name == tool and c.args_hash == wanted for c in calls)
+    return await _recorded(uow, record) > 0
 
 
 async def _spent(uow: UnitOfWork, record: Feedback) -> bool:
-    """Whether every call of the approved tool with those arguments that the run recorded
-    backs a counted approval already. The interrupt id is the client's: without this, one
-    recorded call would back any number of approvals, each under a new id. Serialised per
-    run, so two approvals of one call are counted one after the other."""
+    """Whether every call of the approved tool with those arguments that the agent recorded
+    in the run backs a counted approval already. The interrupt id is the client's: without
+    this, one recorded call would back any number of approvals, each under a new id.
+    Serialised per run, so two approvals of one call are counted one after the other."""
     run_id, tool = record.agent_run_id or "", str(record.metadata.get("tool"))
     await uow.serialize(f"tool-approvals:{record.tenant_id}:{run_id}")
     wanted = stable_hash(record.metadata.get("args"))
-    calls = await uow.tools.invocations_for_run(record.tenant_id, run_id)
-    recorded = sum(c.tool_name == tool and c.args_hash == wanted for c in calls)
+    recorded = await _recorded(uow, record)
     decisions = await uow.feedback.counted_decisions(
         record.tenant_id,
         agent_id=record.agent_id or "",
@@ -1138,10 +1148,13 @@ async def _spent(uow: UnitOfWork, record: Feedback) -> bool:
 
 
 async def _counted_before(uow: UnitOfWork, record: Feedback) -> bool:
-    """Whether another decision on the same interrupt of the same run was counted."""
+    """Whether another decision of the same agent on the same interrupt of the same run
+    was counted. The run and interrupt ids are the client's: another agent's decision under
+    the same ids neither stands for this one nor stops it."""
     interrupt = record.metadata.get("interrupt_id")
     return any(
         other.feedback_id != record.feedback_id
+        and other.agent_id == record.agent_id
         and other.agent_run_id == record.agent_run_id
         and other.metadata.get("interrupt_id") == interrupt
         and other.projection is not None

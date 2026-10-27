@@ -48,6 +48,17 @@ each entry says which one moved. Decisions behind each change are in the
   in-process cache behind the embedding cache): about 1 ms per request for 100 visible
   procedures. One matcher (`modules/tools/matching.py`) serves the context and the hints.
   Service only; the SDK is unchanged.
+- The grounding judge (`/v1/verify`) no longer rejects a run that called tools only because
+  its claims are not in the context: the judge never sees the tool results, so every
+  tool-built answer read as unsupported and a live test put a false reject in the review
+  queue for 40 of 40 correct answers. Such a run gets no verdict unless a claim is
+  contradicted; a fully supported answer still confirms, and a run without tools is judged
+  as before.
+- Concurrent forgets of related memories (twins, and what one replaced) no longer deadlock,
+  refuse a memory a twin's forget had just removed as "not visible in this scope", or reopen
+  a forgotten old value as CURRENT: a forget locks the memory, its twins and what they
+  replaced in one statement, in id order, and decides under that lock; a memory forgotten
+  meanwhile is a success (204), a memory outside the caller's scope is still refused.
 - The capability eval's harness mode (`--mode harness`) wraps its agent with
   `h.wrap(..., run_timeout=)`: the harness had removed `timeout=`, so the mode failed with a
   `TypeError` before asking anything. Its grounding sampling is turned off with
