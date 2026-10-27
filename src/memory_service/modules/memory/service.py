@@ -389,7 +389,27 @@ class MemoryService:
     ) -> CanonicalMemory | None:
         """Soft-delete. Allowed for the owner principal, the user an agent acts for, or a
         tenant admin; the search index entry is removed by the index job. Idempotent: a
-        memory that is already forgotten returns None instead of NotFound."""
+        memory that is already forgotten returns None instead of NotFound, including one a
+        concurrent forget of its twin removed while this one ran.
+
+        Forgets of related memories touch the same rows (twins, and what they replaced), so
+        those rows are locked first, all at once and in id order, and everything is decided
+        on what they hold under the lock. Taking them one update at a time, each forget in
+        its own order, deadlocked two twins' forgets; and checks made on rows a concurrent
+        forget then committed over refused a just-forgotten memory as "not visible in this
+        scope" and reopened a forgotten old value as CURRENT."""
+        found = await uow.memories.get(ctx.tenant_id, memory_id)
+        if found is not None:
+            # the rows this forget may write, read unlocked only to know which to lock
+            twin_ids = [
+                t.memory_id
+                for t in await uow.memories.twins(ctx.tenant_id, found, current_only=False)
+            ]
+            replaced = await uow.memories.replaced_by_any(ctx.tenant_id, [memory_id, *twin_ids])
+            await uow.memories.lock(
+                ctx.tenant_id, [memory_id, *twin_ids, *(m.memory_id for m in replaced)]
+            )
+        # under the lock: already forgotten, or by a concurrent forget of a twin meanwhile
         if await uow.memories.is_forgotten(ctx.tenant_id, memory_id):
             return None
         memory = await self.get_memory(uow, ctx, memory_id)

@@ -451,6 +451,12 @@ class MemoryRepository(Protocol):
 
     async def forget(self, tenant_id: str, memory_id: str) -> bool: ...
 
+    async def lock(self, tenant_id: str, memory_ids: Sequence[str]) -> None:
+        """Hold these rows (deleted ones too) for writing until the transaction ends, taken
+        in ``memory_id`` order so writers of overlapping rows never wait on each other in a
+        cycle; later reads in the transaction see them as the lock found them."""
+        ...
+
     async def is_forgotten(self, tenant_id: str, memory_id: str) -> bool:
         """True when the memory exists but was soft-deleted (forget is idempotent)."""
         ...
