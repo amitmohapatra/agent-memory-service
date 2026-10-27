@@ -569,6 +569,23 @@ class SqlMemoryRepository:
         await self._invalidate_dependents(tenant_id, [memory_id])
         return True
 
+    async def lock(self, tenant_id: str, memory_ids: Sequence[str]) -> None:
+        ids = sorted(set(memory_ids))
+        if not ids:
+            return
+        # ORDER BY under FOR UPDATE: PostgreSQL locks the rows as the sort emits them, so
+        # every caller takes them in the same order. populate_existing: what this session
+        # read before waiting is replaced by what the lock holder committed.
+        (
+            await self.s.scalars(
+                select(MemoryRow)
+                .where(MemoryRow.tenant_id == tenant_id, MemoryRow.memory_id.in_(ids))
+                .order_by(MemoryRow.memory_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).all()
+
     async def is_forgotten(self, tenant_id: str, memory_id: str) -> bool:
         r = await self.s.get(MemoryRow, memory_id)
         return r is not None and r.tenant_id == tenant_id and r.deleted_at is not None

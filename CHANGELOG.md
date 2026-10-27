@@ -32,6 +32,11 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- Concurrent forgets of related memories (twins, and what one replaced) no longer deadlock,
+  refuse a memory a twin's forget had just removed as "not visible in this scope", or reopen
+  a forgotten old value as CURRENT: a forget locks the memory, its twins and what they
+  replaced in one statement, in id order, and decides under that lock; a memory forgotten
+  meanwhile is a success (204), a memory outside the caller's scope is still refused.
 - The capability eval's harness mode (`--mode harness`) wraps its agent with
   `h.wrap(..., run_timeout=)`: the harness had removed `timeout=`, so the mode failed with a
   `TypeError` before asking anything. Its grounding sampling is turned off with
