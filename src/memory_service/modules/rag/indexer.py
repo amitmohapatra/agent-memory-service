@@ -220,6 +220,13 @@ class Indexer:
         )
         return dict(zip(self.spaces.names, vectors, strict=True))
 
+    async def embed_primary_cached(
+        self, texts: Sequence[str], hashes: Sequence[str]
+    ) -> list[list[float]]:
+        """The primary space's vectors alone for ``texts``, behind the same cache: what a
+        text compared only with a query's primary vector needs (a procedure's pattern)."""
+        return await self._embed_space(self.spaces.primary_space, texts, hashes)
+
     async def embed_late(self, texts: Sequence[str]) -> list[list[list[float]]] | None:
         """The late-interaction token vectors of ``texts``; ``None`` without that encoder.
         Not cached: a memory's are ~5 KB and a chunk's ~130 KB, too large to keep in the

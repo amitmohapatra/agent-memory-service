@@ -477,3 +477,32 @@ async def test_a_run_that_called_tools_is_judged_without_moving_any_memory() -> 
     await judge_run(feedback, factory, ctx, "run_1", "ctx_1", "140 units", _report(CONTRADICTED))
     [(record, _, _)] = feedback.submitted
     assert record.verdict is FeedbackVerdict.REJECT and record.cited_memory_ids(10) == []
+
+
+async def test_a_run_that_called_tools_is_no_verdict_when_its_claims_are_only_unsupported() -> None:
+    """B4b: the judge never sees the run's tool results, so every claim built from them reads
+    as unsupported; rejecting it put a false failure in the review queue for each tool run.
+    Only a contradiction is a verdict on such a run, and a fully supported answer confirms."""
+    ctx = MemoryExecutionContext(tenant_id="acme", user_id="u1")
+    factory: Any = _UowWithTools
+    for report in (_report(UNSUPPORTED), _report(SUPPORTED, UNSUPPORTED)):
+        feedback: Any = _Feedback()
+        found = await judge_run(feedback, factory, ctx, "run_1", "ctx_1", "140 units", report)
+        assert found is None and feedback.submitted == []
+
+    feedback = _Feedback()
+    await judge_run(
+        feedback, factory, ctx, "run_1", "ctx_1", "140 units", _report(UNSUPPORTED, CONTRADICTED)
+    )
+    feedback_ok = _Feedback()
+    await judge_run(feedback_ok, factory, ctx, "run_1", "ctx_1", "S12", _report(SUPPORTED))
+    [(rejected, _, _)], [(confirmed, _, _)] = feedback.submitted, feedback_ok.submitted
+    assert rejected.verdict is FeedbackVerdict.REJECT and rejected.cited_memory_ids(10) == []
+    assert confirmed.verdict is FeedbackVerdict.CONFIRM
+
+    # without tools, an unsupported claim still rejects (the context was all it had)
+    feedback = _Feedback()
+    plain: Any = _Uow
+    await judge_run(feedback, plain, ctx, "run_1", "ctx_1", "Zeta", _report(UNSUPPORTED))
+    [(record, _, _)] = feedback.submitted
+    assert record.verdict is FeedbackVerdict.REJECT

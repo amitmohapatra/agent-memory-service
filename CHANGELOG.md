@@ -50,6 +50,28 @@ each entry says which one moved. Decisions behind each change are in the
   request repeated in four runs had three copies served under "Earlier values (since
   replaced)": the same words replace nothing (ADR 0038). The copies stay one per conversation;
   said twice in one conversation it is one memory, as before. Service only.
+- A learned skill reaches a task worded otherwise: a procedure was offered (the context's
+  skills, the hints' plan) only when the task's pattern shared 60% of its words with the
+  procedure's, so "MFA lockout again" or "Re-enrol two-factor for a user who is locked out"
+  got nothing from a skill learned on "reset multi-factor authentication for a locked-out
+  user" (the context abstained). A procedure the words miss now matches by meaning: the
+  cosine of the task's vector to its pattern's, in the space every query is searched in (so
+  every script), at the encoder's own `DenseModel.procedure_cosine` (0.45 for the
+  multilingual encoder, 0.86 for the English one where it is the only space; 0, words alone,
+  for the hash stand-in). Calibrated on the capability eval's MFA skill: 32 of 50 phrasings
+  in five languages match, none of the other 450 procedural queries, nor "reset a store's
+  POS terminal" (0.36). The word match stays the fast path and ranks first. The task is
+  encoded once per request - the context hands the procedures the retrieval's own vectors,
+  the tool hints share theirs with the tool search - and each pattern once per process (an
+  in-process cache behind the embedding cache): about 1 ms per request for 100 visible
+  procedures. One matcher (`modules/tools/matching.py`) serves the context and the hints.
+  Service only; the SDK is unchanged.
+- The grounding judge (`/v1/verify`) no longer rejects a run that called tools only because
+  its claims are not in the context: the judge never sees the tool results, so every
+  tool-built answer read as unsupported and a live test put a false reject in the review
+  queue for 40 of 40 correct answers. Such a run gets no verdict unless a claim is
+  contradicted; a fully supported answer still confirms, and a run without tools is judged
+  as before.
 - Concurrent forgets of related memories (twins, and what one replaced) no longer deadlock,
   refuse a memory a twin's forget had just removed as "not visible in this scope", or reopen
   a forgotten old value as CURRENT: a forget locks the memory, its twins and what they

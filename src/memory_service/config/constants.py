@@ -85,6 +85,13 @@ class DenseModel(BaseModel):
     #: comparable within one encoder, so the floor belongs to it; 0 is no floor. Not part of
     #: the fingerprint: it reads vectors, it does not make them.
     relevance_floor: float = Field(default=0.0, ge=0.0, le=1.0)
+    #: The least cosine between a task and a learned procedure's pattern, in this encoder's
+    #: space when it is the one every query is searched in, for the procedure to be about a
+    #: task that words it differently ("MFA lockout again" and "reset multi-factor
+    #: authentication for a locked-out user"; ``modules/tools/matching.py``). 0 is no such
+    #: match: only the pattern's own words count. Like the floor, it belongs to the encoder
+    #: that measured it and is not part of the fingerprint.
+    procedure_cosine: float = Field(default=0.0, ge=0.0, le=1.0)
     #: Bound each non-preemptible indexing turn on the shared model runner. A full
     #: 32-passage forward pass blocked interactive queries for seconds on CPU.
     document_batch_size: int = Field(default=1, ge=1)
@@ -176,7 +183,14 @@ class FrozenModels(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     #: the English specialist: named vector ``dense_en``, searched for Latin-script queries
-    dense: DenseModel = DenseModel()
+    dense: DenseModel = DenseModel(
+        # Only read where this encoder is the space every query searches (the single-encoder
+        # arm). Its cosines sit high and close together: on the same set the English
+        # phrasings read 0.876-0.993 and "reset a store's POS terminal" 0.812, while German
+        # and Spanish phrasings (0.816-0.99) overlap the other queries (up to 0.829) - so a
+        # floor that matches English paraphrases and nothing of another task.
+        procedure_cosine=0.86,
+    )
     #: The multilingual encoder: named vector ``dense_ml``, searched for every query.
     #:
     #: Bekko a8m: ModernBERT (Answer.AI/LightOn) + mmBERT (JHU) lineage, a Japanese
@@ -198,6 +212,16 @@ class FrozenModels(BaseModel):
         # 8): at 0.20 every evidence memory of 135 questions is still packed and those
         # off-topic questions pack 0.9; 0.25 already loses 1.5% of the evidence.
         relevance_floor=0.2,
+        # A learned skill for a task worded otherwise. Measured on the capability eval's MFA
+        # skill (benchmark/capabilities/data/08_procedural_skill.json): each language's
+        # pattern against its 10 phrasings in en/de/es/ar/hi and the other 450 queries of
+        # that file. At 0.45, 32 of 50 phrasings match (en 9, es 8, hi 7, ar 6, de 2: the
+        # German pattern reads "Nutzer" as a name) and none of the 450, the closest at 0.32;
+        # "reset a store's POS terminal" reads 0.36 (Hindi 0.42), "order more stock for
+        # S12" 0.07. Lower admits the POS terminal; a lost-phone story (0.16-0.40) is out of
+        # reach of any floor that keeps the unrelated tasks out
+        # (tests/eval/test_procedure_match_gate.py).
+        procedure_cosine=0.45,
     )
     sparse: SparseModel = SparseModel()
     nli: NLIModel = NLIModel()
