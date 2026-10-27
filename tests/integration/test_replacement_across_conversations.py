@@ -625,7 +625,7 @@ async def _batch(container, uow_factory, ctx, said: Sequence[tuple[str, int]]) -
     await container.tasks.drain()  # memory.index
 
 
-async def _status(container, uow_factory, ctx, predicate: str) -> dict[str, TemporalStatus]:
+async def _slot(container, uow_factory, ctx, predicate: str) -> dict[str, TemporalStatus]:
     return {
         m.object or m.content: m.temporal.status
         for m in await _memories(uow_factory, ctx, container, include_superseded=True)
@@ -639,13 +639,14 @@ async def test_a_batchs_later_value_replaces_the_earlier_as_two_calls_would(
     """N1: "I work at ACME Corp." (45 days ago) and "I work at Globex now." (5 days ago) in one
     batch both stayed current, so "where did I work six weeks ago?" answered Globex. Where
     someone works holds one value: the later replaces the earlier, kept as its history."""
-    batch, split = _chat(), _chat()
+    # two people: one user's conversations replace each other's statements (ADR 0038)
+    batch, split = _chat("u1"), _chat("u2")
     said = [("I work at ACME Corp.", 45), ("I work at Globex now.", 5)]
     await _batch(container, uow_factory, batch, said)
     for one in said:
         await _batch(container, uow_factory, split, [one])
     for chat in (batch, split):
-        assert await _status(container, uow_factory, chat, "works_at") == {
+        assert await _slot(container, uow_factory, chat, "works_at") == {
             "acme corp": TemporalStatus.SUPERSEDED,
             "globex": TemporalStatus.CURRENT,
         }
@@ -666,7 +667,7 @@ async def test_only_the_last_of_three_values_in_a_batch_is_current(container, uo
         chat,
         [("I work at ACME Corp.", 90), ("I work at Initech.", 45), ("I work at Globex now.", 5)],
     )
-    assert await _status(container, uow_factory, chat, "works_at") == {
+    assert await _slot(container, uow_factory, chat, "works_at") == {
         "acme corp": TemporalStatus.SUPERSEDED,
         "initech": TemporalStatus.SUPERSEDED,
         "globex": TemporalStatus.CURRENT,
@@ -676,7 +677,7 @@ async def test_only_the_last_of_three_values_in_a_batch_is_current(container, uo
 async def test_a_batch_keeps_every_value_of_a_slot_that_holds_many(container, uow_factory) -> None:
     chat = _chat()
     await _batch(container, uow_factory, chat, [("I like tea.", 3), ("I like coffee.", 1)])
-    assert await _status(container, uow_factory, chat, "prefers") == {
+    assert await _slot(container, uow_factory, chat, "prefers") == {
         "tea": TemporalStatus.CURRENT,
         "coffee": TemporalStatus.CURRENT,
     }
@@ -702,7 +703,7 @@ async def test_a_batch_replaces_nothing_across_subjects(container, uow_factory) 
         "The manager of Store 62 is Dan Brown.",
     }
     assert all(m.temporal.status is TemporalStatus.CURRENT for m in stores)
-    assert await _status(container, uow_factory, chat, "works_at") == {
+    assert await _slot(container, uow_factory, chat, "works_at") == {
         "acme corp": TemporalStatus.SUPERSEDED,
         "globex": TemporalStatus.CURRENT,
     }
