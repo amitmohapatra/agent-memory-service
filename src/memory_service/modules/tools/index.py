@@ -21,6 +21,7 @@ from collections.abc import Sequence
 from typing import Final
 
 from memory_service.domain.ids import content_hash
+from memory_service.domain.script import detect_script
 from memory_service.domain.tools import ToolDescriptor
 from memory_service.modules.rag.indexer import Indexer
 from memory_service.modules.retrieval.engine import QueryVectors
@@ -183,6 +184,16 @@ class ToolIndex:
             for i, entry in enumerate(entries)
         ]
 
+    async def encode(self, task: str) -> QueryVectors:
+        """The task's vectors, as a search reads them: every dense space its script calls
+        for, and the sparse one."""
+        script = detect_script(task)
+        return QueryVectors(
+            dense=await self.indexer.spaces.embed_query(task, script=script),
+            sparse=self.indexer.sparse.encode_query(task),
+            script=script,
+        )
+
     async def search(
         self,
         tenant_id: str,
@@ -195,11 +206,9 @@ class ToolIndex:
         """``(tool name, relevance 0..1)``, best first, one per name. ``vectors`` are the
         task's, when a retrieval already encoded it (the pushed context): no second encode."""
         await self.ensure()
-        if vectors is not None and vectors.dense:
-            dense, sparse = vectors.dense, vectors.sparse
-        else:
-            dense = await self.indexer.spaces.embed_query(task)
-            sparse = self.indexer.sparse.encode_query(task)
+        if vectors is None or not vectors.dense:
+            vectors = await self.encode(task)
+        dense, sparse = vectors.dense, vectors.sparse
         hits = await self.store.search_hybrid(
             self.collection,
             dense=dense,

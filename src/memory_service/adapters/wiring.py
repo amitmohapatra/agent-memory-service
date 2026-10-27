@@ -619,6 +619,7 @@ def _wire_tools(container: Container) -> None:
     from memory_service.modules.tools.hints import ToolHintsService
     from memory_service.modules.tools.index import ToolIndex
     from memory_service.modules.tools.learning import ToolLearning
+    from memory_service.modules.tools.matching import ProcedureMatcher
     from memory_service.modules.tools.service import ToolMemoryService
     from memory_service.modules.tools.skills import LearnedSkills
 
@@ -630,7 +631,9 @@ def _wire_tools(container: Container) -> None:
     )
     index = ToolIndex(uow_factory, container.services["indexer"], container.search)
     container.services["tool_index"] = index
-    container.services["tool_hints"] = ToolHintsService(uow_factory, index, container.graph_store)
+    container.services["tool_hints"] = ToolHintsService(
+        uow_factory, index, container.graph_store, ProcedureMatcher(container.services["indexer"])
+    )
     container.services["tool_learning"] = ToolLearning(
         uow_factory, container.services["llm_assist"], container.graph_store
     )

@@ -32,6 +32,22 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- A learned skill reaches a task worded otherwise: a procedure was offered (the context's
+  skills, the hints' plan) only when the task's pattern shared 60% of its words with the
+  procedure's, so "MFA lockout again" or "Re-enrol two-factor for a user who is locked out"
+  got nothing from a skill learned on "reset multi-factor authentication for a locked-out
+  user" (the context abstained). A procedure the words miss now matches by meaning: the
+  cosine of the task's vector to its pattern's, in the space every query is searched in (so
+  every script), at the encoder's own `DenseModel.procedure_cosine` (0.45 for the
+  multilingual encoder, 0.86 for the English one where it is the only space; 0, words alone,
+  for the hash stand-in). Calibrated on the capability eval's MFA skill: 32 of 50 phrasings
+  in five languages match, none of the other 450 procedural queries, nor "reset a store's
+  POS terminal" (0.36). The word match stays the fast path and ranks first. The task is
+  encoded once per request - the context hands the procedures the retrieval's own vectors,
+  the tool hints share theirs with the tool search - and each pattern once per process (an
+  in-process cache behind the embedding cache): about 1 ms per request for 100 visible
+  procedures. One matcher (`modules/tools/matching.py`) serves the context and the hints.
+  Service only; the SDK is unchanged.
 - The capability eval's harness mode (`--mode harness`) wraps its agent with
   `h.wrap(..., run_timeout=)`: the harness had removed `timeout=`, so the mode failed with a
   `TypeError` before asking anything. Its grounding sampling is turned off with

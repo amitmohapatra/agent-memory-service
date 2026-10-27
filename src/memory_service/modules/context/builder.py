@@ -248,6 +248,28 @@ class _StandingRead:
             )
 
 
+class _Encoded:
+    """The query's vectors, handed over the moment the retrieval has them
+    (``RetrievalEngine.retrieve(on_encoded=...)``): they start the standing rules' read, and
+    a learned procedure the query's words miss is matched by them (``ContextSections``)."""
+
+    def __init__(self, standing: _StandingRead) -> None:
+        self.standing = standing
+        self.vectors: asyncio.Future[QueryVectors | None] = (
+            asyncio.get_running_loop().create_future()
+        )
+
+    def __call__(self, routed: RoutedQuery, vectors: QueryVectors) -> None:
+        self.standing.start(routed, vectors)
+        self.settle(vectors)
+
+    def settle(self, vectors: QueryVectors | None) -> None:
+        """Hand ``vectors`` over unless they were: a retrieval that reported none still
+        lets the procedures read finish, on the result's own."""
+        if not self.vectors.done():
+            self.vectors.set_result(vectors)
+
+
 class ContextBuilder:
     def __init__(
         self,
@@ -516,6 +538,10 @@ class ContextBuilder:
                 ctx, revision_fingerprint=found.authz_fp, cached_scope=found.scope
             )
         tokens_before = self.assist.tokens_used()
+        # the standing rules and preferences need only the route and the query's vectors:
+        # read under the ranking, from the moment the vectors exist
+        standing = _StandingRead(self.engine, query, visibility)
+        encoded = _Encoded(standing)
         # the pinned sections and the thread's recent messages are independent of retrieval:
         # they are read under it
         sections = (
@@ -525,6 +551,7 @@ class ContextBuilder:
                     query,
                     visibility,
                     procedures=tools is not None and tools.any,
+                    vectors=encoded.vectors,
                 )
             )
             if self.sections is not None
@@ -533,9 +560,6 @@ class ContextBuilder:
         recent = asyncio.ensure_future(
             self._recent_messages(ctx, window) if window is not None else _nothing()
         )
-        # the standing rules and preferences need only the route and the query's vectors:
-        # read under the ranking, from the moment the vectors exist
-        standing = _StandingRead(self.engine, query, visibility)
         try:
             with timings.stage("retrieve"):
                 result = await self.engine.retrieve(
@@ -544,8 +568,9 @@ class ContextBuilder:
                     document_ids=document_ids,
                     visibility=visibility,
                     query_embedding=(query, embedding) if embedding is not None else None,
-                    on_encoded=standing.start,
+                    on_encoded=encoded,
                 )
+            encoded.settle(result.query_vectors)
             with timings.stage("sections"):
                 pinned = await sections if sections is not None else Pinned()
                 conversation = self._window(

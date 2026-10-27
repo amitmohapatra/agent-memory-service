@@ -33,6 +33,7 @@ from memory_service.domain.tools import StoredProcedure, ToolHints
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.retrieval.engine import Candidate, QueryVectors, memory_candidate
+from memory_service.modules.tools.matching import TaskVectors
 from memory_service.modules.tools.skills import skill_view
 from memory_service.ports.uow import UnitOfWorkFactory
 
@@ -167,15 +168,18 @@ class ContextSections:
         visibility: VisibilitySpecification,
         *,
         procedures: bool,
+        vectors: TaskVectors = None,
     ) -> Pinned:
         """Everything but the tool hints, concurrently: the procedures only for an agent with
         tools. The thread summary comes with or without the window: a framework that keeps
-        its own history keeps the recent messages, not what was said before them."""
+        its own history keeps the recent messages, not what was said before them.
+        ``vectors``: the query's, as the retrieval running beside this encodes them - read
+        only for a procedure the query's words miss."""
         found_profile, found_summary, found_procedures, prefetched = await asyncio.gather(
             self._profile(ctx),
             self._summary(ctx),
             self.services["tool_hints"].procedures(
-                ctx, query, list(visibility.keys), k=CONTEXT_PROCEDURES
+                ctx, query, list(visibility.keys), k=CONTEXT_PROCEDURES, vectors=vectors
             )
             if procedures
             else _empty(),

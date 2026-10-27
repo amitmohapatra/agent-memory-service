@@ -30,13 +30,13 @@ from memory_service.modules.tools.hints import (
     _missing,
     _Resolution,
     next_tool,
-    rank_procedures,
 )
 from memory_service.modules.tools.learning import (
     accept_distilled,
     merge,
     succeeded,
 )
+from memory_service.modules.tools.matching import rank_procedures
 from memory_service.modules.tools.patterns import task_pattern, task_slots
 from memory_service.modules.tools.procedures import decayed, mine_procedure
 from memory_service.modules.tools.trajectories import build_trajectory
@@ -563,6 +563,9 @@ class _HintsUow:
 class _Index:
     def __init__(self, found: list[tuple[str, float]]) -> None:
         self.found = found
+
+    async def encode(self, task: str) -> None:
+        return None
 
     async def search(self, *_: object, **__: object) -> list[tuple[str, float]]:
         return self.found

@@ -164,7 +164,7 @@ class _Sections:
         self.gathered = 0
         self.hinted = 0
 
-    async def gather(self, ctx, query, visibility, *, procedures):
+    async def gather(self, ctx, query, visibility, *, procedures, vectors=None):
         self.gathered += 1
         found = [SkillView(id="proc_1", name=guarded_signature(query) or query)]
         return Pinned(procedures=found if procedures else [])
