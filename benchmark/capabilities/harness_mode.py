@@ -8,7 +8,8 @@ written through the memory SDK into the eval tenant exactly as ``runner`` writes
 transcript a past session would have left); then each question is one harness run of a plain
 function agent: the harness pushes the memory context (``agent.context``) and the function asks
 the gateway's model to answer from it. Runs record nothing back (``without={"records"}``), so
-one question's answer never becomes the next question's memory, and grounding sampling is off.
+one question's answer never becomes the next question's memory, and grounding sampling is off
+(``without={"grounding"}`` on the wrap).
 
 The model on a CPU is slow, so this mode runs a named, deterministic sample
 (``data/_modes.json``); every run is one model call and is timed end to end.
@@ -133,7 +134,7 @@ async def run(settings: Settings, model: str) -> dict[str, Any]:
         print(f"wrote {sum(w.turns for w in written)} turns; settled {signals}", file=sys.stderr)
 
         hs = HarnessSettings.from_env().model_copy(
-            update={"memory_url": settings.url, "api_key": token, "grounding_sample": 0.0}
+            update={"memory_url": settings.url, "api_key": token}
         )
         harness_memory = MemoryClient(settings.url, api_key=token, timeout=settings.timeout)
         async with Harness(config=hs, memory=harness_memory) as h:
@@ -158,8 +159,12 @@ async def run(settings: Settings, model: str) -> dict[str, Any]:
 
             def agent_for(agent_id: str | None) -> Any:
                 if agent_id not in agents:
+                    # grounding sampling off: the harness's switch for it (no setting holds it)
                     agents[agent_id] = h.wrap(
-                        answer, id=agent_id or "capeval-agent", run_timeout=RUN_TIMEOUT
+                        answer,
+                        id=agent_id or "capeval-agent",
+                        run_timeout=RUN_TIMEOUT,
+                        without={"grounding"},
                     )
                 return agents[agent_id]
 

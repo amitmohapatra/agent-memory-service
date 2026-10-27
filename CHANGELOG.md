@@ -34,7 +34,9 @@ each entry says which one moved. Decisions behind each change are in the
 ### Fixed
 - The capability eval's harness mode (`--mode harness`) wraps its agent with
   `h.wrap(..., run_timeout=)`: the harness had removed `timeout=`, so the mode failed with a
-  `TypeError` before asking anything. Service and SDK unchanged.
+  `TypeError` before asking anything. Its grounding sampling is turned off with
+  `without={"grounding"}` on that wrap: the `grounding_sample` it set on the harness's
+  `Settings` is no field there and was silently ignored. Service and SDK unchanged.
 - What the service learns from, after a live learning test (memory, procedures, hints,
   approvals):
   - the grounding judge's verdict waits for a tenant admin's review and is never a person's

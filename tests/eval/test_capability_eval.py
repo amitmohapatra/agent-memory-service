@@ -804,14 +804,17 @@ async def test_harness_mode_waits_for_the_model_and_scores_a_failed_call_as_an_e
     assert "502" in record["error"]
 
 
-def test_harness_mode_wraps_with_the_harness_run_timeout_keyword() -> None:
-    # the harness is not installed beside the service, so the call is checked in the source:
-    # wrap() takes run_timeout= (working time); the old timeout= is a TypeError at run time
+def test_harness_mode_wraps_with_the_harness_run_timeout_and_grounding_off() -> None:
+    # the harness is not installed beside the service, so the calls are checked in the source:
+    # wrap() takes run_timeout= (working time; the old timeout= is a TypeError at run time),
+    # and grounding sampling is turned off with without={"grounding"}, the harness's switch —
+    # its Settings hold no grounding_sample, which model_copy(update=) would take silently
     import ast
 
     from benchmark.capabilities import harness_mode
 
-    tree = ast.parse(Path(harness_mode.__file__).read_text(encoding="utf-8"))
+    source = Path(harness_mode.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
     wraps = [
         node
         for node in ast.walk(tree)
@@ -821,9 +824,11 @@ def test_harness_mode_wraps_with_the_harness_run_timeout_keyword() -> None:
     ]
     assert wraps, "harness mode wraps its answer function"
     for call in wraps:
-        keywords = {k.arg for k in call.keywords}
+        keywords = {k.arg: k.value for k in call.keywords}
         assert "run_timeout" in keywords
         assert "timeout" not in keywords
+        assert ast.literal_eval(keywords["without"]) == {"grounding"}
+    assert "grounding_sample" not in source
 
 
 # --------------------------------------------------------------------------- end to end
