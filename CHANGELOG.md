@@ -32,6 +32,10 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- The capability eval's learned-procedure scenarios learn again: the runner labels its recorded
+  tool runs as a person (`source="human"`) through the tenant's administrator credential, so the
+  label is applied as it arrives and taught from; it labelled them `system`, a run's own report of
+  success, which teaches no procedure. Eval only; service and SDK unchanged.
 - Tool search reads the arguments' descriptions: a catalog entry is embedded with what its input
   schema says each argument is (`properties.<arg>.description`, nested objects and array items
   included, three levels deep), each distinct text once and at most 4,000 characters, so a tool

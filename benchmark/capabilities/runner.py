@@ -193,9 +193,11 @@ class Service:
     """The SDK client for the eval tenant, plus the two readiness signals that are not SDK
     verbs: a job's task name (to leave archive staging out) and the metrics endpoints."""
 
-    def __init__(self, client: Any, worker_metrics_url: str | None) -> None:
+    def __init__(self, client: Any, worker_metrics_url: str | None, reviewer: Any = None) -> None:
         self.client = client
         self.worker_metrics_url = worker_metrics_url
+        #: the tenant administrator's client the tool runs are labelled through (``_tool_runs``)
+        self.reviewer = reviewer or client
 
     async def job(self, ctx: Any, job_id: str) -> dict[str, Any]:
         return await self.client.transport.request("GET", f"/v1/jobs/{job_id}", scope=ctx.scope)
@@ -399,8 +401,12 @@ async def _add(service: Service, ctx: Any, turns: Sequence[GeneratedTurn], w: Wr
     w.failed_jobs += await service.wait_jobs(ctx, job_ids)
 
 
-async def _tool_runs(client: Any, w: Written, session: Any, thread: str) -> None:
-    base = client.bind(user_id=w.user_id, thread_id=thread)
+async def _tool_runs(service: Service, w: Written, session: Any, thread: str, tenant: str) -> None:
+    """Record each run's calls as its agent, then label the run as a person through the
+    tenant's administrator credential: applied as it arrives and taught from. A run's own
+    ``system`` report of success is its outcome only and teaches no procedure."""
+    base = service.client.bind(user_id=w.user_id, thread_id=thread)
+    reviewer = service.reviewer.bind(tenant_id=tenant, user_id=w.user_id, thread_id=thread)
     for run in session.tool_runs:
         task = text_for(run.task, w.language)
         for n in range(run.count):
@@ -413,7 +419,9 @@ async def _tool_runs(client: Any, w: Written, session: Any, thread: str) -> None
                     task=task,
                     step=step,
                 )
-            await agent.feedback("run", str(agent.scope.agent_run_id), run.verdict, source="system")
+            await reviewer.feedback(
+                "run", str(agent.scope.agent_run_id), run.verdict, source="human"
+            )
 
 
 def _probe_text(turns: Sequence[GeneratedTurn]) -> str | None:
@@ -469,7 +477,7 @@ async def write_scenario(
             if probe := _probe_text(turns):
                 w.last_probe, w.probe_thread = probe, thread
         if session.tool_runs and not settings.reuse:
-            await _tool_runs(client, w, session, thread)
+            await _tool_runs(service, w, session, thread, settings.tenant)
     w.write_seconds = _now() - t0
     return w
 
@@ -827,7 +835,10 @@ async def run(
         raise SystemExit("two scenarios of the selection share an id")
     token, policy = await _tenant(settings, factory)
     client = factory(token)
-    service = Service(client, settings.worker_metrics_url)
+    # without an administrator credential (a service key given) a run's label is a vote
+    # that waits for review, and nothing is learned from it
+    reviewer = factory(policy["admin_key"]) if policy.get("admin_key") else None
+    service = Service(client, settings.worker_metrics_url, reviewer)
     written: list[Written] = []
     cleanup: dict[str, Any] = {"purged": False}
     try:
@@ -892,6 +903,8 @@ async def run(
             cleanup = {"purged": True, **done.as_dict()}
             print(f"cleanup: {cleanup}", file=sys.stderr)
         await client.aclose()
+        if reviewer is not None:
+            await reviewer.aclose()
         await _revoke(settings, factory, policy)
 
     from benchmark.capabilities.report import build, save_raw
