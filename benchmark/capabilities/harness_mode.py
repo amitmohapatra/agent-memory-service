@@ -159,7 +159,7 @@ async def run(settings: Settings, model: str) -> dict[str, Any]:
             def agent_for(agent_id: str | None) -> Any:
                 if agent_id not in agents:
                     agents[agent_id] = h.wrap(
-                        answer, id=agent_id or "capeval-agent", timeout=RUN_TIMEOUT
+                        answer, id=agent_id or "capeval-agent", run_timeout=RUN_TIMEOUT
                     )
                 return agents[agent_id]
 

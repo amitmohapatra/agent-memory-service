@@ -804,6 +804,28 @@ async def test_harness_mode_waits_for_the_model_and_scores_a_failed_call_as_an_e
     assert "502" in record["error"]
 
 
+def test_harness_mode_wraps_with_the_harness_run_timeout_keyword() -> None:
+    # the harness is not installed beside the service, so the call is checked in the source:
+    # wrap() takes run_timeout= (working time); the old timeout= is a TypeError at run time
+    import ast
+
+    from benchmark.capabilities import harness_mode
+
+    tree = ast.parse(Path(harness_mode.__file__).read_text(encoding="utf-8"))
+    wraps = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "wrap"
+    ]
+    assert wraps, "harness mode wraps its answer function"
+    for call in wraps:
+        keywords = {k.arg for k in call.keywords}
+        assert "run_timeout" in keywords
+        assert "timeout" not in keywords
+
+
 # --------------------------------------------------------------------------- end to end
 
 
