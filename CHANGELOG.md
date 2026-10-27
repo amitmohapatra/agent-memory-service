@@ -32,6 +32,24 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- An agent no longer writes the user's profile. A memory an agent states (`memory_remember`,
+  `POST /v1/memories` with an agent on the request) as `USER` or `PREFERENCE` is kept as the
+  agent's own `AGENT` memory, by the rule that already re-typed an agent-authored observation's
+  readings (ADR 0013, now one function, `pipeline.authored_type`), so it is never a line of the
+  pinned `user` block: a help-desk run that remembered an asset's owner ("omar (u-77)",
+  `kind="USER"`) had every later context say the user is Omar. It keeps the audience it was
+  given and is still retrieved. The user's own statements (no agent on the request, or their
+  turn relayed by a harness) state their profile as before. Service only.
+- A user's question no longer becomes a memory, and a statement said again no longer replaces
+  itself. A question behind a heading with no question mark ("For employee e-401: how many
+  trips this year ...") was read as a statement and kept as a lasting turn; the question word
+  after a heading now opens a question (`statements._HEADING`). A turn whose every sentence
+  asks still forms nothing, in any language and with `?`, `？` or `؟`, and a turn that also
+  states something ("I moved to Pune. Which store is nearest?") keeps it. A user's turn in the
+  same words in a later conversation was compared with the earlier copy as a replacement, and a
+  request repeated in four runs had three copies served under "Earlier values (since
+  replaced)": the same words replace nothing (ADR 0038). The copies stay one per conversation;
+  said twice in one conversation it is one memory, as before. Service only.
 - A learned skill reaches a task worded otherwise: a procedure was offered (the context's
   skills, the hints' plan) only when the task's pattern shared 60% of its words with the
   procedure's, so "MFA lockout again" or "Re-enrol two-factor for a user who is locked out"

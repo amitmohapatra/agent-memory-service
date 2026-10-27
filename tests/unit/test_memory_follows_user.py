@@ -22,7 +22,9 @@ from memory_service.domain.enums import (
     Visibility,
 )
 from memory_service.domain.ids import content_hash
+from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.observation import Observation
+from memory_service.modules.agent_tools.service import AgentTools
 from memory_service.modules.memory.native import (
     VERBATIM_MAX_PIECES,
     NativeMemoryIntelligence,
@@ -30,7 +32,13 @@ from memory_service.modules.memory.native import (
     said_by_user,
     verbatim_windows,
 )
-from memory_service.modules.memory.pipeline import ObservationPipeline, _told, build_memory
+from memory_service.modules.memory.pipeline import (
+    ObservationPipeline,
+    _told,
+    authored_type,
+    build_memory,
+)
+from memory_service.modules.memory.service import MemoryService
 from memory_service.modules.retrieval.engine import (
     Candidate,
     _dedup,
@@ -422,3 +430,135 @@ async def test_a_runs_own_words_form_no_memory_in_any_language(language, role, w
 def test_a_persons_words_relayed_by_a_run_still_form_memories_in_any_language(language) -> None:
     assert _told(_obs(_PERSONS_WORDS[language], HARNESS))
     assert not _told(_obs(_RUN_OWN_WORDS[language][1], HARNESS, role="TOOL"))
+
+
+# --- a user's question is not a statement (S5) ---------------------------------------------
+
+#: A user turn that only asks, in six languages and the three question marks the service reads
+#: (ASCII, full-width, Arabic), and an English one with no mark behind a heading: replaying a run's
+#: transcript kept "For employee e-401: how many trips ..." as a lasting memory in each of the
+#: four conversations it was asked in.
+_ONLY_ASKS = {
+    "en": "Which store should I restock first?",
+    "en-heading": (
+        "For employee e-401: how many trips this year, which flights are booked, and what the "
+        "travel policy says about the meal allowance."
+    ),
+    "de": "Welche Filiale soll ich zuerst auffüllen?",
+    "es": "¿Qué tienda debo reabastecer primero？",  # noqa: RUF001 - the full-width mark
+    "ar": "أي متجر يجب أن أعيد تعبئته أولاً؟",
+    "hi": "मुझे पहले किस स्टोर को भरना चाहिए?",
+    "zh": "我应该先给哪家店补货？",  # noqa: RUF001 - the full-width mark
+}
+
+
+@pytest.mark.parametrize("ctx", [USER, HARNESS], ids=["direct", "relayed"])
+@pytest.mark.parametrize("which", sorted(_ONLY_ASKS))
+async def test_a_turn_that_only_asks_forms_no_memory(native, which, ctx) -> None:
+    assert await native.extract(_obs(_ONLY_ASKS[which], ctx), ctx) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "fact"),
+    [
+        ("I moved to Pune. Which store is nearest?", "pune"),
+        ("Ich wohne in Pune. Welche Filiale ist am nächsten?", None),
+        ("Stores S12 and S40 both carry style ST-101. Which should get stock first?", None),
+        ("For employee e-401: the meal allowance is 40 EUR a day.", None),
+    ],
+)
+async def test_a_turn_that_asks_and_states_keeps_what_it_states(native, text, fact) -> None:
+    """Questions are told apart per sentence: the turn is kept whole when any sentence of it
+    states something, with what a rule read from that sentence."""
+    cands = await native.extract(_obs(text, HARNESS), HARNESS)
+    assert [c.content for c in cands if c.category == "verbatim_turn"] == [text]
+    if fact:
+        assert any(c.object == fact for c in cands if c.category != "verbatim_turn")
+
+
+# --- what an agent states about the user ---------------------------------------------------
+
+
+def test_only_the_user_states_the_users_own_kinds() -> None:
+    for kind in (MemoryType.USER, MemoryType.PREFERENCE):
+        assert authored_type(kind, by_agent=False) is kind
+        assert authored_type(kind, by_agent=True) is MemoryType.AGENT
+    for kind in (MemoryType.SEMANTIC, MemoryType.EPISODIC, MemoryType.TASK, MemoryType.AGENT):
+        assert authored_type(kind, by_agent=True) is kind
+
+
+class _Rows:
+    def __init__(self) -> None:
+        self.added: list[CanonicalMemory] = []
+
+    async def current_with_hash(self, *_: object, **__: object) -> None:
+        return None
+
+    async def add(self, memory: CanonicalMemory, **_: object) -> None:
+        self.added.append(memory)
+
+
+class _Ignored:
+    async def add(self, *_: object, **__: object) -> None:
+        return None
+
+    async def bump(self, *_: object, **__: object) -> None:
+        return None
+
+
+class _Stated:
+    """The unit of work a stated memory is written through: the rows it adds."""
+
+    def __init__(self) -> None:
+        self.memories, self.pulls, self.revisions = _Rows(), _Ignored(), _Ignored()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        return None
+
+    async def serialize(self, *_: object) -> None:
+        return None
+
+    async def enqueue(self, *_: object) -> int:
+        return 1
+
+    async def commit(self) -> None:
+        return None
+
+
+async def test_an_agents_remembered_user_fact_is_the_agents_not_the_users_profile() -> None:
+    """A help-desk run looked up an asset's owner and called memory_remember(kind="USER",
+    scope="user", content="omar (u-77)"): it was kept as the user's USER memory and became
+    the pinned "### user" block, so every later context told the model the user is Omar."""
+    uow = _Stated()
+    tools = AgentTools(lambda: uow, {"memory": MemoryService(None)})  # type: ignore[arg-type]
+    await tools.call(
+        HARNESS, "memory_remember", {"content": "omar (u-77)", "kind": "USER", "scope": "user"}
+    )
+    await tools.call(
+        HARNESS, "memory_remember", {"content": "Ann likes tables", "kind": "PREFERENCE"}
+    )
+    await tools.call(HARNESS, "memory_remember", {"content": "LT-2290 is Omar's"})
+    omar, likes, fact = uow.memories.added
+    for agents in (omar, likes):
+        assert agents.memory_type is MemoryType.AGENT, "never the profile's kinds"
+        assert agents.subject is None and agents.owner_principal == HARNESS.principal_id
+        assert agents.visibility is Visibility.USER, "still read where the agent asked"
+    assert fact.memory_type is MemoryType.SEMANTIC, "any other kind is kept as stated"
+
+
+@pytest.mark.parametrize("kind", [MemoryType.USER, MemoryType.PREFERENCE])
+async def test_the_users_own_statement_still_states_their_profile(kind) -> None:
+    uow = _Stated()
+    await MemoryService(None).remember(  # type: ignore[arg-type]
+        uow,  # type: ignore[arg-type]
+        USER,
+        content="My name is Omar.",
+        memory_type=kind,
+        lifetime=Lifetime.LONG_TERM,
+    )
+    [said] = uow.memories.added
+    assert said.memory_type is kind and said.subject == "user:u1"
+    assert said.visibility is Visibility.USER

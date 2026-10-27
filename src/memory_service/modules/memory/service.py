@@ -33,6 +33,7 @@ from memory_service.modules.authz.visibility import validate_requested_visibilit
 from memory_service.modules.memory.native import default_visibility, normalized_hash
 from memory_service.modules.memory.pipeline import (
     TASK_MEMORY_INDEX,
+    authored_type,
     build_memory,
     keys_for,
     supersede,
@@ -104,6 +105,8 @@ class MemoryService:
         validate_requested_visibility(ctx, hints)
         await guard_workspace_visibility(uow, self.authz, ctx, visibility)
         content = sanitise(content)
+        # an agent states nothing of the user's profile: its USER or PREFERENCE is its own
+        memory_type = authored_type(memory_type, by_agent=ctx.is_agent)
         now = datetime.now(UTC)
         memory_id = new_id("memory")
         about_user = memory_type in (MemoryType.USER, MemoryType.PREFERENCE) and ctx.user_id
