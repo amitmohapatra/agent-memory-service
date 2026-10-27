@@ -38,7 +38,7 @@ from memory_service.modules.tools.learning import (
     succeeded,
 )
 from memory_service.modules.tools.patterns import task_pattern, task_slots
-from memory_service.modules.tools.procedures import mine_procedure
+from memory_service.modules.tools.procedures import decayed, mine_procedure
 from memory_service.modules.tools.trajectories import build_trajectory
 from trellis.memory.approval import arg_shape
 
@@ -78,6 +78,9 @@ def test_an_argument_shape_names_kinds_and_magnitudes_never_values() -> None:
         (1, 3, 1, "always_ask"),
         (3, 1, 1, None),  # mixed: nothing to suggest
         (4, 0, 0, None),  # too little support
+        (18, 2, 0, None),  # 0.90: just under the rate for approving automatically
+        (5, 5, 0, "always_ask"),  # exactly 0.5: always ask
+        (6, 5, 0, None),  # just over 0.5: nothing
     ],
 )
 def test_approvals_suggest_a_rule_only_with_support_and_a_clear_rate(
@@ -680,3 +683,179 @@ async def test_described_free_text_is_the_model_s_to_word_never_missing() -> Non
     )
     _, missing = await _hinted(task, approve)
     assert missing == {("approve", "approver")}
+
+
+# ------------------------------------------------------------------ edges of learning
+
+
+@pytest.mark.parametrize("age", [timedelta(hours=23.9), timedelta(hours=24), timedelta(hours=24.1)])
+def test_an_unlabelled_clean_run_is_no_evidence_either_side_of_a_day(age: timedelta) -> None:
+    """B5: the 24 h boundary is gone: 23.9 h, 24 h and 24.1 h old, an unlabelled run whose
+    calls worked is neither a success nor a failure."""
+    assert succeeded(None, [_call("a", 0, occurred_at=NOW - age)]) is None
+
+
+def test_a_run_whose_every_call_failed_is_a_failure_unless_a_person_says_otherwise() -> None:
+    """All tools failed: unlabelled, or reported failed by the run itself, it is a failure; a
+    person's (or the judge's) confirm is the run's label and stands (the procedure's rate is
+    the runs')."""
+    failed = [_call("a", 0, status="error"), _call("b", 1, status="timeout")]
+    assert succeeded(None, failed) is False
+    system = RunOutcome(tenant_id="acme", run_id="run_1", success=False, source="system")
+    assert succeeded(system, failed) is False
+    person = RunOutcome(tenant_id="acme", run_id="run_1", success=True, source="human")
+    assert succeeded(person, failed) is True
+
+
+def test_a_run_that_retried_a_step_supports_the_same_procedure_as_one_that_did_not() -> None:
+    """B10: a retry inside one run is an adjustment of its step; that run and a clean one are
+    two runs of one procedure."""
+    clean = build_trajectory(
+        "r0",
+        [_call("lookup", 0, run="r0"), _call("reset", 1, run="r0")],
+        succeeded=True,
+    )
+    retried = build_trajectory(
+        "r1",
+        [
+            _call("lookup", 0, run="r1"),
+            _call("reset", 1, run="r1", status="error", error_class="TimeoutError"),
+            _call("reset", 2, run="r1"),
+        ],
+        succeeded=True,
+    )
+    mined = mine_procedure("p", [clean, retried])
+    assert mined is not None and mined.tools == ["lookup", "reset"]
+    assert (mined.support, mined.success_rate) == (2, 1.0)
+
+
+def test_a_retry_that_never_worked_leaves_an_unlabelled_run_a_failure() -> None:
+    calls = [
+        _call("lookup", 0),
+        _call("reset", 1, status="error", error_class="TimeoutError"),
+        _call("reset", 2, status="error", error_class="TimeoutError"),
+    ]
+    assert succeeded(None, calls) is False
+    assert mine_procedure("p", [build_trajectory("r0", calls, succeeded=False)]) is None
+
+
+def _runs(ok: int, failed: int, *, at: datetime = NOW) -> list:
+    """``ok`` successful and ``failed`` failed runs of lookup -> update."""
+    out = []
+    for i in range(ok + failed):
+        run = f"r{i}"
+        calls = [
+            _call("lookup", 0, run=run, occurred_at=at, output_fields={"quote": f"Q-{i}"}),
+            _call("update", 1, run=run, occurred_at=at, args_redacted={"quote": f"Q-{i}"}),
+        ]
+        out.append(build_trajectory(run, calls, succeeded=i < ok))
+    return out
+
+
+@pytest.mark.parametrize(
+    ("ok", "failed", "new", "kept"),
+    [
+        (1, 0, "candidate", "retired"),  # support 1: below
+        (2, 0, "active", "active"),  # support 2: exactly at
+        (3, 2, "active", "active"),  # rate 0.60: exactly at
+        (5, 4, "candidate", "retired"),  # rate 0.56: just under
+        (2, 2, "candidate", "retired"),  # rate 0.50
+    ],
+)
+def test_a_procedure_is_offered_from_two_supporting_runs_at_a_rate_of_three_in_five(
+    ok: int, failed: int, new: str, kept: str
+) -> None:
+    owner = _call("lookup", 0)
+    mined = mine_procedure("p", _runs(ok, failed))
+    fresh = merge(None, mined, tenant_id="acme", audience="k", owner=owner)
+    assert fresh is not None and fresh.status == new
+    active = merge(
+        None, mine_procedure("p", _runs(2, 0)), tenant_id="acme", audience="k", owner=owner
+    )
+    again = merge(active, mined, tenant_id="acme", audience="k", owner=owner)
+    assert again is not None and again.status == kept
+
+
+def test_a_procedure_idle_past_sixty_days_is_archived_and_new_runs_bring_it_back() -> None:
+    """Decay: idle exactly 60 days it is still offered, a moment longer it is not; archived,
+    two new successful runs make it active again, the same procedure."""
+    mined = mine_procedure("p", _runs(2, 0))
+    assert mined is not None and mined.last_used_at == NOW
+    assert not decayed(mined, now=NOW + timedelta(days=60))
+    assert decayed(mined, now=NOW + timedelta(days=60, seconds=1))
+
+    owner, now = _call("lookup", 0), datetime.now(UTC)
+    active = merge(
+        None, mine_procedure("p", _runs(2, 0, at=now)), tenant_id="acme", audience="k", owner=owner
+    )
+    idle = mine_procedure("p", _runs(2, 0, at=now - timedelta(days=61)))
+    archived = merge(active, idle, tenant_id="acme", audience="k", owner=owner)
+    assert archived is not None and archived.status == "retired"
+    back = merge(
+        archived,
+        mine_procedure("p", _runs(2, 0, at=now)),
+        tenant_id="acme",
+        audience="k",
+        owner=owner,
+    )
+    assert back is not None and back.status == "active"
+    assert back.procedure_id == active.procedure_id  # type: ignore[union-attr]
+
+
+def test_a_run_that_only_reached_code_mode_teaches_no_procedure() -> None:
+    """B17: the four meta-tools are how a script reached the tools; a run whose log brought
+    back no nested call has no step a procedure could offer."""
+    calls = [
+        _call(name, i)
+        for i, name in enumerate(
+            ["list_tool_files", "read_tool_file", "get_tool_docs", "execute_tool_code"]
+        )
+    ]
+    runs = [build_trajectory(f"r{i}", calls, succeeded=True) for i in range(2)]
+    assert all(not t.steps for t in runs)
+    assert mine_procedure("p", runs) is None
+
+
+# ------------------------------------------------------------------ edges of prefill
+
+
+PRIORITY = ToolDescriptor(
+    tenant_id="acme",
+    name="tickets_by_priority",
+    input_schema={
+        "properties": {
+            "priority": {"type": "string", "enum": ["high", "medium", "low"]},
+            "team": {"type": "string", "description": "The team's name, such as network."},
+        }
+    },
+    required=["priority", "team"],
+)
+
+
+@pytest.mark.parametrize(
+    "task",
+    [
+        "Which high-priority tickets does the network team have open, and what is their SLA?",
+        "Show priority P1 tickets for team NET-4",
+    ],
+)
+async def test_an_enum_argument_is_never_filled_with_a_value_outside_its_enum(task: str) -> None:
+    """S2: "priority='SLA'" - a label reaching back over the request's words - and an id
+    after "priority" are no value of an argument that takes one of a few words."""
+    values, _ = await _hinted(task, PRIORITY)
+    assert values.get("tickets_by_priority.priority") in (None, "high", "medium", "low")
+
+
+async def test_a_value_inside_an_identifier_fills_no_other_argument() -> None:
+    """S1: the S12 inside the asset tag LT-2290-S12 is no store."""
+    values, _ = await _hinted("Who has laptop LT-2290-S12?", ASSET_OWNER, DEMAND)
+    assert "store_demand.store" not in values and "store_demand.style" not in values
+
+
+async def test_two_identifiers_of_one_task_each_fill_the_tool_whose_example_they_match() -> None:
+    """S1 across tools: the user id is the password reset's, the asset tag the asset owner's,
+    never the other way round."""
+    task = "Reset the password of u-77 and tell me who has LT-2290"
+    values, missing = await _hinted(task, ASSET_OWNER, RESET)
+    assert values == {"asset_owner.asset_tag": "LT-2290", "reset_password.user_id": "u-77"}
+    assert not missing
