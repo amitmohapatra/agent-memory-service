@@ -36,6 +36,7 @@ from memory_service.modules.memory.pipeline import (
     authored_type,
     build_memory,
     keys_for,
+    said_by_a_person,
     supersede,
 )
 from memory_service.modules.memory.replacement import reinstate
@@ -74,6 +75,27 @@ def _stated(
         observed_at=now,
         source_hash=content_hash(content),
     )
+
+
+def _authorship(ctx: MemoryExecutionContext, old: CanonicalMemory) -> dict[str, Any]:
+    """Whose a new version of ``old`` is, and what it is about. The user's and an admin's
+    keep the old one's. An agent's is the agent's own note: its owner, a kind an agent states
+    (``authored_type``), and no person as its subject, so it never reads as something a
+    person said, whatever the version it replaces was about."""
+    if not ctx.is_agent:
+        return {
+            "owner_principal": old.owner_principal,
+            "memory_type": old.memory_type,
+            "subject": old.subject,
+            "predicate": old.predicate,
+        }
+    about_a_person = (old.subject or "").startswith("user:")
+    return {
+        "owner_principal": ctx.principal_id,
+        "memory_type": authored_type(old.memory_type, by_agent=True),
+        "subject": None if about_a_person else old.subject,
+        "predicate": None if about_a_person else old.predicate,
+    }
 
 
 class MemoryService:
@@ -157,7 +179,9 @@ class MemoryService:
     ) -> CanonicalMemory:
         """Replace a memory's content with a new version, bi-temporally: the new memory holds
         from now, the old one is closed at now and points at it, and both stay readable in a
-        temporal view. The owner (or the user an agent acts for, or a tenant admin) only."""
+        temporal view. The owner (or the user an agent acts for, or a tenant admin) only, and
+        never an agent when the memory is what a person said (``said_by_a_person``). The new
+        version is its writer's (``_authorship``)."""
         old = await self.get_memory(uow, ctx, memory_id)
         await self._require_owner(ctx, old, "supersede")
         if old.temporal.status is not TemporalStatus.CURRENT:
@@ -173,14 +197,11 @@ class MemoryService:
             tenant_id=old.tenant_id,
             scope=old.scope,
             visibility=old.visibility,
-            owner_principal=old.owner_principal,
             lifetime=old.lifetime,
-            memory_type=old.memory_type,
             custom_type=old.custom_type,
             content=content,
             normalized_hash=normalized_hash(content),
-            subject=old.subject,
-            predicate=old.predicate,
+            **_authorship(ctx, old),
             temporal=TemporalState(observed_at=now),
             evidence=[_stated(ctx, new_memory_id, content, now)],
             confidence=STATED_CONFIDENCE,
@@ -240,6 +261,14 @@ class MemoryService:
     async def _require_owner(
         self, ctx: MemoryExecutionContext, memory: CanonicalMemory, action: str
     ) -> None:
+        if ctx.is_agent and said_by_a_person(memory):
+            # what the user said is theirs to restate or retract, admin or not: a run's
+            # memory_update overwrote the user's own statements with its answers
+            raise ScopeDenied(
+                f"memory {memory.memory_id} is the user's own statement: an agent cannot "
+                f"{action} it; use memory_remember to add your note",
+                details={"principal": ctx.principal_id, "reason": "users_own_statement"},
+            )
         if memory.owner_principal in (ctx.principal_id, f"user:{ctx.user_id}"):
             return
         if not await self.authz.is_tenant_admin(ctx):
@@ -391,7 +420,8 @@ class MemoryService:
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, memory_id: str
     ) -> CanonicalMemory | None:
         """Soft-delete. Allowed for the owner principal, the user an agent acts for, or a
-        tenant admin; the search index entry is removed by the index job. Idempotent: a
+        tenant admin - never an agent when it is what a person said (``said_by_a_person``);
+        the search index entry is removed by the index job. Idempotent: a
         memory that is already forgotten returns None instead of NotFound, including one a
         concurrent forget of its twin removed while this one ran.
 

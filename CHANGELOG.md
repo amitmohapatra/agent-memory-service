@@ -32,6 +32,25 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- An agent run can no longer rewrite or forget what the user said. Asked "What is 12 times 7?",
+  a run called `memory_update` on the user's "I raised PO-77812 for 2,000 corrugated boxes; it's
+  late." and replaced it with "12 times 7 = 84"; the new version kept the user as its owner and
+  `user:<u> said` as its subject and predicate, so every later context presented the agent's
+  words as the user's. A memory a person said (a `user:` owner, or a `said` turn of a `user:`
+  subject, which a harness may relay; `pipeline.said_by_a_person`) is refused to an agent by
+  `memory_update`, `memory_forget`, `POST /v1/memories/{id}/supersede`, `DELETE
+  /v1/memories/{id}` and restore, whatever its rights (403: "... is the user's own statement:
+  an agent cannot supersede it; use memory_remember to add your note"). An agent still updates
+  and forgets its own memories, and a version it writes is its own: its owner, a kind an agent
+  states (`authored_type`), no person as subject. The user's and a tenant admin's updates are
+  unchanged. Service only.
+- Two values of a one-valued slot sent in one `history.add` batch ("I work at ACME Corp.", "I
+  work at Globex now.") no longer both stay current. Each message's memories are formed by its
+  own job, and the jobs of one batch ran side by side: each compared its statement with the
+  store before the other had committed, so neither replaced the other, where two calls did. A
+  conversation's messages are now read one at a time, in the order they were stored (the
+  queue's `lock` on `memory.process_observation`, per thread; the post-commit dispatch defers
+  them in outbox order); other conversations run beside them. Service only.
 - A learned skill no longer hands over a call the user's standing rule forbids. With "Never
   create a stock rule at store S40" in the context's `standing_rules` section, a skill learned
   from three runs at S12 made `create_stock_rule` the hints' next step, prefilled at S40, and

@@ -59,6 +59,27 @@ TASK_PROCESS_OBSERVATION = "memory.process_observation"
 TASK_ARCHIVE_STAGE = "archive.stage_message"
 
 
+def observation_job(ctx: MemoryExecutionContext, observation_id: str) -> JobSpec:
+    """The job that forms memories from one message of ``ctx``'s thread. A conversation's
+    messages are read one at a time, in the order they were stored (the queue's ``lock``):
+    each one's consolidation and replacement then see what the earlier ones stored, as if
+    they had come in separate calls. Read in parallel, two messages of one batch ("I work at
+    ACME Corp.", "I work at Globex now.") each compared themselves with the store before
+    either committed, and both values of the one-valued slot stayed current."""
+    return JobSpec(
+        task_name=TASK_PROCESS_OBSERVATION,
+        queue=Queue.CHAT_FAST,
+        payload={
+            "tenant_id": ctx.tenant_id,
+            "observation_id": observation_id,
+            "trace_id": ctx.trace_id,
+        },
+        idempotency_key=f"obs:{observation_id}",
+        lock=f"observe:{ctx.tenant_id}:{ctx.thread_id}",
+        tenant_id=ctx.tenant_id,
+    )
+
+
 @dataclass(frozen=True)
 class MessageAck:
     message_id: str
@@ -335,19 +356,7 @@ class ConversationService:
             await uow.observations.add(observation)
 
             job_ids: list[str] = []
-            outbox_id = await uow.enqueue(
-                JobSpec(
-                    task_name=TASK_PROCESS_OBSERVATION,
-                    queue=Queue.CHAT_FAST,
-                    payload={
-                        "tenant_id": ctx.tenant_id,
-                        "observation_id": observation.observation_id,
-                        "trace_id": ctx.trace_id,
-                    },
-                    idempotency_key=f"obs:{observation.observation_id}",
-                    tenant_id=ctx.tenant_id,
-                )
-            )
+            outbox_id = await uow.enqueue(observation_job(ctx, observation.observation_id))
             if outbox_id is not None:
                 job_ids.append(f"obx_{outbox_id}")
             if self.archive_enabled:

@@ -168,10 +168,15 @@ TOOLS: Final = (
     ),
     AgentTool(
         "memory_update",
-        "Replace a memory with a new statement; the old one stays in its history.",
+        "Replace a memory with a new statement; the old one stays in its history. Only a "
+        "memory you wrote: what the user said is theirs (use memory_remember for your note).",
         MemoryUpdateArgs,
     ),
-    AgentTool("memory_forget", "Forget a memory: it is no longer retrieved.", MemoryForgetArgs),
+    AgentTool(
+        "memory_forget",
+        "Forget a memory you wrote: it is no longer retrieved. What the user said is theirs.",
+        MemoryForgetArgs,
+    ),
     AgentTool(
         "profile_edit",
         "Edit a pinned profile block: replace the exact old text with the new text (empty old "
