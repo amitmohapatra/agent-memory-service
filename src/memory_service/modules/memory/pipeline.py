@@ -293,6 +293,17 @@ def authored_type(memory_type: MemoryType, *, by_agent: bool) -> MemoryType:
     return MemoryType.AGENT if by_agent and memory_type in LASTING_TYPES else memory_type
 
 
+def said_by_a_person(memory: CanonicalMemory) -> bool:
+    """Whether ``memory`` is what a person said: written by them (a ``user:`` owner), or their
+    words kept as said (a ``said`` turn of a ``user:`` subject, which a harness may relay).
+    Only that person restates or retracts it; an agent acting for them adds a note of its own
+    (``authored_type``'s rule, for rewriting): a run's ``memory_update`` replaced "I raised
+    PO-77812 for 2,000 corrugated boxes" with "12 times 7 = 84", kept as what the user said."""
+    return memory.owner_principal.startswith("user:") or (
+        memory.predicate == "said" and (memory.subject or "").startswith("user:")
+    )
+
+
 class ObservationPipeline:
     def __init__(
         self,

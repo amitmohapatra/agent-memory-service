@@ -937,6 +937,8 @@ class SqlOutboxRepository:
         stmt = (
             self._undispatched()
             .where(OutboxRow.outbox_id.in_(list(outbox_ids)))
+            # in the order they were written: jobs sharing a ``lock`` run in the order deferred
+            .order_by(OutboxRow.outbox_id)
             .with_for_update(skip_locked=True)
         )
         return self._entries((await self.s.execute(stmt)).scalars().all())
