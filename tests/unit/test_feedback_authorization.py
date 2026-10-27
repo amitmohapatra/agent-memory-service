@@ -1077,6 +1077,27 @@ async def test_an_approval_naming_another_agents_run_and_call_is_not_counted() -
     assert counted == ["ops"]
 
 
+async def test_another_agents_decision_on_the_same_interrupt_does_not_stop_this_ones() -> None:
+    """Agent B reuses agent A's run and interrupt ids and sends a rejection, which needs no
+    recorded call. It counts for B only: A's approval on that interrupt still counts, for A."""
+    service, run, uow = _projecting()
+    run.calls.append(_transfer())  # recorded by "ops" only
+    counted: list[tuple[str, str]] = []
+
+    async def count_approval(tenant_id, agent_id, tool, shape, counter) -> None:
+        counted.append((agent_id, counter))
+
+    run.count_approval = count_approval  # type: ignore[method-assign]
+    other = OWNER.model_copy(update={"agent_id": "intruder", "agent_run_id": "run_7"})
+    own = OWNER.model_copy(update={"agent_id": "ops", "agent_run_id": "run_7"})
+    await service.submit(uow, other, _decision(FeedbackVerdict.REJECT, "fb_b", interrupt_id="i"))
+    await service.project("acme", "fb_b", attempt=CALL_RECORD_CHECKS)
+    await service.submit(uow, own, _decision(FeedbackVerdict.APPROVE, "fb_a", interrupt_id="i"))
+    mine = await service.project("acme", "fb_a", attempt=CALL_RECORD_CHECKS)
+    assert mine is not None and mine.action is ProjectionAction.TOOL_CALL_COUNTED
+    assert counted == [("intruder", "rejections"), ("ops", "approvals")]
+
+
 def test_a_context_naming_a_run_must_name_its_agent() -> None:
     """A decision counts only on an interrupt of a run, and a run is always an agent's: no
     approval pattern is learned under an agent of no name."""

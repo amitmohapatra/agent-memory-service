@@ -1148,10 +1148,13 @@ async def _spent(uow: UnitOfWork, record: Feedback) -> bool:
 
 
 async def _counted_before(uow: UnitOfWork, record: Feedback) -> bool:
-    """Whether another decision on the same interrupt of the same run was counted."""
+    """Whether another decision of the same agent on the same interrupt of the same run
+    was counted. The run and interrupt ids are the client's: another agent's decision under
+    the same ids neither stands for this one nor stops it."""
     interrupt = record.metadata.get("interrupt_id")
     return any(
         other.feedback_id != record.feedback_id
+        and other.agent_id == record.agent_id
         and other.agent_run_id == record.agent_run_id
         and other.metadata.get("interrupt_id") == interrupt
         and other.projection is not None
