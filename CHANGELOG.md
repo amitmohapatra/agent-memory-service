@@ -32,6 +32,40 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- What the service learns from, after a live learning test (memory, procedures, hints,
+  approvals):
+  - the grounding judge's verdict waits for a tenant admin's review and is never a person's
+    vote; a reject cites only the memories behind contradicted claims, a confirm none, and a
+    run that called tools moves no memory; a passage about something else no longer
+    contradicts a claim (`CONTRADICTION_MIN_COVERAGE`, same script only);
+  - an agent run's own words, its tools' errors and raw tool output form no memory;
+  - an unlabelled run whose calls all worked is no evidence for a procedure, however old (the
+    24-hour weak positive is gone), and neither is a `system` failure of a run whose calls all
+    worked (a time limit, a model error);
+  - a failed call and its retry are one procedure step; a value is a learned literal only when
+    it is the same across runs of different tasks, and is never prefilled for a task naming
+    another; Code Mode's meta-tools are no steps;
+  - tool hints fill an argument only from the task's words that match it (its label, its
+    spelling, its documented example's shape), read no number out of an identifier ("ST-101"),
+    rank a general view (overview, summary, dashboard) below a specific tool, never make a tool
+    that changes something the next step of a question, and offer no candidates when nothing is
+    relevant and no plan is learned; a learned plan is spelled out once in the context;
+  - a tool-call decision counts only on an interrupt of the calling run, naming its reviewer,
+    once per interrupt, and an approval only once the run recorded that call; a learned rule
+    never relaxes an administrator's `approve_when`;
+  - `GET /v1/tools` says whether each entry is indexed (`indexed`), so a client can wait for
+    tool search before its first hints; and the context leaves out its "Evidence status"
+    section when a hinted tool answers the question.
+- A learned "approve automatically" rule needs at least 2 different reviewers: one reviewer's
+  approvals of a tool's calls, however many, no longer make it a suggestion (the reviewers are
+  read from the counted decisions; no new table). And each call a run recorded backs one counted
+  approval: the interrupt id is the client's, so naming a new one made one call back any number.
+  `GET /v1/tools/approval-suggestions` may list fewer suggestions; accepting one that fewer
+  than 2 reviewers support is a 409.
+- The capability eval's learned-procedure scenarios learn again: the runner labels its recorded
+  tool runs as a person (`source="human"`) through the tenant's administrator credential, so the
+  label is applied as it arrives and taught from; it labelled them `system`, a run's own report of
+  success, which teaches no procedure. Eval only; service and SDK unchanged.
 - Tool search reads the arguments' descriptions: a catalog entry is embedded with what its input
   schema says each argument is (`properties.<arg>.description`, nested objects and array items
   included, three levels deep), each distinct text once and at most 4,000 characters, so a tool

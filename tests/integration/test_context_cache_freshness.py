@@ -402,18 +402,22 @@ async def test_semantic_cache_with_tools_serves_what_a_fresh_build_does(containe
     assert first.memories and first.tools is not None and not first.cache_hit
 
     hit = await builder.build(
-        ctx, "where do we buy steel!", tools=ToolsRequest(available=TOOLBOX[::-1])
+        ctx, "where do we buy steel??", tools=ToolsRequest(available=TOOLBOX[::-1])
     )
-    assert hit.cache_hit and hit.query == "where do we buy steel!"
+    assert hit.cache_hit and hit.query == "where do we buy steel??"
     other = await builder.build(
-        ctx, "where do we buy steel!", tools=ToolsRequest(available=TOOLBOX[1:])
+        ctx, "where do we buy steel??", tools=ToolsRequest(available=TOOLBOX[1:])
     )
     assert not other.cache_hit, "another toolbox is another bundle"
+    # the hints' next step depends on whether the task is a question (a tool that changes
+    # something never leads one): a request to act is another bundle
+    act = await builder.build(ctx, "where do we buy steel!", tools=tools)
+    assert not act.cache_hit, "a question's hints were served to a request to act"
 
     async with factory() as uow:  # nothing that holds content changes: the next build is fresh
         await uow.revisions.bump(ctx.tenant_id, RevisionKind.TENANT)
         await uow.commit()
-    fresh = await builder.build(ctx, "where do we buy steel!", tools=tools)
+    fresh = await builder.build(ctx, "where do we buy steel??", tools=tools)
     assert not fresh.cache_hit
     assert [m.item_id for m in hit.memories] == [m.item_id for m in fresh.memories]
     assert (hit.tools, hit.procedures, hit.profile) == (

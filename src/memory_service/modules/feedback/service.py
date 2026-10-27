@@ -6,13 +6,17 @@ the record, so a verdict is never lost and never slows the request that carried 
 - memory: an affirming verdict reinforces, a rejection retracts, a correction writes a new
   memory that supersedes the old one;
 - run: the run's outcome, unless a higher-ranked source decided it (a person over the judge
-  over the run's own status); the memories the verdict cites gain or lose confidence;
-- tool call: counted on the tool's statistics and on its approval pattern;
+  over the run's own status); only then do the memories the verdict cites gain or lose
+  confidence;
+- tool call: counted on the tool's statistics and on its approval pattern - only a person's
+  decision on an interrupt of a run, once per interrupt, and an approval only once the run
+  recorded the call it approved (``_project_tool_call``);
 - procedure: a rejection takes it out of what is offered.
 
-A verdict that would change what was learned on a person's or an agent's word alone waits in
-review (ADR 0028, amended by ADR 0039): it is stored ``pending`` and projected only once a
-tenant admin approves it; a dismissed one is kept for statistics and changes nothing.
+A verdict that would change what was learned on a person's, an agent's or the grounding
+judge's word alone waits in review (ADR 0028, amended by ADR 0039): it is stored ``pending``
+and projected only once a tenant admin approves it; a dismissed one is kept for statistics
+and changes nothing.
 ``_needs_review`` says which. A person counts once per target (``modules.feedback.votes``):
 their newer vote replaces their earlier pending one (dismissed with ``replaced_by``), a vote
 the same as the one of theirs already applied changes nothing, and a flipped one, once
@@ -51,13 +55,14 @@ from memory_service.domain.feedback import (
     outcome_teaches,
 )
 from memory_service.domain.learning import (
+    APPROVAL_DECISIONS_READ,
     CITED_CONFIDENCE_STEP,
     CITED_MEMORIES_MAX,
     CONFIDENCE_FLOOR,
 )
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.revisions import RevisionKind
-from memory_service.domain.tools import RunOutcome
+from memory_service.domain.tools import RunOutcome, stable_hash
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.feedback.votes import (
     ALREADY_COUNTED_REASON,
@@ -87,6 +92,11 @@ TASK_FEEDBACK_PROJECT = "feedback.project"
 REINFORCEMENT_STEP: Final = 0.1
 #: How many verdicts one bulk review decides at most (ids sent, or pending on one target).
 BULK_REVIEW_MAX: Final = 500
+#: How often an approval is looked at again while the call it approved is not recorded yet
+#: (the decision is sent as the run resumes, before the approved call has run), and how far
+#: apart; after that it counts nothing.
+CALL_RECORD_CHECKS: Final = 10
+CALL_RECORD_WAIT_SECONDS: Final = 30
 #: The record fields the trusted headers decide; a body that disagrees is refused.
 IDENTITY_FIELDS: Final = ("tenant_id", "workspace_id", "user_id")
 EVIDENCE_SOURCE: Final = EvidenceSource.FEEDBACK
@@ -129,10 +139,11 @@ class FeedbackService:
 
         The record only claims who it is from: its identity fields must agree with the
         trusted headers, and a memory target must be readable by the caller. ``trusted`` is
-        a verdict applied without review: the service's own (the grounding judge), or one
-        the tenant's administrator credential carries. ``run_vouched``: the credential may
-        act as the agent the context names, so a ``system`` verdict on that agent's own run
-        is its status rather than a client's claim (``_needs_review``)."""
+        a verdict applied without review: one the tenant's administrator credential carries.
+        ``run_vouched``: the credential may act as the agent the context names, so a
+        ``system`` verdict on that agent's own run is its status rather than a client's claim
+        (``_needs_review``); the grounding judge passes it too, its verdict being the
+        service's own word and never a person's vote."""
         await self._admit(uow, ctx, feedback)
         voter = voter_key(feedback.user_id or ctx.user_id, feedback.agent_id or ctx.agent_id)
         if voter is not None:
@@ -290,8 +301,9 @@ class FeedbackService:
         self, ctx: MemoryExecutionContext, record: Feedback, *, trusted: bool, run_vouched: bool
     ) -> bool:
         """Whether ``record`` waits for a tenant admin before it changes anything: an end
-        user's vote does. Applied as it arrives: the service's own judge; a run reporting its
-        own final status, citing nothing (the lowest-ranked word on a run, which never
+        user's vote does, and so does the grounding judge's verdict (``grounding.judge``: a
+        model's word, never trusted). Applied as it arrives: a run reporting its own final
+        status, citing nothing (the lowest-ranked word on a run, which never
         overrides a person or the judge); an owner's correction of a memory carrying new text
         (an edit, authorised as one by ``_authorize_memory_verdict``; a thumbs-down is a vote
         and waits); a decision on a tool call (what is learned from it is a suggestion,
@@ -304,6 +316,8 @@ class FeedbackService:
         token, another run, one citing memories - waits like a vote."""
         if trusted:
             return False
+        if record.source is FeedbackSource.JUDGE:
+            return True  # whoever's credential carried it, a model's verdict is no admin's
         if (
             run_vouched
             and record.source is FeedbackSource.SYSTEM
@@ -323,13 +337,19 @@ class FeedbackService:
         return ctx.is_agent or not await self.authz.is_tenant_admin(ctx)
 
     @staticmethod
-    async def _schedule(uow: UnitOfWork, record: Feedback) -> None:
+    async def _schedule(uow: UnitOfWork, record: Feedback, *, attempt: int = 0) -> None:
+        key = f"feedback:{record.tenant_id}:{record.feedback_id}"
         await uow.enqueue(
             JobSpec(
                 task_name=TASK_FEEDBACK_PROJECT,
                 queue=Queue.RECONCILE,
-                payload={"tenant_id": record.tenant_id, "feedback_id": record.feedback_id},
-                idempotency_key=f"feedback:{record.tenant_id}:{record.feedback_id}",
+                payload={
+                    "tenant_id": record.tenant_id,
+                    "feedback_id": record.feedback_id,
+                    **({"attempt": attempt} if attempt else {}),
+                },
+                idempotency_key=f"{key}:{attempt}" if attempt else key,
+                schedule_in_seconds=CALL_RECORD_WAIT_SECONDS if attempt else None,
                 tenant_id=record.tenant_id,
             )
         )
@@ -574,10 +594,14 @@ class FeedbackService:
         return ctx.workspace_id is not None and record.workspace_id == ctx.workspace_id
 
     # ------------------------------------------------------------------ projector
-    async def project(self, tenant_id: str, feedback_id: str) -> FeedbackProjection | None:
+    async def project(
+        self, tenant_id: str, feedback_id: str, *, attempt: int = 0
+    ) -> FeedbackProjection | None:
         """The ``feedback.project`` job. Idempotent and serialised: the record and, for a
         memory target, the memory are locked for the transaction, so a re-dispatched job or
-        two verdicts on one memory apply one after another and never fork the chain."""
+        two verdicts on one memory apply one after another and never fork the chain. An
+        approval of a call the run has not recorded yet is looked at again later
+        (``attempt``, at most ``CALL_RECORD_CHECKS`` times)."""
         async with self.uow_factory() as uow:
             await uow.serialize(f"feedback:{tenant_id}:{feedback_id}")
             record = await uow.feedback.get(tenant_id, feedback_id)
@@ -588,6 +612,14 @@ class FeedbackService:
                 return record.projection
             if record.pending:
                 # waits for a reviewer; approval schedules this job again
+                return None
+            if (
+                attempt < CALL_RECORD_CHECKS
+                and _approves(record)
+                and not await _backed(uow, record)
+            ):
+                await self._schedule(uow, record, attempt=attempt + 1)
+                await uow.commit()
                 return None
             if record.target_kind is FeedbackTargetKind.MEMORY:
                 await uow.serialize(f"memory:{tenant_id}:{record.target_id}")
@@ -773,30 +805,30 @@ class FeedbackService:
         """A verdict on a run: confirmed or approved succeeded, rejected or corrected did not.
 
         The run's outcome follows the verdict unless a higher-ranked source already decided
-        it (``OUTCOME_PRECEDENCE``: a person over the judge over the run's own status). The
-        memories the verdict cites (its evidence references) gain or lose confidence, and a
-        confirmed run marks them used for prefetch learning - unless the verdict is the run's
-        own unverified success, which is its outcome only (``outcome_teaches``)."""
+        it (``OUTCOME_PRECEDENCE``: a person over the judge over the run's own status). Only
+        a verdict that labels the run moves the memories it cites (its evidence references):
+        they gain or lose confidence, and a confirmed run marks them used for prefetch
+        learning - unless the verdict is the run's own unverified success, which is its
+        outcome only (``outcome_teaches``). An outranked verdict changes nothing."""
         affirmed = record.verdict in AFFIRMING_VERDICTS
         teaches = outcome_teaches(record.source, success=affirmed)
-        adjusted = (
-            await self._adjust_cited(uow, record, affirmed=affirmed, now=now) if teaches else []
-        )
-        if affirmed and adjusted:
-            await uow.pulls.mark_used(record.tenant_id, record.target_id, adjusted)
         labelled = await self._label_run(uow, record, success=affirmed, learn=teaches, now=now)
-        if not labelled and not adjusted:
+        if not labelled:
             return FeedbackProjection(
                 action=ProjectionAction.NONE,
                 run_id=record.target_id,
                 reason="a higher-ranked source already decided the run's outcome",
                 projected_at=now,
             )
+        adjusted = (
+            await self._adjust_cited(uow, record, affirmed=affirmed, now=now) if teaches else []
+        )
+        if affirmed and adjusted:
+            await uow.pulls.mark_used(record.tenant_id, record.target_id, adjusted)
         return FeedbackProjection(
-            action=ProjectionAction.RUN_LABELLED if labelled else ProjectionAction.NONE,
+            action=ProjectionAction.RUN_LABELLED,
             memory_ids=adjusted,
             run_id=record.target_id,
-            reason=None if labelled else "a higher-ranked source decided the run's outcome",
             projected_at=now,
         )
 
@@ -806,12 +838,46 @@ class FeedbackService:
         """Approve, reject or edit of a tool call: counted on the tool and on the approval
         pattern of (agent, tool, argument shape). The tool is ``metadata.tool`` and its
         arguments ``metadata.args`` (the edit's replacement arguments when absent). The run's
-        outcome is not touched: that is what RUN feedback is for."""
+        outcome is not touched: that is what RUN feedback is for.
+
+        A learned approval rule stops a person being asked, so only a decision that is one
+        counts: a reviewer's on an interrupt (``metadata.interrupt_id``) of a run, once per
+        interrupt whatever feedback id carries it again, and an approval only when the run
+        recorded the call it approved, that tool with those arguments (``_backed``), each
+        recorded call backing one counted approval (``_spent``: the interrupt id is the
+        client's). A rejection or an edit only makes the tool ask more, so it needs no
+        recorded call."""
         tool = str(record.metadata.get("tool") or "").strip()
         if not tool:
             return FeedbackProjection(
                 action=ProjectionAction.NONE,
                 reason="the verdict names no tool (metadata.tool)",
+                projected_at=now,
+            )
+        interrupt = record.metadata.get("interrupt_id")
+        if not (record.agent_run_id and interrupt and record.reviewer):
+            return FeedbackProjection(
+                action=ProjectionAction.NONE,
+                reason="a decision counts only on an interrupt of a run, with its reviewer",
+                projected_at=now,
+            )
+        if await _counted_before(uow, record):
+            return FeedbackProjection(
+                action=ProjectionAction.NONE,
+                reason="a decision on this interrupt was counted already",
+                projected_at=now,
+            )
+        if _approves(record) and not await _backed(uow, record):
+            return FeedbackProjection(
+                action=ProjectionAction.NONE,
+                reason="the run recorded no call of that tool with those arguments",
+                projected_at=now,
+            )
+        if _approves(record) and await _spent(uow, record):
+            return FeedbackProjection(
+                action=ProjectionAction.NONE,
+                reason="each call of that tool with those arguments the run recorded backs a "
+                "counted approval already",
                 projected_at=now,
             )
         counter = APPROVAL_COUNTER[record.verdict]
@@ -1028,3 +1094,59 @@ class FeedbackService:
             )
         )
         await bump_memory_revisions(uow, memories)
+
+
+def _approves(record: Feedback) -> bool:
+    """Whether ``record`` approves a tool call: the decision a learned rule relaxes on."""
+    return (
+        record.target_kind is FeedbackTargetKind.TOOL_CALL
+        and APPROVAL_COUNTER[record.verdict] == "approvals"
+    )
+
+
+async def _backed(uow: UnitOfWork, record: Feedback) -> bool:
+    """Whether the decision's run recorded the call it decided: its tool, its arguments."""
+    args = record.metadata.get("args")
+    if not record.agent_run_id or not isinstance(args, dict):
+        return False
+    tool, wanted = record.metadata.get("tool"), stable_hash(args)
+    calls = await uow.tools.invocations_for_run(record.tenant_id, record.agent_run_id)
+    return any(c.tool_name == tool and c.args_hash == wanted for c in calls)
+
+
+async def _spent(uow: UnitOfWork, record: Feedback) -> bool:
+    """Whether every call of the approved tool with those arguments that the run recorded
+    backs a counted approval already. The interrupt id is the client's: without this, one
+    recorded call would back any number of approvals, each under a new id. Serialised per
+    run, so two approvals of one call are counted one after the other."""
+    run_id, tool = record.agent_run_id or "", str(record.metadata.get("tool"))
+    await uow.serialize(f"tool-approvals:{record.tenant_id}:{run_id}")
+    wanted = stable_hash(record.metadata.get("args"))
+    calls = await uow.tools.invocations_for_run(record.tenant_id, run_id)
+    recorded = sum(c.tool_name == tool and c.args_hash == wanted for c in calls)
+    decisions = await uow.feedback.counted_decisions(
+        record.tenant_id,
+        agent_id=record.agent_id or "",
+        tool=tool,
+        limit=APPROVAL_DECISIONS_READ,
+    )
+    counted = sum(
+        d.agent_run_id == run_id and _approves(d) and stable_hash(d.metadata.get("args")) == wanted
+        for d in decisions
+    )
+    return counted >= recorded
+
+
+async def _counted_before(uow: UnitOfWork, record: Feedback) -> bool:
+    """Whether another decision on the same interrupt of the same run was counted."""
+    interrupt = record.metadata.get("interrupt_id")
+    return any(
+        other.feedback_id != record.feedback_id
+        and other.agent_run_id == record.agent_run_id
+        and other.metadata.get("interrupt_id") == interrupt
+        and other.projection is not None
+        and other.projection.action is ProjectionAction.TOOL_CALL_COUNTED
+        for other in await uow.feedback.list_for(
+            record.tenant_id, target_kind=record.target_kind, target_id=record.target_id
+        )
+    )

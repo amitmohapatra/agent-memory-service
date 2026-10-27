@@ -191,7 +191,8 @@ print(
 - `verify` needs the `bundle_id` of the context the answer was given, in the same scope, within
   30 minutes (`404` otherwise).
 - With a run (`run_id=`, or the scope's `agent_run_id`) the verdict is recorded as the
-  service's own judge feedback on the run (`report.feedback_id`), applied without review.
+  service's own judge feedback on the run (`report.feedback_id`), pending until a tenant admin
+  approves it.
 - `representative=False` on the report means the NLI is a stand-in: do not trust the numbers.
 
 ## 8. Tool memory
@@ -204,7 +205,7 @@ print(
 | Read the catalog with statistics | `GET /v1/tools?names=…` | `await ctx.advanced.tools.catalog(names=[…])` |
 | Record each call | `POST /v1/tools/invocations` | `await ctx.record_tool("erp-get_stock", {"sku": "A4"}, output={…}, task=question, step=0)` |
 | Label the run (its own status: the outcome only, no evidence for learning) | `POST /v1/feedback` | `await ctx.feedback("run", ctx.scope.agent_run_id, "confirm", source="system")` |
-| Confirm it (what procedures learn from: a person's verdict, applied once a tenant admin approves it, or the judge's, `POST /v1/verify`) | `POST /v1/feedback` | `await ctx.feedback("run", run_id, "confirm")` |
+| Confirm it (what procedures learn from: a person's verdict or the judge's, `POST /v1/verify`, each applied once a tenant admin approves it) | `POST /v1/feedback` | `await ctx.feedback("run", run_id, "confirm")` |
 | Which tool, plan, arguments | `POST /v1/tools/hints` (or inline: `context(q, tools=[…])`) | `hints = await ctx.tool_hints(task, available=names)` |
 | Approval rules the decisions support | `GET /v1/tools/approval-suggestions` | `await ctx.advanced.tools.approval_suggestions(tool=…)` |
 | Adopt one | `POST /v1/tools/approval-suggestions/{id}/accept` | `await ctx.advanced.tools.accept_suggestion(s.id)` |
@@ -212,8 +213,9 @@ print(
 
 - The service never executes a tool. `task` is the question in words (it becomes the pattern
   procedures are keyed on), not an id.
-- A procedure needs ≥ 2 supporting runs and ≥ 60 % success; an unlabelled run counts as a weak
-  success only after a day without failed calls. An active one is the agent's learned skill,
+- A procedure needs ≥ 2 supporting runs and ≥ 60 % success; an unlabelled run is no evidence
+  unless one of its calls failed, and neither is a `system` reject of a run whose calls all
+  worked (a time limit, a model error). An active one is the agent's learned skill,
   offered in its context on its own ([api/skills.md](api/skills.md)).
 - Recording is idempotent on run + step + tool + arguments; `visibility` defaults to
   `PRIVATE`: learned per agent across all its users (share with `AGENT_GROUP`/`WORKSPACE`/
@@ -251,7 +253,7 @@ The six tools: `memory_search`, `memory_remember`, `memory_update`, `memory_forg
 | The queue by target (tenant admin key) | `GET /v1/feedback?review=pending&group=target` | `await admin_ctx.feedback.pending(group="target")` |
 | Decide in bulk (tenant admin key) | `POST /v1/feedback/approve`, `/dismiss` (ids, or a target) | `admin_ctx.feedback.approve_many(ids)`, `.dismiss_many(target_kind=…, target_id=…)` |
 
-**Applied immediately:** the service's own grounding judge (`/v1/verify`); a run reporting its
+**Applied immediately:** a run reporting its
 own status (`source="system"`, target = the calling `agent_run_id`, citing no memories: its
 outcome only — a `confirm` from it teaches no procedure and moves no confidence); an
 owner's `correct`/`edit` of their own memory carrying new text; any `tool_call` verdict;
@@ -259,7 +261,8 @@ anything sent with the tenant admin key or by a tenant admin user in person.
 
 **Waits for review** (`review.state == "pending"`, changes nothing): an end user's 👍/👎 — a
 `confirm`/`approve`/`reject` of a memory (the owner's thumbs-down included), a person's or
-client's verdict on a run, any procedure verdict — and a client-claimed `source="judge"`. A
+client's verdict on a run, any procedure verdict — and every `source="judge"` verdict, the
+service's own grounding judge's (`/v1/verify`) included. A
 voter's newer vote on the same target replaces their earlier pending one
 (dismissed, with `review.replaced_by`): repeated clicks count once (ADR 0039).
 

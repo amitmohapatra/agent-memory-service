@@ -4,7 +4,10 @@ accepting one into the catalog as the tool's ``approve_when``.
 A suggestion is never applied by the service on its own: it is listed, and a person accepts
 it. Accepting composes the rule with what the tool already asks for (its ``approve_when``, or
 its risk tier when it has none), so an accepted rule narrows or widens exactly the calls of
-that argument shape and nothing else.
+that argument shape and nothing else. A rule that would make the tool ask less is offered only
+while the tool has no ``approve_when`` (an administrator's rule is never relaxed by learning),
+and only once ``APPROVAL_MIN_REVIEWERS`` different reviewers approved calls of that shape, as
+the counted decisions themselves name them (``reviewers``).
 """
 
 from __future__ import annotations
@@ -16,11 +19,17 @@ from typing import Final
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import Conflict, NotFound
-from memory_service.domain.learning import ApprovalCounts, Suggestion
+from memory_service.domain.feedback import APPROVAL_COUNTER
+from memory_service.domain.learning import (
+    APPROVAL_DECISIONS_READ,
+    APPROVAL_MIN_REVIEWERS,
+    ApprovalCounts,
+    Suggestion,
+)
 from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.tools import SideEffects, ToolDescriptor
 from memory_service.ports.uow import UnitOfWork
-from trellis.memory.approval import parse, when_shape
+from trellis.memory.approval import arg_shape, parse, when_shape
 
 #: The only field accepting a suggestion changes.
 APPROVE_WHEN: Final = frozenset({"approve_when"})
@@ -55,11 +64,49 @@ def compose(existing: str | None, risk: SideEffects, suggestion: Suggestion, sha
 def offered(counts: ApprovalCounts, entry: ToolDescriptor | None) -> Suggestion | None:
     """The rule these decisions support that may be offered for this tool. Never "approve
     automatically" for an irreversible tool: however often a deletion or a payment was
-    approved, the next one is still asked about. "Always ask" is offered for any tier."""
+    approved, the next one is still asked about; and never for a tool that has an
+    ``approve_when`` already (an administrator's rule, or one accepted before): what the
+    decisions learned may make it ask more, never less. "Always ask" is offered for any tier."""
     suggestion = counts.suggestion()
-    if suggestion == "auto_approve" and entry is not None and entry.risk == "irreversible":
-        return None
+    if suggestion == "auto_approve" and entry is not None:
+        if entry.risk == "irreversible":
+            return None
+        if entry.approve_when and not accepted(entry, counts.arg_shape):
+            return None
     return suggestion
+
+
+async def offer(
+    uow: UnitOfWork, tenant_id: str, counts: ApprovalCounts, entry: ToolDescriptor | None
+) -> Suggestion | None:
+    """:func:`offered`, and "approve automatically" only once at least
+    ``APPROVAL_MIN_REVIEWERS`` different reviewers approved calls of this shape: one
+    reviewer's approvals, however many, are one person's say."""
+    suggestion = offered(counts, entry)
+    if suggestion != "auto_approve":
+        return suggestion
+    enough = len(await reviewers(uow, tenant_id, counts)) >= APPROVAL_MIN_REVIEWERS
+    return suggestion if enough else None
+
+
+async def reviewers(uow: UnitOfWork, tenant_id: str, counts: ApprovalCounts) -> set[str]:
+    """Who approved the calls of this (agent, tool, argument shape), from the counted
+    decisions themselves: each names its reviewer (``Feedback.reviewer``, as the credential
+    that sent it says), so no other record is kept."""
+    decisions = await uow.feedback.counted_decisions(
+        tenant_id, agent_id=counts.agent_id, tool=counts.tool, limit=APPROVAL_DECISIONS_READ
+    )
+    return {
+        d.reviewer
+        for d in decisions
+        if d.reviewer
+        and APPROVAL_COUNTER[d.verdict] == "approvals"
+        and arg_shape(_args(d.metadata.get("args"))) == counts.arg_shape
+    }
+
+
+def _args(args: object) -> dict[str, object] | None:
+    return args if isinstance(args, dict) else None
 
 
 def accepted(entry: ToolDescriptor | None, shape: str) -> bool:
@@ -79,9 +126,13 @@ async def accept(uow: UnitOfWork, ctx: MemoryExecutionContext, identifier: str) 
     entry = await uow.tools.by_name(
         ctx.tenant_id, tool, workspace_id=ctx.workspace_id
     ) or await uow.tools.ensure(ctx.tenant_id, tool)
-    suggestion = offered(counts, entry)
+    suggestion = await offer(uow, ctx.tenant_id, counts, entry)
     if suggestion is None:
-        raise Conflict(f"{tool} is irreversible: its calls are always asked about")
+        raise Conflict(
+            f"{tool} is irreversible or has an approve_when already, or fewer than "
+            f"{APPROVAL_MIN_REVIEWERS} reviewers approved it: a learned rule never makes it "
+            "ask less"
+        )
     if accepted(entry, shape):
         return entry
     expression = compose(entry.approve_when, entry.risk, suggestion, shape)

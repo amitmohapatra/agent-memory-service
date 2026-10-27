@@ -64,9 +64,11 @@ duplicated into a competing procedure. Decay: a procedure unused for 60 days, or
 rate falls below 0.5, is archived rather than deleted.
 
 **Outcome labelling.** A run is successful when it is explicitly labelled through
-`POST /v1/runs/{id}/outcome`, or — as a weak positive only — when it is older than
-`weak_positive_after_hours` (24h), had no failing call and nobody corrected it. Unlabelled and
-recent means *unknown*, not *successful*.
+`POST /v1/runs/{id}/outcome`. Unlabelled means *unknown*, not *successful* — nor, however
+fresh, *failed* — unless one of its calls failed. (Amended 2026-10-26: the 24 h weak positive is
+gone; it counted every fresh unlabelled run as a failure until it was a day old. A failure the
+system reports for a run whose calls all worked — a time limit, a model error — is no evidence
+either: the run's failure, not its procedure's.)
 
 **Ranking formula**, deterministic and explainable:
 

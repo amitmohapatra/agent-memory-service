@@ -500,7 +500,7 @@ are not committed.)
 | `PINNED_SHARE` | 0.5 | at their maxima the pinned sections are ~3.8k tokens (profile 3 × 4,000 chars, summary 2,000 chars, 3 procedures, hints) - inside half the default 8,000 budget | kept; at small budgets the priority order decides |
 | `PROCEDURE_MIN_SUPPORT` / `_MIN_SUCCESS_RATE` | 2 / 0.6 | no labelled multi-run traffic exists yet | kept, unmeasured |
 | prefetch (`PREFETCH_MIN_PULLS`, `_MIN_RATE`, `_MAX`, settle) | 3, 0.5, 5, 10 min | no agent-tool pull traffic exists yet | kept, unmeasured |
-| `APPROVAL_MIN_SUPPORT`, approve/reject rates | 5, 0.95 / 0.5 | no approval traffic | kept, unmeasured |
+| `APPROVAL_MIN_SUPPORT`, approve/reject rates, `APPROVAL_MIN_REVIEWERS` | 5, 0.95 / 0.5, 2 | no approval traffic | kept, unmeasured |
 | standing factor | ±15% | no feedback traffic; bounded so it only reorders near-ties | kept, unmeasured |
 
 The unmeasured ones need traffic the benchmarks do not generate (labelled runs, pulls,

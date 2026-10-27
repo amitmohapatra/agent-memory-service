@@ -98,6 +98,19 @@ class ToolIndex:
         log.info("tools.indexed", tenant_id=tenant_id, count=len(entries))
         return len(entries)
 
+    async def indexed(self, entries: Sequence[ToolDescriptor]) -> set[str]:
+        """The ids of the entries tool search finds as they are now: their record holds their
+        current text. One just published or changed is not, until its ``tools.index`` job
+        ran: what a harness waits for before it first asks for hints."""
+        if not entries:
+            return set()
+        await self.ensure()
+        held = {
+            r.record_id: r.payload.get("text_hash")
+            for r in await self.store.get(self.collection, [e.tool_id for e in entries])
+        }
+        return {e.tool_id for e in entries if held.get(e.tool_id) == _hash(e)}
+
     async def refresh(self, *, force: bool = False) -> int:
         """Index every catalog entry that has no record, or whose record was embedded from
         other text than its ``index_text`` gives now (a release changed what tools are searched

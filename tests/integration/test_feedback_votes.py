@@ -181,7 +181,8 @@ async def test_a_pending_run_vote_leaves_outcome_cited_memories_and_skills_alone
 
 
 async def test_what_is_not_a_vote_applies_at_once(container, uow_factory) -> None:
-    """The run's own status, a tool-call decision, the service's own judge and the admin."""
+    """The run's own status, a tool-call decision and the admin (its credential, whatever
+    source the record claims)."""
     await _admin(container, uow_factory)
     cases = [
         (HELPER, {"target_kind": "run", "target_id": "run_helper", "source": "system"}, False),

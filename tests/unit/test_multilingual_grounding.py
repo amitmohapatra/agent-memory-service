@@ -113,3 +113,18 @@ async def test_short_assertions_reach_the_classifier(claim):
 )
 def test_short_questions_and_known_acknowledgements_are_not_claims(text):
     assert decompose(text) == []
+
+
+async def test_a_passage_about_something_else_contradicts_nothing():
+    """B4b: the user's own sentence, restated, was "contradicted" by an unrelated numeric
+    memory in 9 of 50 correct answers. A passage must share the claim's subject (its words) to
+    refute it; the same passage about the claim still does."""
+    nli = RecordingNLI(NLIScore(entailment=0.01, neutral=0.01, contradiction=0.98))
+    cascade = GroundingCascade(nli, settings=NLISettings())
+    claim = "The loading dock door access code for warehouse three is 7731."
+    other = Evidence("mem_x", "Warehouse revenue fell to 412 million.")
+    unrelated = await cascade.verify(claim, [other])
+    assert unrelated.claims[0].verdict != "contradicted"
+    same = Evidence("mem_y", "The loading dock door access code is 9120.")
+    related = await cascade.verify(claim, [same])
+    assert related.claims[0].verdict == "contradicted"

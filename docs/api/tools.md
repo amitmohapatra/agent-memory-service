@@ -31,15 +31,17 @@ sequenceDiagram
 ```
 
 The run's verdict is what makes this work (the harness sends a `system` verdict from the
-run's final status; a judge or a person overrides it, human > judge > system): only a successful run validates a procedure, and a
-run nobody labelled counts as a (weak) success only a day later, if none of its calls failed.
+run's final status; a judge or a person overrides it, human > judge > system): only a successful run validates a procedure. A
+run nobody labelled is no evidence unless one of its calls failed, and a `system` reject of a
+run whose calls all worked (a time limit, a model error, a stall) is none either: the run
+failed, not its procedure.
 
 ## Routes
 
 | Route | Purpose | SDK |
 | --- | --- | --- |
 | `PUT /v1/tools/catalog` | upsert catalog entries by name (idempotent) | `ctx.advanced.tools.put_catalog([...])` |
-| `GET /v1/tools?names=…` | the catalog visible in this scope, by name, with statistics (cursor paged; a page holds the whole 500-entry catalog by default). `ETag` + `Cache-Control: private, no-cache`: send it back in `If-None-Match` and an unchanged catalog is a `304` without a body — how a harness refreshes approval tiers cheaply | `ctx.advanced.tools.catalog(names=…)` (follows the cursor); `catalog_if_changed(names, etag=)` → `(entries | None, etag)`, `None` when unchanged |
+| `GET /v1/tools?names=…` | the catalog visible in this scope, by name, with statistics (cursor paged; a page holds the whole 500-entry catalog by default). `ETag` + `Cache-Control: private, no-cache`: send it back in `If-None-Match` and an unchanged catalog is a `304` without a body — how a harness refreshes approval tiers cheaply. Each entry says whether tool search finds it as it is now (`indexed`: false right after it was published or changed, until its `tools.index` job ran): a harness waits for it before a tenant's first hints | `ctx.advanced.tools.catalog(names=…)` (follows the cursor); `catalog_if_changed(names, etag=)` → `(entries | None, etag)`, `None` when unchanged |
 | `POST /v1/tools/invocations` | record one call (idempotent on run + step + tool + arguments) | `ctx.record_tool(...)` |
 | `POST /v1/feedback` (target `run`) | label a run successful or not | `ctx.feedback("run", run_id, "confirm", source="system")` |
 | `POST /v1/tools/hints` | the tools that fit, best first: confidence, success rate, next step, the arguments found and the ones missing; the plan | `ctx.tool_hints(task, available=…, k=…)` |
@@ -135,31 +137,50 @@ hints.plan  # the learned procedure: .steps (tool names), .success_rate, .runs |
   callable tool the search missed still competes on its record), scored by relevance × how
   well the tool has worked, with a bonus for the plan's tools, its next step, and recent use.
   `confidence` is that score as 0..1 (`1 - e^-score`, same order); `success_rate` is the share
-  of the tool's recorded calls that succeeded (absent: never called).
+  of the tool's recorded calls that succeeded (absent: never called). When nothing matched the
+  task (the catalog is not indexed yet) and no plan is learned, there are no candidates and no
+  `next`: a ranking of zeros is the toolbox in alphabetical order, no hint. A general view —
+  a tool whose name says `overview`, `summary` or `dashboard` — is left out when it ranks
+  below a specific tool (ranked first, it is what the task asked for; a plan step stays).
 - **plan / next** — the stored procedure whose pattern matches the task and whose tools are all
-  callable; `next: true` marks the step this run has not done yet.
+  callable; `next: true` marks the step this run has not done yet (without a plan, the best
+  candidate). A tool that changes something (its catalog risk is not `read`) is never `next`
+  for a task that is a question: the best candidate that only reads is.
 - **args** — every candidate's arguments, first found wins: the procedure's binding (an
-  earlier step's output in this run, or the literal every successful run used) → the
+  earlier step's output in this run, or the constant every successful run used, unless the
+  task names another value of its kind) → the
   knowledge graph (an entity of the argument's type named in the task; for an `…id` argument,
   the id a tool returned for it) → a `name: value` line of a pinned profile block, or a memory
   whose predicate is the argument's name → a value the task itself names → a value a memory in
   hand names right after the argument's words ("their supplier id is SUP-40" for
   `supplier_id`). A value named right after an argument's own words fills that argument and no
   other ("for cost centre CC-7" is `cost_centre`, never `supplier_id`), as does an identifier
-  that spells it (`SKU-22` is `sku`, never the quote `Q-1183`); a name is never an `…id`
-  argument's (it is left for the argument that takes a name). Each value is used once, a
-  currency on either side of an amount is the amount's (`700 EUR`), and a value for a number
-  argument is a number (`"700 EUR"` → `700`).
+  that spells it (`SKU-22` is `sku`, never the quote `Q-1183`) and one of the shape of the
+  example the argument's schema gives (`"The store's id, such as S12."`: `S40`, and the `S7` of
+  "Store S7"; `examples` count too); a name is never an `…id` argument's (it is left for the
+  argument that takes a name), and an identifier never fills an argument only because its name
+  asks for one (the asset tag `LT-2290` is no `user_id`). Each value is used once, a currency
+  on either side of an amount is the amount's (`700 EUR`), a value for a number argument is a
+  number (`"700 EUR"` → `700`), and no number is read out of an identifier (`ST-101` is no
+  `max_units`).
 - **missing** — required arguments nothing filled, with the question to ask (and the
-  `entity_type` the argument names, when the catalog says).
+  `entity_type` the argument names, when the catalog says) — but not a free-text argument the
+  catalog describes (a team's name, a question, with no identifier, number or entity to find):
+  the request says it in words the hints do not extract, and the model words it from there.
 
 ## Procedures and the learning job
 
 `tools.learn` runs after every outcome label and every five minutes. It reads the calls not
 learned yet (a partial index), re-mines every task pattern they touch from that pattern's newest
-calls (the prefix-tree miner: coverage first, then length; retries collapse; failures are kept
-as the step's failure modes) and updates that pattern's one stored procedure — a delta, never a
-rewrite of the others. A procedure is **active** (offered) once at least 2 runs support it and
+calls (the prefix-tree miner: coverage first, then length; a failed call and its retry of the
+same tool are one step, which the call that worked stands for; failures are kept as the step's
+failure modes) and updates that pattern's one stored procedure — a delta, never a rewrite of the
+others. A step's argument is a learned literal only when it is a constant of the task: the same
+value in runs about at least two different things (the values their tasks named) and named by
+none of them — a value each run took from its own task (`style ST-101`) is the next task's to
+give, and a literal is never prefilled for a task that names another value of its kind. Under
+Code Mode the steps are the tools the script called (recorded from the gateway's log), never the
+meta-tools (`list_tool_files`, `read_tool_file`, `get_tool_docs`, `execute_tool_code`). A procedure is **active** (offered) once at least 2 runs support it and
 at least 60% succeeded; it is **retired** when that stops holding and **rejected** by a
 `reject` verdict on it (`target_kind: procedure`) or a [dismissal](skills.md) until its steps
 change. An active procedure is the agent's **learned skill** for that kind of task: the
@@ -182,6 +203,24 @@ ideally, `metadata.args`; an `edit`'s correction stands in for the arguments) is
 (agent, tool, argument shape). The shape is value-free: each argument with its kind, numbers by
 order of magnitude (`amount:num:1e4,supplier:str`). With at least 5 decisions, 95% approved
 suggests `auto_approve` and 50% or fewer `always_ask`. Nothing applies them on its own.
+
+Only a real decision counts: one on an interrupt (`metadata.interrupt_id`) of the calling run
+(`agent_run_id`), naming its `reviewer`, counted once per interrupt however many feedback ids
+carry it; and an approval only once that run recorded the call it approved — that tool with
+those arguments — each recorded call backing one counted approval: the interrupt id is the
+client's, so a new id does not make one call back a second approval. An approval sent before the approved call is recorded (the harness sends it as
+the run resumes) is looked at again every 30 seconds, ten times, then counts nothing. A
+rejection or an edit only makes the tool ask more, so it needs no recorded call. And
+`auto_approve` is offered only for a tool without an `approve_when`: an administrator's rule (or
+one accepted before) is never relaxed by what was learned; `always_ask` may still be added.
+`auto_approve` also needs at least 2 different reviewers among the counted approvals of that
+shape (read from the decisions themselves, the newest 500 on the tool): one person's approvals,
+however many, suggest nothing.
+
+What this does not stop: the reviewer, the run and the interrupt id are what the sending
+credential says. A key that may act as the agent can record a call and then approve it, naming
+any reviewer. An interrupt id minted by the service would not change that, since the same key
+would ask for it: closing it takes decisions sent with the reviewer's own credential.
 
 ```python
 for s in await ctx.advanced.tools.approval_suggestions(tool="erp-create_po"):

@@ -321,7 +321,7 @@ async def test_feedback_is_projected_when_the_service_is_wired() -> None:
     queue, _, _ = _wire({"feedback": feedback})
     task = next(n for n in queue.handlers if n.startswith("feedback"))
     await queue.handlers[task]({"tenant_id": "acme", "feedback_id": "fb_1"})
-    assert feedback.calls == [("project", ("acme", "fb_1"), {})]
+    assert feedback.calls == [("project", ("acme", "fb_1"), {"attempt": 0})]
     bare, _, _ = _wire()
     assert await bare.handlers[task]({"tenant_id": "acme", "feedback_id": "fb_1"}) is None
 

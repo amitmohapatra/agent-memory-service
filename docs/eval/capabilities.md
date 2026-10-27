@@ -50,7 +50,12 @@ samples (`_modes.json`).
 A scenario is **sessions of turns** (`USER`, `ASSISTANT`, `EVENT`), written through
 `history.add` with their `occurred_at`, one thread per session; a session may instead
 **repeat** a templated log line (`repeat`: count, interval, seeded value ranges) or **record
-tool runs** (`tool_runs`: `record_tool` + run feedback, how an agent learns a procedure). A
+tool runs** (`tool_runs`: `record_tool` as the agent, then each run labelled by a person
+through the tenant's administrator credential, how an agent learns a procedure: a run's own
+`system` report of success teaches nothing, and with only a service key the label waits for
+review, so the procedure scenarios need the administrator path; a
+query about a learned procedure asserts its steps in order with a regex, which only the learned
+skill's item meets — a small toolbox's tool hints name every tool on their own). A
 scale scenario names a **corpus** spec; its aggregate questions carry the computation
 (`aggregate`: record kind, calendar period relative to the run date, group, value, top-k) and
 the ground truth is computed from what was generated (`generate.py`).

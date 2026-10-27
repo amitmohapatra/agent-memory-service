@@ -196,7 +196,9 @@ def register_handlers(container: Container) -> None:
         """Learn from one feedback record (idempotent; see modules.feedback)."""
         feedback = container.services.get("feedback")
         if feedback is not None:
-            await feedback.project(payload["tenant_id"], payload["feedback_id"])
+            await feedback.project(
+                payload["tenant_id"], payload["feedback_id"], attempt=int(payload.get("attempt", 0))
+            )
 
     async def memory_index(payload: dict[str, Any]) -> None:
         """Index the memories, which makes them findable, then their graph enrichment

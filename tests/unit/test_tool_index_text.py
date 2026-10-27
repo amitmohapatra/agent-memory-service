@@ -4,8 +4,10 @@ distinct text once and the whole bounded."""
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
+from memory_service.domain.ids import content_hash
 from memory_service.domain.tools import (
     INDEX_ARGUMENT_MAX_CHARS,
     INDEX_SCHEMA_DEPTH,
@@ -14,6 +16,8 @@ from memory_service.domain.tools import (
     argument_descriptions,
     bounded_text,
 )
+from memory_service.modules.tools.index import ToolIndex
+from memory_service.ports.search import SearchRecord
 
 
 def _tool(schema: dict[str, Any] | None, description: str = "Create a record") -> ToolDescriptor:
@@ -199,3 +203,46 @@ def test_odd_schemas_are_tolerated() -> None:
     assert argument_descriptions(odd) == ["first of a tuple"]
     assert argument_descriptions(None) == []
     assert "first of a tuple" in _tool(odd).index_text()
+
+
+# --- whether the index holds an entry as it is now ------------------------------------------
+
+
+class _Store:
+    def __init__(self, records: list[SearchRecord]) -> None:
+        self.records = {r.record_id: r for r in records}
+
+    async def ensure_collection(self, spec) -> None:
+        return None
+
+    async def get(self, collection, ids):
+        return [self.records[i] for i in ids if i in self.records]
+
+
+class _Indexer:
+    spaces = SimpleNamespace(dimensions={})
+    sparse = SimpleNamespace(server_side_idf=True)
+
+    def collection(self, name: str) -> str:
+        return name
+
+
+def _record(entry: ToolDescriptor, text: str) -> SearchRecord:
+    return SearchRecord(
+        record_id=entry.tool_id,
+        collection="tools",
+        tenant_id="acme",
+        payload={"text_hash": content_hash(text)},
+    )
+
+
+async def test_an_entry_is_indexed_once_its_record_holds_its_current_text() -> None:
+    """B13: the first run asked for hints before its just-published tools were indexed, and
+    every hint was a zero. ``GET /v1/tools`` says per entry whether search finds it now."""
+    fresh = ToolDescriptor(tenant_id="acme", tool_id="tol_a", name="store_demand")
+    changed = ToolDescriptor(tenant_id="acme", tool_id="tol_b", name="excess_stock")
+    absent = ToolDescriptor(tenant_id="acme", tool_id="tol_c", name="lost_sales")
+    store = _Store([_record(fresh, fresh.index_text()), _record(changed, "an older text")])
+    index = ToolIndex(None, _Indexer(), store)  # type: ignore[arg-type]
+    assert await index.indexed([fresh, changed, absent]) == {"tol_a"}
+    assert await index.indexed([]) == set()

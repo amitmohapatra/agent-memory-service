@@ -277,8 +277,8 @@ async def test_a_run_verdict_moves_the_cited_memories_and_labels_the_run(
     container, uow_factory
 ) -> None:
     """Confirmed: every memory the run's answer cited gains confidence and a reinforcement,
-    and the run is labelled successful. Rejected: they lose confidence. A person's label
-    outranks the judge's (``OUTCOME_PRECEDENCE``)."""
+    and the run is labelled successful. A person's label outranks the judge's
+    (``OUTCOME_PRECEDENCE``), and an outranked verdict moves no memory it cites (B12)."""
     memory = await _first_memory(container, uow_factory)
     agent = ALICE.model_copy(update={"agent_id": "helper", "agent_run_id": "run_answer_1"})
     cited = [{"source_type": "memory", "source_id": memory.memory_id}]
@@ -326,11 +326,11 @@ async def test_a_run_verdict_moves_the_cited_memories_and_labels_the_run(
     )
     assert rejected.projection is not None
     assert rejected.projection.action is ProjectionAction.NONE
-    assert rejected.projection.memory_ids == [memory.memory_id]
+    assert rejected.projection.memory_ids == []
     async with uow_factory() as uow:
-        lowered = await uow.memories.get("acme", memory.memory_id)
+        unmoved = await uow.memories.get("acme", memory.memory_id)
         kept = await uow.tools.outcome("acme", "run_answer_1")
-    assert lowered is not None and lowered.confidence == pytest.approx(raised.confidence - 0.05)
+    assert unmoved is not None and unmoved.confidence == pytest.approx(raised.confidence)
     assert kept is not None and kept.success and kept.source == "human"
 
 
@@ -505,8 +505,8 @@ async def test_a_dismissed_vote_is_kept_and_never_applied(container, uow_factory
 
 
 async def test_what_is_applied_as_it_arrives(container, uow_factory) -> None:
-    """The judge's own verdict, a run reporting its own status, an owner's correction of a
-    memory carrying new text and what a tenant admin says need no review."""
+    """A run reporting its own status, an owner's correction of a memory carrying new text and
+    what a tenant admin says need no review."""
     memory = await _first_memory(container, uow_factory)
     service = container.services["feedback"]
     run = ALICE.model_copy(update={"agent_id": "helper", "agent_run_id": "run_self"})

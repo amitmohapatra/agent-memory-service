@@ -34,6 +34,7 @@ from memory_service.domain.enums import Visibility
 from memory_service.domain.learning import (
     APPROVAL_MIN_SUPPORT,
     APPROVAL_SUGGESTIONS_MAX,
+    ApprovalCounts,
     Suggestion,
 )
 from memory_service.domain.tools import (
@@ -368,9 +369,17 @@ class CatalogTool(BaseModel):
     stats: ToolStatsBody = Field(
         default_factory=ToolStatsBody, description="What the calls recorded for it add up to."
     )
+    indexed: bool | None = Field(
+        default=None,
+        description="Whether tool search finds it as it is now (`GET /v1/tools` only): false "
+        "right after it was published or changed, until it is indexed - a harness waits for "
+        "it before its first hints; null where the catalog has no search index.",
+    )
 
     @classmethod
-    def of(cls, entry: ToolDescriptor, stats: ToolStats | None = None) -> CatalogTool:
+    def of(
+        cls, entry: ToolDescriptor, stats: ToolStats | None = None, *, indexed: bool | None = None
+    ) -> CatalogTool:
         return cls(
             **entry.model_dump(
                 include={
@@ -393,6 +402,7 @@ class CatalogTool(BaseModel):
             risk=entry.risk,
             input_schema=entry.input_schema or {"type": "object"},
             stats=ToolStatsBody.of(stats or ToolStats(tool_name=entry.name)),
+            indexed=indexed,
         )
 
 
@@ -556,8 +566,14 @@ async def list_tools(
             uow, ctx, names, after=position["name"] if position else "", limit=limit + 1
         )
     items, next_cursor = page(rows, limit=limit, position=lambda row: {"name": row[0].name})
+    index = container.services.get("tool_index")
+    found = await index.indexed([entry for entry, _ in items]) if index is not None else None
     body = CatalogPageResponse(
-        tools=[CatalogTool.of(entry, stats) for entry, stats in items], next_cursor=next_cursor
+        tools=[
+            CatalogTool.of(entry, stats, indexed=None if found is None else entry.tool_id in found)
+            for entry, stats in items
+        ],
+        next_cursor=next_cursor,
     )
     headers = {LINK_HEADER: next_link(request, next_cursor)} if next_cursor else None
     return conditional_model(request, body, cache_control=CATALOG_CACHE_CONTROL, headers=headers)
@@ -666,6 +682,12 @@ async def approval_suggestions(
                 ctx.tenant_id, workspace_id=ctx.workspace_id, names=names, limit=len(names) + 1
             )
         }
+        offers: list[tuple[ApprovalCounts, Suggestion]] = [
+            (c, suggestion)
+            for c in counts
+            if (suggestion := await approvals.offer(uow, ctx.tenant_id, c, entries.get(c.tool)))
+            is not None
+        ]
     link_next(request, response, next_cursor)
     return ApprovalSuggestionsResponse(
         next_cursor=next_cursor,
@@ -683,8 +705,7 @@ async def approval_suggestions(
                 approve_rate=round(c.approve_rate, 4),
                 agent_id=c.agent_id or None,
             )
-            for c in counts
-            if (suggestion := approvals.offered(c, entries.get(c.tool))) is not None
+            for c, suggestion in offers
         ],
     )
 

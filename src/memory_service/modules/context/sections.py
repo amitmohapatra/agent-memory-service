@@ -144,7 +144,8 @@ def within_budget(pinned: Pinned, budget: int) -> tuple[Pinned, int]:
         elif (cut := _truncated(pinned.thread_summary, allowed - used)) is not None:
             kept.thread_summary = cut
             used += estimate_tokens(summary_section(cut) or "")
-    if (text := skills_section(pinned.procedures)) and used + estimate_tokens(text) <= allowed:
+    text = skills_section(pinned.procedures, pinned.tools)
+    if text and used + estimate_tokens(text) <= allowed:
         kept.procedures, used = pinned.procedures, used + estimate_tokens(text)
     if (text := tools_section(pinned.tools)) and used + estimate_tokens(text) <= allowed:
         kept.tools, used = pinned.tools, used + estimate_tokens(text)

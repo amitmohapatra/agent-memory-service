@@ -72,7 +72,9 @@ async def _harness(app, tenant_id: str = "acme"):
     return admin, sdk(app, service.token)
 
 
-async def _one_successful_run(agent, quote: str = "Q-1183", *, confirmed_by=None) -> str:
+async def _one_successful_run(
+    agent, quote: str = "Q-1183", *, confirmed_by=None, task: str = TASK
+) -> str:
     """Record the two calls of a run and label the run successful, as an adapter would. The
     quote id flows from the lookup's output into the update's arguments. The run's own
     ``system`` confirm is its outcome only; ``confirmed_by`` (a tenant admin's binding)
@@ -81,14 +83,14 @@ async def _one_successful_run(agent, quote: str = "Q-1183", *, confirmed_by=None
         LOOKUP,
         {"sku": "SKU-22", "region": "EMEA"},
         output={"price": 1200, "quote": quote},
-        task=TASK,
+        task=task,
         step=0,
     )
     second = await agent.record_tool(
         UPDATE,
         {"quote": quote, "price": 1200},
         output={"ok": True},
-        task=TASK,
+        task=task,
         step=1,
         latency_ms=42.0,
     )
@@ -166,15 +168,22 @@ async def test_labelled_runs_become_a_plan_with_the_next_step_and_its_arguments(
     user = harness.bind(user_id="u1")
     await user.agent("quote-bot").advanced.tools.put_catalog(CATALOG)
 
-    cold = await user.agent("quote-bot").tool_hints(TASK, available=[LOOKUP, UPDATE])
+    # each run is about its own quote and none names the region: EMEA, the same in every run,
+    # is a constant of the procedure (a literal is learned only from runs about different
+    # things, never from a value their tasks named)
+    priced = "update quote {} with the list price for SKU-22"
+    task = priced.format("Q-1183")
+    cold = await user.agent("quote-bot").tool_hints(task, available=[LOOKUP, UPDATE])
     assert cold.plan is None, "nothing learned yet: no plan is invented"
     assert {c.name for c in cold.tools} <= {LOOKUP, UPDATE}
 
     for quote in ("Q-1183", "Q-2001"):
-        await _one_successful_run(user.agent("quote-bot"), quote, confirmed_by=admin)
+        await _one_successful_run(
+            user.agent("quote-bot"), quote, confirmed_by=admin, task=priced.format(quote)
+        )
 
     fresh = user.agent("quote-bot")
-    hints = await fresh.tool_hints(TASK, available=[LOOKUP, UPDATE])
+    hints = await fresh.tool_hints(task, available=[LOOKUP, UPDATE])
     assert hints.plan is not None and hints.plan.steps == [LOOKUP, UPDATE]
     assert hints.plan.runs == 2 and hints.plan.success_rate == 1.0
     assert hints.next is not None and hints.next.name == LOOKUP == hints.tools[0].name
@@ -188,15 +197,15 @@ async def test_labelled_runs_become_a_plan_with_the_next_step_and_its_arguments(
         LOOKUP,
         {"sku": "SKU-22", "region": "EMEA"},
         output={"price": 1200, "quote": "Q-3003"},
-        task=TASK,
+        task=task,
         step=0,
     )
-    after = await fresh.tool_hints(TASK, available=[LOOKUP, UPDATE])
+    after = await fresh.tool_hints(task, available=[LOOKUP, UPDATE])
     assert after.next is not None and after.next.name == UPDATE
     assert after.next.args["quote"] == "Q-3003", "the quote comes from the lookup's output"
 
     # a caller that cannot call the second tool is never handed a plan that needs it
-    partial = await fresh.tool_hints(TASK, available=[LOOKUP])
+    partial = await fresh.tool_hints(task, available=[LOOKUP])
     assert partial.plan is None and {c.name for c in partial.tools} == {LOOKUP}
 
 
@@ -208,11 +217,17 @@ async def test_approvals_become_a_rule_that_applies_once_accepted(app, running) 
     agent = harness.bind(user_id="u1").agent("quote-bot")
     await agent.advanced.tools.put_catalog(CATALOG)
     for i in range(5):
-        await agent.feedback(
+        # a decision counts only on an interrupt of a run that recorded the call it approved,
+        # and "approve automatically" needs two different reviewers
+        run = harness.bind(user_id="u1").agent("quote-bot", agent_run_id=f"run_approve_{i}")
+        args = {"quote": f"Q-{i}", "price": 1200 + i}
+        await run.record_tool(UPDATE, args, output={"ok": True}, task=TASK, step=0)
+        await run.feedback(
             "tool_call",
             f"call_{i}",
             "approve",
-            metadata={"tool": UPDATE, "args": {"quote": f"Q-{i}", "price": 1200 + i}},
+            reviewer=f"user:lead{i % 2}",
+            metadata={"tool": UPDATE, "args": args, "interrupt_id": f"int_{i}"},
         )
     suggestions = await agent.advanced.tools.approval_suggestions()
     assert [(s.tool, s.suggestion, s.support) for s in suggestions] == [(UPDATE, "auto_approve", 5)]

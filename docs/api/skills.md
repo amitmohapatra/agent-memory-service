@@ -40,6 +40,12 @@ flowchart LR
    - adds to your skill refund-policy: find_order -> refund (worked 100% of 12 runs)
    ```
 
+   When the context also carries tool hints and the best skill is their plan (every step a
+   candidate), its steps are spelled out once: they are the tools listed first under `## Tools`,
+   in its order, with their arguments and the next step, and its line here keeps the name, the
+   track record and the fixes (`- refund-an-order: the first 2 tools under Tools, in that order
+   (worked 95% of 40 runs)`).
+
    The `tool_search` memory tool returns the best one as its `plan`. Nothing to load, nothing
    to install: the harness puts the context in front of the model, and every framework gets it.
 

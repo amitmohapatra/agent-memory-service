@@ -65,6 +65,7 @@ from memory_service.modules.retrieval.engine import (
 )
 from memory_service.modules.retrieval.periods import months_dated
 from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
+from memory_service.modules.tools.hints import asks_change
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import evidence_status_total, stage_seconds
 from memory_service.observability.timings import Timings
@@ -353,7 +354,7 @@ class ContextBuilder:
         # the namespace binds the tools by their digest (``ToolsRequest.fingerprint``: the
         # sorted names, k, hints), so a request with tools reuses only a bundle built for the
         # same toolbox, whose hints and skills were found for the same words
-        semantic = self._semantic_key(namespace, ctx, query)
+        semantic = self._semantic_key(namespace, ctx, query, tools)
         scope_key = AuthorizationService.scope_cache_key(ctx, authz_fp)
         answer = {"prompt": prompt_key, "full": full_key}.get(output, cache_key)
         keys = [scope_key, answer, semantic]
@@ -401,7 +402,13 @@ class ContextBuilder:
     def _revision_fingerprint(revisions: dict[str, int]) -> str:
         return stable_key(*(f"{k}={v}" for k, v in sorted(revisions.items())))
 
-    def _semantic_key(self, namespace: str, ctx: MemoryExecutionContext, query: str) -> str | None:
+    def _semantic_key(
+        self,
+        namespace: str,
+        ctx: MemoryExecutionContext,
+        query: str,
+        tools: ToolsRequest | None = None,
+    ) -> str | None:
         if self.semantic_cache is None or not self.retrieval_cfg.dense:
             return None
         if self.assist.wants("query_expansion"):
@@ -409,6 +416,11 @@ class ContextBuilder:
         route = self._cache_router.route(query, has_thread=ctx.thread_id is not None)
         if route.query_type not in {QueryType.USER_MEMORY, QueryType.GENERAL_SEMANTIC}:
             return None
+        if tools:
+            # the hints' next step depends on whether the task is a question (a tool that
+            # changes something never leads one), and the guarded words drop the question
+            # mark: a question's hints are no hints for a request to act, nor the reverse
+            namespace = stable_key(namespace, f"asks_change={asks_change(query)}")
         return semantic_key(namespace, query)
 
     async def build(

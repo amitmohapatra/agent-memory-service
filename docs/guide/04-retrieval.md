@@ -332,7 +332,8 @@ for a framework that replays it as its own conversation (`modules/context/window
   slot ("participated in" on four days) are gathered into one dated block;
 - `## Facts`, `## Summaries`, `## Knowledge` — graph facts, summaries and document passages
   with their section paths;
-- `## Evidence status` — only when it is not `COMPLETE`.
+- `## Evidence status` — only when it is not `COMPLETE`, and no hinted tool answers the question
+  (a tool candidate at confidence 0.5 or more).
 
 A model-extracted memory is labelled "model-extracted, unverified" on its line. The default
 response (`format="prompt"`) is the rendered text plus `bundle_id`, `evidence_status` and

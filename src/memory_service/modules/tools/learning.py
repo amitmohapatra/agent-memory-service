@@ -21,9 +21,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any, Final
 
+from memory_service.domain.feedback import FeedbackSource
 from memory_service.domain.revisions import RevisionKind, audience_revision_keys
 from memory_service.domain.tools import (
     RunOutcome,
@@ -50,8 +51,6 @@ PATTERN_CALLS_MAX: Final = 480
 #: Runs that must follow a procedure before it is offered, and the share that must succeed.
 PROCEDURE_MIN_SUPPORT: Final = 2
 PROCEDURE_MIN_SUCCESS_RATE: Final = 0.6
-#: An unlabelled run counts as a success once this old, when none of its calls failed.
-WEAK_POSITIVE_AFTER: Final = timedelta(hours=24)
 #: Example runs of each kind the distillation prompt sees.
 DISTIL_EXAMPLES: Final = 3
 TITLE_MAX_CHARS: Final = 120
@@ -78,19 +77,21 @@ _DISTIL_SYSTEM = (
 )
 
 
-def succeeded(
-    outcome: RunOutcome | None, calls: Sequence[ToolInvocation], now: datetime
-) -> bool | None:
-    """A run is a success when labelled so, or - as a weak positive - when it is older than
-    the window and none of its calls failed. ``None``: the run is no evidence either way, its
-    label being its own unverified report of success (``RunOutcome.teaches``)."""
-    if outcome is not None:
-        return outcome.success if outcome.teaches else None
-    if not calls or any(not c.succeeded for c in calls):
-        return False
-    newest = max(c.occurred_at for c in calls)
-    newest = newest if newest.tzinfo else newest.replace(tzinfo=UTC)
-    return now - newest >= WEAK_POSITIVE_AFTER
+def succeeded(outcome: RunOutcome | None, calls: Sequence[ToolInvocation]) -> bool | None:
+    """A run is a success or a failure when labelled so, and a failure when nobody labelled
+    it and one of its calls failed. ``None`` - no evidence either way - for a run nobody
+    labelled whose calls all worked (however old: a fresh run is no failure), one whose label
+    is its own unverified report of success (``RunOutcome.teaches``), and one the system
+    reported failed though every call of it worked: a time limit, a model error or a stall is
+    the run's failure, not its procedure's."""
+    clean = all(c.succeeded for c in calls)
+    if outcome is None:
+        return False if not calls or not clean else None
+    if not outcome.teaches:
+        return None
+    if outcome.source == FeedbackSource.SYSTEM and not outcome.success and calls and clean:
+        return None
+    return outcome.success
 
 
 def _steps(procedure: Procedure) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -313,8 +314,7 @@ class ToolLearning:
             if call.run_id:
                 by_run[call.run_id].append(call)
         outcomes = await uow.tools.outcomes(tenant_id, list(by_run))
-        now = datetime.now(UTC)
-        labelled = {run: succeeded(outcomes.get(run), runs, now) for run, runs in by_run.items()}
+        labelled = {run: succeeded(outcomes.get(run), runs) for run, runs in by_run.items()}
         return [
             build_trajectory(run, by_run[run], succeeded=success)
             for run, success in labelled.items()

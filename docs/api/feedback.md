@@ -135,7 +135,6 @@ writing a second one — which matters for a judge that samples the same run twi
 
 Applied as it arrives (`review: null`), because none of these is an end user's vote:
 
-* the service's own grounding judge — the verdict `POST /v1/verify` records on a run;
 * a run reporting its own status: `source="system"`, `target_kind="run"`, the target is the
   calling scope's `agent_run_id`, it cites no memories (`evidence_refs` empty), and the
   credential may act as that agent (an issued key whose `may_act_as` allows it, as the
@@ -154,12 +153,21 @@ Applied as it arrives (`review: null`), because none of these is an end user's v
 
 `DELETE /v1/memories/{id}` is not feedback: erasure applies at once.
 
-Everything else waits (`review.state = "pending"`): a `confirm`/`approve` **or a `reject`** of a
-memory by a non-admin — the owner's thumbs-down included, and a `correct`/`edit` whose
-correction carries no text — a verdict on a run from a person or a client (including a
-client-claimed `source="judge"`, and a `system` verdict that cites memories, names another
-run or comes from a credential that may not act as the agent), and any verdict on a
-procedure.
+Everything else waits (`review.state = "pending"`): every `source="judge"` verdict — the
+service's own grounding judge's, the one `POST /v1/verify` records on a run, included,
+whoever's key carried it — a `confirm`/`approve` **or a `reject`** of a memory by a non-admin —
+the owner's thumbs-down included, and a `correct`/`edit` whose correction carries no text — a
+verdict on a run from a person or a client (including a `system` verdict that cites memories,
+names another run or comes from a credential that may not act as the agent), and any verdict
+on a procedure.
+
+The grounding judge's verdict never raises a memory's confidence: the answer was checked
+against the memories it was given, so its `confirm` cites none (it would only echo them back).
+Its `reject` cites only the memories that contradict one of the answer's claims, never one a
+supported claim rests on, and none at all when the run recorded tool calls: such an answer
+rests on the tools' results, which the context it was checked against never held. Approved, a
+run verdict moves the memories it cites only when it labels the run: one a higher-ranked
+source outranks changes nothing.
 
 While a vote waits it changes nothing: the memory stays current with the same confidence and
 reinforcement (so ranking does not move), its index entry and the cached bundles that show it

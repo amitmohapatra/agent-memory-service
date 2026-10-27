@@ -94,8 +94,8 @@ async def _label(
     source: FeedbackSource = FeedbackSource.JUDGE,
 ) -> None:
     """The run's verified outcome: the grounding judge's RUN feedback (what ``/v1/verify``
-    records; ``source=SYSTEM`` is the run's own word on its final status), projected right
-    away rather than by the queued job."""
+    records, approved by a tenant admin; ``source=SYSTEM`` is the run's own word on its final
+    status), projected right away rather than by the queued job."""
     feedback = container.services["feedback"]
     async with container.services["uow_factory"]() as uow:
         stored, _ = await feedback.submit(
@@ -108,11 +108,14 @@ async def _label(
                 verdict=FeedbackVerdict.CONFIRM if success else FeedbackVerdict.REJECT,
                 source=source,
             ),
-            # the judge records on the service's own authority (``grounding.judge``); the
-            # harness's key may act as the agent: its run's status is taken (ADR 0039)
-            trusted=source is FeedbackSource.JUDGE,
+            # the judge's verdict is the service's own word, never a vote; the harness's key
+            # may act as the agent: its run's status is taken (ADR 0039)
             run_vouched=True,
         )
+        if stored.pending:  # the judge's word waits for a tenant admin (``grounding.judge``)
+            await feedback.review(
+                uow, ctx.tenant_id, stored.feedback_id, approve=True, reviewed_by="admin"
+            )
         await uow.commit()
     await feedback.project(ctx.tenant_id, stored.feedback_id)
 
