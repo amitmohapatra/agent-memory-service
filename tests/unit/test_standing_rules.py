@@ -168,3 +168,45 @@ async def test_a_restated_rule_or_preference_with_new_values_keeps_only_the_newe
     }
     assert "06:20" in blocks["standing_rules"] and "06:50" not in blocks["standing_rules"]
     assert "ZB1871" in blocks["preferences"] and "JN4786" not in blocks["preferences"]
+
+
+STOCK_RULE_TASK = "Create a stock rule for ST-101 at S40, min 1 max 3."
+
+
+@pytest.mark.parametrize(
+    ("rule", "forbidden"),
+    [
+        ("Never create a stock rule at store S40", True),
+        ("Never create stock rules at store S40.", True),
+        ("Never create stock rules", True),
+        ("Never create a stock rule at store S12", False),
+        ("Never create a stock rule for ST-202 at store S40", False),
+        ("Always create a stock rule at store S40", False),
+        ("Never delete a stock rule at store S40", False),
+        ("Nunca llames a create_stock_rule para la tienda S40", True),
+        ("Nie create_stock_rule für Filiale S40 aufrufen.", True),
+        ("لا تستدعِ create_stock_rule أبدًا للمتجر S40", True),
+        ("Nunca llames a create_stock_rule para la tienda S12", False),
+    ],
+)
+def test_a_never_rule_forbids_the_action_it_says_on_the_values_it_names(
+    rule: str, forbidden: bool
+) -> None:
+    assert standing.forbids(rule, "create_stock_rule", [STOCK_RULE_TASK]) is forbidden
+
+
+@pytest.mark.asyncio
+async def test_a_replaced_never_rule_is_not_listed_and_forbids_nothing() -> None:
+    """The hints read the rules the section lists: a "never" rule a later one on the same
+    subject superseded, or one a later statement replaced (an earlier value), is not one."""
+    newer = "Create stock rules at store S40 only with my approval from now on."
+    hits = [
+        _hit("a", "Never create a stock rule at store S40.", "rule", day="2026-09-01"),
+        _hit("b", newer, "rule", day="2026-10-01"),
+    ]
+    blocks = await standing.standing_blocks(_Engine(hits), STOCK_RULE_TASK, None, _Vectors())
+    assert standing.listed_rules(blocks) == [newer]
+    assert not standing.forbids(newer, "create_stock_rule", [STOCK_RULE_TASK])
+    earlier = [_hit("a", "Never create a stock rule at store S40.", "rule", earlier_value=True)]
+    blocks = await standing.standing_blocks(_Engine(earlier), STOCK_RULE_TASK, None, _Vectors())
+    assert standing.listed_rules(blocks) == []

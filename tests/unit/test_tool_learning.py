@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
+from memory_service.domain.context_bundle import ProfileBlockView, skills_section, tools_section
 from memory_service.domain.graph import IDENTIFIED_BY, USED_ENTITY, layer_for
 from memory_service.domain.learning import ApprovalCounts
 from memory_service.domain.tools import (
@@ -15,6 +16,7 @@ from memory_service.domain.tools import (
     RunOutcome,
     StoredProcedure,
     ToolDescriptor,
+    ToolHints,
     ToolInvocation,
 )
 from memory_service.modules.tools.edges import tool_edges
@@ -539,8 +541,11 @@ def test_a_general_view_is_no_candidate_below_a_specific_tool() -> None:
 
 
 class _HintsUow:
-    def __init__(self, entries: list[ToolDescriptor]) -> None:
+    def __init__(
+        self, entries: list[ToolDescriptor], procedures: list[StoredProcedure] | None = None
+    ) -> None:
         self.entries = entries
+        self.learned = procedures or []
         self.tools = self
         self.procedures = self
 
@@ -551,7 +556,7 @@ class _HintsUow:
         return None
 
     async def visible(self, *_: object, **__: object) -> list:
-        return []
+        return self.learned
 
     async def catalog(self, tenant_id, *, workspace_id, names, limit):
         return [e for e in self.entries if e.name in names]
@@ -668,7 +673,7 @@ async def test_a_number_is_never_read_out_of_an_identifier() -> None:
     assert values["create_stock_rule.style"] == "ST-101"
     assert {("create_stock_rule", "min_units"), ("create_stock_rule", "max_units")} <= missing
     found = Prefill(tool="create_stock_rule", value="ST-101", source="task")
-    assert _as_declared(found, RULE, "max_units").value == "ST-101"
+    assert _as_declared(found, RULE, "max_units") is None, "no number: no value of it"
 
 
 async def test_described_free_text_is_the_model_s_to_word_never_missing() -> None:
@@ -862,3 +867,145 @@ async def test_two_identifiers_of_one_task_each_fill_the_tool_whose_example_they
     values, missing = await _hinted(task, ASSET_OWNER, RESET)
     assert values == {"asset_owner.asset_tag": "LT-2290", "reset_password.user_id": "u-77"}
     assert not missing
+
+
+# ------------------------------------------------------------------ the user's standing rules
+
+
+STOCK_RULE_TASK = "Create a stock rule for ST-101 at S40, min 1 max 3."
+NEVER_AT_S40 = "Never create a stock rule at store S40"
+
+
+def _rules(*rules: str, block: str = "standing_rules") -> list[ProfileBlockView]:
+    return [ProfileBlockView(block=block, text="\n".join(f"- {r}" for r in rules), version=0)]
+
+
+async def _stock_rule_hints(task: str, profile: list[ProfileBlockView]) -> ToolHints:
+    """The F6 setting: a skill learned from three runs that created a stock rule at S12."""
+    learned = _procedure(
+        task_pattern("Create a stock rule for ST-101 at S12, min 2 max 6"),
+        ["create_stock_rule"],
+        success_rate=1.0,
+        support=3,
+    )
+    service = ToolHintsService(
+        lambda: _HintsUow([RULE], [learned]),  # type: ignore[arg-type,return-value]
+        _Index([("create_stock_rule", 0.9)]),  # type: ignore[arg-type]
+        None,
+    )
+    return await service.hints(
+        MemoryExecutionContext(tenant_id="acme", user_id="u1"),
+        task,
+        available=["create_stock_rule"],
+        k=5,
+        scope_keys=["k"],
+        profile=profile,
+    )
+
+
+async def test_a_call_the_user_s_standing_rule_forbids_is_handed_over_as_no_step() -> None:
+    """F6: "Never create a stock rule at store S40" is in the context's standing rules, and a
+    skill learned at S12 made create_stock_rule the next step, prefilled at S40: the model
+    called it. The call the rule forbids is no next step, nothing is prefilled or asked for
+    it, and the Tools section and the skill say which rule forbids it."""
+    hints = await _stock_rule_hints(STOCK_RULE_TASK, _rules(NEVER_AT_S40))
+    assert hints.next is None
+    assert not [k for k in hints.prefill if k.startswith("create_stock_rule.")]
+    assert not [m for m in hints.missing if m.tool == "create_stock_rule"]
+    assert hints.forbidden == {"create_stock_rule": NEVER_AT_S40}
+    (candidate,) = hints.candidates
+    assert "next step" not in candidate.why, "no next step's bonus either"
+    tools = tools_section(hints) or ""
+    assert "next step" not in tools and "store = " not in tools
+    assert f"a standing rule of the user forbids this here: {NEVER_AT_S40}" in tools
+    assert hints.plan is not None
+    note = f"  - but a standing rule of the user forbids create_stock_rule here: {NEVER_AT_S40}"
+    assert note in (skills_section([hints.plan], hints) or "")
+
+
+@pytest.mark.parametrize(
+    ("task", "rules"),
+    [
+        # a rule about another store: the call at S12 is allowed
+        ("Create a stock rule for ST-101 at S12, min 1 max 3.", [NEVER_AT_S40]),
+        # an "always" rule forbids nothing
+        (STOCK_RULE_TASK, ["Always create a stock rule at store S40 with min 1"]),
+        # a "never" rule about another action
+        (STOCK_RULE_TASK, ["Never delete a stock rule at store S40"]),
+        # a rule naming two values of which the call has one
+        (STOCK_RULE_TASK, ["Never create a stock rule for ST-202 at store S40"]),
+    ],
+)
+async def test_a_standing_rule_forbids_only_the_call_it_is_about(
+    task: str, rules: list[str]
+) -> None:
+    hints = await _stock_rule_hints(task, _rules(*rules))
+    assert hints.next == "create_stock_rule" and not hints.forbidden
+    assert "create_stock_rule.store" in hints.prefill
+
+
+async def test_only_a_current_rule_the_context_lists_forbids() -> None:
+    """A forgotten or replaced rule is not in the ``standing_rules`` section (``standing``
+    reads only current rules); still in the profile's ``user`` block, refreshed later, or a
+    memory in hand, it forbids nothing."""
+    hints = await _stock_rule_hints(STOCK_RULE_TASK, _rules(NEVER_AT_S40, block="user"))
+    assert hints.next == "create_stock_rule" and not hints.forbidden
+
+
+async def test_a_rule_forbids_a_call_by_a_value_found_for_its_arguments() -> None:
+    """The task names no store; the profile's ``store: S40`` fills it, and the call at S40 is
+    the one the rule forbids. A rule naming no value forbids every such call."""
+    task = "Create a stock rule for ST-101 at my store, min 1 max 3."
+    profile = [ProfileBlockView(block="user", text="store: S40", version=0)]
+    hints = await _stock_rule_hints(task, [*_rules(NEVER_AT_S40), *profile])
+    assert hints.forbidden == {"create_stock_rule": NEVER_AT_S40} and hints.next is None
+    hints = await _stock_rule_hints(task, _rules("Never create stock rules"))
+    assert set(hints.forbidden) == {"create_stock_rule"}
+
+
+# ------------------------------------------------------------------ a value of the declared type
+
+
+async def test_an_identifier_from_memory_is_never_a_number_argument() -> None:
+    """F7: asked about style ZZ999999, the memory "S12 should never hold fewer than 2 or
+    more than 6 units of ST-101" filled min_units and max_units with 'ST-101'. A value that
+    is not of the argument's declared type is no value of it, whichever source found it."""
+
+    class Said:
+        item_id = "mem_bounds"
+        attributes: dict[str, str] = {}
+        text = "S12 should never hold fewer than 2 or more than 6 units of ST-101"
+
+    service = ToolHintsService(None, None, None)  # type: ignore[arg-type]
+    job = _job(RULE, task="How many units of style ZZ999999 do we hold?", memories=[Said()])
+    prefill, missing = await service.arguments(job)
+    assert "create_stock_rule.min_units" not in prefill
+    assert "create_stock_rule.max_units" not in prefill
+    assert {("create_stock_rule", "min_units"), ("create_stock_rule", "max_units")} <= {
+        (m.tool, m.arg) for m in missing
+    }
+
+
+async def test_a_number_from_memory_or_profile_fills_a_number_argument() -> None:
+    """The type gate keeps a real number from any source: a memory's predicate, a profile
+    line; an identifier a learned literal gives is skipped for the next source."""
+
+    class Bound:
+        item_id = "mem_min"
+        attributes = {"predicate": "min_units", "object": "2"}
+
+    profile = [ProfileBlockView(block="user", text="max units: 6", version=0)]
+    service = ToolHintsService(None, None, None)  # type: ignore[arg-type]
+    prefill, _ = await service.arguments(_job(RULE, memories=[Bound()], profile=profile))
+    assert prefill["create_stock_rule.min_units"].value == 2
+    assert prefill["create_stock_rule.max_units"].value == 6
+    plan = _procedure(
+        "p",
+        ["create_stock_rule"],
+        bindings=[{"step": 0, "argument": "min_units", "source_step": None, "literal": "ST-101"}],
+    )
+    prefill, _ = await service.arguments(_job(RULE, plan=plan, memories=[Bound()]))
+    found = prefill["create_stock_rule.min_units"]
+    assert (found.value, found.source) == (2, "memory")
+    half = Prefill(tool="create_stock_rule", value="2.5", source="memory")
+    assert _as_declared(half, RULE, "min_units") is None, "no whole number for an integer"

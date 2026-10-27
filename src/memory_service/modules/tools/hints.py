@@ -14,10 +14,14 @@
   them), the pinned profile and the memories in hand, and finally the values the task itself
   names - a value the task names right after an argument's own words ("cost centre CC-7")
   fills that argument and no other, as does one of the shape of the argument's own example
-  ("such as S12": S40) - each cast to the type the tool's schema declares;
+  ("such as S12": S40) - each cast to the type the tool's schema declares, and none that is
+  not of it, whatever its source ("ST-101" is no ``min_units``);
 - missing: required arguments nothing resolved, with the question to ask - but not a
   free-text one the catalog describes (a team's name, a question): the model words it from
   the request.
+- forbidden: the candidates a current standing rule of the user forbids for this call
+  ("Never create a stock rule at store S40", the ``standing_rules`` section the context
+  lists): never the next step, nothing prefilled or asked for, and the rule beside them.
 - confidence: each candidate's score as a number in 0..1 (``1 - e^-score``, so the order
   is the score's).
 
@@ -34,6 +38,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from typing import Any, Final
 
 from memory_service.domain.context import MemoryExecutionContext
@@ -49,6 +54,7 @@ from memory_service.domain.tools import (
     ToolInvocation,
     ToolStats,
 )
+from memory_service.modules.context.standing import forbids, listed_rules
 from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
 from memory_service.modules.retrieval.engine import QueryVectors
 from memory_service.modules.tools.index import ToolIndex
@@ -176,6 +182,56 @@ def _may_lead(tool: str | None, task: str, entries: dict[str, ToolDescriptor]) -
     if tool is None or asks_change(task) or not _changes(entries.get(tool)):
         return tool
     return None
+
+
+def _rescored(
+    candidates: Sequence[ToolCandidate],
+    found: Sequence[tuple[str, float]],
+    plan: StoredProcedure | None,
+    stats: dict[str, ToolStats],
+    available: Sequence[str] | None,
+) -> list[ToolCandidate]:
+    """The same candidates scored with no next step (it is forbidden): none leads on the
+    plan's bonus."""
+    kept = {c.name for c in candidates}
+    return [
+        c for c in _candidates(found, plan, None, stats, available, HINTS_K_MAX) if c.name in kept
+    ]
+
+
+def _guarded(hints: ToolHints, forbidden: dict[str, str]) -> ToolHints:
+    """``hints`` less what they would hand over of a forbidden tool: it is never the next
+    step, and no argument of it is found or asked for."""
+    return hints.model_copy(
+        update={
+            "next": None if hints.next in forbidden else hints.next,
+            "prefill": {k: p for k, p in hints.prefill.items() if p.tool not in forbidden},
+            "missing": [m for m in hints.missing if m.tool not in forbidden],
+            "forbidden": forbidden,
+        }
+    )
+
+
+def _forbidden(
+    candidates: Sequence[ToolCandidate],
+    task: str,
+    prefill: dict[str, Prefill],
+    profile: Sequence[Any],
+) -> dict[str, str]:
+    """The candidates a standing rule of the user forbids for this call, each with the rule:
+    a rule the context's ``standing_rules`` section lists (current, and applying to the
+    request) that ``standing.forbids`` the tool on the task's values and those found for its
+    arguments ("Never create a stock rule at store S40": ``create_stock_rule`` at S40)."""
+    rules = listed_rules(profile)
+    if not rules:
+        return {}
+    out: dict[str, str] = {}
+    for candidate in candidates:
+        values = [task, *(p.value for p in prefill.values() if p.tool == candidate.name)]
+        rule = next((r for r in rules if forbids(r, candidate.name, values)), None)
+        if rule is not None:
+            out[candidate.name] = rule
+    return out
 
 
 def asks_change(task: str) -> bool:
@@ -333,7 +389,6 @@ class ToolHintsService:
             )
         step = _may_lead(next_tool(plan, done), task, entries)
         candidates = _candidates(found, plan, step, stats, available, min(k, HINTS_K_MAX))
-        tool = step or next((c.name for c in candidates if _may_lead(c.name, task, entries)), None)
         # every candidate's arguments, not only the next step's: the caller may take another
         prefill, missing = await self._every_argument(
             [
@@ -342,13 +397,20 @@ class ToolHintsService:
                 if c.name in entries
             ]
         )
-        return ToolHints(
+        forbidden = _forbidden(candidates, task, prefill, profile)
+        if step in forbidden:
+            # the plan's next step is a call the user's standing rule forbids: it leads nothing
+            step = None
+            candidates = _rescored(candidates, found, plan, stats, available)
+        tool = step or next((c.name for c in candidates if _may_lead(c.name, task, entries)), None)
+        hints = ToolHints(
             candidates=candidates,
             plan=_plan_hint(plan),
             next=tool,
             prefill=prefill,
             missing=missing,
         )
+        return _guarded(hints, forbidden)
 
     async def _every_argument(
         self, jobs: list[_Resolution]
@@ -379,19 +441,23 @@ class ToolHintsService:
         for arg in arguments:
             found = await self._resolve(job, arg)
             if found is not None:
-                prefill[f"{job.tool.name}.{arg}"] = _as_declared(found, job.tool, arg)
+                prefill[f"{job.tool.name}.{arg}"] = found
             elif arg in job.tool.required and not _worded(job, arg):
                 missing.append(_missing(job.tool, arg))
         return prefill, missing
 
     async def _resolve(self, job: _Resolution, arg: str) -> Prefill | None:
+        """The first value a source finds for ``arg`` that is of the type the tool declares
+        for it (``_as_declared``): one that is not is no value of the argument, wherever it
+        was found, and the next source is read."""
+        fit = partial(_as_declared, tool=job.tool, arg=arg)
         return (
-            _from_procedure(job, arg)
-            or await self._from_graph(job, arg)
-            or _from_profile(job, arg)
-            or _from_memories(job, arg)
-            or _from_task(job, arg)
-            or _from_memory_text(job, arg)
+            fit(_from_procedure(job, arg))
+            or fit(await self._from_graph(job, arg))
+            or fit(_from_profile(job, arg))
+            or fit(_from_memories(job, arg))
+            or fit(_from_task(job, arg))
+            or fit(_from_memory_text(job, arg))
         )
 
     async def _from_graph(self, job: _Resolution, arg: str) -> Prefill | None:
@@ -666,17 +732,25 @@ def _same(left: str, right: str) -> bool:
     return min(len(left), len(right)) >= STEM_CHARS and left[:STEM_CHARS] == right[:STEM_CHARS]
 
 
-def _as_declared(found: Prefill, tool: ToolDescriptor, arg: str) -> Prefill:
+def _as_declared(found: Prefill | None, tool: ToolDescriptor, arg: str) -> Prefill | None:
     """The value as the tool's schema types the argument: "700" or "EUR 1,200" for a number
-    argument is a number. A value that is not one is left as it was found."""
+    argument is a number. None for a value that is not one ("ST-101" is no ``min_units``) or
+    no whole one for an integer argument; any value of an argument declared otherwise."""
     declared = _declared(tool, arg).get("type")
-    if declared not in ("number", "integer") or not isinstance(found.value, str):
+    if found is None or declared not in ("number", "integer"):
         return found
-    number = _number(found.value)
-    if number is None:
+    value = found.value
+    if isinstance(value, str):
+        number = _number(value)
+    elif isinstance(value, int | float) and not isinstance(value, bool):
+        number = float(value)
+    else:
+        number = None
+    if number is None or (declared == "integer" and not number.is_integer()):
+        return None
+    if not isinstance(value, str):
         return found
-    value: int | float = int(number) if declared == "integer" or number.is_integer() else number
-    return found.model_copy(update={"value": value})
+    return found.model_copy(update={"value": int(number) if number.is_integer() else number})
 
 
 def _missing(tool: ToolDescriptor, arg: str) -> MissingArgument:

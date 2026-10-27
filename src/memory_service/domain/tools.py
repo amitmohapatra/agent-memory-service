@@ -551,3 +551,8 @@ class ToolHints(BaseModel):
         default_factory=dict, description="argument values found, keyed tool.arg"
     )
     missing: list[MissingArgument] = Field(default_factory=list)
+    forbidden: dict[str, str] = Field(
+        default_factory=dict,
+        description="candidates a standing rule of the user forbids for this task, tool -> "
+        "the rule: never the next step, no argument found or asked for",
+    )
