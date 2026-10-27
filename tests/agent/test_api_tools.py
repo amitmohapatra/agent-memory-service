@@ -208,7 +208,8 @@ async def test_approvals_become_a_rule_that_applies_once_accepted(app, running) 
     agent = harness.bind(user_id="u1").agent("quote-bot")
     await agent.advanced.tools.put_catalog(CATALOG)
     for i in range(5):
-        # a decision counts only on an interrupt of a run that recorded the call it approved
+        # a decision counts only on an interrupt of a run that recorded the call it approved,
+        # and "approve automatically" needs two different reviewers
         run = harness.bind(user_id="u1").agent("quote-bot", agent_run_id=f"run_approve_{i}")
         args = {"quote": f"Q-{i}", "price": 1200 + i}
         await run.record_tool(UPDATE, args, output={"ok": True}, task=TASK, step=0)
@@ -216,7 +217,7 @@ async def test_approvals_become_a_rule_that_applies_once_accepted(app, running) 
             "tool_call",
             f"call_{i}",
             "approve",
-            reviewer="user:lead",
+            reviewer=f"user:lead{i % 2}",
             metadata={"tool": UPDATE, "args": args, "interrupt_id": f"int_{i}"},
         )
     suggestions = await agent.advanced.tools.approval_suggestions()

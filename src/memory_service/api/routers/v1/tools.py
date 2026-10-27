@@ -34,6 +34,7 @@ from memory_service.domain.enums import Visibility
 from memory_service.domain.learning import (
     APPROVAL_MIN_SUPPORT,
     APPROVAL_SUGGESTIONS_MAX,
+    ApprovalCounts,
     Suggestion,
 )
 from memory_service.domain.tools import (
@@ -681,6 +682,12 @@ async def approval_suggestions(
                 ctx.tenant_id, workspace_id=ctx.workspace_id, names=names, limit=len(names) + 1
             )
         }
+        offers: list[tuple[ApprovalCounts, Suggestion]] = [
+            (c, suggestion)
+            for c in counts
+            if (suggestion := await approvals.offer(uow, ctx.tenant_id, c, entries.get(c.tool)))
+            is not None
+        ]
     link_next(request, response, next_cursor)
     return ApprovalSuggestionsResponse(
         next_cursor=next_cursor,
@@ -698,8 +705,7 @@ async def approval_suggestions(
                 approve_rate=round(c.approve_rate, 4),
                 agent_id=c.agent_id or None,
             )
-            for c in counts
-            if (suggestion := approvals.offered(c, entries.get(c.tool))) is not None
+            for c, suggestion in offers
         ],
     )
 

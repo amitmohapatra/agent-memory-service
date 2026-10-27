@@ -32,6 +32,12 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- A learned "approve automatically" rule needs at least 2 different reviewers: one reviewer's
+  approvals of a tool's calls, however many, no longer make it a suggestion (the reviewers are
+  read from the counted decisions; no new table). And each call a run recorded backs one counted
+  approval: the interrupt id is the client's, so naming a new one made one call back any number.
+  `GET /v1/tools/approval-suggestions` may list fewer suggestions; accepting one that fewer
+  than 2 reviewers support is a 409.
 - The capability eval's learned-procedure scenarios learn again: the runner labels its recorded
   tool runs as a person (`source="human"`) through the tenant's administrator credential, so the
   label is applied as it arrives and taught from; it labelled them `system`, a run's own report of

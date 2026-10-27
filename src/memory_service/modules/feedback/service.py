@@ -55,6 +55,7 @@ from memory_service.domain.feedback import (
     outcome_teaches,
 )
 from memory_service.domain.learning import (
+    APPROVAL_DECISIONS_READ,
     CITED_CONFIDENCE_STEP,
     CITED_MEMORIES_MAX,
     CONFIDENCE_FLOOR,
@@ -842,8 +843,10 @@ class FeedbackService:
         A learned approval rule stops a person being asked, so only a decision that is one
         counts: a reviewer's on an interrupt (``metadata.interrupt_id``) of a run, once per
         interrupt whatever feedback id carries it again, and an approval only when the run
-        recorded the call it approved, that tool with those arguments (``_backed``). A
-        rejection or an edit only makes the tool ask more, so it needs no recorded call."""
+        recorded the call it approved, that tool with those arguments (``_backed``), each
+        recorded call backing one counted approval (``_spent``: the interrupt id is the
+        client's). A rejection or an edit only makes the tool ask more, so it needs no
+        recorded call."""
         tool = str(record.metadata.get("tool") or "").strip()
         if not tool:
             return FeedbackProjection(
@@ -868,6 +871,13 @@ class FeedbackService:
             return FeedbackProjection(
                 action=ProjectionAction.NONE,
                 reason="the run recorded no call of that tool with those arguments",
+                projected_at=now,
+            )
+        if _approves(record) and await _spent(uow, record):
+            return FeedbackProjection(
+                action=ProjectionAction.NONE,
+                reason="each call of that tool with those arguments the run recorded backs a "
+                "counted approval already",
                 projected_at=now,
             )
         counter = APPROVAL_COUNTER[record.verdict]
@@ -1102,6 +1112,29 @@ async def _backed(uow: UnitOfWork, record: Feedback) -> bool:
     tool, wanted = record.metadata.get("tool"), stable_hash(args)
     calls = await uow.tools.invocations_for_run(record.tenant_id, record.agent_run_id)
     return any(c.tool_name == tool and c.args_hash == wanted for c in calls)
+
+
+async def _spent(uow: UnitOfWork, record: Feedback) -> bool:
+    """Whether every call of the approved tool with those arguments that the run recorded
+    backs a counted approval already. The interrupt id is the client's: without this, one
+    recorded call would back any number of approvals, each under a new id. Serialised per
+    run, so two approvals of one call are counted one after the other."""
+    run_id, tool = record.agent_run_id or "", str(record.metadata.get("tool"))
+    await uow.serialize(f"tool-approvals:{record.tenant_id}:{run_id}")
+    wanted = stable_hash(record.metadata.get("args"))
+    calls = await uow.tools.invocations_for_run(record.tenant_id, run_id)
+    recorded = sum(c.tool_name == tool and c.args_hash == wanted for c in calls)
+    decisions = await uow.feedback.counted_decisions(
+        record.tenant_id,
+        agent_id=record.agent_id or "",
+        tool=tool,
+        limit=APPROVAL_DECISIONS_READ,
+    )
+    counted = sum(
+        d.agent_run_id == run_id and _approves(d) and stable_hash(d.metadata.get("args")) == wanted
+        for d in decisions
+    )
+    return counted >= recorded
 
 
 async def _counted_before(uow: UnitOfWork, record: Feedback) -> bool:

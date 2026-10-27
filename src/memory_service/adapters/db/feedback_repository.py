@@ -19,6 +19,7 @@ from memory_service.domain.feedback import (
     FeedbackReview,
     FeedbackTargetGroup,
     FeedbackTargetKind,
+    ProjectionAction,
     ReviewState,
 )
 
@@ -247,6 +248,19 @@ class SqlFeedbackRepository:
         stmt = _voter(stmt, user_id, agent_id).order_by(
             FeedbackRow.created_at.desc(), FeedbackRow.feedback_id.desc()
         )
+        return [_to_domain(r) for r in (await self.s.scalars(stmt.limit(limit))).all()]
+
+    async def counted_decisions(
+        self, tenant_id: str, *, agent_id: str, tool: str, limit: int
+    ) -> list[Feedback]:
+        stmt = select(FeedbackRow).where(
+            FeedbackRow.tenant_id == tenant_id,
+            FeedbackRow.target_kind == FeedbackTargetKind.TOOL_CALL.value,
+            func.coalesce(FeedbackRow.agent_id, "") == agent_id,
+            FeedbackRow.metadata_["tool"].astext == tool,
+            FeedbackRow.projection["action"].astext == ProjectionAction.TOOL_CALL_COUNTED.value,
+        )
+        stmt = stmt.order_by(FeedbackRow.created_at.desc(), FeedbackRow.feedback_id.desc())
         return [_to_domain(r) for r in (await self.s.scalars(stmt.limit(limit))).all()]
 
     async def _page(

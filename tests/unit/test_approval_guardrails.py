@@ -10,6 +10,13 @@ import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import Conflict
+from memory_service.domain.feedback import (
+    Feedback,
+    FeedbackProjection,
+    FeedbackTargetKind,
+    FeedbackVerdict,
+    ProjectionAction,
+)
 from memory_service.domain.learning import ApprovalCounts
 from memory_service.domain.tools import ToolAnnotations, ToolDescriptor
 from memory_service.modules.tools import approvals
@@ -80,12 +87,37 @@ class _Revisions:
         return 1
 
 
+def _approval(reviewer: str, n: int, args: dict[str, Any] | None = None) -> Feedback:
+    return Feedback(
+        feedback_id=f"fb_{n}",
+        tenant_id="acme",
+        agent_id="bot",
+        target_kind=FeedbackTargetKind.TOOL_CALL,
+        target_id=f"call_{n}",
+        verdict=FeedbackVerdict.APPROVE,
+        reviewer=reviewer,
+        metadata={"tool": "t", "args": args or {"path": f"/p{n}"}},
+        projection=FeedbackProjection(action=ProjectionAction.TOOL_CALL_COUNTED),
+    )
+
+
+class _Decisions:
+    """The counted decisions on the tool: by default from two reviewers."""
+
+    def __init__(self, *reviewers: str) -> None:
+        names = reviewers or ("user:lead", "user:ops")
+        self.decisions = [_approval(name, n) for n, name in enumerate(names * 10)]
+
+    async def counted_decisions(self, *_: Any, **__: Any) -> list[Feedback]:
+        return self.decisions
+
+
 CTX = MemoryExecutionContext(tenant_id="acme", user_id="u", workspace_id="ws1", agent_id="bot")
 
 
 async def _accept(counts: ApprovalCounts | None, entry: ToolDescriptor | None) -> _Tools:
     tools = _Tools(counts, entry)
-    uow: Any = SimpleNamespace(tools=tools, revisions=_Revisions())
+    uow: Any = SimpleNamespace(tools=tools, revisions=_Revisions(), feedback=_Decisions())
     await approvals.accept(uow, CTX, approvals.suggestion_id(AUTO))
     return tools
 
@@ -127,3 +159,28 @@ async def test_a_learned_rule_never_relaxes_an_administrators_approve_when() -> 
     # the rule this very suggestion wrote is still listed (as accepted)
     own = approvals.compose(None, "write", "auto_approve", SHAPE)
     assert approvals.offered(AUTO, _tool("write").model_copy(update={"approve_when": own}))
+
+
+async def test_approve_automatically_needs_two_different_reviewers() -> None:
+    """B6: twenty approvals by one reviewer made "approve automatically" a suggestion. It is
+    offered only once two different reviewers approved calls of that shape, as the counted
+    decisions name them; approvals of another shape are not counted."""
+    entry = _tool("write")
+
+    async def offered(decisions: _Decisions) -> str | None:
+        uow: Any = SimpleNamespace(feedback=decisions)
+        return await approvals.offer(uow, "acme", AUTO, entry)
+
+    assert await offered(_Decisions("user:lead")) is None
+    assert await offered(_Decisions("user:lead", "user:ops")) == "auto_approve"
+    other_shape = _Decisions("user:lead")
+    other_shape.decisions.append(_approval("user:ops", 99, args={"path": 3}))
+    assert await offered(other_shape) is None
+    # "always ask" only adds a question: one reviewer is enough
+    one: Any = SimpleNamespace(feedback=_Decisions("user:lead"))
+    assert await approvals.offer(one, "acme", ASK, entry) == "always_ask"
+    tools = _Tools(AUTO, entry)
+    uow: Any = SimpleNamespace(tools=tools, revisions=_Revisions(), feedback=_Decisions("u:1"))
+    with pytest.raises(Conflict, match="reviewers"):
+        await approvals.accept(uow, CTX, approvals.suggestion_id(AUTO))
+    assert tools.upserted is None

@@ -119,6 +119,19 @@ class _FeedbackRepo:
         ]
         return sorted(found, key=lambda r: (r.created_at, r.feedback_id), reverse=True)[:limit]
 
+    async def counted_decisions(self, tenant_id, *, agent_id, tool, limit):
+        found = [
+            r
+            for (t, _), r in self.rows.items()
+            if t == tenant_id
+            and r.target_kind is FeedbackTargetKind.TOOL_CALL
+            and (r.agent_id or "") == agent_id
+            and r.metadata.get("tool") == tool
+            and r.projection is not None
+            and r.projection.action is ProjectionAction.TOOL_CALL_COUNTED
+        ]
+        return sorted(found, key=lambda r: (r.created_at, r.feedback_id), reverse=True)[:limit]
+
 
 def _same_voter(r: Feedback, user_id, agent_id) -> bool:
     if user_id is not None:
@@ -833,6 +846,39 @@ async def test_an_approval_counts_once_and_only_for_a_call_its_run_recorded() ->
     rejected = await decided(FeedbackVerdict.REJECT, "fb_rejected", interrupt_id="int_3")
     assert rejected is not None and rejected.action is ProjectionAction.TOOL_CALL_COUNTED
     assert [c for _, _, c in run.counted] == ["approvals", "rejections"]
+
+
+async def test_one_recorded_call_backs_one_approval_whatever_interrupt_id_it_names() -> None:
+    """B6: the interrupt id is the client's, so one call the run recorded backed any number of
+    approvals, each naming a new interrupt (and a new target). Each recorded call now backs
+    one counted approval; a second call of the same tool and arguments backs a second."""
+    service, run, uow = _projecting()
+    ctx = OWNER.model_copy(update={"agent_id": "ops", "agent_run_id": "run_7"})
+
+    async def approved(feedback_id: str, interrupt: str, target: str) -> ProjectionAction:
+        record = _decision(FeedbackVerdict.APPROVE, feedback_id, interrupt_id=interrupt)
+        await service.submit(uow, ctx, record.model_copy(update={"target_id": target}))
+        projected = await service.project("acme", feedback_id, attempt=CALL_RECORD_CHECKS)
+        assert projected is not None
+        return projected.action
+
+    def recorded(step: int) -> ToolInvocation:
+        return ToolInvocation(
+            tenant_id="acme",
+            tool_id="tol_t",
+            tool_name="transfer_stock",
+            run_id="run_7",
+            step=step,
+            args_hash=stable_hash(ARGS),
+        )
+
+    run.calls.append(recorded(0))
+    assert await approved("fb_1", "int_1", "call_1") is ProjectionAction.TOOL_CALL_COUNTED
+    assert await approved("fb_2", "int_2", "call_2") is ProjectionAction.NONE
+    assert await approved("fb_3", "int_3", "call_1") is ProjectionAction.NONE
+    run.calls.append(recorded(1))
+    assert await approved("fb_4", "int_4", "call_4") is ProjectionAction.TOOL_CALL_COUNTED
+    assert [c for _, _, c in run.counted] == ["approvals", "approvals"]
 
 
 async def test_an_approval_before_its_call_is_recorded_is_looked_at_again() -> None:

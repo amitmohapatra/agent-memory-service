@@ -207,11 +207,20 @@ suggests `auto_approve` and 50% or fewer `always_ask`. Nothing applies them on i
 Only a real decision counts: one on an interrupt (`metadata.interrupt_id`) of the calling run
 (`agent_run_id`), naming its `reviewer`, counted once per interrupt however many feedback ids
 carry it; and an approval only once that run recorded the call it approved — that tool with
-those arguments. An approval sent before the approved call is recorded (the harness sends it as
+those arguments — each recorded call backing one counted approval: the interrupt id is the
+client's, so a new id does not make one call back a second approval. An approval sent before the approved call is recorded (the harness sends it as
 the run resumes) is looked at again every 30 seconds, ten times, then counts nothing. A
 rejection or an edit only makes the tool ask more, so it needs no recorded call. And
 `auto_approve` is offered only for a tool without an `approve_when`: an administrator's rule (or
 one accepted before) is never relaxed by what was learned; `always_ask` may still be added.
+`auto_approve` also needs at least 2 different reviewers among the counted approvals of that
+shape (read from the decisions themselves, the newest 500 on the tool): one person's approvals,
+however many, suggest nothing.
+
+What this does not stop: the reviewer, the run and the interrupt id are what the sending
+credential says. A key that may act as the agent can record a call and then approve it, naming
+any reviewer. An interrupt id minted by the service would not change that, since the same key
+would ask for it: closing it takes decisions sent with the reviewer's own credential.
 
 ```python
 for s in await ctx.advanced.tools.approval_suggestions(tool="erp-create_po"):
