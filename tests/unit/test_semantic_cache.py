@@ -8,10 +8,11 @@ import pytest
 
 from memory_service.adapters.cache.memory_cache import MemoryCache
 from memory_service.domain.revisions import RevisionKind
-from memory_service.domain.tools import SkillView, ToolHints
+from memory_service.domain.tools import SkillView, ToolCandidate, ToolHints
 from memory_service.modules.context.sections import Pinned, ToolsRequest
 from memory_service.modules.context.semantic_cache import SemanticBundleCache, guarded_signature
 from memory_service.modules.llm.policy import model_call_policy
+from memory_service.modules.tools.hints import asks_change
 from tests.unit.test_context_datapath import CTX, _builder, _parts
 
 pytestmark = pytest.mark.unit
@@ -170,7 +171,12 @@ class _Sections:
 
     async def tools(self, ctx, query, request, visibility, *, memories, profile, vectors):
         self.hinted += 1
-        return ToolHints(next=sorted(request.available)[0], plan=None)
+        first = sorted(request.available)[0]
+        # as the real hints: a tool that changes something never leads a question
+        return ToolHints(
+            candidates=[ToolCandidate(name=first, score=1.0)],
+            next=first if asks_change(query) else None,
+        )
 
 
 def tooled_builder():
@@ -187,8 +193,8 @@ async def test_a_request_with_tools_reuses_a_bundle_built_for_the_same_toolbox()
     builder = tooled_builder()
     first = await builder.build(CTX, "my timezone?", tools=_tools())
     await builder.drain()
-    second = await builder.build(CTX, "please my timezone", tools=_tools(reversed(TOOLBOX)))
-    assert second.cache_hit and second.query == "please my timezone"
+    second = await builder.build(CTX, "please my timezone?", tools=_tools(reversed(TOOLBOX)))
+    assert second.cache_hit and second.query == "please my timezone?"
     assert builder.engine.calls == 1 and builder.sections.gathered == 1
     assert second.bundle_id != first.bundle_id
     assert (second.tools, second.procedures) == (first.tools, first.procedures)
@@ -201,8 +207,8 @@ async def test_a_semantic_hit_with_tools_is_the_bundle_a_fresh_build_makes():
     cached = tooled_builder()
     await cached.build(CTX, "my timezone?", tools=_tools())
     await cached.drain()
-    hit = await cached.build(CTX, "please my timezone", tools=_tools())
-    fresh = await tooled_builder().build(CTX, "please my timezone", tools=_tools())
+    hit = await cached.build(CTX, "please my timezone?", tools=_tools())
+    fresh = await tooled_builder().build(CTX, "please my timezone?", tools=_tools())
     assert hit.cache_hit and not fresh.cache_hit
 
     def content(bundle):  # what the caller reads (evidence timestamps are the build's own)
@@ -221,6 +227,24 @@ async def test_a_semantic_hit_with_tools_is_the_bundle_a_fresh_build_makes():
     await cached.close()
 
 
+async def test_a_question_and_a_request_to_act_are_different_bundles_with_tools():
+    """The hints' next step depends on whether the task is a question, a mark the guarded
+    words drop: with tools, a question's bundle is never served to a request to act, nor the
+    reverse; without tools the two still share one."""
+    builder = tooled_builder()
+    await builder.build(CTX, "my timezone?", tools=_tools())
+    await builder.drain()
+    act = await builder.build(CTX, "please my timezone!", tools=_tools())
+    fresh = await tooled_builder().build(CTX, "please my timezone!", tools=_tools())
+    assert not act.cache_hit and builder.engine.calls == 2
+    assert act.tools is not None and act.tools.next == sorted(TOOLBOX)[0]
+    assert act.tools == fresh.tools
+    await builder.drain()
+    again = await builder.build(CTX, "my timezone.", tools=_tools())
+    assert again.cache_hit and again.tools == act.tools
+    await builder.close()
+
+
 @pytest.mark.parametrize(
     "other",
     [
@@ -235,7 +259,7 @@ async def test_a_semantic_hit_needs_the_same_toolbox(other):
     builder = tooled_builder()
     await builder.build(CTX, "my timezone?", tools=_tools())
     await builder.drain()
-    second = await builder.build(CTX, "please my timezone", tools=other)
+    second = await builder.build(CTX, "please my timezone?", tools=other)
     assert not second.cache_hit and builder.engine.calls == 2
     await builder.close()
 
