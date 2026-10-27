@@ -5,9 +5,9 @@
   record), re-scored by how well each has worked and how recently; none when nothing matched
   the task and no plan is learned (an index not built yet is no reason to name any tool),
   and no general view (an overview, a summary, a dashboard) ranked below a specific tool;
-- plan / next: the best stored procedure for the task pattern that uses only callable tools,
-  and its first step this run has not done yet; never a tool that changes something when the
-  task is a question;
+- plan / next: the best stored procedure about the task (by its pattern's words or meaning:
+  ``matching``) that uses only callable tools, and its first step this run has not done yet;
+  never a tool that changes something when the task is a question;
 - prefill: each argument of every candidate (keyed ``tool.arg``), resolved in order from the
   procedure's bindings (a literal, or an earlier step's output in this run), the knowledge
   graph (entities of the argument's type named in the task, and the ids tools returned for
@@ -21,7 +21,9 @@
 - confidence: each candidate's score as a number in 0..1 (``1 - e^-score``, so the order
   is the score's).
 
-Every read is indexed and bounded; the only model is the query encoder of the tool search.
+Every read is indexed and bounded; the only model is the query encoder of the tool search
+(the task is encoded once, for the search and the procedures' meaning alike), and the same
+encoder once per process for each procedure pattern a match reads by meaning.
 """
 
 from __future__ import annotations
@@ -50,15 +52,14 @@ from memory_service.domain.tools import (
 from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
 from memory_service.modules.retrieval.engine import QueryVectors
 from memory_service.modules.tools.index import ToolIndex
-from memory_service.modules.tools.patterns import similarity, task_pattern, task_slots
+from memory_service.modules.tools.matching import ProcedureMatcher, TaskVectors
+from memory_service.modules.tools.patterns import task_slots
 from memory_service.modules.tools.skills import skill_view
 from memory_service.ports.intelligence import GraphStore
 from memory_service.ports.uow import UnitOfWorkFactory
 
 #: The most candidates a caller may ask for.
 HINTS_K_MAX: Final = 20
-#: Pattern similarity at which a stored procedure is taken to be about the task.
-PROCEDURE_MATCH: Final = 0.6
 #: Active procedures read per request before ranking (the newest learned).
 VISIBLE_PROCEDURES_MAX: Final = 100
 #: How much a tool's success rate moves its score around the neutral 0.5.
@@ -102,17 +103,6 @@ _SLOT_CUES: Final = (
     ("id", ("id", "number", "code", "ref", "reference", "sku")),
     ("num", ("qty", "quantity", "count", "number", "amount")),
 )
-
-
-def rank_procedures(
-    task: str, procedures: Sequence[StoredProcedure], k: int
-) -> list[StoredProcedure]:
-    """The procedures about this task (pattern similarity), best first."""
-    pattern = task_pattern(task)
-    scored = [(similarity(pattern, p.pattern), p) for p in procedures]
-    kept = [(s, p) for s, p in scored if s >= PROCEDURE_MATCH]
-    kept.sort(key=lambda sp: (-sp[0], -sp[1].success_rate, -sp[1].support, sp[1].procedure_id))
-    return [p for _, p in kept[:k]]
 
 
 def _norm(name: str) -> str:
@@ -263,17 +253,31 @@ class _Resolution:
 
 class ToolHintsService:
     def __init__(
-        self, uow_factory: UnitOfWorkFactory, index: ToolIndex, graph: GraphStore | None
+        self,
+        uow_factory: UnitOfWorkFactory,
+        index: ToolIndex,
+        graph: GraphStore | None,
+        matcher: ProcedureMatcher | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.index = index
         self.graph = graph
+        #: which procedures a task is about; without one, by the pattern's words alone
+        self.matcher = matcher or ProcedureMatcher(None)
 
     async def procedures(
-        self, ctx: MemoryExecutionContext, task: str, scope_keys: Sequence[str], *, k: int
+        self,
+        ctx: MemoryExecutionContext,
+        task: str,
+        scope_keys: Sequence[str],
+        *,
+        k: int,
+        vectors: TaskVectors = None,
     ) -> list[StoredProcedure]:
         """Active procedures the caller may read, about this task, best first: its audience's,
-        and its agent's learned skills (``ProcedureRepository.visible``)."""
+        and its agent's learned skills (``ProcedureRepository.visible``), matched by
+        ``ProcedureMatcher``. ``vectors``: the task's, when the request has (or is computing)
+        them."""
         async with self.uow_factory() as uow:
             visible = await uow.procedures.visible(
                 ctx.tenant_id,
@@ -282,7 +286,7 @@ class ToolHintsService:
                 user_id=ctx.user_id,
                 limit=VISIBLE_PROCEDURES_MAX,
             )
-        return rank_procedures(task, visible, k)
+        return await self.matcher.rank(task, visible, k, vectors=vectors)
 
     async def hints(
         self,
@@ -296,9 +300,12 @@ class ToolHintsService:
         profile: Sequence[Any] = (),
         vectors: QueryVectors | None = None,
     ) -> ToolHints:
+        if vectors is None:
+            # encoded once: the catalog search and a procedure the words miss both read them
+            vectors = await self.index.encode(task)
         # the stored procedures and the catalog search are independent reads
         procedures, found = await asyncio.gather(
-            self.procedures(ctx, task, scope_keys, k=3),
+            self.procedures(ctx, task, scope_keys, k=3, vectors=vectors),
             self.index.search(ctx.tenant_id, ctx.workspace_id, task, vectors=vectors),
         )
         plan = next(

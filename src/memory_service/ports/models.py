@@ -45,6 +45,9 @@ class EmbeddingProvider(Protocol):
     dimension: int
     #: the least cosine a ranked item needs to be packed (``DenseModel.relevance_floor``)
     relevance_floor: float
+    #: the least cosine a learned procedure's pattern needs to a task that words it
+    #: differently (``DenseModel.procedure_cosine``; 0: no such match)
+    procedure_cosine: float
 
     async def embed_documents(self, texts: Sequence[str]) -> list[list[float]]: ...
 
