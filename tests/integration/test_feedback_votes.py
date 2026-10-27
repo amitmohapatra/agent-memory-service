@@ -711,18 +711,22 @@ async def test_an_agent_for_an_admin_edits_only_its_users_memories(container, uo
 )
 async def test_review_reports_read_an_index(container, uow_factory, query, index) -> None:
     """``review=approved|dismissed`` and its grouped form read the rows of one state through
-    an index (migration 0027), not the tenant's whole history. Sequential scans are switched
-    off so the plan shows an index is usable at all; on a table this small the planner
-    would otherwise rightly prefer a scan. Which of the two review indexes it picks for the
-    grouped form depends on the statistics (the target one pays off on a large table), so
-    either one passes; a plan through neither does not."""
+    an index (migration 0027), not the tenant's whole history. Sequential and bitmap scans
+    are switched off so the plan shows an index is usable at all; on a table this small the
+    planner would otherwise rightly prefer a scan, and a bitmap scan of the tenant-only
+    ``ix_feedback_target`` filtered by state won while the table had no statistics yet
+    (autovacuum had not analyzed it), so it is analyzed first. Which of the two review
+    indexes it picks for the grouped form depends on the statistics (the target one pays
+    off on a large table), so either one passes; a plan through neither does not."""
     import psycopg
 
     from tests.conftest import DB_URL
 
     url = DB_URL.replace("postgresql+psycopg://", "postgresql://")
-    with psycopg.connect(url) as conn:
+    with psycopg.connect(url, autocommit=True) as conn:
+        conn.execute("ANALYZE feedback")
         conn.execute("SET enable_seqscan = off")
+        conn.execute("SET enable_bitmapscan = off")
         plan = "\n".join(row[0] for row in conn.execute(f"EXPLAIN {query}").fetchall())
     assert index in plan or "ix_feedback_review" in plan, plan
     assert "Seq Scan" not in plan, plan
