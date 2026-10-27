@@ -836,6 +836,7 @@ async def test_an_approval_counts_once_and_only_for_a_call_its_run_recorded() ->
             tool_id="tol_t",
             tool_name="transfer_stock",
             run_id="run_7",
+            agent_id="ops",
             args_hash=stable_hash(ARGS),
         )
     )
@@ -869,6 +870,7 @@ async def test_one_recorded_call_backs_one_approval_whatever_interrupt_id_it_nam
             tool_id="tol_t",
             tool_name="transfer_stock",
             run_id="run_7",
+            agent_id="ops",
             step=step,
             args_hash=stable_hash(ARGS),
         )
@@ -1002,12 +1004,13 @@ async def test_a_memory_deleted_while_the_judge_waited_moves_nothing_and_the_run
 # ---------------------------------------------------------------- edge cases of approval decisions
 
 
-def _transfer(run_id: str = "run_7", step: int = 0) -> ToolInvocation:
+def _transfer(run_id: str = "run_7", step: int = 0, agent_id: str = "ops") -> ToolInvocation:
     return ToolInvocation(
         tenant_id="acme",
         tool_id="tol_t",
         tool_name="transfer_stock",
         run_id=run_id,
+        agent_id=agent_id,
         step=step,
         args_hash=stable_hash(ARGS),
     )
@@ -1030,9 +1033,10 @@ async def test_a_decision_sent_again_under_its_id_is_stored_once_and_counted_onc
 
 async def test_a_decision_counts_only_for_the_agent_that_sent_it() -> None:
     """A credential acting as another agent names that agent's run: the approval is counted
-    for the agent it acts as, never for the agent whose rule a person's question guards."""
+    for the agent it acts as, never for the agent whose rule a person's question guards, and
+    only the calls it recorded under that run id back it."""
     service, run, uow = _projecting()
-    run.calls.append(_transfer())
+    run.calls.extend([_transfer(step=0), _transfer(step=1, agent_id="intruder")])
     counted: list[str] = []
 
     async def count_approval(tenant_id, agent_id, tool, shape, counter) -> None:
@@ -1040,11 +1044,37 @@ async def test_a_decision_counts_only_for_the_agent_that_sent_it() -> None:
 
     run.count_approval = count_approval  # type: ignore[method-assign]
     intruder = OWNER.model_copy(update={"agent_id": "intruder", "agent_run_id": "run_7"})
-    await service.submit(
-        uow, intruder, _decision(FeedbackVerdict.APPROVE, "fb_i", interrupt_id="i")
-    )
-    await service.project("acme", "fb_i", attempt=CALL_RECORD_CHECKS)
-    assert counted == ["intruder"]
+    for feedback_id, interrupt in [("fb_i", "i"), ("fb_i2", "i2")]:
+        await service.submit(
+            uow, intruder, _decision(FeedbackVerdict.APPROVE, feedback_id, interrupt_id=interrupt)
+        )
+        await service.project("acme", feedback_id, attempt=CALL_RECORD_CHECKS)
+    assert counted == ["intruder"], "ops' call under the same run id backs no second approval"
+
+
+async def test_an_approval_naming_another_agents_run_and_call_is_not_counted() -> None:
+    """Two agents of one tenant may send the same run id. Agent B's approval naming the run,
+    tool and arguments agent A recorded is not backed by A's call; A's own approval still
+    counts, for A."""
+    service, run, uow = _projecting()
+    run.calls.append(_transfer())  # recorded by "ops" only
+    counted: list[str] = []
+
+    async def count_approval(tenant_id, agent_id, tool, shape, counter) -> None:
+        counted.append(agent_id)
+
+    run.count_approval = count_approval  # type: ignore[method-assign]
+    other = OWNER.model_copy(update={"agent_id": "intruder", "agent_run_id": "run_7"})
+    own = OWNER.model_copy(update={"agent_id": "ops", "agent_run_id": "run_7"})
+    await service.submit(uow, other, _decision(FeedbackVerdict.APPROVE, "fb_b", interrupt_id="b"))
+    theirs = await service.project("acme", "fb_b", attempt=CALL_RECORD_CHECKS)
+    assert theirs is not None and theirs.action is ProjectionAction.NONE
+    assert theirs.reason == "the run recorded no call of that tool with those arguments"
+    assert counted == []
+    await service.submit(uow, own, _decision(FeedbackVerdict.APPROVE, "fb_a", interrupt_id="a"))
+    mine = await service.project("acme", "fb_a", attempt=CALL_RECORD_CHECKS)
+    assert mine is not None and mine.action is ProjectionAction.TOOL_CALL_COUNTED
+    assert counted == ["ops"]
 
 
 def test_a_context_naming_a_run_must_name_its_agent() -> None:
