@@ -184,6 +184,34 @@ def _may_lead(tool: str | None, task: str, entries: dict[str, ToolDescriptor]) -
     return None
 
 
+def _rescored(
+    candidates: Sequence[ToolCandidate],
+    found: Sequence[tuple[str, float]],
+    plan: StoredProcedure | None,
+    stats: dict[str, ToolStats],
+    available: Sequence[str] | None,
+) -> list[ToolCandidate]:
+    """The same candidates scored with no next step (it is forbidden): none leads on the
+    plan's bonus."""
+    kept = {c.name for c in candidates}
+    return [
+        c for c in _candidates(found, plan, None, stats, available, HINTS_K_MAX) if c.name in kept
+    ]
+
+
+def _guarded(hints: ToolHints, forbidden: dict[str, str]) -> ToolHints:
+    """``hints`` less what they would hand over of a forbidden tool: it is never the next
+    step, and no argument of it is found or asked for."""
+    return hints.model_copy(
+        update={
+            "next": None if hints.next in forbidden else hints.next,
+            "prefill": {k: p for k, p in hints.prefill.items() if p.tool not in forbidden},
+            "missing": [m for m in hints.missing if m.tool not in forbidden],
+            "forbidden": forbidden,
+        }
+    )
+
+
 def _forbidden(
     candidates: Sequence[ToolCandidate],
     task: str,
@@ -372,22 +400,17 @@ class ToolHintsService:
         forbidden = _forbidden(candidates, task, prefill, profile)
         if step in forbidden:
             # the plan's next step is a call the user's standing rule forbids: it leads nothing
-            kept = {c.name for c in candidates}
             step = None
-            candidates = [
-                c
-                for c in _candidates(found, plan, None, stats, available, HINTS_K_MAX)
-                if c.name in kept
-            ]
+            candidates = _rescored(candidates, found, plan, stats, available)
         tool = step or next((c.name for c in candidates if _may_lead(c.name, task, entries)), None)
-        return ToolHints(
+        hints = ToolHints(
             candidates=candidates,
             plan=_plan_hint(plan),
-            next=None if tool in forbidden else tool,
-            prefill={key: p for key, p in prefill.items() if p.tool not in forbidden},
-            missing=[m for m in missing if m.tool not in forbidden],
-            forbidden=forbidden,
+            next=tool,
+            prefill=prefill,
+            missing=missing,
         )
+        return _guarded(hints, forbidden)
 
     async def _every_argument(
         self, jobs: list[_Resolution]
