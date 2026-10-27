@@ -366,3 +366,59 @@ def test_a_persons_words_an_event_and_an_agents_result_still_form_memories() -> 
     assert _told(_obs(CODE, role="ASSISTANT")), "a chat app's assistant, outside any run"
     assert _told(_obs("Draft plan.", HARNESS, kind=ObservationKind.AGENT_RESULT, role=None))
     assert not _told(_obs("Thinking: UTC.", HARNESS, role="AGENT"))
+
+
+#: The same three kinds of a run's own writing as above, in five languages: whose words they
+#: are, not the language they are in, decides that they form no memory.
+_RUN_OWN_WORDS = {
+    "de": (
+        "Das Lieferantensystem ist nicht erreichbar, daher kann ich die Lieferzeit nicht nennen.",
+        "supplier_eta fehlgeschlagen: das Lieferantensystem ist nicht erreichbar",
+    ),
+    "es": (
+        "El sistema del proveedor no está disponible, así que no puedo dar la fecha de entrega.",
+        "supplier_eta falló: el sistema del proveedor no está disponible",
+    ),
+    "hi": (
+        "आपूर्तिकर्ता प्रणाली उपलब्ध नहीं है, इसलिए मैं डिलीवरी का समय नहीं बता सकता।",
+        "supplier_eta विफल: आपूर्तिकर्ता प्रणाली उपलब्ध नहीं है",
+    ),
+    "ar": (
+        "نظام المورد غير متاح، لذلك لا أستطيع تحديد موعد التسليم.",
+        "فشل supplier_eta: نظام المورد غير متاح",
+    ),
+    "zh": (
+        "供应商系统不可用，因此我无法确定交货时间。",  # noqa: RUF001
+        "supplier_eta 失败：供应商系统不可用",  # noqa: RUF001
+    ),
+}
+#: A person's own statement in each language: still theirs to remember.
+_PERSONS_WORDS = {
+    "de": "Der Code für den Gefahrstoffkäfig in Lager 3 ist 8492.",
+    "es": "El código de la jaula de materiales peligrosos del almacén 3 es 8492.",
+    "hi": "गोदाम 3 में खतरनाक सामग्री के पिंजरे का कोड 8492 है।",
+    "ar": "رمز قفص المواد الخطرة في المستودع 3 هو 8492.",
+    "zh": "3号仓库危险品笼的密码是8492。",
+}
+
+
+@pytest.mark.parametrize("language", sorted(_RUN_OWN_WORDS))
+@pytest.mark.parametrize(("role", "which"), [("ASSISTANT", 0), ("TOOL", 1)])
+async def test_a_runs_own_words_form_no_memory_in_any_language(language, role, which) -> None:
+    """B15 in de/es/hi/ar/zh: an agent run's hedge and its tool's error stay in the
+    transcript and form nothing, whatever language the run wrote them in."""
+    text = _RUN_OWN_WORDS[language][which]
+    observations = _Observations(_obs(text, HARNESS, role=role))
+    pipeline = ObservationPipeline(
+        lambda: _Uow(observations),  # type: ignore[arg-type,return-value]
+        _Unreachable(),  # type: ignore[arg-type]
+        settings=MemoryIntelligenceSettings(),
+    )
+    assert await pipeline.run({"tenant_id": "acme", "observation_id": "obs_1"}) == []
+    assert observations.status == "NO_MEMORY"
+
+
+@pytest.mark.parametrize("language", sorted(_PERSONS_WORDS))
+def test_a_persons_words_relayed_by_a_run_still_form_memories_in_any_language(language) -> None:
+    assert _told(_obs(_PERSONS_WORDS[language], HARNESS))
+    assert not _told(_obs(_RUN_OWN_WORDS[language][1], HARNESS, role="TOOL"))

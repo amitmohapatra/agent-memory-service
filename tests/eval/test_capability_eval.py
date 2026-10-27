@@ -804,6 +804,67 @@ async def test_harness_mode_waits_for_the_model_and_scores_a_failed_call_as_an_e
     assert "502" in record["error"]
 
 
+def test_harness_mode_wraps_with_the_harness_run_timeout_and_grounding_off() -> None:
+    # the harness is not installed beside the service, so the calls are checked in the source:
+    # wrap() takes run_timeout= (working time; the old timeout= is a TypeError at run time),
+    # and grounding sampling is turned off with without={"grounding"}, the harness's switch —
+    # its Settings hold no grounding_sample, which model_copy(update=) would take silently
+    import ast
+
+    from benchmark.capabilities import harness_mode
+
+    source = Path(harness_mode.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    wraps = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "wrap"
+    ]
+    assert wraps, "harness mode wraps its answer function"
+    for call in wraps:
+        keywords = {k.arg: k.value for k in call.keywords}
+        assert "run_timeout" in keywords
+        assert "timeout" not in keywords
+        assert ast.literal_eval(keywords["without"]) == {"grounding"}
+    assert "grounding_sample" not in source
+    # no run passes without={"records"} (the harness refuses the name): each question is
+    # isolated by a scope of its own instead, its run asked as the user its scenario is
+    # written as
+    runs = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "run"
+        and ast.unparse(node.func.value) == "agent"  # the wrapped agent's, not asyncio's
+    ]
+    assert runs, "harness mode runs the agent"
+    for call in runs:
+        keywords = {k.arg: k.value for k in call.keywords}
+        assert "without" not in keywords
+        assert ast.unparse(keywords["user"]) == "w.user_id"
+    assert '"records"' not in source
+
+
+def test_harness_mode_asks_every_question_as_a_user_of_its_own() -> None:
+    # what a run records lands in its user's memory (and an agent's own notes are bound to
+    # that user): a user per question keeps one answer out of the next question's memory
+    from benchmark.capabilities import harness_mode
+    from benchmark.capabilities.dataset import cases
+    from benchmark.capabilities.runner import identity
+
+    scenario = max(DATASET.scenarios, key=lambda s: len(list(cases(s, "en"))))
+    asked = list(cases(scenario, "en"))
+    assert len(asked) > 1, "a scenario with several questions"
+    users = [harness_mode.question_user(case) for case in asked]
+    assert len(set(users)) == len(users)
+    assert identity(scenario.id, "en") not in users  # not the runner's per-scenario user
+    assert users == [harness_mode.question_user(case) for case in asked]  # stable
+    assert harness_mode.IDENTITIES == "question-language/v1"
+
+
 # --------------------------------------------------------------------------- end to end
 
 

@@ -789,3 +789,117 @@ async def test_an_approved_vote_whose_job_has_not_run_never_counts_twice(
     p3 = (await _get(container, uow_factory, v3.feedback_id)).projection
     assert p2 is not None and p2.action is ProjectionAction.NONE
     assert p3 is not None and p3.action is ProjectionAction.NONE and p3.reversed is None
+
+
+async def test_a_judge_verdict_citing_memories_erased_or_retracted_while_it_waited(
+    container, uow_factory
+) -> None:
+    """The judge's reject cites two memories; while it waits for review one is forgotten and
+    the other retracted. Approved, it labels the run and moves neither (no 404, no lost
+    verdict, no confidence change on a memory that is no longer current)."""
+    memory = await _first_memory(container, uow_factory)
+    await _observe(container, uow_factory, ALICE, "The quarterly stock count is on Fridays.")
+    other = next(
+        m for m in await _memories(uow_factory, ALICE, container) if "stock count" in m.content
+    )
+    cited = [{"source_type": "memory", "source_id": m.memory_id} for m in (memory, other)]
+    judged = await _vote(
+        container,
+        uow_factory,
+        HELPER,
+        run_vouched=True,
+        target_kind=FeedbackTargetKind.RUN,
+        target_id="run_helper",
+        verdict=FeedbackVerdict.REJECT,
+        source=FeedbackSource.JUDGE,
+        evidence_refs=cited,
+    )
+    assert judged.pending
+    async with uow_factory() as uow:
+        await container.services["memory"].forget(uow, ALICE, memory.memory_id)
+        await uow.commit()
+    await container.tasks.drain()
+    await _vote(  # the administrator's own thumbs-down: applied at once
+        container,
+        uow_factory,
+        ALICE,
+        trusted=True,
+        target_kind=FeedbackTargetKind.MEMORY,
+        target_id=other.memory_id,
+        verdict=FeedbackVerdict.REJECT,
+    )
+    async with uow_factory() as uow:
+        retracted = await uow.memories.get("acme", other.memory_id)
+    assert retracted is not None and retracted.temporal.status is TemporalStatus.RETRACTED
+
+    await _bulk(container, uow_factory, approve=True, feedback_ids=[judged.feedback_id])
+    applied = await _get(container, uow_factory, judged.feedback_id)
+    assert applied.projection is not None
+    assert applied.projection.action is ProjectionAction.RUN_LABELLED
+    assert applied.projection.memory_ids == []
+    async with uow_factory() as uow:
+        outcome = await uow.tools.outcome("acme", "run_helper")
+        after = await uow.memories.get("acme", other.memory_id)
+    assert outcome is not None and not outcome.success and outcome.source == "judge"
+    assert after is not None and after.confidence == retracted.confidence
+
+
+async def test_approvals_of_one_recorded_call_racing_count_once_and_stay_in_their_tenant(
+    container, uow_factory
+) -> None:
+    """B6 against the database: one call the run recorded, two approvals naming two
+    interrupts projected at the same moment, and the first replayed under its id. One is
+    counted (``_spent`` is serialised per run); another tenant's identical decision counts in
+    that tenant only, and its reviewer is no reviewer here."""
+    from memory_service.modules.feedback.service import CALL_RECORD_CHECKS
+    from memory_service.modules.tools.approvals import reviewers
+    from trellis.memory.approval import arg_shape
+
+    args = {"from": "W1", "to": "S12", "units": 4}
+    shape = arg_shape(args)
+    tools, feedback = container.services["tool_memory"], container.services["feedback"]
+    ops = ALICE.model_copy(update={"agent_id": "ops", "agent_run_id": "run_ops"})
+    theirs = MemoryExecutionContext(
+        tenant_id="globex", user_id="gina", agent_id="ops", agent_run_id="run_ops"
+    )
+
+    def decision(tenant_id: str, feedback_id: str, interrupt: str, reviewer: str) -> Feedback:
+        return Feedback(
+            feedback_id=feedback_id,
+            tenant_id=tenant_id,
+            target_kind=FeedbackTargetKind.TOOL_CALL,
+            target_id=f"call_{interrupt}",
+            verdict=FeedbackVerdict.APPROVE,
+            source=FeedbackSource.INTERRUPT,
+            reviewer=reviewer,
+            metadata={"tool": "transfer_stock", "args": args, "interrupt_id": interrupt},
+        )
+
+    sent = [
+        (ops, decision("acme", new_id("feedback"), "int_a", "user:lead")),
+        (ops, decision("acme", new_id("feedback"), "int_b", "user:lead")),
+        (theirs, decision("globex", new_id("feedback"), "int_g", "user:gina")),
+    ]
+    async with uow_factory() as uow:
+        for ctx in (ops, theirs):
+            await tools.record(uow, ctx, tool="transfer_stock", args=args, step=0)
+        for ctx, record in sent:
+            stored, created = await feedback.submit(uow, ctx, record)
+            assert created and not stored.pending
+        _, replayed = await feedback.submit(uow, ops, sent[0][1])
+        assert not replayed
+        await uow.commit()
+    ids = [(record.tenant_id, record.feedback_id) for _, record in sent]
+    projected = await asyncio.gather(
+        *(feedback.project(t, f, attempt=CALL_RECORD_CHECKS) for t, f in ids)
+    )
+    await container.tasks.drain()
+    actions = [p.action if p else None for p in projected]
+    assert actions[:2].count(ProjectionAction.TOOL_CALL_COUNTED) == 1
+    assert actions[2] is ProjectionAction.TOOL_CALL_COUNTED
+    async with uow_factory() as uow:
+        here = await uow.tools.approval_pattern("acme", "ops", "transfer_stock", shape)
+        there = await uow.tools.approval_pattern("globex", "ops", "transfer_stock", shape)
+        assert here is not None and here.approvals == 1
+        assert there is not None and there.approvals == 1
+        assert await reviewers(uow, "acme", here) == {"user:lead"}
