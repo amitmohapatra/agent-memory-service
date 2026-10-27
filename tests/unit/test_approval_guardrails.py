@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.errors import Conflict
+from memory_service.domain.errors import Conflict, NotFound
 from memory_service.domain.feedback import (
     Feedback,
     FeedbackProjection,
@@ -20,6 +20,7 @@ from memory_service.domain.feedback import (
 from memory_service.domain.learning import ApprovalCounts
 from memory_service.domain.tools import ToolAnnotations, ToolDescriptor
 from memory_service.modules.tools import approvals
+from trellis.memory.approval import arg_shape, evaluate
 
 SHAPE = "path:str"
 AUTO = ApprovalCounts(agent_id="bot", tool="t", arg_shape=SHAPE, approvals=20)
@@ -184,3 +185,55 @@ async def test_approve_automatically_needs_two_different_reviewers() -> None:
     with pytest.raises(Conflict, match="reviewers"):
         await approvals.accept(uow, CTX, approvals.suggestion_id(AUTO))
     assert tools.upserted is None
+
+
+# --------------------------------------------------------------------------- edge cases
+
+
+async def test_only_the_agent_a_suggestion_was_learned_from_may_accept_it() -> None:
+    """A spoofed agent id: another agent's credential, even naming the same tool and shape,
+    finds no such suggestion and changes no catalog entry."""
+    tools = _Tools(AUTO, _tool("write"))
+    uow: Any = SimpleNamespace(tools=tools, revisions=_Revisions(), feedback=_Decisions())
+    intruder = CTX.model_copy(update={"agent_id": "intruder"})
+    with pytest.raises(NotFound):
+        await approvals.accept(uow, intruder, approvals.suggestion_id(AUTO))
+    with pytest.raises(NotFound):
+        await approvals.accept(uow, CTX, "not-a-suggestion-id")
+    assert tools.upserted is None and not tools.ensured
+
+
+async def test_a_reviewer_who_only_rejected_or_edited_is_no_second_approver() -> None:
+    """Two reviewers means two who approved calls of that shape: a colleague's rejections or
+    edits of it are no say for asking less."""
+    decisions = _Decisions("user:lead")
+    for n, verdict in enumerate((FeedbackVerdict.REJECT, FeedbackVerdict.EDIT), start=100):
+        decisions.decisions.append(
+            _approval("user:ops", n).model_copy(
+                update={"verdict": verdict, "correction": {"path": "/x"}}
+            )
+        )
+    uow: Any = SimpleNamespace(feedback=decisions)
+    assert await approvals.reviewers(uow, "acme", AUTO) == {"user:lead"}
+    assert await approvals.offer(uow, "acme", AUTO, _tool("write")) is None
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        {"path": "/p", "amount": 50},
+        {"path": "/p", "amount": 500},
+        {"amount": 500},
+        {"path": "/p"},
+        {"path": 3},
+        {},
+    ],
+)
+def test_always_ask_only_ever_adds_questions_to_an_administrators_rule(args: dict) -> None:
+    """A learned "always ask" composed onto ``amount > 100``: every call the administrator's
+    rule asks about is still asked about, whatever its shape."""
+    admin = "amount > 100"
+    composed = approvals.compose(admin, "write", "always_ask", SHAPE)
+    if evaluate(admin, args):
+        assert evaluate(composed, args)
+    assert evaluate(composed, args) is (evaluate(admin, args) or arg_shape(args) == SHAPE)

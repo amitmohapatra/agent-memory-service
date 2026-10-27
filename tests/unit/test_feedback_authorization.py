@@ -26,6 +26,7 @@ from memory_service.domain.tools import RunOutcome, ToolInvocation, stable_hash
 from memory_service.modules.feedback.service import CALL_RECORD_CHECKS, FeedbackService
 from memory_service.modules.feedback.votes import ALREADY_COUNTED_REASON, is_vote
 from memory_service.modules.grounding.judge import judge_run
+from memory_service.modules.tools.service import TASK_TOOLS_LEARN
 
 OWNER = MemoryExecutionContext(tenant_id="acme", user_id="alice", workspace_id="fin")
 READER = MemoryExecutionContext(tenant_id="acme", user_id="carol", workspace_id="fin")
@@ -892,3 +893,179 @@ async def test_an_approval_before_its_call_is_recorded_is_looked_at_again() -> N
     [job] = uow.jobs
     assert job.payload["attempt"] == 1 and job.schedule_in_seconds
     assert uow.feedback.rows[("acme", "fb_a")].projection is None and run.counted == []
+
+
+# ---------------------------------------------------------------- edge cases of the judge and of labels
+
+
+async def test_a_judge_verdict_sent_again_under_its_id_is_stored_once_and_applied_once() -> None:
+    """A /v1/verify call retried (or a relayed verdict replayed) carries the same feedback id:
+    one record, one review, one change to the run and its memories."""
+    service, run, uow = _projecting()
+    admin = READER.model_copy(update={"agent_run_id": "run_9"})
+    first, created = await service.submit(
+        uow, admin, _judge(FeedbackVerdict.REJECT, "fb_jr"), run_vouched=True
+    )
+    again, created_again = await service.submit(
+        uow, admin, _judge(FeedbackVerdict.REJECT, "fb_jr"), run_vouched=True
+    )
+    assert (created, created_again) == (True, False) and again.feedback_id == first.feedback_id
+    assert [fid for (_, fid) in uow.feedback.rows] == ["fb_jr"]
+    await service.review(uow, "acme", "fb_jr", approve=True, reviewed_by="carol")
+    with pytest.raises(Conflict):
+        await service.review(uow, "acme", "fb_jr", approve=True, reviewed_by="carol")
+    projected = [await service.project("acme", "fb_jr") for _ in range(3)]
+    assert projected[0] == projected[1] == projected[2]
+    assert run.confidence == {"mem_1": 0.85}, "moved once"
+
+
+async def test_a_person_overrides_an_applied_judge_verdict_and_a_later_judge_moves_nothing() -> (
+    None
+):
+    """Precedence the other way round from B12: the judge's approved reject labelled the run;
+    a person's confirm then decides it, and the judge's next verdict, even approved, is
+    outranked: neither the outcome nor the memory it cites moves."""
+    service, run, uow = _projecting()
+    await service.submit(uow, OWNER, _judge(FeedbackVerdict.REJECT, "fb_j1"), run_vouched=True)
+    await service.review(uow, "acme", "fb_j1", approve=True, reviewed_by="carol")
+    await service.project("acme", "fb_j1")
+    assert run.outcomes["run_9"].source == "judge" and run.confidence == {"mem_1": 0.85}
+
+    person, _ = await service.submit(uow, READER, _run_vote(FeedbackVerdict.CONFIRM))
+    assert not person.pending, "a tenant admin in person"
+    labelled = await service.project("acme", person.feedback_id)
+    assert labelled is not None and labelled.action is ProjectionAction.RUN_LABELLED
+    assert run.outcomes["run_9"].source == "human" and run.outcomes["run_9"].success
+
+    await service.submit(uow, OWNER, _judge(FeedbackVerdict.REJECT, "fb_j2"), run_vouched=True)
+    await service.review(uow, "acme", "fb_j2", approve=True, reviewed_by="carol")
+    outranked = await service.project("acme", "fb_j2")
+    assert outranked is not None and outranked.action is ProjectionAction.NONE
+    assert run.outcomes["run_9"].source == "human" and run.outcomes["run_9"].success
+    assert run.confidence == {"mem_1": 0.85}
+
+
+async def test_a_runs_own_status_never_overrides_the_judge() -> None:
+    """The run's own word ranks lowest: after the judge's verdict labelled the run, the
+    status the run reports (applied as it arrives) changes nothing."""
+    service, run, uow = _projecting()
+    await service.submit(uow, OWNER, _judge(FeedbackVerdict.REJECT, "fb_j1"), run_vouched=True)
+    await service.review(uow, "acme", "fb_j1", approve=True, reviewed_by="carol")
+    await service.project("acme", "fb_j1")
+    run_ctx = OWNER.model_copy(update={"agent_id": "ref", "agent_run_id": "run_9"})
+    status, _ = await service.submit(
+        uow, run_ctx, _run_vote(FeedbackVerdict.CONFIRM, source="system"), run_vouched=True
+    )
+    assert not status.pending
+    projected = await service.project("acme", status.feedback_id)
+    assert projected is not None and projected.action is ProjectionAction.NONE
+    assert run.outcomes["run_9"].source == "judge" and not run.outcomes["run_9"].success
+
+
+async def test_a_late_label_queues_the_run_to_be_learned_again_and_its_own_success_does_not() -> (
+    None
+):
+    """A label that is evidence (a person's, the judge's, a reported failure) re-queues the
+    learning job, so a run already learned is re-mined under its new label; the run's own
+    unverified success is its outcome only and queues nothing."""
+    service, run, uow = _projecting()
+    run_ctx = OWNER.model_copy(update={"agent_id": "ref", "agent_run_id": "run_9"})
+    own, _ = await service.submit(
+        uow, run_ctx, _run_vote(FeedbackVerdict.CONFIRM, source="system"), run_vouched=True
+    )
+    uow.jobs.clear()
+    await service.project("acme", own.feedback_id)
+    assert run.outcomes["run_9"].success and uow.jobs == []
+
+    late, _ = await service.submit(uow, READER, _run_vote(FeedbackVerdict.REJECT))
+    uow.jobs.clear()
+    await service.project("acme", late.feedback_id)
+    assert [j.task_name for j in uow.jobs] == [TASK_TOOLS_LEARN]
+    assert run.outcomes["run_9"].source == "human" and not run.outcomes["run_9"].success
+
+
+async def test_a_memory_deleted_while_the_judge_waited_moves_nothing_and_the_run_is_labelled() -> (
+    None
+):
+    """The judge's reject cites a memory; the memory is erased while the verdict waits for
+    review. Approved, the verdict still labels the run and moves no memory (none is there)."""
+    service, run, uow = _projecting()
+    await service.submit(uow, OWNER, _judge(FeedbackVerdict.REJECT, "fb_jd"), run_vouched=True)
+    del run.confidence["mem_1"]  # erased: the repository no longer returns it
+    await service.review(uow, "acme", "fb_jd", approve=True, reviewed_by="carol")
+    projected = await service.project("acme", "fb_jd")
+    assert projected is not None and projected.action is ProjectionAction.RUN_LABELLED
+    assert projected.memory_ids == []
+    assert run.outcomes["run_9"].source == "judge" and not run.outcomes["run_9"].success
+
+
+# ---------------------------------------------------------------- edge cases of approval decisions
+
+
+def _transfer(run_id: str = "run_7", step: int = 0) -> ToolInvocation:
+    return ToolInvocation(
+        tenant_id="acme",
+        tool_id="tol_t",
+        tool_name="transfer_stock",
+        run_id=run_id,
+        step=step,
+        args_hash=stable_hash(ARGS),
+    )
+
+
+async def test_a_decision_sent_again_under_its_id_is_stored_once_and_counted_once() -> None:
+    service, run, uow = _projecting()
+    ctx = OWNER.model_copy(update={"agent_id": "ops", "agent_run_id": "run_7"})
+    run.calls.extend([_transfer(step=0), _transfer(step=1)])
+    record = _decision(FeedbackVerdict.APPROVE, "fb_once", interrupt_id="int_1")
+    _, created = await service.submit(uow, ctx, record)
+    _, again = await service.submit(uow, ctx, record)
+    assert (created, again) == (True, False)
+    first = await service.project("acme", "fb_once", attempt=CALL_RECORD_CHECKS)
+    second = await service.project("acme", "fb_once", attempt=CALL_RECORD_CHECKS)
+    assert first == second and first is not None
+    assert first.action is ProjectionAction.TOOL_CALL_COUNTED
+    assert [c for _, _, c in run.counted] == ["approvals"], "the second recorded call is unspent"
+
+
+async def test_a_decision_counts_only_for_the_agent_that_sent_it() -> None:
+    """A credential acting as another agent names that agent's run: the approval is counted
+    for the agent it acts as, never for the agent whose rule a person's question guards."""
+    service, run, uow = _projecting()
+    run.calls.append(_transfer())
+    counted: list[str] = []
+
+    async def count_approval(tenant_id, agent_id, tool, shape, counter) -> None:
+        counted.append(agent_id)
+
+    run.count_approval = count_approval  # type: ignore[method-assign]
+    intruder = OWNER.model_copy(update={"agent_id": "intruder", "agent_run_id": "run_7"})
+    await service.submit(
+        uow, intruder, _decision(FeedbackVerdict.APPROVE, "fb_i", interrupt_id="i")
+    )
+    await service.project("acme", "fb_i", attempt=CALL_RECORD_CHECKS)
+    assert counted == ["intruder"]
+
+
+def test_a_context_naming_a_run_must_name_its_agent() -> None:
+    """A decision counts only on an interrupt of a run, and a run is always an agent's: no
+    approval pattern is learned under an agent of no name."""
+    with pytest.raises(ValueError, match="agent_id"):
+        MemoryExecutionContext(tenant_id="acme", user_id="alice", agent_run_id="run_7")
+
+
+async def test_a_decision_outside_a_run_or_without_a_reviewer_counts_nothing() -> None:
+    service, run, uow = _projecting()
+    run.calls.append(_transfer())
+    in_run = OWNER.model_copy(update={"agent_id": "ops", "agent_run_id": "run_7"})
+    no_run = OWNER.model_copy(update={"agent_id": "ops"})
+    unnamed = _decision(FeedbackVerdict.APPROVE, "fb_r", interrupt_id="i_r")
+    cases = [
+        (no_run, _decision(FeedbackVerdict.APPROVE, "fb_n", interrupt_id="i_n")),
+        (in_run, unnamed.model_copy(update={"reviewer": None})),
+    ]
+    for ctx, record in cases:
+        await service.submit(uow, ctx, record)
+        projected = await service.project("acme", record.feedback_id, attempt=CALL_RECORD_CHECKS)
+        assert projected is not None and projected.action is ProjectionAction.NONE
+    assert run.counted == []

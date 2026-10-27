@@ -401,3 +401,38 @@ async def test_another_tenant_reaches_no_tool_memory_and_no_agent_key(app, runni
     theirs = globex.bind(user_id="u1").agent("quote-bot")
     assert (await theirs.tool_hints(TASK)).plan is None
     assert await theirs.advanced.tools.catalog() == []
+
+
+@pytest.mark.covers("tools.record_invocation", "feedback.submit_feedback")
+async def test_forged_or_one_persons_approvals_suggest_nothing(app, running) -> None:
+    """B6 through the API: five approvals naming five interrupts of one recorded call count
+    once; five runs each approved by one reviewer count five, and still suggest nothing:
+    "approve automatically" needs two different reviewers. Forged ids name no recorded call."""
+    _, harness = await _harness(app)
+    agent = harness.bind(user_id="u1").agent("quote-bot")
+    await agent.advanced.tools.put_catalog(CATALOG)
+    args = {"quote": "Q-1", "price": 1200}
+    once = harness.bind(user_id="u1").agent("quote-bot", agent_run_id="run_once")
+    await once.record_tool(UPDATE, args, output={"ok": True}, task=TASK, step=0)
+    for i in range(5):
+        await once.feedback(
+            "tool_call",
+            f"call_forged_{i}",
+            "approve",
+            reviewer=f"user:lead{i % 2}",
+            metadata={"tool": UPDATE, "args": args, "interrupt_id": f"int_forged_{i}"},
+        )
+    assert await agent.advanced.tools.approval_suggestions() == []
+
+    for i in range(5):
+        run = harness.bind(user_id="u1").agent("quote-bot", agent_run_id=f"run_solo_{i}")
+        solo = {"quote": f"Q-{i}", "price": 1300 + i}
+        await run.record_tool(UPDATE, solo, output={"ok": True}, task=TASK, step=0)
+        await run.feedback(
+            "tool_call",
+            f"call_solo_{i}",
+            "approve",
+            reviewer="user:lead0",  # the reviewer of the one call counted above
+            metadata={"tool": UPDATE, "args": solo, "interrupt_id": f"int_solo_{i}"},
+        )
+    assert await agent.advanced.tools.approval_suggestions() == []

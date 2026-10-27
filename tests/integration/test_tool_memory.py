@@ -3,6 +3,7 @@ learning job (stored procedures, distillation, graph edges) and the hints read b
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pytest
@@ -471,3 +472,51 @@ async def test_an_agent_learns_from_all_its_users_and_shares_once_two_produced_i
     assert await _procedures(container, _ctx("run_x")) == []
     [still] = await skills.list("acme", agent_id="pricing-agent")
     assert still.status == "dismissed" and still.runs == 4
+
+
+async def test_learn_jobs_racing_over_a_burst_of_runs_store_one_procedure(
+    container, uow_factory
+) -> None:
+    """Six runs land at once and two learn jobs race over their calls: one procedure row (the
+    upsert on its pattern), its support the six runs, not twelve; nothing is left to learn."""
+    learning: ToolLearning = container.services["tool_learning"]
+    await asyncio.gather(
+        *(_run_once(container, run=f"run_{i}", quote=f"Q-{i}", sku=f"S-{i}") for i in range(6))
+    )
+    learned = await asyncio.gather(learning.learn(), learning.learn())
+    assert 12 in learned and set(learned) <= {0, 12}
+    [procedure] = await _procedures(container, _ctx())
+    assert procedure.status == "active" and procedure.support == 6
+    async with uow_factory() as uow:
+        audience, _ = audience_of((await uow.tools.invocations_for_run("acme", "run_0"))[0])
+        stored = await uow.procedures.by_pattern("acme", audience, _pattern())
+    assert stored is not None and stored.procedure_id == procedure.procedure_id
+    assert await learning.learn() == 0
+
+
+async def test_a_learn_job_that_died_before_marking_its_calls_mines_them_again_to_the_same_row(
+    container, uow_factory
+) -> None:
+    """A crash between the re-mine and ``mark_learned``: the next job finds the same calls
+    unlearned, mines the same procedure and leaves its row as it was (same id, same support)."""
+    learning: ToolLearning = container.services["tool_learning"]
+    for i in range(2):
+        await _run_once(container, run=f"run_{i}", quote=f"Q-{i}", sku=f"S-{i}")
+    async with uow_factory() as uow:
+        audience, agent = audience_of((await uow.tools.invocations_for_run("acme", "run_0"))[0])
+    await learning._mine("acme", audience, agent, _pattern())  # the job died after this
+    async with uow_factory() as uow:
+        mined = await uow.procedures.by_pattern("acme", audience, _pattern())
+    assert mined is not None and mined.status == "active" and mined.support == 2
+
+    assert await learning.learn() == 4, "nothing was marked learned"
+    async with uow_factory() as uow:
+        again = await uow.procedures.by_pattern("acme", audience, _pattern())
+    assert again is not None
+    assert (again.procedure_id, again.support, again.steps_hash, again.status) == (
+        mined.procedure_id,
+        2,
+        mined.steps_hash,
+        "active",
+    )
+    assert await learning.learn() == 0

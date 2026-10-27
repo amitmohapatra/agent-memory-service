@@ -269,3 +269,22 @@ def test_the_tools_digest_is_the_toolbox_not_its_order_or_repeats():
     assert _tools(reversed(TOOLBOX)).fingerprint() == digest
     assert _tools([*TOOLBOX, TOOLBOX[0]]).fingerprint() == digest
     assert _tools(TOOLBOX[:-1]).fingerprint() != digest
+
+
+@pytest.mark.parametrize("mark", ["?", "\uff1f", "\u061f"])
+async def test_a_question_in_any_script_is_never_served_a_request_to_acts_bundle(mark):
+    """The 354339d fix for every question mark the hints read (Latin, full-width, Arabic):
+    with tools, a request to act built first is not served to the question, and the
+    question's bundle, cached, is served to the same question asked again."""
+    assert not asks_change(f"my timezone{mark}") and asks_change("please my timezone!")
+    builder = tooled_builder()
+    act = await builder.build(CTX, "please my timezone!", tools=_tools())
+    await builder.drain()
+    asked = await builder.build(CTX, f"my timezone{mark}", tools=_tools())
+    assert not asked.cache_hit and builder.engine.calls == 2
+    assert act.tools is not None and act.tools.next == sorted(TOOLBOX)[0]
+    assert asked.tools is not None and asked.tools.next is None
+    await builder.drain()
+    again = await builder.build(CTX, f"please my timezone{mark}", tools=_tools())
+    assert again.cache_hit and again.tools == asked.tools
+    await builder.close()
