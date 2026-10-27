@@ -143,8 +143,12 @@ The samples are deterministic (`_modes.json`): per capability the InventorySmart
 then the first scenario of each other domain in id-hash order. `llm`: English, three phrasing
 kinds (`direct`, `paraphrase`, `implicit`), every capability but scale (extracting a
 1,100-message tenant with a CPU model takes hours; scale is measured in the other two modes).
-`harness`: English, the `direct` phrasing, every capability. Harness runs record nothing back
-(`without={"records"}`), so no answer becomes the next question's memory.
+`harness`: English, the `direct` phrasing, every capability. Each question is asked as a user
+of its own, its scenario written again for that user (users named `question-language/v1`), so
+what its run records — the transcript, the outcome — lands in that user's memory and no answer
+becomes another question's memory: a user's memories are read for that user only, and an
+agent's own notes are bound to the user it runs for. A scenario with several questions is
+therefore written once per question. Grounding sampling is off (`without={"grounding"}`).
 
 ## Metrics
 
