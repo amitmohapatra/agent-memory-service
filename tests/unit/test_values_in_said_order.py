@@ -23,7 +23,13 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import MemoryType, TemporalStatus
 from memory_service.domain.memory import CanonicalMemory, TemporalState
 from memory_service.modules.memory.pipeline import _one_writer_per_user, _replace, supersede
-from memory_service.modules.memory.replacement import Decision, Grade, apply
+from memory_service.modules.memory.replacement import (
+    CrossConversationReplacement,
+    Decision,
+    Grade,
+    apply,
+)
+from tests.unit.test_cross_conversation_replacement import ScriptedNLI, _uow
 
 pytestmark = pytest.mark.unit
 
@@ -31,7 +37,10 @@ NOW = datetime(2026, 10, 27, 12, 0, tzinfo=UTC)
 CTX = MemoryExecutionContext(tenant_id="acme", user_id="u1", thread_id="thr_a")
 
 
-def _works_at(employer: str, *, days_ago: float, **temporal: Any) -> CanonicalMemory:
+def _works_at(
+    employer: str, *, days_ago: float, source: str = "", **temporal: Any
+) -> CanonicalMemory:
+    """The rules' reading of "I work at <employer>.", said ``days_ago`` days before ``NOW``."""
     said = NOW - timedelta(days=days_ago)
     return CanonicalMemory.model_validate(
         {
@@ -47,8 +56,30 @@ def _works_at(employer: str, *, days_ago: float, **temporal: Any) -> CanonicalMe
             "predicate": "works_at",
             "object": employer.lower(),
             "temporal": {"observed_at": said, **temporal},
-            "evidence": [{"source_type": "message", "source_id": employer, "observed_at": said}],
+            "evidence": [
+                {"source_type": "message", "source_id": source or employer, "observed_at": said}
+            ],
             "system_metadata": {"category": "attribute"},
+        }
+    )
+
+
+def _turn(content: str, *, days_ago: float, source: str) -> CanonicalMemory:
+    """A user's turn as said, kept in their conversation."""
+    said = NOW - timedelta(days=days_ago)
+    return CanonicalMemory.model_validate(
+        {
+            "tenant_id": "acme",
+            "content": content,
+            "memory_type": MemoryType.OBSERVATION,
+            "lifetime": "LONG_TERM",
+            "visibility": "USER",
+            "scope": {"level": "THREAD", "tenant_id": "acme", "thread_id": source},
+            "owner_principal": "user:u1",
+            "normalized_hash": content,
+            "temporal": {"observed_at": said},
+            "evidence": [{"source_type": "message", "source_id": source, "observed_at": said}],
+            "system_metadata": {"category": "verbatim_turn"},
         }
     )
 
@@ -157,6 +188,27 @@ def test_a_value_replaced_across_conversations_closes_where_the_newer_begins() -
     apply(acme, globex, Decision(Grade.SUPERSEDED, 0.97, "contradiction"), now=NOW)
     assert acme.temporal.status is TemporalStatus.SUPERSEDED
     assert acme.temporal.valid_to == NOW - timedelta(days=5)
+
+
+async def test_a_turn_read_after_a_later_value_is_still_compared_with_it() -> None:
+    """ "I work at ACME Corp. My shift starts at six." (45 days ago) read after "I work at Globex
+    now. I start at nine." (5 days ago): consolidation keeps the turn's reading (``works_at acme
+    corp``) as Globex's history, and that reading's slot still ties the turn to the later one
+    for the head (ADR 0040), as it did while the reading stayed current."""
+    globex = _turn("I work at Globex now. I start at nine.", days_ago=5, source="msg_globex")
+    globex_reading = _works_at("Globex", days_ago=5, source="msg_globex")
+    acme = _turn("I work at ACME Corp. My shift starts at six.", days_ago=45, source="msg_acme")
+    acme_reading = _works_at("ACME Corp", days_ago=45, source="msg_acme")
+    supersede(acme_reading, globex_reading, now=NOW)  # what consolidation did
+    uow = _uow([globex, globex_reading, acme])
+    nli = ScriptedNLI({("Globex", "ACME"): 0.97})
+
+    out = await CrossConversationReplacement(nli).run(uow, CTX, [acme, acme_reading], now=NOW)
+    assert [m.memory_id for m in out.changed] == [acme.memory_id]
+    stored = uow.memories.rows[acme.memory_id]
+    assert stored.temporal.status is TemporalStatus.SUPERSEDED
+    assert stored.temporal.superseded_by == globex.memory_id
+    assert stored.temporal.valid_to == NOW - timedelta(days=5)
 
 
 async def test_one_users_statements_are_compared_and_written_one_message_at_a_time() -> None:
