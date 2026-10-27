@@ -22,6 +22,7 @@ import pytest
 from memory_service.domain.enums import MessageRole, TemporalStatus, Visibility
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.domain.feedback import FeedbackTargetKind, FeedbackVerdict, ProjectionAction
+from memory_service.domain.ids import new_id
 from memory_service.domain.memory import earlier_value, replaced_by
 from memory_service.domain.observation import ProcessingHints
 from memory_service.modules.memory.replacement import CrossConversationReplacement
@@ -555,3 +556,45 @@ async def test_statements_about_one_thing_that_say_different_things_all_stay_cur
     current = "\n".join(m.text for m in bundle.memories)
     assert "K41" in current and "Lena Ortiz" in current, current
     assert not any("K41" in item.text for item in bundle.history), [i.text for i in bundle.history]
+
+
+async def test_a_request_said_again_in_another_conversation_replaces_nothing(
+    container, uow_factory
+) -> None:
+    """S5: replaying a real run's transcript, a request the user made in four conversations
+    was kept in each and three copies were served as "Earlier values (since replaced)". Each
+    stays current in its own conversation; said twice in one, it is one memory."""
+    said = "For the network team: list its open high-priority tickets and its SLA breaches."
+    _scripted(container, 0.99, always=True)  # a head that reads any pair as a contradiction
+    first, again = _chat(), _chat()
+    for chat in (first, again, again):
+        await _say(container, uow_factory, chat, said)
+    copies = [
+        m
+        for chat in (first, again)
+        for m in await _old_forms(container, uow_factory, chat, said)
+        if m.scope.thread_id == chat.thread_id
+    ]
+    assert sorted(m.scope.thread_id for m in copies) == sorted(
+        [first.thread_id, again.thread_id]
+    ), "one per conversation: not merged across them, not repeated within one"
+    assert all(m.temporal.status is TemporalStatus.CURRENT for m in copies)
+    assert not any(replaced_by(m.system_metadata) for m in copies)
+    rendered = (await _context(container, _chat(), "open high-priority tickets")).render()
+    assert "Earlier values" not in rendered
+
+
+async def test_a_question_relayed_from_every_run_forms_no_memory(container, uow_factory) -> None:
+    """S5: the user's question, posted by the agent harness in each run, was kept as a
+    lasting memory; one with no question mark behind a heading was read as a statement."""
+    _scripted(container, 0.99, always=True)
+    asked = (
+        "For employee e-401: how many trips this year and which flights are booked.",
+        "Which store should I restock first?",
+    )
+    runs = [_chat(agent_id="help-desk", agent_run_id=new_id("agent_run")) for _ in range(2)]
+    for run in runs:
+        for text in asked:
+            await _say(container, uow_factory, run, text)
+        remembered = await _memories(uow_factory, run, container, include_superseded=True)
+        assert not [m.content for m in remembered if m.content in asked]

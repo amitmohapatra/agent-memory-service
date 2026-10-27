@@ -1159,6 +1159,10 @@ class CrossConversationReplacement:
             for old in earlier:
                 if old.temporal.observed_at > unit.temporal.observed_at:
                     continue  # a statement replaces only what was said before it
+                if old.normalized_hash == unit.normalized_hash:
+                    # the same words said again, in another conversation, replace nothing: a
+                    # request repeated in four runs marked three of its copies "since replaced"
+                    continue
                 relation = _slot_relation(
                     relate(mine, anchors(old.content, old.lang or None), unit.content, old.content),
                     unit,

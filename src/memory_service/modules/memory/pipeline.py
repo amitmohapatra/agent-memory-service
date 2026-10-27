@@ -25,7 +25,13 @@ from memory_service.domain.enums import (
     Visibility,
 )
 from memory_service.domain.fiscal import FiscalCalendar
-from memory_service.domain.memory import AdmissionDecision, CanonicalMemory, Scope, TemporalState
+from memory_service.domain.memory import (
+    LASTING_TYPES,
+    AdmissionDecision,
+    CanonicalMemory,
+    Scope,
+    TemporalState,
+)
 from memory_service.domain.observation import AGENT_ROLES, Observation
 from memory_service.modules.authz.visibility import readable_by
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
@@ -277,6 +283,16 @@ def _told(observation: Observation) -> bool:
     return not (observation.agent_run_id and role in AGENT_ROLES)
 
 
+def authored_type(memory_type: MemoryType, *, by_agent: bool) -> MemoryType:
+    """The kind a memory is kept as, given who wrote it. What a user says about themselves
+    (``USER``, ``PREFERENCE``: the kinds the pinned ``user`` profile block is kept from) is
+    theirs alone to state: written by an agent it is about the agent, and is kept as the
+    agent's memory (``AGENT``), never a profile line of the human it acts for (ADR 0013). The
+    one rule for both ways an agent writes: an observation it authored, and a memory it states
+    (``memory_remember``, ``POST /v1/memories`` with an agent on the request)."""
+    return MemoryType.AGENT if by_agent and memory_type in LASTING_TYPES else memory_type
+
+
 class ObservationPipeline:
     def __init__(
         self,
@@ -446,10 +462,10 @@ class ObservationPipeline:
             update["memory_type"] = h.memory_type
         if h.custom_type:
             update["custom_type"] = h.custom_type
-        elif o.agent_authored and c.memory_type in (MemoryType.USER, MemoryType.PREFERENCE):
+        elif (kept := authored_type(c.memory_type, by_agent=o.agent_authored)) != c.memory_type:
             # "my timezone is UTC" said by an agent is about the agent: it becomes the agent's
             # working memory, never a USER memory of the human it acts for (no chat pollution)
-            update["memory_type"] = MemoryType.AGENT
+            update["memory_type"] = kept
         if h.lifetime:
             update["lifetime"] = h.lifetime
         if h.visibility:

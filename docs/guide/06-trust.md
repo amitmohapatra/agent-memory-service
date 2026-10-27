@@ -209,7 +209,7 @@ are the ones in the code, each with where it lives.
 | Threat | Defence | Where |
 |---|---|---|
 | Reading what you should not, or writing into someone else's audience | the audience filter is applied inside the store before any search; writing a `WORKSPACE` memory requires membership of an existing team | chapter 7, `modules/tenancy/gate.py` |
-| An agent's own text becoming the user's memory | agent-authored observations are never kept verbatim, and first-person facts in them are re-typed from `USER`/`PREFERENCE` to `AGENT` | `Observation.agent_authored`, ADR 0013 |
+| An agent's own text becoming the user's memory or profile | agent-authored observations are never kept verbatim; first-person facts in them, and a `USER` or `PREFERENCE` memory an agent states (`memory_remember`), are re-typed to `AGENT`, so they never reach the pinned `user` block | `Observation.agent_authored`, `pipeline.authored_type`, ADR 0013 |
 | The echo loop: a memory is retrieved, repeated by the agent, extracted again and reinforced until it reads as certain | a candidate whose only evidence is an agent's own output is counted as an echo and cannot raise confidence | `_is_echo` in `modules/memory/pipeline.py` |
 | One principal repeating itself to inflate a fact | corroboration counts distinct principals: + 0.15 confidence the first time another principal says it, + 0.05 for a repeat | `_apply` in `modules/memory/pipeline.py` |
 | A second agent overwriting a shared fact | a different value from another principal is kept as `CONTRADICT` beside the original, and the evidence report names the conflict | ADR 0013, chapter 3 |

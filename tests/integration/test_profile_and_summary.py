@@ -103,6 +103,29 @@ async def test_the_user_block_is_kept_from_what_the_user_said_and_an_edit_is_kep
             await profile.edit(uow, ANN, "user", "phone number", "x")
 
 
+async def test_an_agents_remembered_user_fact_never_becomes_the_users_profile(
+    container, uow_factory
+) -> None:
+    """A help-desk run looked up an asset's owner and remembered it as the user's own USER
+    fact ("omar (u-77)"): it became the pinned user block, so every later context told the
+    model the user is Omar. What an agent states is its own; the user's word still counts."""
+    agent = ANN.model_copy(update={"agent_id": "help-desk", "agent_run_id": "run_desk"})
+    stored = await container.services["agent_tools"].call(
+        agent, "memory_remember", {"content": "omar (u-77)", "kind": "USER", "scope": "user"}
+    )
+    await container.tasks.drain()  # memory.index -> profile.refresh
+    profile: ProfileService = container.services["profile"]
+    async with uow_factory() as uow:
+        kept = await uow.memories.get("acme", stored["id"])
+        assert await profile.blocks(uow, ANN) == [], "no profile block from an agent's word"
+    assert kept is not None and kept.memory_type is MemoryType.AGENT
+
+    await _remember(container, uow_factory, "My name is Ann", MemoryType.USER)
+    async with uow_factory() as uow:
+        [block] = await profile.blocks(uow, ANN)
+    assert block.block == "user" and block.text == "- My name is Ann"
+
+
 async def test_a_standing_rule_said_in_conversation_is_pinned_in_the_user_block(
     container, uow_factory
 ) -> None:

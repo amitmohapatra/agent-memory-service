@@ -122,6 +122,9 @@ _CLAUSE_BREAK: Final = re.compile(r"(?<!\d)[,:]|[,:](?!\d)|[;\u2014\u2013()\u060
 _QUESTION_MARK: Final = re.compile("[?\uff1f\u061f][\"'\u201d\u2019)\\]]*\\s*$")
 _WORD: Final = re.compile(rf"[{_LETTER}'\u2019#/.-]+")
 _LEAD_NOISE: Final = re.compile("^[\\s\"'\u201c\u2018\u00a1\u00bf(\\[*\u2022#-]+")
+#: A heading before what a sentence says ("For employee e-401: how many trips ..."): up to
+#: five words, then a colon and a space (not the colon in "9:30").
+_HEADING: Final = re.compile(r"^(?:[^\s:]+\s+){0,4}[^\s:]+:\s+")
 #: apostrophes typed as quotes ("Don't" with a right single quote), read as the ASCII one
 _APOSTROPHES: Final = str.maketrans({"\u2019": "'", "\u2018": "'", "\u02bc": "'"})
 
@@ -347,11 +350,14 @@ class _Reader:
         "When"/"whenever"/"if" open a condition as often as a question: "When I ask for a
         stock audit, always use a table" is an instruction, and reading it as a question
         stored nothing at all. A question word that also opens a condition is a question
-        only when an auxiliary follows it ("when is the delivery").
+        only when an auxiliary follows it ("when is the delivery"). A question word after a
+        heading opens the question too: "For employee e-401: how many trips this year ..."
+        was read as a statement and kept as a memory.
         """
         s = _LEAD_NOISE.sub("", sentence.strip())
         if _QUESTION_MARK.search(s):
             return True
+        s = _HEADING.sub("", s, count=1)
         lead = self.cues["question_start"].at(s, 0)
         if lead is None:
             return False
