@@ -7,8 +7,9 @@ the answer was checked against the memories it was given, so a confirm would onl
 (a wrong memory reached 1.0 in two runs). A reject cites only the memories that contradict a
 claim (``cited``), never one a supported claim rests on, and none at all when the run called
 tools: its answer rests on their results, which the context the judge checked against never
-held. The record's id is derived from the run, the bundle and the answer, so verifying the
-same answer twice records one verdict.
+held. For the same reason a claim of such a run that the context merely does not hold is no
+verdict on it: only a contradicted claim rejects it. The record's id is derived from the run,
+the bundle and the answer, so verifying the same answer twice records one verdict.
 """
 
 from __future__ import annotations
@@ -70,12 +71,15 @@ async def judge_run(
     claim (a greeting, a question back) is no verdict on the run, and neither is a context
     that held no evidence: every claim is "unsupported" against nothing, including one the
     run's own tools returned, and rejecting such a run made its outcome a failure, so the
-    agent never learned from it. Nothing is recorded for either."""
+    agent never learned from it. Nothing is recorded for either, nor for a run that called
+    tools whose claims are only unsupported: they are what its tools returned (B4b)."""
     if not report.claims or report.evidence_count == 0:
         return None
     async with uow_factory() as uow:
         # an answer built from the run's own tool results moves no memory
         tools = await uow.tools.invocations_for_run(ctx.tenant_id, run_id)
+        if tools and not report.contradicted and report.unsupported:
+            return None
         record = Feedback(
             feedback_id=f"fb_{stable_key(ctx.tenant_id, run_id, bundle_id, content_hash(answer))}",
             tenant_id=ctx.tenant_id,

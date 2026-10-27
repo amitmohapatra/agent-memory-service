@@ -32,6 +32,12 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- The grounding judge (`/v1/verify`) no longer rejects a run that called tools only because
+  its claims are not in the context: the judge never sees the tool results, so every
+  tool-built answer read as unsupported and a live test put a false reject in the review
+  queue for 40 of 40 correct answers. Such a run gets no verdict unless a claim is
+  contradicted; a fully supported answer still confirms, and a run without tools is judged
+  as before.
 - Concurrent forgets of related memories (twins, and what one replaced) no longer deadlock,
   refuse a memory a twin's forget had just removed as "not visible in this scope", or reopen
   a forgotten old value as CURRENT: a forget locks the memory, its twins and what they
