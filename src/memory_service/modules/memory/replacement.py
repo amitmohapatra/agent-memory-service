@@ -1462,15 +1462,15 @@ def apply(
     form: CanonicalMemory, unit: CanonicalMemory, decision: Decision, *, now: datetime
 ) -> None:
     """Mark ``form`` as replaced by ``unit``: an earlier value (still current) or superseded
-    (closed at ``unit``'s time, kept for the temporal view). The newer memory is not touched,
-    so one statement may replace several."""
+    (closed where ``unit`` begins - when it was said, ``TemporalState.since`` - kept for the
+    temporal view). The newer memory is not touched, so one statement may replace several."""
     form.system_metadata = {**form.system_metadata, "replaced_by": marker(unit.memory_id, decision)}
     if decision.grade is Grade.SUPERSEDED:
         form.temporal = form.temporal.model_copy(
             update={
                 "status": TemporalStatus.SUPERSEDED,
                 "superseded_by": unit.memory_id,
-                "valid_to": form.temporal.valid_to or unit.temporal.valid_from or now,
+                "valid_to": form.temporal.valid_to or unit.temporal.since,
             }
         )
         form.system_metadata["supersede_reason"] = "replaced in a later statement"

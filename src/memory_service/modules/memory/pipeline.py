@@ -230,19 +230,22 @@ def build_memory(
 
 
 def supersede(target: CanonicalMemory, replacement: CanonicalMemory, *, now: datetime) -> None:
-    """Bi-temporal replacement: ``replacement`` holds from its valid_from (now unless dated),
-    and ``target`` is closed at that instant and points at it. Neither row is deleted."""
+    """Bi-temporal replacement: ``replacement`` holds from when it was said (``since``: its
+    valid_from, else its observed_at), and ``target`` is closed at that instant and points at
+    it. Neither row is deleted, and a ``replacement`` that already replaced another value keeps
+    its link to that one."""
+    since = replacement.temporal.since
     replacement.temporal = replacement.temporal.model_copy(
         update={
-            "supersedes": target.memory_id,
-            "valid_from": replacement.temporal.valid_from or now,
+            "supersedes": replacement.temporal.supersedes or target.memory_id,
+            "valid_from": since,
         }
     )
     target.temporal = target.temporal.model_copy(
         update={
             "status": TemporalStatus.SUPERSEDED,
             "superseded_by": replacement.memory_id,
-            "valid_to": target.temporal.valid_to or replacement.temporal.valid_from or now,
+            "valid_to": target.temporal.valid_to or since,
         }
     )
     target.updated_at = now
@@ -258,7 +261,19 @@ async def _replace(
 ) -> set[str]:
     """Store ``memory`` as the new version of ``target`` and close ``target``, with the turn
     kept in the target's words: it is the same statement (ADR 0036), and left CURRENT it
-    keeps answering the value just replaced. The ids written."""
+    keeps answering the value just replaced. The ids written.
+
+    The newer of the two is the one said later (``TemporalState.since``), the order they are
+    read in only on a tie: "I work at ACME Corp." said 45 days ago and read after "I work at
+    Globex now." (said 5 days ago) closed Globex and stayed current. Said before ``target``,
+    ``memory`` is stored as its history instead, closed where ``target`` begins."""
+    if target.temporal.since > memory.temporal.since:
+        supersede(memory, target, now=now)
+        await uow.memories.add(
+            memory, visibility_keys=keys_for(memory.scope, memory.visibility, ctx)
+        )
+        await uow.memories.update(target)
+        return {memory.memory_id, target.memory_id}
     twins = await uow.memories.twins(ctx.tenant_id, target)
     supersede(target, memory, now=now)
     for twin in twins:
@@ -267,6 +282,18 @@ async def _replace(
     for closed in (target, *twins):
         await uow.memories.update(closed)
     return {memory.memory_id, target.memory_id, *(t.memory_id for t in twins)}
+
+
+async def _one_writer_per_user(uow: UnitOfWork, ctx: MemoryExecutionContext) -> None:
+    """Hold the user's statements while this message's are compared with them and written: a
+    user's own memories (``USER`` scope) and their statements in every conversation (ADR 0038)
+    are read across threads, and the queue runs one conversation's messages one at a time,
+    not one user's. Two conversations of a user read side by side each compared themselves
+    with a store the other had not committed to, and both values of a one-valued slot stayed
+    current. Only this unit of work waits (an advisory lock, released at commit): reading the
+    message - the model's work - still runs in parallel, and other users never wait."""
+    if ctx.user_id:
+        await uow.serialize(f"statements:{ctx.tenant_id}:{ctx.user_id}")
 
 
 def _told(observation: Observation) -> bool:
@@ -380,6 +407,7 @@ class ObservationPipeline:
                     or observation.hints.importance is not None
                 )
                 async with self.uow_factory() as uow:
+                    await _one_writer_per_user(uow, ctx)
                     since = datetime.now(UTC)
                     affected = await self._apply_all(
                         uow,
