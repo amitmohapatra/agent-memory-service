@@ -32,6 +32,22 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- Of two values of a one-valued slot, the one said later stays current, whatever order they are
+  read in. "I work at Globex now." (`occurred_at` 5 days ago) sent first, then "I work at ACME
+  Corp." (45 days ago) in a separate call: consolidation closed Globex and kept ACME current, so
+  "where do I work?" answered ACME. When each was said decides (`TemporalState.since`: the date
+  the statement names, else its `occurred_at` - when it was stored if none was given), the order
+  of reading only on a tie; a value said before the current one is stored as its history
+  (`SUPERSEDED`, `superseded_by` the current one, `valid_to` where that one begins), the event-time
+  rule ADR 0040 set for replacement across conversations, now on the consolidation path too. A
+  replacement holds from when it was said, not from when it was read, on both paths, so a search
+  as of six weeks ago (`as_of`) reads ACME and one as of yesterday Globex. And two conversations of
+  one user read at the same time each compared themselves with a store the other had not
+  committed to, and both values stayed current (2 of 6 users' batches under load): the queue runs
+  one conversation's messages one at a time (#57), and now one user's statements are compared and
+  written one message at a time too (a transaction-scoped advisory lock on the user, taken by the
+  write of an observation only: reading the message - the model's work - still runs in parallel,
+  and other users never wait). No new setting; service only.
 - An agent run can no longer rewrite or forget what the user said. Asked "What is 12 times 7?",
   a run called `memory_update` on the user's "I raised PO-77812 for 2,000 corrugated boxes; it's
   late." and replaced it with "12 times 7 = 84"; the new version kept the user as its owner and
