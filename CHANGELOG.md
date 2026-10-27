@@ -32,6 +32,11 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- Concurrent forgets of related memories (twins, and what one replaced) no longer deadlock,
+  refuse a memory a twin's forget had just removed as "not visible in this scope", or reopen
+  a forgotten old value as CURRENT: a forget locks the memory, its twins and what they
+  replaced in one statement, in id order, and decides under that lock; a memory forgotten
+  meanwhile is a success (204), a memory outside the caller's scope is still refused.
 - What the service learns from, after a live learning test (memory, procedures, hints,
   approvals):
   - the grounding judge's verdict waits for a tenant admin's review and is never a person's
