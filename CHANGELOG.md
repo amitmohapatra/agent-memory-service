@@ -32,6 +32,28 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- A learned skill no longer hands over a call the user's standing rule forbids. With "Never
+  create a stock rule at store S40" in the context's `standing_rules` section, a skill learned
+  from three runs at S12 made `create_stock_rule` the hints' next step, prefilled at S40, and
+  the model called it twice. A candidate a current "never" rule of the section forbids
+  (`standing.forbids`: the rule says every word of the tool's name, as stems, and names no code
+  or number the call does not have: the task's values and those found for its arguments) is
+  no next step and gets no next-step bonus, nothing is prefilled or asked for it, and the
+  Tools section and the learned skill's line say which rule forbids it
+  (`ToolHints.forbidden`). A rule about another store, an "always" rule, and one replaced,
+  superseded or forgotten (not in the section) forbid nothing. The "never" words are the
+  standing words the section already reads (`standing.NEVER_WORDS`: English, German, Spanish,
+  Arabic); a rule in another language matches a tool it names (`create_stock_rule`). The
+  `/v1/tools/hints` endpoint and the `tool_search` memory tool read the stored profile, which
+  has no such section, and are unchanged. Service only.
+- A value of the wrong type is never prefilled. Asked "How many units of style ZZ999999 do
+  we hold?", the hints prefilled `min_units = 'ST-101'` and `max_units = 'ST-101'` from the
+  memory "S12 should never hold fewer than 2 or more than 6 units of ST-101": only the
+  task's own values were held to the argument's declared type. Every source (a learned
+  binding, the graph, the profile, a memory, the task) now goes through one check
+  (`hints._as_declared`): a value that is no number for a `number` or `integer` argument, or
+  no whole one for an `integer`, is no value of it, and the next source is read. Service
+  only.
 - An agent no longer writes the user's profile. A memory an agent states (`memory_remember`,
   `POST /v1/memories` with an agent on the request) as `USER` or `PREFERENCE` is kept as the
   agent's own `AGENT` memory, by the rule that already re-typed an agent-authored observation's

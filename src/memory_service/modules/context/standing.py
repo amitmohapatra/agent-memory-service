@@ -64,11 +64,12 @@ PREFERENCE_SIMILARITY: Final = 0.4
 SHARED_STEMS: Final = 1
 #: two rules are about the same subject when this share of the shorter one's stems is shared
 SAME_SUBJECT: Final = 0.5
+#: the standing words that forbid what follows them: a rule with one is a "never" rule
+NEVER_WORDS: Final = frozenset({"never", "nie", "niemals", "nunca", "أبدا", "أبدًا"})
 #: the words that make a rule standing are not its subject
-_STANDING_WORDS: Final = frozenset(
+_STANDING_WORDS: Final = NEVER_WORDS | frozenset(
     {
         "always",
-        "never",
         "from",
         "now",
         "permanently",
@@ -76,18 +77,13 @@ _STANDING_WORDS: Final = frozenset(
         "time",
         "whenever",
         "immer",
-        "nie",
-        "niemals",
         "jedes",
         "mal",
         "siempre",
-        "nunca",
         "cada",
         "vez",
         "دائما",
         "دائمًا",
-        "أبدا",
-        "أبدًا",
         "हमेशा",
         "कभी",
         "नहीं",
@@ -120,6 +116,39 @@ def _stems(text: str, lang: str) -> set[str]:
 
 def applies(query_stems: set[str], hit_stems: set[str], similarity: float, floor: float) -> bool:
     return similarity >= floor or len(query_stems & hit_stems) >= SHARED_STEMS
+
+
+def listed_rules(profile: Iterable[Any]) -> list[str]:
+    """The rules the ``standing_rules`` section of ``profile`` lists (``standing_blocks``): the
+    user's current rules that apply to the request, nothing replaced, superseded or
+    forgotten."""
+    return [
+        line.removeprefix("- ")
+        for block in profile
+        if getattr(block, "block", None) == RULES_BLOCK
+        for line in str(block.text).splitlines()
+        if line.strip()
+    ]
+
+
+def forbids(rule: str, action: str, values: Iterable[Any]) -> bool:
+    """Whether the standing rule ``rule`` forbids ``action`` (a tool's name) on a call of
+    ``values``: it is a "never" rule (``NEVER_WORDS``), it says every word of the action, as
+    its stems ("Never create stock rules ..." says ``create_stock_rule``), and every code or
+    number it names ("... at store S40") is one of the call's: a rule naming none is about
+    every call, one naming another store is not about this one."""
+    text = rule.replace("_", " ")
+    if not content_terms(text) & NEVER_WORDS:
+        return False
+    said = _stems(text, detect_language(text))
+    words = content_terms(action.replace("_", " "))
+    if not words or not all(stemmed_terms({w}, "en") & said for w in words):
+        return False
+    return _codes(text) <= {code for value in values for code in _codes(str(value))}
+
+
+def _codes(text: str) -> set[str]:
+    return {c.lower().strip("-") for c in _CODED.findall(text)}
 
 
 def is_rule(fields: Any) -> bool:

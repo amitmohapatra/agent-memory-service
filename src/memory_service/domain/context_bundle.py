@@ -30,6 +30,8 @@ TOOLS_SHOWN_MAX = 3
 #: evidence status is then not shown (an INSUFFICIENT drove the model to search memory in
 #: loops on questions its tools answer).
 TOOL_ANSWERS_CONFIDENCE = 0.5
+#: How a tool hint or a learned skill's step says a standing rule of the user forbids it.
+_FORBIDDEN = "a standing rule of the user forbids {tool} here"
 
 #: What produced ``ContextItem.score``; the scales are not comparable across kinds.
 ScoreKind = Literal["fusion", "exact"]
@@ -598,10 +600,13 @@ def skills_section(skills: Sequence[SkillView], tools: ToolHints | None = None) 
     """The learned skills that match the task, in full: their steps, what fixed a failing
     step and their track record. One the agent's own skill was opened for says so. The one
     the Tools section lays out (``planned``) is not spelled out twice: its line names it,
-    its track record and its fixes, and its steps are the tools listed first there."""
+    its track record and its fixes, and its steps are the tools listed first there. A step a
+    standing rule of the user forbids for this task (``ToolHints.forbidden``) says so, with
+    the rule: what the runs did is no step to take against it."""
     if not skills:
         return None
     laid_out = tools.plan.id if tools is not None and tools.plan and planned(tools) else None
+    forbidden = tools.forbidden if tools is not None else {}
     lines = []
     for skill in skills:
         steps = " -> ".join(skill.steps)
@@ -610,6 +615,11 @@ def skills_section(skills: Sequence[SkillView], tools: ToolHints | None = None) 
         what = f"adds to your skill {skill.with_skill}" if skill.with_skill else skill.name
         lines.append(f"- {what}: {steps} (worked {skill.success_rate:.0%} of {skill.support} runs)")
         lines.extend(f"  - if {fix}" for fix in skill.fixes)
+        lines.extend(
+            f"  - but {_FORBIDDEN.format(tool=step)}: {forbidden[step]}"
+            for step in dict.fromkeys(skill.steps)
+            if step in forbidden
+        )
     return "## Learned skills for this task\n" + "\n".join(lines)
 
 
@@ -652,6 +662,8 @@ def _tool_line(candidate: ToolCandidate, hints: ToolHints) -> str:
     head += ", next step)" if candidate.name == hints.next else ")"
     details = [", ".join(f"{arg} = {value!r}" for arg, value in found.items())] if found else []
     details += [f"missing {m.arg}: {m.question}" for m in absent]
+    if candidate.name in hints.forbidden:
+        details.append(f"{_FORBIDDEN.format(tool='this')}: {hints.forbidden[candidate.name]}")
     return head + (": " + "; ".join(details) if details else "")
 
 
