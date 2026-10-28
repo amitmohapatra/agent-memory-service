@@ -94,7 +94,7 @@ stores it as `lang` (migration 0018). It decides three things:
 
 The verbatim turn is kept in every language either way. Every prompt ends with the rule that
 text is returned in its source's language, never translated. Details:
-[the twelve uses](guide/08-models.md#the-twelve-uses).
+[the eleven uses](guide/08-models.md#the-eleven-uses).
 
 ## Moving an existing tenant: the reindex path
 

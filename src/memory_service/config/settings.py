@@ -416,9 +416,6 @@ LLMUse = Literal[
     #: (``modules.memory.restatement``, ADR 0027).
     "memory_restatement",
     "grounding_judge",
-    #: Distil a stored procedure's title and strategy from the runs that followed it (the
-    #: tool learning job); the miner's own rendering is kept without it.
-    "procedure_abstraction",
 ]
 #: Every use: the default tenant policy.
 ALL_LLM_USES: tuple[LLMUse, ...] = get_args(LLMUse)

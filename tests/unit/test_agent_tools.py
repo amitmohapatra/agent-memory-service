@@ -1,10 +1,10 @@
-"""The memory agent tools without a service: the fixed set, their schemas, pull bookkeeping."""
+"""The memory agent tools without a service: the fixed set and their schemas."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from memory_service.modules.agent_tools.service import TOOLS, AgentTools, result_ids
+from memory_service.modules.agent_tools.service import TOOLS, AgentTools
 from memory_service.modules.retrieval.engine import Candidate, _observed_within
 from memory_service.modules.retrieval.search import candidate_item
 
@@ -46,12 +46,6 @@ def test_the_set_is_final_and_every_schema_is_self_contained() -> None:
         "format": "date-time",
         "type": "string",
     }
-
-
-def test_only_named_items_are_counted_as_what_a_pull_returned() -> None:
-    assert result_ids([{"id": "mem_1"}, {"text": "no id"}, {"id": "chk_2"}]) == ["mem_1", "chk_2"]
-    assert result_ids({"id": "mem_3"}) == ["mem_3"]
-    assert result_ids({"candidates": []}) == []
 
 
 def test_a_time_window_keeps_only_what_was_observed_inside_it() -> None:

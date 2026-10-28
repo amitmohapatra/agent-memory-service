@@ -1,6 +1,5 @@
 """The pinned sections of a pushed context: the profile blocks, the thread's durable summary,
-the procedures learned for the task and the tool hints (both only for an agent with tools),
-and the items prefetched from what earlier pulls used.
+the procedures learned for the task and the tool hints (both only for an agent with tools).
 
 Each is one indexed read (the procedures a bounded one) and they run concurrently with
 retrieval, so they add a round trip, not a stage. The pinned sections are budgeted first: they
@@ -28,11 +27,10 @@ from memory_service.domain.context_bundle import (
     summary_section,
     tools_section,
 )
-from memory_service.domain.enums import TemporalStatus
 from memory_service.domain.tools import StoredProcedure, ToolHints
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
-from memory_service.modules.retrieval.engine import Candidate, QueryVectors, memory_candidate
+from memory_service.modules.retrieval.engine import QueryVectors
 from memory_service.modules.tools.matching import TaskVectors
 from memory_service.modules.tools.skills import skill_view
 from memory_service.ports.uow import UnitOfWorkFactory
@@ -96,7 +94,6 @@ class Pinned:
     profile: list[ProfileBlockView] = field(default_factory=list)
     thread_summary: ThreadSummaryView | None = None
     procedures: list[SkillView] = field(default_factory=list)
-    prefetched: list[Candidate] = field(default_factory=list)
     tools: ToolHints | None = None
 
     @property
@@ -135,7 +132,7 @@ def within_budget(pinned: Pinned, budget: int) -> tuple[Pinned, int]:
     the tokens they take. A section is costed as the text it renders to; one that does not
     fit is dropped, except the thread summary, which keeps its newest part."""
     allowed, used = int(budget * PINNED_SHARE), 0
-    kept = Pinned(prefetched=pinned.prefetched)
+    kept = Pinned()
     kept.profile, cost = _profile_that_fits(pinned.profile, allowed)
     used += cost
     if (text := summary_section(pinned.thread_summary)) and pinned.thread_summary is not None:
@@ -175,7 +172,7 @@ class ContextSections:
         its own history keeps the recent messages, not what was said before them.
         ``vectors``: the query's, as the retrieval running beside this encodes them - read
         only for a procedure the query's words miss."""
-        found_profile, found_summary, found_procedures, prefetched = await asyncio.gather(
+        found_profile, found_summary, found_procedures = await asyncio.gather(
             self._profile(ctx),
             self._summary(ctx),
             self.services["tool_hints"].procedures(
@@ -183,13 +180,11 @@ class ContextSections:
             )
             if procedures
             else _empty(),
-            self._prefetched(ctx, query, visibility),
         )
         return Pinned(
             profile=found_profile,
             thread_summary=found_summary,
             procedures=[skill_view(p) for p in found_procedures],
-            prefetched=prefetched,
         )
 
     async def tools(
@@ -231,24 +226,6 @@ class ContextSections:
             covers_to_sequence=summary.covers_to_sequence,
             version=summary.version,
         )
-
-    async def _prefetched(
-        self, ctx: MemoryExecutionContext, query: str, visibility: VisibilitySpecification
-    ) -> list[Candidate]:
-        """Memories this principal's pulls for requests like this one kept using, still
-        current and still visible to it."""
-        ids = await self.services["agent_tools"].prefetched(ctx, query)
-        if not ids:
-            return []
-        async with self.uow_factory() as uow:
-            memories = await uow.memories.get_many(ctx.tenant_id, ids)
-        return [
-            memory_candidate(m, retriever="prefetch", score=1.0)
-            for m in memories
-            if m.temporal.status is TemporalStatus.CURRENT
-            and m.deleted_at is None
-            and visibility.allows(m.tenant_id, m.system_metadata.get("visibility_keys", []))
-        ]
 
 
 async def _empty() -> list[StoredProcedure]:

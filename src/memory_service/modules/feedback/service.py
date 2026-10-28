@@ -807,9 +807,9 @@ class FeedbackService:
         The run's outcome follows the verdict unless a higher-ranked source already decided
         it (``OUTCOME_PRECEDENCE``: a person over the judge over the run's own status). Only
         a verdict that labels the run moves the memories it cites (its evidence references):
-        they gain or lose confidence, and a confirmed run marks them used for prefetch
-        learning - unless the verdict is the run's own unverified success, which is its
-        outcome only (``outcome_teaches``). An outranked verdict changes nothing."""
+        they gain or lose confidence - unless the verdict is the run's own unverified
+        success, which is its outcome only (``outcome_teaches``). An outranked verdict
+        changes nothing."""
         affirmed = record.verdict in AFFIRMING_VERDICTS
         teaches = outcome_teaches(record.source, success=affirmed)
         labelled = await self._label_run(uow, record, success=affirmed, learn=teaches, now=now)
@@ -823,8 +823,6 @@ class FeedbackService:
         adjusted = (
             await self._adjust_cited(uow, record, affirmed=affirmed, now=now) if teaches else []
         )
-        if affirmed and adjusted:
-            await uow.pulls.mark_used(record.tenant_id, record.target_id, adjusted)
         return FeedbackProjection(
             action=ProjectionAction.RUN_LABELLED,
             memory_ids=adjusted,

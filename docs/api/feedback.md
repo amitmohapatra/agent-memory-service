@@ -205,8 +205,6 @@ What undoing does not restore exactly:
 * a step clipped at a bound is undone by the full step, not by what the clip took - a
   memory at confidence 0.95 reinforced to 1.0 (+0.05) and then voted down ends at 0.9, not
   0.95; away from the bounds a step and its undoing cancel;
-* a confirmed run marked the memories it cited as used for prefetch learning
-  (`pulls.mark_used`); a flipped vote does not take that mark back;
 * a procedure is offered again as `active`, whatever it was before the rejection.
 
 A replaced vote is not a review state of its own, so a client that knows pending, approved and

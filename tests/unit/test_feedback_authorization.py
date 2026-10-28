@@ -667,9 +667,6 @@ class _Run:
     async def bump(self, *_: object) -> None:
         return None
 
-    async def mark_used(self, *_: object) -> None:
-        return None
-
     async def invocations_for_run(self, tenant_id, run_id) -> list:
         return [c for c in self.calls if c.run_id == run_id]
 
@@ -704,7 +701,7 @@ class _ProjectingUow(_Uow):
     def __init__(self, run: _Run, feedback: _FeedbackRepo) -> None:
         super().__init__()
         self.feedback = feedback
-        self.tools = self.memories = self.revisions = self.pulls = run
+        self.tools = self.memories = self.revisions = run
 
     async def __aenter__(self):
         return self

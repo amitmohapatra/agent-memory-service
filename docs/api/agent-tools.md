@@ -27,13 +27,3 @@ Descriptions and schemas are language-neutral: queries and content may be in any
 Bad arguments answer 422 naming the field (`args.<field>`); an unknown tool 404. Writes follow
 the rules of their routes (a memory is updated or forgotten by its owner, a workspace block by a
 member).
-
-## Pulls and prefetch learning
-
-Every call is logged as a **pull**: the request's pattern (the typed-placeholder form of the
-query or task), the tool, its arguments and the ids it returned. A returned id is **used** when
-the run later cites it (a supported claim of `POST /v1/verify`, the cited memories of a
-confirmed answer verdict) or acts on it (`memory_update`, `memory_forget`). Every five minutes a
-job folds pulls older than ten minutes into per (principal, pattern, item) counts. `/v1/context`
-pre-includes (one indexed read) up to five items that were pulled at least three times for the
-same pattern and used in at least half of those pulls, re-checked against the caller's audience.

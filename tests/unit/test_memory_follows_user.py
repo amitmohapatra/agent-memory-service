@@ -499,9 +499,6 @@ class _Rows:
 
 
 class _Ignored:
-    async def add(self, *_: object, **__: object) -> None:
-        return None
-
     async def bump(self, *_: object, **__: object) -> None:
         return None
 
@@ -510,7 +507,7 @@ class _Stated:
     """The unit of work a stated memory is written through: the rows it adds."""
 
     def __init__(self) -> None:
-        self.memories, self.pulls, self.revisions = _Rows(), _Ignored(), _Ignored()
+        self.memories, self.revisions = _Rows(), _Ignored()
 
     async def __aenter__(self):
         return self

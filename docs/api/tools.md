@@ -194,11 +194,6 @@ at least 60% succeeded; it is **retired** when that stops holding and **rejected
 change. An active procedure is the agent's **learned skill** for that kind of task: the
 context offers it in full ([skills.md](skills.md)).
 
-With the tenant's model (use `procedure_abstraction`, the recording principal's key), an active
-procedure whose steps changed is distilled into a title and a strategy from the runs that
-succeeded and those that failed ("what to avoid"). Without one, the title is the pattern and the
-strategy the miner's own rendering.
-
 The same job writes graph edges in the `procedural` layer: a call with a typed argument
 (`argument_entity_types`) `used_entity` the entity it names; when that call succeeded and returned
 an id field, the entity is `identified_by` the id. That is how "Acme" becomes `supplier_id`
