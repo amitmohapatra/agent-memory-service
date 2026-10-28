@@ -630,6 +630,7 @@ async def tool_hints(
         k=body.k,
         scope_keys=list(visibility.keys),
         profile=profile,
+        visibility=visibility,
     )
     return hints_view(hints)
 

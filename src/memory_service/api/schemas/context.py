@@ -137,6 +137,11 @@ class ToolChoiceBody(BaseModel):
     missing: list[MissingArgumentBody] | None = Field(
         default=None, description="required arguments nothing found"
     )
+    forbidden: str | None = Field(
+        default=None,
+        description="the user's standing rule that forbids this call here: never the next "
+        "step, no arguments found or asked for",
+    )
 
 
 class SkillBody(BaseModel):

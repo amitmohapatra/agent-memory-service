@@ -21,7 +21,7 @@ framework lists them with `ctx.agent_tools()` and offers them to its model (Way 
 | `memory_update` | `id` (or its bundle handle, `m3`), `content` | `{id, supersedes}` |
 | `memory_forget` | `id` (or its bundle handle) | `{id, forgotten}`; memories derived from it are retracted too ([memory.md](memory.md#forgetting-takes-what-was-derived-from-it)) |
 | `profile_edit` | `block`, `old` (empty replaces the block), `new` | `{block, text, version}`; 409 when `old` is gone |
-| `tool_search` | `task` | `{tools: [{name, confidence, success_rate?, next?, args?, missing?}], plan?}` (the `/v1/tools/hints` answer) |
+| `tool_search` | `task` | `{tools: [{name, confidence, success_rate?, next?, args?, missing?, forbidden?}], plan?}` (the `/v1/tools/hints` answer; `forbidden`: the user's standing rule against that call) |
 
 Descriptions and schemas are language-neutral: queries and content may be in any language.
 Bad arguments answer 422 naming the field (`args.<field>`); an unknown tool 404. Writes follow

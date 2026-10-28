@@ -32,6 +32,21 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- `POST /v1/tools/hints` and the `tool_search` memory tool no longer hand over a call the
+  user's standing rule forbids. They read the stored profile, which never lists the
+  `standing_rules` section (the context computes it per request), so with "Never create a stock
+  rule at store S40" said in an earlier conversation, a task at S40 still got
+  `create_stock_rule` as `next`, with its arguments filled. Given the caller's visibility, the
+  hints now read the rules that apply to the task themselves (`ToolHintsService._standing`:
+  `standing.standing_blocks`, the read the context makes, on the task's one encoding, which the
+  tool index and the memories share, beside the catalog search and the procedures); the context
+  passes its profile, which already lists them, and reads them once. The guard is the one the
+  context has: no `next`, `args` or `missing` for the forbidden call, and a rule about another
+  store, an "always" rule, or one superseded, replaced or forgotten forbids nothing. A tool
+  choice now carries the rule as `forbidden` (`POST /v1/tools/hints`, `tool_search`, and
+  `format=full` contexts): additive, an SDK client reads it as an extra field. A deployment
+  with no memory indexed yet reads no rule rather than failing on the missing collection
+  (`RetrievalEngine.ensure_collections`). Service only; the SDK is unchanged.
 - A learned skill says which standing rule forbids its step with the tool hints off too. With
   `tools.hints=false` (no `ToolHints`), "Never create a stock rule at store S40" in the
   context's `standing_rules` and a task at S40, the skill line read only
