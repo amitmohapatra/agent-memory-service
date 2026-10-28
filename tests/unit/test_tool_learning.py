@@ -14,6 +14,7 @@ from memory_service.domain.learning import ApprovalCounts
 from memory_service.domain.tools import (
     Prefill,
     RunOutcome,
+    SkillView,
     StoredProcedure,
     ToolDescriptor,
     ToolHints,
@@ -32,6 +33,7 @@ from memory_service.modules.tools.hints import (
     _missing,
     _Resolution,
     next_tool,
+    ruled,
 )
 from memory_service.modules.tools.learning import (
     accept_distilled,
@@ -920,7 +922,8 @@ async def test_a_call_the_user_s_standing_rule_forbids_is_handed_over_as_no_step
     assert f"a standing rule of the user forbids this here: {NEVER_AT_S40}" in tools
     assert hints.plan is not None
     note = f"  - but a standing rule of the user forbids create_stock_rule here: {NEVER_AT_S40}"
-    assert note in (skills_section([hints.plan], hints) or "")
+    skills = ruled([hints.plan], STOCK_RULE_TASK, _rules(NEVER_AT_S40), hints)
+    assert note in (skills_section(skills, hints) or "")
 
 
 @pytest.mark.parametrize(
@@ -961,6 +964,146 @@ async def test_a_rule_forbids_a_call_by_a_value_found_for_its_arguments() -> Non
     assert hints.forbidden == {"create_stock_rule": NEVER_AT_S40} and hints.next is None
     hints = await _stock_rule_hints(task, _rules("Never create stock rules"))
     assert set(hints.forbidden) == {"create_stock_rule"}
+
+
+LEARNED_AT_S12 = SkillView(
+    id="prc_s12",
+    name="create-a-stock-rule-for-st-101-at-s12",
+    steps=["create_stock_rule"],
+    success_rate=1.0,
+    support=3,
+)
+NOTE_AT_S40 = f"  - but a standing rule of the user forbids create_stock_rule here: {NEVER_AT_S40}"
+
+
+def test_a_skill_says_which_rule_forbids_its_step_without_tool_hints() -> None:
+    """N5: with the tool hints off (no ``ToolHints``) the skill line read
+    "create-a-stock-rule...: create_stock_rule (worked 100% of 3 runs)" and no more, though
+    the context's standing rules said "Never create a stock rule at store S40" and the task
+    was at S40: the model called it. The skill's step says which rule forbids it either way."""
+    (skill,) = ruled([LEARNED_AT_S12], STOCK_RULE_TASK, _rules(NEVER_AT_S40), None)
+    assert skill.forbidden == {"create_stock_rule": NEVER_AT_S40}
+    assert NOTE_AT_S40 in (skills_section([skill]) or "").splitlines()
+
+
+async def test_a_skill_s_forbidden_step_reads_the_same_with_or_without_tool_hints() -> None:
+    profile = _rules(NEVER_AT_S40)
+    hints = await _stock_rule_hints(STOCK_RULE_TASK, profile)
+    assert hints.plan is not None
+    hinted = skills_section(ruled([hints.plan], STOCK_RULE_TASK, profile, hints), hints) or ""
+    unhinted = skills_section(ruled([hints.plan], STOCK_RULE_TASK, profile, None)) or ""
+    notes = [line for line in hinted.splitlines() if line.startswith("  - but ")]
+    assert notes == [NOTE_AT_S40]
+    assert notes == [line for line in unhinted.splitlines() if line.startswith("  - but ")]
+
+
+@pytest.mark.parametrize(
+    ("task", "rules"),
+    [
+        # a rule about another store: the call at S12 is allowed
+        ("Create a stock rule for ST-101 at S12, min 1 max 3.", [NEVER_AT_S40]),
+        # an "always" rule forbids nothing
+        (STOCK_RULE_TASK, ["Always create a stock rule at store S40 with min 1"]),
+        # a "never" rule about another action
+        (STOCK_RULE_TASK, ["Never delete a stock rule at store S40"]),
+    ],
+)
+def test_a_skill_carries_no_note_of_a_rule_about_another_call(task: str, rules: list[str]) -> None:
+    (skill,) = ruled([LEARNED_AT_S12], task, _rules(*rules), None)
+    assert not skill.forbidden and "standing rule" not in (skills_section([skill]) or "")
+
+
+def test_only_a_rule_the_standing_rules_section_lists_marks_a_skill() -> None:
+    (skill,) = ruled([LEARNED_AT_S12], STOCK_RULE_TASK, _rules(NEVER_AT_S40, block="user"), None)
+    assert not skill.forbidden
+
+
+# ------------------------------------------------------------------ a change nobody asked for
+
+
+class _Asked:
+    """A memory of an earlier request: "min 1 max 3" were that request's values."""
+
+    item_id = "mem_s40"
+    attributes: dict[str, str] = {}
+    text = STOCK_RULE_TASK
+
+
+READ_DEMAND = DEMAND.model_copy(update={"side_effects": "read"})
+
+
+async def _question_hints(task: str) -> ToolHints:
+    service = ToolHintsService(
+        lambda: _HintsUow([RULE, READ_DEMAND]),  # type: ignore[arg-type,return-value]
+        _Index([("create_stock_rule", 0.9), ("store_demand", 0.8)]),  # type: ignore[arg-type]
+        None,
+    )
+    return await service.hints(
+        MemoryExecutionContext(tenant_id="acme", user_id="u1"),
+        task,
+        available=["create_stock_rule", "store_demand"],
+        k=5,
+        scope_keys=["k"],
+        memories=[_Asked()],
+    )
+
+
+@pytest.mark.parametrize(
+    "task",
+    [
+        "How many units of style ZZ999999 do we hold at S12?",
+        "How many units of style ZZ999999 do we hold at S12\uff1f",
+        "\u0643\u0645 \u0648\u062d\u062f\u0629 \u0645\u0646 ZZ999999 \u0644\u062f\u064a\u0646\u0627 \u0641\u064a S12\u061f",
+    ],
+)
+async def test_a_tool_that_changes_something_gets_no_argument_for_a_question(task: str) -> None:
+    """Item 13: asked "How many units of style ZZ999999 do we hold?", the Tools section gave
+    create_stock_rule store, style and the min 1 max 3 of an earlier request at S40, and the
+    model created a rule nobody asked for. A call that changes something is no answer to a
+    question: it may be listed, nothing is found or asked for it. The read is prefilled."""
+    hints = await _question_hints(task)
+    assert "create_stock_rule" in {c.name for c in hints.candidates}
+    assert not [k for k in hints.prefill if k.startswith("create_stock_rule.")]
+    assert not [m for m in hints.missing if m.tool == "create_stock_rule"]
+    assert hints.prefill["store_demand.store"].value == "S12", "the read is still prefilled"
+    line = next(x for x in (tools_section(hints) or "").splitlines() if "create_stock_rule" in x)
+    assert "min_units" not in line and "missing" not in line and "store" not in line
+
+
+async def test_a_tool_that_changes_something_is_prefilled_when_asked_to_act() -> None:
+    hints = await _question_hints("Create a stock rule for style ZZ999999 at S12, min 5 max 8.")
+    values = {k: p.value for k, p in hints.prefill.items() if k.startswith("create_stock_rule.")}
+    assert values == {
+        "create_stock_rule.store": "S12",
+        "create_stock_rule.style": "ZZ999999",
+        "create_stock_rule.min_units": 5,
+        "create_stock_rule.max_units": 8,
+    }
+
+
+async def test_an_earlier_request_s_values_are_no_argument_of_another_call() -> None:
+    """Where item 13's min 1 max 3 came from: the memory of the earlier request at S40 named
+    "min 1 max 3", and the memory text filled ``min_units`` and ``max_units`` of a call about
+    another style and store. A memory about something else gives no value; one about what
+    the task is about still does."""
+    service = ToolHintsService(None, None, None)  # type: ignore[arg-type]
+    task = "Create a stock rule for ST-202 at S12."
+    prefill, missing = await service.arguments(_job(RULE, task=task, memories=[_Asked()]))
+    assert "create_stock_rule.min_units" not in prefill
+    assert ("create_stock_rule", "min_units") in {(m.tool, m.arg) for m in missing}
+
+    class Kept:
+        item_id = "mem_s12"
+        attributes: dict[str, str] = {}
+        text = "For ST-202 at S12 we keep min 5 max 8."
+
+    prefill, _ = await service.arguments(_job(RULE, task=task, memories=[Kept()]))
+    found = prefill["create_stock_rule.min_units"]
+    assert (found.value, found.source, prefill["create_stock_rule.max_units"].value) == (
+        5,
+        "memory",
+        8,
+    )
 
 
 # ------------------------------------------------------------------ a value of the declared type
