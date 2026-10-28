@@ -10,11 +10,6 @@ An agent's own calls (its PRIVATE records, for whichever user it ran) share one 
 ``agent_audience``: the agent learns from all of its users, and the procedure says how many
 users produced it, so it reaches the agent's other users only once two of them did
 (``StoredProcedure``). Calls shared wider keep their own audience key.
-
-With the tenant's model (use ``procedure_abstraction``), an active procedure whose steps
-changed is distilled into a title and a strategy from what succeeded AND what failed
-(ReasoningBank / AWM style). Without one, the title is the pattern and the strategy the
-miner's own rendering, so behaviour is uniform.
 """
 
 from __future__ import annotations
@@ -33,12 +28,10 @@ from memory_service.domain.tools import (
     agent_audience,
     stable_hash,
 )
-from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.tools.edges import tool_edges
 from memory_service.modules.tools.procedures import Procedure, decayed, mine_procedure
 from memory_service.modules.tools.trajectories import Trajectory, build_trajectory
 from memory_service.observability.logging import get_logger
-from memory_service.ports.credentials import ModelIdentity
 from memory_service.ports.intelligence import GraphStore
 from memory_service.ports.uow import UnitOfWorkFactory
 
@@ -51,30 +44,6 @@ PATTERN_CALLS_MAX: Final = 480
 #: Runs that must follow a procedure before it is offered, and the share that must succeed.
 PROCEDURE_MIN_SUPPORT: Final = 2
 PROCEDURE_MIN_SUCCESS_RATE: Final = 0.6
-#: Example runs of each kind the distillation prompt sees.
-DISTIL_EXAMPLES: Final = 3
-TITLE_MAX_CHARS: Final = 120
-STRATEGY_MAX_CHARS: Final = 1200
-
-DISTIL_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "title": {"type": "string"},
-        "strategy": {"type": "string"},
-        "avoid": {"type": "string"},
-    },
-    "required": ["title", "strategy", "avoid"],
-    "additionalProperties": False,
-}
-_DISTIL_SYSTEM = (
-    "You distil a reusable procedure from an agent's recorded tool calls. You are given a "
-    "task pattern (values replaced by typed placeholders), the steps that succeeded with "
-    "where each argument came from, and what happened in runs that failed. Write a short "
-    "title, the strategy (when to apply the steps and how their arguments are filled) and "
-    "what to avoid (from the failures; empty when none failed). Use only what is given. "
-    "Write in the language of the task pattern. Return JSON only: "
-    '{"title": ..., "strategy": ..., "avoid": ...}.'
-)
 
 
 def succeeded(outcome: RunOutcome | None, calls: Sequence[ToolInvocation]) -> bool | None:
@@ -153,8 +122,7 @@ def merge(
     users: int = 0,
     sole_user: str | None = None,
 ) -> StoredProcedure | None:
-    """The stored procedure after a re-mine: only its own row changes, and its distilled
-    title and strategy are kept for as long as its steps are."""
+    """The stored procedure after a re-mine: only its own row changes."""
     if mined is None:
         if existing is None or existing.status in ("retired", "rejected"):
             return None
@@ -172,53 +140,12 @@ def merge(
             "support": mined.support,
             "status": _status(mined, steps_hash, existing),
             "steps_hash": steps_hash,
-            "owner_principal": owner.principal_id,
             "workspace_id": owner.workspace_id,
-            "strategy": base.strategy if base.steps_hash == steps_hash else mined.render(),
-            "title": base.title or mined.task_pattern[:TITLE_MAX_CHARS],
             "users": users,
             "sole_user": sole_user,
             "updated_at": datetime.now(UTC),
         }
     )
-
-
-def _render_run(trajectory: Trajectory) -> str:
-    calls = ", ".join(
-        f"{s.tool_name}({','.join(sorted(s.args_redacted))})"
-        + ("" if s.succeeded else f" -> {s.status} {s.error_class or ''}".rstrip())
-        for s in trajectory.steps
-    )
-    return f"- {calls}"
-
-
-def distil_prompt(procedure: StoredProcedure, trajectories: Sequence[Trajectory]) -> str:
-    wins = [t for t in trajectories if t.succeeded][:DISTIL_EXAMPLES]
-    losses = [t for t in trajectories if not t.succeeded][:DISTIL_EXAMPLES]
-    return "\n".join(
-        [
-            f"Task pattern: {procedure.pattern}",
-            f"Steps (support {procedure.support}, success rate {procedure.success_rate:.0%}):",
-            procedure.strategy,
-            "Runs that succeeded:",
-            *(_render_run(t) for t in wins),
-            "Runs that failed:",
-            *([_render_run(t) for t in losses] or ["- none"]),
-        ]
-    )
-
-
-def accept_distilled(result: dict[str, Any] | None) -> tuple[str, str] | None:
-    """The model's title and strategy (with what to avoid), or None when unusable."""
-    if not result:
-        return None
-    title = " ".join(str(result.get("title", "")).split())[:TITLE_MAX_CHARS]
-    strategy = str(result.get("strategy", "")).strip()
-    avoid = str(result.get("avoid", "")).strip()
-    if not title or not strategy:
-        return None
-    text = f"{strategy}\nAvoid: {avoid}" if avoid else strategy
-    return title, text[:STRATEGY_MAX_CHARS]
 
 
 def _unchanged(merged: StoredProcedure, existing: StoredProcedure | None) -> bool:
@@ -229,11 +156,8 @@ def _unchanged(merged: StoredProcedure, existing: StoredProcedure | None) -> boo
 
 
 class ToolLearning:
-    def __init__(
-        self, uow_factory: UnitOfWorkFactory, assist: LLMAssist, graph: GraphStore | None
-    ) -> None:
+    def __init__(self, uow_factory: UnitOfWorkFactory, graph: GraphStore | None) -> None:
         self.uow_factory = uow_factory
-        self.assist = assist
         self.graph = graph
 
     async def learn(self, tenant_id: str | None = None) -> int:
@@ -302,8 +226,6 @@ class ToolLearning:
             await uow.procedures.save(merged)
             await uow.revisions.bump(tenant_id, RevisionKind.TENANT, "")
             await uow.commit()
-        if merged.status == "active" and merged.distilled != merged.steps_hash:
-            await self._distil(merged, trajectories)
 
     @staticmethod
     async def _trajectories(
@@ -320,37 +242,6 @@ class ToolLearning:
             for run, success in labelled.items()
             if success is not None
         ]
-
-    async def _distil(self, procedure: StoredProcedure, trajectories: Sequence[Trajectory]) -> None:
-        """Title and strategy from the tenant's model; the deterministic ones stay otherwise."""
-        if not procedure.owner_principal:
-            return
-        identity = ModelIdentity(procedure.tenant_id, procedure.owner_principal)
-        async with self.assist.bound(identity):
-            if not self.assist.wants("procedure_abstraction"):
-                return
-            result = await self.assist.structured(
-                "procedure_abstraction",
-                system=_DISTIL_SYSTEM,
-                user=distil_prompt(procedure, trajectories),
-                schema=DISTIL_SCHEMA,
-                max_tokens=600,
-            )
-        accepted = accept_distilled(result)
-        if accepted is None:
-            return
-        title, strategy = accepted
-        async with self.uow_factory() as uow:
-            current = await uow.procedures.get(procedure.tenant_id, procedure.procedure_id)
-            if current is None or current.steps_hash != procedure.steps_hash:
-                return  # re-mined meanwhile: the next run distils the new steps
-            await uow.procedures.save(
-                current.model_copy(
-                    update={"title": title, "strategy": strategy, "distilled": current.steps_hash}
-                )
-            )
-            await uow.revisions.bump(procedure.tenant_id, RevisionKind.TENANT, "")
-            await uow.commit()
 
     async def _edges(self, calls: Sequence[ToolInvocation]) -> None:
         if self.graph is None:

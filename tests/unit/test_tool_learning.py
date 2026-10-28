@@ -35,11 +35,7 @@ from memory_service.modules.tools.hints import (
     next_tool,
     ruled,
 )
-from memory_service.modules.tools.learning import (
-    accept_distilled,
-    merge,
-    succeeded,
-)
+from memory_service.modules.tools.learning import merge, succeeded
 from memory_service.modules.tools.matching import rank_procedures
 from memory_service.modules.tools.patterns import task_pattern, task_slots
 from memory_service.modules.tools.procedures import decayed, mine_procedure
@@ -213,21 +209,21 @@ def test_a_procedure_is_admitted_with_support_and_kept_on_a_delta() -> None:
         audience="k",
         owner=owner,
     )
-    assert one is not None and one.status == "candidate" and one.title == "p"
+    assert one is not None and one.status == "candidate"
     two = merge(
         one, mine_procedure("p", _trajectories(2)), tenant_id="acme", audience="k", owner=owner
     )
     assert two is not None and two.status == "active" and two.procedure_id == one.procedure_id
     assert {b["argument"] for b in two.bindings} == {"quote"}
-    distilled = two.model_copy(update={"title": "Reprice", "distilled": two.steps_hash})
     again = merge(
-        distilled,
+        two,
         mine_procedure("p", _trajectories(3)),
         tenant_id="acme",
         audience="k",
         owner=owner,
     )
-    assert again is not None and again.title == "Reprice" and again.distilled == again.steps_hash
+    assert again is not None and again.procedure_id == two.procedure_id
+    assert again.steps_hash == two.steps_hash and again.support == 3
     rejected = two.model_copy(update={"status": "rejected"})
     assert (
         merge(
@@ -328,15 +324,6 @@ def test_a_learned_literal_never_fills_an_argument_the_task_names_another_value_
     assert _from_procedure(same, "style").value == "ST-101"  # type: ignore[union-attr]
     unnamed = _job(tool, plan=plan, task="How many units are there?")
     assert _from_procedure(unnamed, "style").value == "ST-101"  # type: ignore[union-attr]
-
-
-def test_only_a_complete_distillation_is_accepted() -> None:
-    assert accept_distilled(None) is None
-    assert accept_distilled({"title": "", "strategy": "x", "avoid": ""}) is None
-    title, strategy = accept_distilled(
-        {"title": " Reprice  a quote ", "strategy": "Do it.", "avoid": "Locks."}
-    )  # type: ignore[misc]
-    assert title == "Reprice a quote" and strategy == "Do it.\nAvoid: Locks."
 
 
 # ------------------------------------------------------------------ hints

@@ -122,9 +122,8 @@ under the floor (0.20 for the shipped multilingual encoder) is not packed, so a 
 store cannot answer comes back nearly empty instead of full of whatever ranked next
 (`diagnostics.below_relevance_floor` counts them). Exact identifier hits and expansion
 companions are exempt. They are one indexed read each and run concurrently with retrieval; none of them calls
-a model. Memories an agent's own pulls kept using for requests of the same pattern are
-pre-included ([agent-tools.md](agent-tools.md)). `window=False` leaves the conversation window
-out, for a framework that keeps its own history. The cache key includes the `tools` request.
+a model. `window=False` leaves the conversation window out, for a framework that keeps its own
+history. The cache key includes the `tools` request.
 
 **The window as the conversation itself (`window_format="messages"`).** An agent whose
 framework replays a conversation as messages — LangGraph, the OpenAI Agents SDK — takes the

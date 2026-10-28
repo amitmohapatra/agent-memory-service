@@ -148,7 +148,6 @@ LLMUse = Literal[
     "chunk_context",
     "memory_restatement",
     "grounding_judge",
-    "procedure_abstraction",
 ]
 #: What ``keys.whoami`` calls a credential: an issued key's role, or the mode of one that is
 #: not an issued key.

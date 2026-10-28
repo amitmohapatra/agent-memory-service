@@ -454,18 +454,13 @@ class StoredProcedure(BaseModel):
     tenant_id: str
     scope_key: str
     pattern: str
-    title: str = ""
-    strategy: str = ""
     steps: list[dict[str, Any]] = Field(default_factory=list)
     bindings: list[dict[str, Any]] = Field(default_factory=list)
     success_rate: float = 0.0
     support: int = 0
     status: ProcedureStatus = "candidate"
-    #: the fingerprint of the steps; the title and strategy were distilled from ``distilled``
+    #: the fingerprint of the steps
     steps_hash: str = ""
-    distilled: str = ""
-    #: whose model key distils it: the principal that recorded the calls
-    owner_principal: str | None = None
     workspace_id: str | None = None
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     #: the agent it was learned for (an agent-audience procedure), else None

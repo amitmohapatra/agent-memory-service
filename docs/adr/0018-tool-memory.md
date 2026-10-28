@@ -117,6 +117,15 @@ step exists in the registry and every binding resolves against a real trajectory
 - Cold start returns empty advice and the agent behaves exactly as it would without memory.
   Nothing is guessed.
 
+> **Amendment, 2026-10 — procedure abstraction is removed.** The optional model step became
+> the `procedure_abstraction` use: the learning job had the tenant's model write a procedure's
+> title and strategy from its successes and failures (`procedures.title`, `strategy`,
+> `distilled`). Nothing read them: a learned skill is offered as its steps, track record and
+> fixes (`SkillView`), named from its task pattern, and a sentinel strategy appeared in no
+> context, hint, `tool_search` answer or admin listing. The step, the use and the four columns
+> (with `owner_principal`, whose key paid for it) are gone (migration `0030_drop_dead_learning`);
+> learning is deterministic end to end, as the decision above says it should be first.
+
 ## Status of the adapters
 The API, SDK (`client.tools.*`, `client.runs.outcome`) and gate are in place. The framework
 adapters that call them — the LangGraph tool wrapper and Bifrost execute node, ADK tool

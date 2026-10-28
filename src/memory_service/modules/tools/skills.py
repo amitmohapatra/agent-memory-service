@@ -59,9 +59,9 @@ def _words(text: str) -> list[str]:
 
 
 def skill_name(procedure: StoredProcedure) -> str:
-    """A name from the title (or the pattern without its placeholders): its words, in any
-    script, lowercased and joined by hyphens, at most 64 characters, cut at a word."""
-    source = _PLACEHOLDER.sub(" ", (procedure.title or procedure.pattern).casefold())
+    """A name from the pattern without its placeholders: its words, in any script,
+    lowercased and joined by hyphens, at most 64 characters, cut at a word."""
+    source = _PLACEHOLDER.sub(" ", procedure.pattern.casefold())
     name = ""
     for word in _words(source):
         longer = f"{name}-{word}" if name else word

@@ -211,7 +211,6 @@ flowchart TB
   subgraph five[Every 5 minutes]
     RC["periodic.reconcile: outbox sweep, archive repair,<br/>re-queue jobs whose worker stopped heartbeating (145 s)"]
     PQ["periodic.profile_queries: due standing questions"]
-    PL["periodic.prefetch_learn: what pulls teach the push"]
     TL["periodic.tools_learn: procedures and procedural edges"]
     TR["periodic.tools_refresh: index catalog entries with no record or older text<br/>(once per worker process per 6 h)"]
   end

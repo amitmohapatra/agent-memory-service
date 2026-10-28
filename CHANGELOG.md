@@ -549,6 +549,22 @@ each entry says which one moved. Decisions behind each change are in the
   deselects them instead of skipping the whole module; the pure fingerprint test still runs.
 
 ### Removed
+- Two learning features that never fed anything (migration `0030_drop_dead_learning`):
+  - **Prefetch learning.** `/v1/context` pre-included memories an agent's earlier tool calls
+    kept using for requests of the same pattern, from counts the `periodic.prefetch_learn` job
+    folded every 5 minutes. On a live stack 0 of 60 runs pre-included anything and no counted
+    item was ever eligible: a pull was keyed by the model's own query wording, which differs
+    every run. Gone with it: the agent-tool pull log (a row per memory agent-tool call), which
+    nothing else read - `POST /v1/verify` and a confirmed run's feedback only marked pulls
+    used. Tables `agent_tool_pulls` and `prefetch_stats` are dropped. The context's
+    `diagnostics.prefetched` key is no longer set.
+  - **Procedure distillation.** With the `procedure_abstraction` model use the tool-learning
+    job had the tenant's model write a procedure's title and strategy; no read path showed
+    them. The use is removed from the model policy vocabulary (`LLMUse`): stored policies drop
+    it, and its usage rows go with it. Columns `procedures.title`, `strategy`, `distilled` and
+    `owner_principal` (whose key paid for it) are dropped. A learned skill is named from its
+    task pattern, as it already was without a model. SDK `trellis-memory` 0.5.1: `LLMUse`
+    loses `procedure_abstraction`.
 - The `MEMORY__BLOB__PROVIDER` setting. The blob store follows from where the service runs:
   GCS when `MEMORY__SERVICE__ENVIRONMENT` is `staging` or `prod`, or when a GCS emulator is
   configured (`STORAGE_EMULATOR_HOST`); the filesystem otherwise. A leftover
@@ -576,7 +592,7 @@ each entry says which one moved. Decisions behind each change are in the
   methods and keywords that exist. Run in CI.
 - Dated reports moved out of the user docs to `benchmark/reports/`, design records to
   `design/`; superseded handoffs, plans and logs deleted (git history keeps them). The model
-  uses page merged into [chapter 8](docs/guide/08-models.md#the-twelve-uses).
+  uses page merged into [chapter 8](docs/guide/08-models.md#the-eleven-uses).
 - ADR headers carry their amendments (0004, 0009, 0021, 0022, 0023); ADR 0017 is closed as
   superseded by 0024-0026.
 - `.env.example` lists `MEMORY__RETAIL_CALENDAR`, the one setting it was missing.

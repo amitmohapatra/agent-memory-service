@@ -15,8 +15,7 @@ Mem^p update rules are followed literally:
               archived rather than deleted.
 
 Ranking is deterministic and explainable. Nothing here calls a model; the learning job
-(``modules.tools.learning``) stores what is mined here and, with the tenant's model, distils
-a title and strategy for it.
+(``modules.tools.learning``) stores what is mined here.
 """
 
 from __future__ import annotations
@@ -49,11 +48,6 @@ class Binding:
     @property
     def resolvable_from_trajectory(self) -> bool:
         return self.source_step is not None and self.source_field is not None
-
-    def render(self) -> str:
-        if self.resolvable_from_trajectory:
-            return f"{self.argument}=step{self.source_step}.{self.source_field}"
-        return f"{self.argument}={self.literal!r}"
 
 
 @dataclass
@@ -112,19 +106,6 @@ class Procedure:
     @property
     def tools(self) -> list[str]:
         return [s.tool for s in self.steps]
-
-    def render(self) -> str:
-        lines = [f"Procedure for: {self.task_pattern}"]
-        for step in self.steps:
-            args = ", ".join(b.render() for b in step.bindings) or "-"
-            lines.append(
-                f"{step.ordinal + 1}. {step.tool}({args})"
-                f"  [support {step.support}, success {step.success_rate:.0%}]"
-            )
-            for error, fix in step.failure_modes.items():
-                if fix:
-                    lines.append(f"     on {error}: {fix}")
-        return "\n".join(lines)
 
 
 def mine_procedure(pattern: str, trajectories: list[Trajectory]) -> Procedure | None:

@@ -138,9 +138,6 @@ async def verify(
     async with container.services["llm_assist"].reading(ctx):
         evidence, unused = record_evidence(record)
         report = await cascade.verify(body.answer, evidence, unused=unused)
-    supported = [i for c in report.claims if c.verdict == "supported" for i in c.evidence_ids]
-    # what a run's verified answer rests on is what its memory pulls were good for
-    await container.services["agent_tools"].used(ctx, supported)
     run_id = body.run_id or ctx.agent_run_id
     feedback_id = (
         await judge_run(

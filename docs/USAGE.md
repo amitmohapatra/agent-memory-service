@@ -68,8 +68,7 @@ print((await MemoryClient(url, api_key=service.token).tenant.keys.whoami()).role
 | **Manual** — your code calls verbs | pipelines, back-office jobs, importers, tests | the routes below | `remember`, `update`, `forget`, `search`, `history`, `feedback`, `record_tool`, `tool_hints`, `profile`, `verify`, `ctx.advanced.*` |
 
 They combine: push every turn *and* hand the agent the pull tools (that is what the harness
-does). What the agent keeps pulling for a kind of request is pre-included in later pushes
-(prefetch learning).
+does).
 
 ## 3. Writing: turns, facts or documents
 
@@ -238,8 +237,7 @@ The six tools: `memory_search`, `memory_remember`, `memory_update`, `memory_forg
 
 - Hand the schemas to your model as-is; return the `result` to it as the tool output.
 - `memory_update`/`memory_forget` accept a context handle (`m3`); ownership rules still apply.
-- Every call is logged as a pull and feeds prefetch learning; do not record these calls again
-  with `record_tool`.
+- Do not record these calls again with `record_tool`.
 - Bad arguments are a `422` naming `args.<field>`; an unknown tool `404`.
 
 ## 10. Feedback: what applies now and what waits
@@ -311,7 +309,7 @@ for day in (await admin.tenant.model_usage()).days:  # GET /v1/model-key/usage
 - There is no workspace-level key or policy, no per-request `use_llm`, and no
   `MEMORY__MODELS__*` variable; model defaults are code constants (`auto` via the gateway).
 - Changing a policy or key invalidates cached model-assisted reads.
-- Each use, its tier and its fallback: [the twelve uses](guide/08-models.md#the-twelve-uses).
+- Each use, its tier and its fallback: [the eleven uses](guide/08-models.md#the-eleven-uses).
 
 ## 12. Tenancy operations
 
