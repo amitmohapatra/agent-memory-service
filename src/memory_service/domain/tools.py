@@ -508,6 +508,9 @@ class SkillView(BaseModel):
     fixes: list[str] = Field(default_factory=list)
     success_rate: float = 0.0
     support: int = 0
+    #: its steps a standing rule of the user forbids for this task, step -> the rule
+    #: (``modules.tools.hints.ruled``): what the runs did is no step to take against it
+    forbidden: dict[str, str] = Field(default_factory=dict)
 
 
 PrefillSource = Literal["procedure", "graph", "profile", "memory", "task"]

@@ -32,6 +32,29 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- A learned skill says which standing rule forbids its step with the tool hints off too. With
+  `tools.hints=false` (no `ToolHints`), "Never create a stock rule at store S40" in the
+  context's `standing_rules` and a task at S40, the skill line read only
+  "create-a-stock-rule...: create_stock_rule (worked 100% of 3 runs)", and the model called it:
+  the note came only from the hints (`ToolHints.forbidden`). Each skill's steps are now checked
+  against the section's rules with or without hints (`hints.ruled`, the same `standing.forbids`
+  test the hints apply, on the task's values; with hints, their verdict for a step they hinted
+  stands), carried as `SkillView.forbidden` and rendered under the skill. A rule about another
+  store or an "always" rule adds no note. Service only; the wire form of a skill is unchanged.
+- A tool that changes something gets no argument values and no "missing" question when the task
+  is a question. Asked "How many units of style ZZ999999 do we hold?", the Tools section listed
+  `create_stock_rule` with `store='S12', style='ZZ999999'`, in another run `min_units = 1,
+  max_units = 3`, and the model created a rule nobody asked for. Such a tool may still be listed
+  as a candidate (it was already never the next step, `hints._may_lead`); a read tool is
+  prefilled as before, and a write tool on a request to act is too. The question marks are the
+  ones the hints already read (`?`, `？`, `؟`). Service only.
+- An earlier request's values no longer fill another call's arguments. The `min_units = 1,
+  max_units = 3` above came from the memory of the earlier request "Create a stock rule for
+  ST-101 at S40, min 1 max 3.", whose words "min 1 max 3" the memory-text source
+  (`hints._from_memory_text`) read as labelled values for any task. A memory's labelled value
+  now fills an argument only when the memory is about what the task is about: it names an
+  identifier or name the task names ("Acme Steel"), or nothing but the value itself ("their
+  supplier id is SUP-40"). Service only.
 - Of two values of a one-valued slot, the one said later stays current, whatever order they are
   read in. "I work at Globex now." (`occurred_at` 5 days ago) sent first, then "I work at ACME
   Corp." (45 days ago) in a separate call: consolidation closed Globex and kept ACME current, so

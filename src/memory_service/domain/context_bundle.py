@@ -601,12 +601,11 @@ def skills_section(skills: Sequence[SkillView], tools: ToolHints | None = None) 
     step and their track record. One the agent's own skill was opened for says so. The one
     the Tools section lays out (``planned``) is not spelled out twice: its line names it,
     its track record and its fixes, and its steps are the tools listed first there. A step a
-    standing rule of the user forbids for this task (``ToolHints.forbidden``) says so, with
-    the rule: what the runs did is no step to take against it."""
+    standing rule of the user forbids for this task (``SkillView.forbidden``, with or without
+    tool hints) says so, with the rule: what the runs did is no step to take against it."""
     if not skills:
         return None
     laid_out = tools.plan.id if tools is not None and tools.plan and planned(tools) else None
-    forbidden = tools.forbidden if tools is not None else {}
     lines = []
     for skill in skills:
         steps = " -> ".join(skill.steps)
@@ -616,9 +615,9 @@ def skills_section(skills: Sequence[SkillView], tools: ToolHints | None = None) 
         lines.append(f"- {what}: {steps} (worked {skill.success_rate:.0%} of {skill.support} runs)")
         lines.extend(f"  - if {fix}" for fix in skill.fixes)
         lines.extend(
-            f"  - but {_FORBIDDEN.format(tool=step)}: {forbidden[step]}"
+            f"  - but {_FORBIDDEN.format(tool=step)}: {skill.forbidden[step]}"
             for step in dict.fromkeys(skill.steps)
-            if step in forbidden
+            if step in skill.forbidden
         )
     return "## Learned skills for this task\n" + "\n".join(lines)
 

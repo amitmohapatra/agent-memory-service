@@ -8,10 +8,12 @@
 - plan / next: the best stored procedure about the task (by its pattern's words or meaning:
   ``matching``) that uses only callable tools, and its first step this run has not done yet;
   never a tool that changes something when the task is a question;
-- prefill: each argument of every candidate (keyed ``tool.arg``), resolved in order from the
+- prefill: each argument of every candidate (keyed ``tool.arg``) - but none of one that
+  changes something when the task is a question, nor asked for - resolved in order from the
   procedure's bindings (a literal, or an earlier step's output in this run), the knowledge
   graph (entities of the argument's type named in the task, and the ids tools returned for
-  them), the pinned profile and the memories in hand, and finally the values the task itself
+  them), the pinned profile and the memories in hand (one about what the task is about),
+  and finally the values the task itself
   names - a value the task names right after an argument's own words ("cost centre CC-7")
   fills that argument and no other, as does one of the shape of the argument's own example
   ("such as S12": S40) - each cast to the type the tool's schema declares, and none that is
@@ -35,7 +37,7 @@ from __future__ import annotations
 import asyncio
 import math
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from functools import partial
@@ -89,6 +91,8 @@ _GENERIC_ARG_WORDS: Final = frozenset(
 #: Words in an argument's name that ask for an identifier, and the value kinds that are one.
 _IDENTIFIER_WORDS: Final = frozenset({"id", "ids", "code", "ref", "number", "no"})
 _IDENTIFIER_KINDS: Final = frozenset({"id", "num"})
+#: The value kinds that say what a text is about (a store, a supplier), not how much or when.
+_SUBJECT_KINDS: Final = frozenset({"id", "entity", "email", "url"})
 #: Word prefixes that compare as the same word ("centre"/"center", "supplier"/"suppliers").
 STEM_CHARS: Final = 5
 _WORD = re.compile(r"[A-Za-z][a-z]*|[a-z]+|\d+")
@@ -199,39 +203,73 @@ def _rescored(
     ]
 
 
-def _guarded(hints: ToolHints, forbidden: dict[str, str]) -> ToolHints:
+def _guarded(hints: ToolHints, forbidden: dict[str, str], unasked: set[str]) -> ToolHints:
     """``hints`` less what they would hand over of a forbidden tool: it is never the next
-    step, and no argument of it is found or asked for."""
+    step, and no argument of it is found or asked for; nor of a tool ``unasked`` for
+    (``_unasked``)."""
+    held = unasked | set(forbidden)
     return hints.model_copy(
         update={
             "next": None if hints.next in forbidden else hints.next,
-            "prefill": {k: p for k, p in hints.prefill.items() if p.tool not in forbidden},
-            "missing": [m for m in hints.missing if m.tool not in forbidden],
+            "prefill": {k: p for k, p in hints.prefill.items() if p.tool not in held},
+            "missing": [m for m in hints.missing if m.tool not in held],
             "forbidden": forbidden,
         }
     )
 
 
+def _unasked(
+    candidates: Sequence[ToolCandidate], task: str, entries: dict[str, ToolDescriptor]
+) -> set[str]:
+    """The candidates that change something when the task is a question (``_may_lead``): it
+    is answered before anything is changed, so no argument of such a call is found or asked
+    for - a value an earlier request named ("min 1 max 3") is no argument of a call nobody
+    asked for. They stay candidates."""
+    return {c.name for c in candidates if _may_lead(c.name, task, entries) is None}
+
+
 def _forbidden(
-    candidates: Sequence[ToolCandidate],
+    tools: Iterable[str],
     task: str,
-    prefill: dict[str, Prefill],
     profile: Sequence[Any],
+    prefill: dict[str, Prefill] | None = None,
 ) -> dict[str, str]:
-    """The candidates a standing rule of the user forbids for this call, each with the rule:
-    a rule the context's ``standing_rules`` section lists (current, and applying to the
+    """The tools a standing rule of the user forbids for this call, each with the rule: a
+    rule the context's ``standing_rules`` section lists (current, and applying to the
     request) that ``standing.forbids`` the tool on the task's values and those found for its
-    arguments ("Never create a stock rule at store S40": ``create_stock_rule`` at S40)."""
+    arguments (``prefill``) ("Never create a stock rule at store S40": ``create_stock_rule``
+    at S40)."""
     rules = listed_rules(profile)
     if not rules:
         return {}
     out: dict[str, str] = {}
-    for candidate in candidates:
-        values = [task, *(p.value for p in prefill.values() if p.tool == candidate.name)]
-        rule = next((r for r in rules if forbids(r, candidate.name, values)), None)
+    for tool in dict.fromkeys(tools):
+        values = [task, *(p.value for p in (prefill or {}).values() if p.tool == tool)]
+        rule = next((r for r in rules if forbids(r, tool, values)), None)
         if rule is not None:
-            out[candidate.name] = rule
+            out[tool] = rule
     return out
+
+
+def ruled(
+    skills: Sequence[SkillView], task: str, profile: Sequence[Any], hints: ToolHints | None
+) -> list[SkillView]:
+    """``skills`` with the steps a standing rule of the user forbids for this task
+    (``SkillView.forbidden``), with or without tool hints: the rule (``_forbidden``) on the
+    task's values, and the hints' own verdict (``ToolHints.forbidden``, which also read the
+    values found for each candidate's arguments) for a step they hinted."""
+    known = hints.forbidden if hints is not None else {}
+    return [
+        skill.model_copy(
+            update={
+                "forbidden": {
+                    **_forbidden(skill.steps, task, profile),
+                    **{step: known[step] for step in skill.steps if step in known},
+                }
+            }
+        )
+        for skill in skills
+    ]
 
 
 def asks_change(task: str) -> bool:
@@ -397,7 +435,7 @@ class ToolHintsService:
                 if c.name in entries
             ]
         )
-        forbidden = _forbidden(candidates, task, prefill, profile)
+        forbidden = _forbidden([c.name for c in candidates], task, profile, prefill)
         if step in forbidden:
             # the plan's next step is a call the user's standing rule forbids: it leads nothing
             step = None
@@ -410,7 +448,7 @@ class ToolHintsService:
             prefill=prefill,
             missing=missing,
         )
-        return _guarded(hints, forbidden)
+        return _guarded(hints, forbidden, _unasked(candidates, task, entries))
 
     async def _every_argument(
         self, jobs: list[_Resolution]
@@ -581,10 +619,12 @@ def _from_memories(job: _Resolution, arg: str) -> Prefill | None:
 
 def _from_memory_text(job: _Resolution, arg: str) -> Prefill | None:
     """A value a memory in hand names for this argument ("their supplier id is SUP-40" for
-    ``supplier_id``): only a labelled one, and only after the task, which always wins."""
+    ``supplier_id``): only a labelled one, only after the task, which always wins, and only
+    from a memory about what the task is about (``_about_task``)."""
     for item in job.memories:
-        for _, value, label in _labelled_slots(str(getattr(item, "text", "")), [arg]):
-            if label == arg:
+        text = str(getattr(item, "text", ""))
+        for _, value, label in _labelled_slots(text, [arg]):
+            if label == arg and _about_task(text, job.task, value):
                 return Prefill(
                     tool=job.tool.name,
                     value=value,
@@ -592,6 +632,16 @@ def _from_memory_text(job: _Resolution, arg: str) -> Prefill | None:
                     evidence_id=str(getattr(item, "item_id", "")),
                 )
     return None
+
+
+def _about_task(text: str, task: str, value: str) -> bool:
+    """Whether a memory that names ``value`` is about what the task is about: it names
+    something the task names (an identifier or a name: "Acme Steel"), or nothing but the
+    value. An earlier request ("Create a stock rule for ST-101 at S40, min 1 max 3") names
+    its own store and style: its "min 1" is no value of a call about style ZZ999999."""
+    named = {v.casefold() for kind, v in task_slots(task) if kind in _SUBJECT_KINDS}
+    said = {v.casefold() for kind, v in task_slots(text) if kind in _SUBJECT_KINDS}
+    return bool(said & named) or said <= {value.casefold()}
 
 
 def _slot_kinds(job: _Resolution, arg: str) -> list[str]:

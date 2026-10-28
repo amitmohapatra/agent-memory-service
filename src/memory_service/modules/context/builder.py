@@ -65,7 +65,7 @@ from memory_service.modules.retrieval.engine import (
 )
 from memory_service.modules.retrieval.periods import months_dated
 from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
-from memory_service.modules.tools.hints import asks_change
+from memory_service.modules.tools.hints import asks_change, ruled
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import evidence_status_total, stage_seconds
 from memory_service.observability.timings import Timings
@@ -643,8 +643,9 @@ class ContextBuilder:
         pinned: Pinned,
         timings: Timings,
     ) -> None:
-        """Working memory and prefetched memories ahead of the ranked ones, and the tool
-        hints (which read the memories in hand and the profile)."""
+        """Working memory and prefetched memories ahead of the ranked ones, the tool hints
+        (which read the memories in hand and the profile), and the learned skills' steps a
+        standing rule of the user forbids for this task, with or without hints (``ruled``)."""
         if self.working is not None and result.routed.needs_memories:
             for i, item in enumerate(await self.working.recall(ctx)):
                 result.candidates.insert(
@@ -676,6 +677,7 @@ class ContextBuilder:
                     profile=pinned.profile,
                     vectors=result.query_vectors,
                 )
+        pinned.procedures = ruled(pinned.procedures, query, pinned.profile, pinned.tools)
 
     async def _semantic_lookup(
         self, found: _Lookup, query: str

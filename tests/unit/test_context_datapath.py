@@ -783,3 +783,38 @@ def test_the_relevance_floor_belongs_to_the_encoder_that_measured_it() -> None:
     assert FROZEN_MODELS.dense_ml.relevance_floor == 0.2
     assert FROZEN_MODELS.dense.relevance_floor == 0.0, "never the space every query reads"
     assert HashEmbedding().relevance_floor == 0.0, "a stand-in has no calibrated cosine"
+
+
+async def test_a_learned_skill_says_which_rule_forbids_its_step_with_the_hints_off() -> None:
+    """N5: a caller that asks for no tool hints (``hints=False``) still gets the learned
+    skills, and a step the context's standing rule forbids for this task says so: the skill
+    is no step to take against the rule, with or without the Tools section."""
+    from memory_service.domain.context_bundle import ProfileBlockView, pinned_sections
+    from memory_service.domain.tools import SkillView
+    from memory_service.modules.context.sections import Pinned, ToolsRequest
+    from memory_service.observability.timings import Timings
+
+    rule = "Never create a stock rule at store S40"
+    builder = _builder()
+    result = await builder.engine.retrieve(CTX, QUERY)
+    pinned = Pinned(
+        profile=[ProfileBlockView(block="standing_rules", text=f"- {rule}", version=0)],
+        procedures=[
+            SkillView(
+                id="prc_s12",
+                name="create-a-stock-rule",
+                steps=["create_stock_rule"],
+                success_rate=1.0,
+                support=3,
+            )
+        ],
+    )
+    unhinted = ToolsRequest(available=[f"tool_{i}" for i in range(8)], hints=False)
+    task = "Create a stock rule for ST-101 at S40, min 1 max 3."
+    await builder._add_extras(CTX, task, unhinted, VISIBILITY, result, pinned, Timings())
+    assert pinned.tools is None
+    rendered = "\n".join(pinned_sections(pinned.profile, None, pinned.procedures, None))
+    assert f"  - but a standing rule of the user forbids create_stock_rule here: {rule}" in (
+        rendered.splitlines()
+    )
+    await builder.close()
