@@ -8,7 +8,7 @@ Trellis packages work together. The history itself is the [CHANGELOG](../CHANGEL
 | Thing | Where the version is | Now |
 |---|---|---|
 | The service, `trellis-memory-service` | `pyproject.toml`, `src/memory_service/__about__.py`, `GET /version`, the OpenAPI `info.version` | 0.3.0 |
-| The SDK, `trellis-memory` (`trellis.memory`) | `sdk/python/pyproject.toml` | 0.5.1 |
+| The SDK, `trellis-memory` (`trellis.memory`) | `sdk/python/pyproject.toml` | 0.6.0 |
 | The HTTP API | the path prefix | `/v1` |
 | The database schema | Alembic revisions in `migrations/versions/` | `0024_online_candidate_index` |
 | The search index | the collection name: the fingerprint of every encoder and the key layout | changes with a model |

@@ -30,6 +30,12 @@ TOOLS_SHOWN_MAX = 3
 #: evidence status is then not shown (an INSUFFICIENT drove the model to search memory in
 #: loops on questions its tools answer).
 TOOL_ANSWERS_CONFIDENCE = 0.5
+#: The heading the rendered context gives the evidence status. The status is about what
+#: long-term memory holds for the question (memories, documents, graph facts) and nothing
+#: else: it was "Evidence status", and an INSUFFICIENT under it read as "nothing to answer
+#: from" to a model whose own conversation held the answer (a follow-up asking where the
+#: previous answer came from was answered "I do not know").
+EVIDENCE_HEADING = "Evidence status (long-term memory)"
 #: How a tool hint or a learned skill's step says a standing rule of the user forbids it.
 _FORBIDDEN = "a standing rule of the user forbids {tool} here"
 
@@ -109,6 +115,9 @@ class ConversationWindow(BaseModel):
     rendered: str = ""
     token_estimate: int = 0
     form: WindowFormat = WindowFormat.RENDERED
+    #: The messages form only: the newest turn alone is over the conversation budget and is
+    #: given whole anyway (a turn is never cut), for the caller to trim to its model.
+    over_budget: bool = False
 
     @property
     def shown(self) -> bool:
@@ -560,7 +569,9 @@ class ContextBundle(BaseModel):
                 )
             )
         if self.evidence.status is not EvidenceStatus.COMPLETE and not tool_answers(self.tools):
-            parts.append(f"## Evidence status\n{self.evidence.status}")
+            # what long-term memory holds for the question - never the conversation, which the
+            # window carries (and, in the messages form, the caller replays)
+            parts.append(f"## {EVIDENCE_HEADING}\n{self.evidence.status}")
         return "\n\n".join(parts)
 
 

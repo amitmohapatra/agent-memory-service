@@ -179,8 +179,10 @@ class ToolHintsResponse(BaseModel):
 # --------------------------------------------------------------------------- context
 
 _EVIDENCE_STATUS = (
-    "COMPLETE, INCOMPLETE (evidence for part of the question, or about someone else) or "
-    "INSUFFICIENT (nothing to go on: answer that you do not know rather than guess)"
+    "What long-term memory (memories, documents, graph facts) holds for the question - not the "
+    "conversation, which the window carries: COMPLETE, INCOMPLETE (evidence for part of the "
+    "question, or about someone else) or INSUFFICIENT (memory has nothing on it: unless the "
+    "conversation answers it, say you do not know rather than guess)"
 )
 
 
@@ -291,6 +293,12 @@ class ConversationBody(BaseModel):
     messages: list[WindowMessageBody] = Field(
         description="The thread's most recent messages after its summary, oldest first; a "
         "tool call and its results are never parted."
+    )
+    over_budget: bool | None = Field(
+        default=None,
+        description="window_format=messages: true when the newest turn alone is over the "
+        "conversation budget and is given whole anyway (a turn is never cut): trim it to the "
+        "model's context before replaying it. Absent otherwise.",
     )
 
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Callable, Coroutine, Mapping, Sequence
+from collections.abc import Coroutine, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Final, Literal
@@ -318,7 +318,7 @@ class ContextBuilder:
 
     def _config_fingerprint(self) -> str:
         parts = [
-            "source-lineage-v2:rag-evidence-v7:multilingual-packing-v1",
+            "source-lineage-v2:rag-evidence-v7:multilingual-packing-v1:whole-turn-window-v1",
             self.retrieval_cfg.model_dump_json(),
             self.cfg.model_dump_json(),
             self.engine.indexer.fingerprint,
@@ -334,6 +334,8 @@ class ContextBuilder:
         tools: ToolsRequest | None,
         window: WindowFormat | None,
         output: ContextFormat | Literal["record"] = "record",
+        *,
+        conversation_budget: int | None = None,
     ) -> _Lookup:
         """Everything the cache decision needs: one database round trip, one cache read.
 
@@ -368,6 +370,12 @@ class ContextBuilder:
             ",".join(document_ids or []),
             tools.fingerprint() if tools else "",
             WINDOW_KEYS[window],
+            # a window cut to the caller's own budget; none named keeps the key it always had
+            *(
+                [f"conversation-budget={conversation_budget}"]
+                if conversation_budget is not None and window is not None
+                else []
+            ),
         )
         bundle_id = stable_key(namespace, query)
         cache_key = self._cache_key(ctx, bundle_id)
@@ -455,6 +463,7 @@ class ContextBuilder:
         tools: ToolsRequest | None = None,
         window: bool = True,
         window_format: WindowFormat = WindowFormat.RENDERED,
+        conversation_token_budget: int | None = None,
     ) -> ContextBundle:
         """The bundle itself, for in-process readers (the profile job, the benchmarks)."""
         budget = token_budget or self.cfg.token_budget
@@ -465,11 +474,27 @@ class ContextBuilder:
         ):
             timings = Timings()
             with timings.stage("scope"):
-                found = await self._lookup(ctx, query, budget, document_ids, tools, form)
+                found = await self._lookup(
+                    ctx,
+                    query,
+                    budget,
+                    document_ids,
+                    tools,
+                    form,
+                    conversation_budget=conversation_token_budget,
+                )
             if found.bundle is not None:
                 return ContextBundle.model_validate_json(found.bundle)
             bundle = await self._fresh(
-                ctx, query, budget, document_ids, tools, form, found, timings
+                ctx,
+                query,
+                budget,
+                document_ids,
+                tools,
+                form,
+                found,
+                timings,
+                conversation_token_budget or self.cfg.conversation_token_budget,
             )
         evidence_status_total.labels(bundle.evidence.status.value).inc()
         self._after_build(ctx, bundle, found)
@@ -487,6 +512,7 @@ class ContextBuilder:
         window_format: WindowFormat = WindowFormat.RENDERED,
         output: ContextFormat = "prompt",
         debug: bool = False,
+        conversation_token_budget: int | None = None,
     ) -> bytes:
         """The context as the API sends it, serialised once.
 
@@ -494,6 +520,8 @@ class ContextBuilder:
         so a hit in either is the stored bytes untouched.
         ``debug`` asks for the build's diagnostics, which only a build has: it is never
         served from the cache. Callers that need the ContextBundle itself use ``build``.
+        ``conversation_token_budget`` sizes the window (``None``: the service's
+        ``conversation_token_budget``).
         """
         budget = token_budget or self.cfg.token_budget
         form = window_format if window else None
@@ -503,12 +531,29 @@ class ContextBuilder:
         ):
             timings = Timings()
             with timings.stage("scope"):
-                found = await self._lookup(ctx, query, budget, document_ids, tools, form, output)
+                found = await self._lookup(
+                    ctx,
+                    query,
+                    budget,
+                    document_ids,
+                    tools,
+                    form,
+                    output,
+                    conversation_budget=conversation_token_budget,
+                )
             if found.bundle is not None and not debug:
                 self._track(self.records.given(ctx, found.bundle_id))
                 return found.bundle
             bundle = await self._fresh(
-                ctx, query, budget, document_ids, tools, form, found, timings
+                ctx,
+                query,
+                budget,
+                document_ids,
+                tools,
+                form,
+                found,
+                timings,
+                conversation_token_budget or self.cfg.conversation_token_budget,
             )
         evidence_status_total.labels(bundle.evidence.status.value).inc()
         self._after_build(ctx, bundle, found)
@@ -527,9 +572,10 @@ class ContextBuilder:
         window: WindowFormat | None,
         found: _Lookup,
         timings: Timings,
+        conversation_budget: int,
     ) -> ContextBundle:
-        """Retrieve, window (in the form asked for; ``None``: none) and assemble - the
-        cache-miss half of a build."""
+        """Retrieve, window (in the form asked for; ``None``: none - within
+        ``conversation_budget``) and assemble - the cache-miss half of a build."""
         cached, embedding = await self._semantic_lookup(found, query)
         if cached is not None:
             return cached
@@ -574,7 +620,11 @@ class ContextBuilder:
             with timings.stage("sections"):
                 pinned = await sections if sections is not None else Pinned()
                 conversation = self._window(
-                    ctx, await recent, after=pinned.covered_to, form=window or WindowFormat.RENDERED
+                    ctx,
+                    await recent,
+                    after=pinned.covered_to,
+                    form=window or WindowFormat.RENDERED,
+                    token_budget=conversation_budget,
                 )
         except BaseException:
             for side in (sections, recent, standing.task):
@@ -859,13 +909,20 @@ class ContextBuilder:
         """The thread's most recent messages, read while retrieval runs. A caller that keeps
         no history of its own (``window``) gets them whatever the question: the turn before
         is what a follow-up means, and the route cannot know what it refers to. The messages
-        form reads the tool results of the calls in it too."""
+        form reads the tool results of the calls in it too, and counts
+        ``conversation_max_messages`` as turns: a turn is replayed whole or not at all."""
         if not ctx.thread_id:
             return []
         limit = self.cfg.conversation_max_messages
         async with self.uow_factory() as uow:
             if form is WindowFormat.MESSAGES:
-                return await self.conversation.window_messages(uow, ctx, ctx.thread_id, limit=limit)
+                return await self.conversation.window_messages(
+                    uow,
+                    ctx,
+                    ctx.thread_id,
+                    turns=limit,
+                    limit=self.cfg.conversation_read_max_messages,
+                )
             thread = await uow.threads.get(ctx.tenant_id, ctx.thread_id)
             if thread is None:
                 return []
@@ -878,17 +935,18 @@ class ContextBuilder:
         *,
         after: int,
         form: WindowFormat,
+        token_budget: int,
     ) -> ConversationWindow:
         """The messages after the thread's durable summary (which covers everything up to
-        ``after``) that fit the conversation budget, in the form asked for."""
+        ``after``) that fit ``token_budget``, in the form asked for."""
         if not ctx.thread_id or not messages:
             return ConversationWindow(thread_id=ctx.thread_id, form=form)
-        cut = WINDOW_CUTS[form]
-        return cut(
-            ctx.thread_id,
-            [m for m in messages if m.sequence > after],
-            self.cfg.conversation_token_budget,
-        )
+        after_summary = [m for m in messages if m.sequence > after]
+        if form is WindowFormat.MESSAGES:
+            return replay_window(
+                ctx.thread_id, after_summary, token_budget, self.cfg.conversation_max_messages
+            )
+        return render_window(ctx.thread_id, after_summary, token_budget)
 
     def _below_floor(self, c: Candidate, slot: slots.Slot | None = None) -> bool:
         """A ranked item whose similarity to the question is under the floor is not packed:
@@ -973,7 +1031,16 @@ class ContextBuilder:
         budget: int,
         revision_fp: str,
     ) -> ContextBundle:
-        remaining = budget - window.token_estimate
+        # A rendered window is in the rendered text, all of it. The messages form is replayed by
+        # the caller as its own conversation: it takes the conversation's usual share of the
+        # budget and no more, so a larger window the caller asked for (or a newest turn over
+        # its budget, given whole) never crowds the memories out.
+        drawn = (
+            window.token_estimate
+            if window.form is WindowFormat.RENDERED
+            else min(window.token_estimate, self.cfg.conversation_token_budget)
+        )
+        remaining = budget - drawn
         memories: list[ContextItem] = []
         primary_memories = 0
         knowledge: list[ContextItem] = []
@@ -1226,13 +1293,6 @@ async def _nothing() -> list[Message]:
     return []
 
 
-#: How each form cuts the window from the thread's recent messages.
-WINDOW_CUTS: Final[
-    Mapping[WindowFormat, Callable[[str, Sequence[Message], int], ConversationWindow]]
-] = {
-    WindowFormat.RENDERED: render_window,
-    WindowFormat.MESSAGES: replay_window,
-}
 #: What each window (``None``: none) adds to a bundle's cache key; the rendered form's is the
 #: key it always had.
 WINDOW_KEYS: Final[Mapping[WindowFormat | None, str]] = {

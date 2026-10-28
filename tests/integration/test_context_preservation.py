@@ -172,7 +172,7 @@ async def test_abstention_and_no_evidence(container, uow_factory) -> None:
     assert "content term" in res.diagnostics["evidence"]["notes"][0]
     bundle = await container.services["context_builder"].build(U1, unrelated)
     assert bundle.evidence.status is EvidenceStatus.INSUFFICIENT
-    assert "## Evidence status\nINSUFFICIENT" in bundle.render()
+    assert "## Evidence status (long-term memory)\nINSUFFICIENT" in bundle.render()
     # nothing at all for a stranger -> INSUFFICIENT with 'no evidence retrieved'
     stranger = MemoryExecutionContext(tenant_id="globex", user_id="u9")
     res = await engine.retrieve(stranger, Q)

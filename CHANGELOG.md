@@ -8,6 +8,17 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- The caller sizes the conversation window: `POST /v1/context` takes an optional
+  `conversation_token_budget` (100-1000000 tokens; omitted: the service's 2000, as before), SDK
+  `trellis-memory` 0.6.0 `ctx.context(..., conversation_token_budget=...)`. A window that holds
+  its newest turn whole although that turn alone is over the budget says so in
+  `conversation.over_budget` (absent otherwise; SDK `Conversation.over_budget`), for the
+  caller to trim it to its model with its own library (LangChain's `trim_messages`): the
+  service never shortens what was said. In the messages form the window is the caller's to
+  replay, so it takes no more of `token_budget` than the default conversation share (2000)
+  and a larger window never crowds the memories out. Additive: a request without the field
+  is cut with the service's budget, and an SDK 0.5 client reads `over_budget` as an extra
+  field.
 - The prompt form of the context names the memories it shows: `POST /v1/context`
   (`format="prompt"`) returns `memory_ids`, the ids of the memories `rendered` shows, in bundle
   order (absent when none). A person's verdict on the answer cites them (`evidence_refs`), so it
@@ -32,6 +43,26 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- A follow-up about the previous answer ("where did you get that?", "which steps did you
+  take?") has the turn behind it: the messages form of the window (`window_format="messages"`)
+  gives whole turns - a USER message with every tool call, result and answer after it - or
+  none, from the newest back. It was cut per call-and-result unit and stopped at the first
+  that did not fit, so one tool result over about 8k characters (or more than nine calls in
+  a turn) dropped the turn's question, its calls and their results, and the next turn
+  replayed the bare answer. The newest turn is now always given from its question on (over
+  the budget: whole, with `conversation.over_budget`), a call is never given without its
+  result nor a result without its call, and `conversation_max_messages` (20) counts turns:
+  the store read reaches back 20 questions (`MessageRepository.list_window(turns=...)`,
+  bounded at `conversation_read_max_messages`, 1000), where 20 messages cut a turn of ten
+  calls in half. For an older client the window is the one it got whenever its newest turn
+  fits the budget; a thread of more than 20 short messages now gives up to 20 turns within
+  the same 2000 tokens. The rendered form of the window is cut per message as before
+  (within the caller's budget when it names one). Service and SDK 0.6.0.
+- The evidence status is labelled as what it is: the rendered heading is
+  `## Evidence status (long-term memory)` (was `## Evidence status`), and `evidence_status` is
+  described as what long-term memory holds for the question, not the conversation. An
+  INSUFFICIENT under the bare heading read as "nothing to answer from" to a model whose own
+  conversation held the answer. The status is computed as before.
 - `POST /v1/tools/hints` and the `tool_search` memory tool no longer hand over a call the
   user's standing rule forbids. They read the stored profile, which never lists the
   `standing_rules` section (the context computes it per request), so with "Never create a stock

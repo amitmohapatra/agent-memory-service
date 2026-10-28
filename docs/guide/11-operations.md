@@ -118,7 +118,7 @@ shipped were never the same artefact".
 |---|---|
 | `FROZEN_MODELS` | the encoders, ColBERT, NLI, revisions, runtimes, graph files, the relevance floor (chapter 8) |
 | `RetrievalSettings`, `FINAL_K`, `DEPTH_RATIO` | depth, arm weights, timeouts for entity search and query expansion, expansion budget |
-| `ContextSettings` | token budget 8,000, conversation window 20 messages and 2,000 tokens, access-counter flush |
+| `ContextSettings` | token budget 8,000, conversation window 20 turns (messages form; 20 messages rendered) and 2,000 tokens unless the request names its own, a read bound of 1,000 messages, access-counter flush |
 | `MemoryIntelligenceSettings` | dedup thresholds, verbatim turns, preceding-turn key, forgetting half-life and threshold |
 | `GraphSettings` | the 150 ms traversal budget, pool sizes, entity-route limits, summary bounds |
 | `NLISettings` | grounding thresholds and band |

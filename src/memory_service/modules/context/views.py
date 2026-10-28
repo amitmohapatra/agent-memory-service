@@ -86,7 +86,10 @@ def conversation_body(window: ConversationWindow) -> dict[str, Any] | None:
         _put(message, "tool_calls", [c.model_dump(mode="json") for c in m.tool_calls])
         _put(message, "tool_call_id", m.tool_call_id)
         messages.append(message)
-    return {"thread_id": window.thread_id, "messages": messages}
+    body: dict[str, Any] = {"thread_id": window.thread_id, "messages": messages}
+    if window.over_budget:
+        body["over_budget"] = True
+    return body
 
 
 def tool_choices(hints: ToolHints) -> list[dict[str, Any]]:

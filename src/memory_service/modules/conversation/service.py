@@ -439,16 +439,22 @@ class ConversationService:
         return messages
 
     async def window_messages(
-        self, uow: UnitOfWork, ctx: MemoryExecutionContext, thread_id: str, *, limit: int
+        self,
+        uow: UnitOfWork,
+        ctx: MemoryExecutionContext,
+        thread_id: str,
+        *,
+        turns: int,
+        limit: int,
     ) -> list[Message]:
-        """The thread's newest ``limit`` messages a window replays, oldest first: the visible
-        chat and the results of its tool calls. Read from the store, so a message appended
-        before is there however far the worker is behind; ``[]`` for a thread not created
-        yet (nothing was said in it)."""
+        """The messages a window replays of the thread's newest ``turns`` turns (at most the
+        newest ``limit``), oldest first: the visible chat and the results of its tool calls.
+        Read from the store, so a message appended before is there however far the worker is
+        behind; ``[]`` for a thread not created yet (nothing was said in it)."""
         if await uow.threads.get(ctx.tenant_id, thread_id) is None:
             return []
         await self.authz.require(ctx, "can_read", "thread", thread_id)
-        return await uow.messages.list_window(ctx.tenant_id, thread_id, limit=limit)
+        return await uow.messages.list_window(ctx.tenant_id, thread_id, turns=turns, limit=limit)
 
     async def get_message(
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, message_id: str

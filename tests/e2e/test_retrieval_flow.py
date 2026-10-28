@@ -106,7 +106,7 @@ def test_recall_and_context_over_http(client) -> None:
         assert set(prompt) >= {"rendered", "bundle_id", "token_estimate", "evidence_status"}
         if status:
             assert prompt["evidence_status"] == status
-            assert "## Evidence status\nINSUFFICIENT" in prompt["rendered"]
+            assert "## Evidence status (long-term memory)\nINSUFFICIENT" in prompt["rendered"]
         else:
             assert prompt["evidence_status"] != "INSUFFICIENT"
             assert "## Recent conversation" in prompt["rendered"]
