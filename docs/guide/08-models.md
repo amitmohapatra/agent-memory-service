@@ -114,7 +114,7 @@ inside the application's own deployment, which is the coupling the gateway exist
 ### When a call is allowed
 
 A use runs only when all four hold (`LLMAssist.wants`, `modules/llm/assist.py`; each use is
-in [the twelve uses](#the-twelve-uses)):
+in [the eleven uses](#the-eleven-uses)):
 
 ```mermaid
 flowchart TB
@@ -180,9 +180,9 @@ reads, because which uses are active is part of the context cache key (chapter 4
 
 ---
 
-## The twelve uses
+## The eleven uses
 
-`LLMUse` in `config/settings.py` names twelve. Each is optional work layered on a
+`LLMUse` in `config/settings.py` names eleven. Each is optional work layered on a
 deterministic path, and any model failure (no key, gateway error, rate limit, invalid output)
 falls back to that path. The tier is the model the call goes to: `fast`
 (`LLMTuning.fast_model`) for `contextual_extraction`, `query_expansion`, `chunk_context` and
@@ -204,7 +204,6 @@ gateway model per use instead (`models: {"memory_restatement": "<gateway model i
 | `reflection` | periodic job, per principal with a key, over recent memories | strong | cited insights (≥ 2 sources) | none |
 | `memory_connections` | periodic job over recent memory pairs | strong | typed edges between memories (supersedes / contradicts / relates) | none |
 | `memory_restatement` | **opt-in** (ADR 0027): a conversation message, at ingest, when the tenant's policy names this use. The model sees the turn, the turn before it, the speakers and the date, and returns a standalone restatement, up to three facts and up to four relations, checked against what it was shown (every number and capitalised name must occur there). Backfill earlier turns with `python -m memory_service.tools.restate --tenant <id> [--limit N] [--force]` | fast | the restatement appended to the turn's own index key (`system_metadata["restatement"]`; the content stays verbatim) and model-extracted graph relations bound to the turn (confidence ≤ 0.6) | the turn indexed as said |
-| `procedure_abstraction` | the tool-learning job, for a procedure that clears support and success-rate gates | strong | title and strategy text distilled from successes and failures | the miner's own rendering |
 
 ### Reads (only when the read is assisted)
 

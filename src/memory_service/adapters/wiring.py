@@ -634,9 +634,7 @@ def _wire_tools(container: Container) -> None:
     container.services["tool_hints"] = ToolHintsService(
         uow_factory, index, container.graph_store, ProcedureMatcher(container.services["indexer"])
     )
-    container.services["tool_learning"] = ToolLearning(
-        uow_factory, container.services["llm_assist"], container.graph_store
-    )
+    container.services["tool_learning"] = ToolLearning(uow_factory, container.graph_store)
     container.services["agent_tools"] = AgentTools(uow_factory, container.services)
     container.services["learned_skills"] = LearnedSkills(uow_factory)
 

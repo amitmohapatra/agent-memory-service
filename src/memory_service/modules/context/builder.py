@@ -643,9 +643,9 @@ class ContextBuilder:
         pinned: Pinned,
         timings: Timings,
     ) -> None:
-        """Working memory and prefetched memories ahead of the ranked ones, the tool hints
-        (which read the memories in hand and the profile), and the learned skills' steps a
-        standing rule of the user forbids for this task, with or without hints (``ruled``)."""
+        """Working memory ahead of the ranked memories, the tool hints (which read the
+        memories in hand and the profile), and the learned skills' steps a standing rule of
+        the user forbids for this task, with or without hints (``ruled``)."""
         if self.working is not None and result.routed.needs_memories:
             for i, item in enumerate(await self.working.recall(ctx)):
                 result.candidates.insert(
@@ -659,11 +659,6 @@ class ContextBuilder:
                         payload={"memory_type": item.get("memory_type", "WORKING")},
                     ),
                 )
-        present = {c.record_id for c in result.candidates}
-        fresh = [c for c in pinned.prefetched if c.record_id not in present]
-        result.candidates[:0] = fresh
-        if fresh:
-            result.diagnostics["prefetched"] = [c.record_id for c in fresh]
         if tools is not None and tools.hinted and self.sections is not None:
             with timings.stage("tools"):
                 pinned.tools = await self.sections.tools(

@@ -14,7 +14,6 @@ from memory_service.ports.credentials import CredentialRepository
 from memory_service.ports.feedback import FeedbackRepository
 from memory_service.ports.llm import LLMPolicyRepository, LLMUsageRepository
 from memory_service.ports.profile import ProfileRepository, ThreadSummaryRepository
-from memory_service.ports.pulls import PullRepository
 from memory_service.ports.repositories import (
     AgentRunRepository,
     ArchiveRepository,
@@ -60,7 +59,6 @@ class UnitOfWork(Protocol):
     procedures: ProcedureRepository
     profiles: ProfileRepository
     summaries: ThreadSummaryRepository
-    pulls: PullRepository
     tenants: TenantRepository
     api_keys: ApiKeyRepository
     workspaces: WorkspaceRepository

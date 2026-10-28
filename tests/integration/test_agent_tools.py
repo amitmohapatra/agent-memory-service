@@ -1,5 +1,4 @@
-"""Memory agent tools against PostgreSQL: each tool in the caller's scope, every call logged
-as a pull, used ids marked, and the prefetch counts learned from them."""
+"""Memory agent tools against PostgreSQL: each tool in the caller's scope."""
 
 from __future__ import annotations
 
@@ -10,7 +9,6 @@ import pytest
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import MessageRole, TemporalStatus
 from memory_service.domain.errors import NotFound, ScopeDenied, ValidationFailed
-from memory_service.domain.pulls import PREFETCH_MIN_PULLS
 
 pytestmark = pytest.mark.integration
 
@@ -27,9 +25,7 @@ async def _call(container, name: str, args: dict, run: str = "run_1"):
     return result
 
 
-async def test_an_agent_remembers_finds_updates_and_forgets_through_its_tools(
-    container, uow_factory
-) -> None:
+async def test_an_agent_remembers_finds_updates_and_forgets_through_its_tools(container) -> None:
     stored = await _call(
         container,
         "memory_remember",
@@ -56,18 +52,6 @@ async def test_an_agent_remembers_finds_updates_and_forgets_through_its_tools(
     assert updated["supersedes"] == stored["id"]
     forgotten = await _call(container, "memory_forget", {"id": updated["id"]})
     assert forgotten == {"id": updated["id"], "forgotten": True}
-    async with uow_factory() as uow:
-        pulls = await uow.pulls.settled(before=datetime.now(UTC) + timedelta(hours=1), limit=50)
-    assert [p.tool for p in pulls] == [
-        "memory_remember",
-        "memory_search",
-        "memory_search",
-        "memory_update",
-        "memory_forget",
-    ]
-    first_search = pulls[1]
-    assert first_search.result_ids[0] == stored["id"]
-    assert first_search.used_ids == [stored["id"]], "the update acted on what the search found"
 
     with pytest.raises(ValidationFailed):
         await _call(container, "memory_update", {"id": stored["id"]})
@@ -218,25 +202,3 @@ async def test_message_search_reads_this_conversation_then_the_users_earlier_one
             "acme", "ann", limit=10, threads=5, words=["4_71", "44%"]
         )
         assert literal == [], "LIKE wildcards in a word are matched literally"
-
-
-async def test_items_a_run_keeps_using_for_a_request_pattern_are_prefetched(
-    container, uow_factory
-) -> None:
-    stored = await _call(
-        container, "memory_remember", {"content": "The paper supplier is Acme", "kind": "SEMANTIC"}
-    )
-    agent_tools = container.services["agent_tools"]
-    for i in range(PREFETCH_MIN_PULLS):
-        run = f"run_{i}"
-        await _call(container, "memory_search", {"query": f"supplier for order {i}"}, run=run)
-        await agent_tools.used(_agent(run), [stored["id"]])
-    assert await agent_tools.prefetched(_agent(), "supplier for order 99") == []
-    assert await agent_tools.learn_prefetch() == 0, "pulls settle before they are learned"
-    learned = await agent_tools.learn_prefetch(now=datetime.now(UTC) + timedelta(hours=1))
-    assert learned == PREFETCH_MIN_PULLS + 1
-    assert await agent_tools.prefetched(_agent(), "supplier for order 99") == [stored["id"]]
-    other = MemoryExecutionContext(tenant_id="acme", user_id="bob", agent_id="buyer")
-    assert await agent_tools.prefetched(other, "supplier for order 99") == []
-    bundle = await container.services["context_builder"].build(_agent(), "supplier for order 99")
-    assert stored["id"] in [m.item_id for m in bundle.memories]

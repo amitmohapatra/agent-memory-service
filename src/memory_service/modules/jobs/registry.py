@@ -340,10 +340,6 @@ def register_handlers(container: Container) -> None:
         """Claim the standing questions that are due."""
         await container.services["profile"].schedule_due()
 
-    async def prefetch_learn(payload: dict[str, Any]) -> None:
-        """Fold settled agent-tool pulls into what the context pre-includes."""
-        await container.services["agent_tools"].learn_prefetch()
-
     async def tools_index(payload: dict[str, Any]) -> None:
         """Embed changed catalog entries for tool search."""
         await container.services["tool_index"].index(payload["tenant_id"], payload["tool_ids"])
@@ -464,9 +460,6 @@ def register_handlers(container: Container) -> None:
     )
     queue.register(TASK_TOOLS_INDEX, Queue.EMBEDDING, tools_index, retries=5)
     _register_tools_refresh(queue, container)
-    queue.register_periodic(
-        "periodic.prefetch_learn", Queue.RECONCILE, prefetch_learn, cron="*/5 * * * *"
-    )
     queue.register(TASK_TOOLS_LEARN, Queue.RECONCILE, tools_learn, retries=0)
     queue.register_periodic(
         "periodic.tools_learn", Queue.RECONCILE, tools_learn, cron="*/5 * * * *"

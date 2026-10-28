@@ -62,7 +62,7 @@ sequenceDiagram
 `role: "EVENT"` is stored as an internal message and learned from as an event. A message in a
 language other than English is kept verbatim and indexed in the multilingual dense space; the
 model reads it into typed facts only when the tenant's key and policy allow
-([chapter 8](guide/08-models.md#the-twelve-uses)). `ctx.remember(...)` (`POST /v1/memories`) is
+([chapter 8](guide/08-models.md#the-eleven-uses)). `ctx.remember(...)` (`POST /v1/memories`) is
 the direct path: one memory, stored verbatim, never gated.
 
 ## 2. Context build
@@ -95,7 +95,7 @@ sequenceDiagram
       E->>PG: one budgeted graph statement (150 ms)
     end
     E-->>B: fused candidates (memories ranked by ADR 0026), graph facts
-    B->>PG: side sections in parallel: profile, thread summary, procedures, prefetched memories, recent messages, tool hints
+    B->>PG: side sections in parallel: profile, thread summary, procedures, recent messages, tool hints
     B->>B: expand over the document graph, verify evidence groups, relevance floor
     B->>B: pack within the token budget, render with handles ([m1], [k1])
     B->>K: one pipelined write: the bundle record, the prompt form, the full form
@@ -212,7 +212,6 @@ sequenceDiagram
   end
   G->>G: contradiction scan over retrieved-but-unused evidence
   G-->>API: per claim: supported, unsupported, contradicted or borderline
-  API->>API: the supported evidence counts as used (agent-tool pull statistics)
   opt a run in the scope or in the body
     API->>F: the report as the judge's RUN feedback (pending: a tenant admin decides it)
   end

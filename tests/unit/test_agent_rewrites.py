@@ -94,19 +94,13 @@ class _Rows:
 
 
 class _Ignored:
-    async def add(self, *_: Any, **__: Any) -> None:
-        return None
-
     async def bump(self, *_: Any, **__: Any) -> None:
-        return None
-
-    async def mark_used(self, *_: Any, **__: Any) -> None:
         return None
 
 
 class _Uow:
     def __init__(self, rows: list[CanonicalMemory]) -> None:
-        self.memories, self.pulls, self.revisions = _Rows(rows), _Ignored(), _Ignored()
+        self.memories, self.revisions = _Rows(rows), _Ignored()
 
     async def __aenter__(self) -> _Uow:
         return self

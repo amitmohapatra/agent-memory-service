@@ -92,3 +92,8 @@ ADR 0028 made a vote wait for the tenant's administrator. Two gaps remained, bot
   and two partial indexes for the review reports (`ix_feedback_review`,
   `ix_feedback_review_target`).
 - SDK: `ctx.feedback.pending(group="target", review=...)`, `approve_many`, `dismiss_many`.
+
+> **Amendment, 2026-10.** The run's `mark_used` that decision 5 leaves in place no longer
+> exists: the agent-tool pull log it wrote to, and the prefetch learning that read it, were
+> removed (migration `0030_drop_dead_learning`). A confirmed run now moves only its cited
+> memories' confidence, which a flipped vote undoes in full.
