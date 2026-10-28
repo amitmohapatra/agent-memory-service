@@ -91,7 +91,8 @@ def conversation_body(window: ConversationWindow) -> dict[str, Any] | None:
 
 def tool_choices(hints: ToolHints) -> list[dict[str, Any]]:
     """Each candidate with its confidence, its track record, whether it is the learned
-    plan's next step, the arguments already found and the required ones nothing found."""
+    plan's next step, the arguments already found, the required ones nothing found, and the
+    standing rule of the user that forbids calling it here (``ToolHints.forbidden``)."""
     out: list[dict[str, Any]] = []
     for c in hints.candidates:
         prefix = f"{c.name}."
@@ -113,6 +114,7 @@ def tool_choices(hints: ToolHints) -> list[dict[str, Any]]:
             if m.tool == c.name
         ]
         _put(choice, "missing", missing)
+        _put(choice, "forbidden", hints.forbidden.get(c.name))
         out.append(choice)
     return out
 

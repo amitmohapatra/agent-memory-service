@@ -44,7 +44,7 @@ failed, not its procedure.
 | `GET /v1/tools?names=…` | the catalog visible in this scope, by name, with statistics (cursor paged; a page holds the whole 500-entry catalog by default). `ETag` + `Cache-Control: private, no-cache`: send it back in `If-None-Match` and an unchanged catalog is a `304` without a body — how a harness refreshes approval tiers cheaply. Each entry says whether tool search finds it as it is now (`indexed`: false right after it was published or changed, until its `tools.index` job ran): a harness waits for it before a tenant's first hints | `ctx.advanced.tools.catalog(names=…)` (follows the cursor); `catalog_if_changed(names, etag=)` → `(entries | None, etag)`, `None` when unchanged |
 | `POST /v1/tools/invocations` | record one call (idempotent on run + step + tool + arguments) | `ctx.record_tool(...)` |
 | `POST /v1/feedback` (target `run`) | label a run successful or not | `ctx.feedback("run", run_id, "confirm", source="system")` |
-| `POST /v1/tools/hints` | the tools that fit, best first: confidence, success rate, next step, the arguments found and the ones missing; the plan | `ctx.tool_hints(task, available=…, k=…)` |
+| `POST /v1/tools/hints` | the tools that fit, best first: confidence, success rate, next step, the arguments found and the ones missing, the user's standing rule that forbids one; the plan | `ctx.tool_hints(task, available=…, k=…)` |
 | `GET /v1/tools/approval-suggestions?tool=…` | approval rules this agent's reviewed calls support, most supported first (cursor paged) | `ctx.advanced.tools.approval_suggestions(tool=…)` |
 | `POST /v1/tools/approval-suggestions/{suggestion_id}/accept` | accept one: its rule is written into the tool's `approve_when` | `ctx.advanced.tools.accept_suggestion(id)` |
 
@@ -167,6 +167,14 @@ hints.plan  # the learned procedure: .steps (tool names), .success_rate, .runs |
   `entity_type` the argument names, when the catalog says) — but not a free-text argument the
   catalog describes (a team's name, a question, with no identifier, number or entity to find):
   the request says it in words the hints do not extract, and the model words it from there.
+- **forbidden** — the user's standing "never" rule that forbids the call here ("Never create
+  a stock rule at store S40" for `create_stock_rule` on a task, or an argument found, at S40):
+  the tool stays a candidate but is never `next`, and no `args` or `missing` are given for it.
+  The rules are the user's current ones that apply to the task (ADR 0041: a later rule on the
+  subject supersedes, a forgotten or replaced one is gone), read in the caller's scope on the
+  task's own vectors beside the catalog search; `POST /v1/context` reads them once for its
+  profile and the inline hints use that. A rule about another store, an "always" rule, or one
+  about another action forbids nothing.
 
 ## Procedures and the learning job
 
@@ -294,7 +302,8 @@ Arguments are redacted per the catalog entry's `redact` list before they are sto
 
 `format=full` returns the same content as data instead: `skills` (`id`, `name`, `steps` as
 tool names, `with_skill`, `fixes`, `success_rate`, `runs`) and `tools`, each with `confidence`,
-`success_rate`, `next`, `args` and `missing`, exactly as `POST /v1/tools/hints` returns them.
+`success_rate`, `next`, `args`, `missing` and `forbidden`, exactly as `POST /v1/tools/hints`
+returns them.
 
 Nothing tool-related is in the context when `tools` is not sent: no learned skills, no hints, no
 tools. Fewer than five tools get the learned skills and no hints: the model already sees every

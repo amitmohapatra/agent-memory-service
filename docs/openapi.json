@@ -7159,6 +7159,18 @@
             "title": "Confidence",
             "type": "number"
           },
+          "forbidden": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the user's standing rule that forbids this call here: never the next step, no arguments found or asked for",
+            "title": "Forbidden"
+          },
           "missing": {
             "anyOf": [
               {

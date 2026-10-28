@@ -355,5 +355,6 @@ class AgentTools:
             k=TOOL_SEARCH_K,
             scope_keys=list(visibility.keys),
             profile=profile,
+            visibility=visibility,
         )
         return hints_view(hints)

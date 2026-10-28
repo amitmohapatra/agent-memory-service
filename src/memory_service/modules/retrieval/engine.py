@@ -362,11 +362,7 @@ class RetrievalEngine:
                     with timings.stage("visibility"):
                         async with self.uow_factory() as uow:
                             visibility = await self.authz.visibility(ctx, revisions=uow.revisions)
-                if self.indexer.fingerprint not in self._ensured:
-                    # a fresh deployment answers "nothing yet" before anything was indexed,
-                    # instead of failing on a missing collection
-                    await self.indexer.ensure_collections()
-                    self._ensured.add(self.indexer.fingerprint)
+                await self.ensure_collections()
                 # a post-stage that depends only on the route and the scope (the graph
                 # traversal) starts now and is awaited when its turn comes
                 for name, stage in self.post_stages.items():
@@ -1171,6 +1167,14 @@ class RetrievalEngine:
             weights=self.cfg.hybrid_weights,
             late=vectors.late,
         )
+
+    async def ensure_collections(self) -> None:
+        """The collections this engine searches, once per index build: a fresh deployment
+        answers "nothing yet" before anything was indexed, instead of failing on a missing
+        collection (a search outside ``retrieve``, ``modules.context.standing``, too)."""
+        if self.indexer.fingerprint not in self._ensured:
+            await self.indexer.ensure_collections()
+            self._ensured.add(self.indexer.fingerprint)
 
     def memory_scope(self, visibility: VisibilitySpecification) -> tuple[str, SearchFilter]:
         """The memories collection and the filter a current-memory search of ``visibility``

@@ -23,12 +23,17 @@
   the request.
 - forbidden: the candidates a current standing rule of the user forbids for this call
   ("Never create a stock rule at store S40", the ``standing_rules`` section the context
-  lists): never the next step, nothing prefilled or asked for, and the rule beside them.
+  lists): never the next step, nothing prefilled or asked for, and the rule beside them. A
+  caller with no context (``POST /v1/tools/hints``, the ``tool_search`` agent tool) passes
+  its visibility, and the rules that apply to the task are read here, beside the search
+  (``standing.standing_blocks``, on the task's own vectors): a stored profile never lists
+  them.
 - confidence: each candidate's score as a number in 0..1 (``1 - e^-score``, so the order
   is the score's).
 
 Every read is indexed and bounded; the only model is the query encoder of the tool search
-(the task is encoded once, for the search and the procedures' meaning alike), and the same
+(the task is encoded once, for the search, the procedures' meaning and the standing rules
+alike: the tool index and the memories share one indexer, so one vector space), and the same
 encoder once per process for each procedure pattern a match reads by meaning.
 """
 
@@ -44,6 +49,7 @@ from functools import partial
 from typing import Any, Final
 
 from memory_service.domain.context import MemoryExecutionContext
+from memory_service.domain.context_bundle import ProfileBlockView
 from memory_service.domain.graph import IDENTIFIED_BY
 from memory_service.domain.tools import (
     MissingArgument,
@@ -56,9 +62,10 @@ from memory_service.domain.tools import (
     ToolInvocation,
     ToolStats,
 )
-from memory_service.modules.context.standing import forbids, listed_rules
+from memory_service.modules.authz.visibility import VisibilitySpecification
+from memory_service.modules.context.standing import forbids, listed_rules, standing_blocks
 from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
-from memory_service.modules.retrieval.engine import QueryVectors
+from memory_service.modules.retrieval.engine import QueryVectors, RetrievalEngine
 from memory_service.modules.tools.index import ToolIndex
 from memory_service.modules.tools.matching import ProcedureMatcher, TaskVectors
 from memory_service.modules.tools.patterns import task_slots
@@ -352,12 +359,16 @@ class ToolHintsService:
         index: ToolIndex,
         graph: GraphStore | None,
         matcher: ProcedureMatcher | None = None,
+        *,
+        engine: RetrievalEngine | None = None,
     ) -> None:
         self.uow_factory = uow_factory
         self.index = index
         self.graph = graph
         #: which procedures a task is about; without one, by the pattern's words alone
         self.matcher = matcher or ProcedureMatcher(None)
+        #: the memories' search the user's standing rules are read with (``_standing``)
+        self.engine = engine
 
     async def procedures(
         self,
@@ -393,15 +404,22 @@ class ToolHintsService:
         memories: Sequence[Any] = (),
         profile: Sequence[Any] = (),
         vectors: QueryVectors | None = None,
+        visibility: VisibilitySpecification | None = None,
     ) -> ToolHints:
+        """``visibility``: the caller's, when ``profile`` is the stored blocks alone (no
+        context was built): the standing rules that apply to the task are read in it
+        (``_standing``). The context passes none: its profile already lists them."""
         if vectors is None:
-            # encoded once: the catalog search and a procedure the words miss both read them
+            # encoded once: the catalog search, a procedure the words miss and the standing
+            # rules all read them
             vectors = await self.index.encode(task)
-        # the stored procedures and the catalog search are independent reads
-        procedures, found = await asyncio.gather(
+        # the stored procedures, the catalog search and the standing rules are independent
+        procedures, found, standing = await asyncio.gather(
             self.procedures(ctx, task, scope_keys, k=3, vectors=vectors),
             self.index.search(ctx.tenant_id, ctx.workspace_id, task, vectors=vectors),
+            self._standing(task, visibility, vectors),
         )
+        profile = [*standing, *profile]
         plan = next(
             (p for p in procedures if available is None or set(p.tools) <= set(available)), None
         )
@@ -449,6 +467,19 @@ class ToolHintsService:
             missing=missing,
         )
         return _guarded(hints, forbidden, _unasked(candidates, task, entries))
+
+    async def _standing(
+        self, task: str, visibility: VisibilitySpecification | None, vectors: QueryVectors | None
+    ) -> list[ProfileBlockView]:
+        """The standing rules and preferences that apply to ``task`` in ``visibility``, as the
+        context lists them (``standing.standing_blocks``): what ``_forbidden`` reads. None
+        without a visibility (the caller's profile already lists them) or a memories'
+        search."""
+        if visibility is None or self.engine is None:
+            return []
+        # no memory indexed yet is no rule, not a missing collection
+        await self.engine.ensure_collections()
+        return await standing_blocks(self.engine, task, visibility, vectors)
 
     async def _every_argument(
         self, jobs: list[_Resolution]

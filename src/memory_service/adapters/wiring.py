@@ -632,7 +632,11 @@ def _wire_tools(container: Container) -> None:
     index = ToolIndex(uow_factory, container.services["indexer"], container.search)
     container.services["tool_index"] = index
     container.services["tool_hints"] = ToolHintsService(
-        uow_factory, index, container.graph_store, ProcedureMatcher(container.services["indexer"])
+        uow_factory,
+        index,
+        container.graph_store,
+        ProcedureMatcher(container.services["indexer"]),
+        engine=container.services["retrieval"],
     )
     container.services["tool_learning"] = ToolLearning(
         uow_factory, container.services["llm_assist"], container.graph_store
