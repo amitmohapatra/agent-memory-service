@@ -155,7 +155,7 @@ conformance suite (`tests/contract/test_llm_conformance.py`) against a stub of i
 | Bifrost | `http://<gateway>:8080/v1` | `bifrost` | `bearer` (its virtual key) | no content logging and Bifrost's deny-all MCP scope on every call |
 | Ollama | `http://<host>:11434/v1` | `openai-compatible` | `bearer`, no key | name the model: its `/models` says nothing to choose by |
 | vLLM, llama.cpp | `http://<host>:8000/v1` | `openai-compatible` | `bearer`, key optional | one model listed: `auto` takes it |
-| Anthropic | `https://api.anthropic.com/v1` | `openai-compatible` | `bearer` (API key) | its OpenAI-compatible endpoint |
+| Anthropic | `https://api.anthropic.com/v1` | `openai-compatible` | `bearer` (API key) | its OpenAI-compatible endpoint; name the model, and for one that takes no temperature set `profile.temperature=false`: its `/models` says neither |
 | Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `openai-compatible` | `bearer` (API key) | its OpenAI-compatible endpoint |
 | Vertex AI | `https://<region>-aiplatform.googleapis.com/v1/projects/<p>/locations/<region>/endpoints/openapi` | `openai-compatible` | `google` | application default credentials, refreshed; the `[google]` extra |
 | Bedrock | `https://bedrock-runtime.<region>.amazonaws.com/openai/v1` | `openai-compatible` | `aws` | SigV4 from the AWS environment or role; the `[aws]` extra |
@@ -198,8 +198,8 @@ flowchart TB
   asking for an explicit model (`adapters/models/catalog.py`).
 - **What the request looks like** is the model's profile, never its name: a reasoning model,
   or one that takes no temperature, is sent `max_completion_tokens` and no `temperature` (the
-  sdk shapes it); `max_output_tokens` caps the budget; a model without `tool_calling` is sent
-  no `tool_choice`. The profile is the registered endpoint's (the harness sends LangChain's
+  sdk shapes it); `max_output_tokens` caps the budget; no call carries tools or a
+  `tool_choice` (an endpoint may refuse one without tools). The profile is the registered endpoint's (the harness sends LangChain's
   model profile), `MEMORY__MODELS__LLM__PROFILE__*` for the service's own, refined by what
   `/models` lists for an `auto` choice.
 - **Language**: every system prompt ends with one rule — return text in the language of its

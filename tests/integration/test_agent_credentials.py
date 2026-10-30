@@ -112,7 +112,7 @@ async def test_concurrent_agents_send_only_their_key_and_explicit_mcp_denial(
                 assert headers["x-bf-mcp-include-tools"] == ""
                 assert headers["x-bf-disable-content-logging"] == "true"
             assert all(
-                prompt["tool_choice"] == "none" and "tools" not in prompt
+                "tool_choice" not in prompt and "tools" not in prompt
                 for prompt in gateway.prompts()
             )
             await save(credentials, uow_factory, ALICE, None)

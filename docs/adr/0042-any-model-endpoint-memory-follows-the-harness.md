@@ -53,7 +53,7 @@ headers: no content logging and the deny-all MCP scope), the auth (`bifrost_sdk.
 `bearer`; `google`, a refreshed token for Vertex AI; `aws`, SigV4 for Bedrock), and the
 model's profile (`ModelProfile`: a reasoning model, or one without a temperature, gets
 `max_completion_tokens` and no `temperature`, shaped by the sdk; `max_output_tokens` caps the
-budget; a model without `tool_calling` gets no `tool_choice`). One sdk client per endpoint, so
+budget; no call carries tools, so none carries a `tool_choice`). One sdk client per endpoint, so
 the circuit breaker is per endpoint and one agent's broken endpoint never trips another's.
 
 **`auto` reads the listing, not the name.** It takes the cheapest model whose `/models` row

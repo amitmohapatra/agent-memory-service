@@ -11,8 +11,8 @@ rather than shipping untested. Each stub checks what its real counterpart would:
 - a bearer key; a Google access token, refreshed once it expires; an AWS SigV4 signature,
   recomputed by the stub from the request it received, body included;
 - the request's shape from the profile: ``max_completion_tokens`` and no ``temperature`` for
-  a reasoning model or one that takes no temperature, the output ceiling, ``tool_choice``
-  only for a model that takes tools.
+  a reasoning model or one that takes no temperature, the output ceiling, and never a
+  ``tool_choice`` (no memory call sends tools, and an endpoint may refuse one without them).
 """
 
 from __future__ import annotations
@@ -111,7 +111,7 @@ PROFILES: dict[str, ModelProfile] = {
     "plain chat": ModelProfile(),
     "reasoning": ModelProfile(reasoning_output=True),
     "no temperature": ModelProfile(temperature=False),
-    "ceiling, no tools": ModelProfile(max_output_tokens=64, tool_calling=False),
+    "ceiling": ModelProfile(max_output_tokens=64),
 }
 
 # ----------------------------------------------------------------------------- auth stubs
@@ -287,7 +287,8 @@ async def test_a_memory_call_conforms_on_every_route_auth_profile_and_wire(
             assert "temperature" not in body
         else:
             assert body["max_tokens"] == budget and body["temperature"] == 0.0
-        assert ("tool_choice" in body) is shape.tool_calling and "tools" not in body
+        # no tools, so no tool_choice: an endpoint may refuse one without tools (400)
+        assert "tool_choice" not in body and "tools" not in body
     assert "response_format" in bodies[1]
     if auth == "google":
         assert state["tokens"] == ["ya29.token-1", "ya29.token-2"], "refreshed once expired"

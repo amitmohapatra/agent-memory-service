@@ -34,7 +34,7 @@ async def test_all_memory_calls_explicitly_deny_mcp_and_use_service_prompts(stru
         assert "x-bf-prompt-id" not in request.headers
         assert "x-bf-mcp-session-id" not in request.headers
         body = json.loads(request.content)
-        assert body["tool_choice"] == "none" and not body.get("tools")
+        assert "tool_choice" not in body and "tools" not in body
         assert body["messages"][0]["content"] == "Service-owned prompt."
     await adapter.close()
 
@@ -69,5 +69,5 @@ async def test_another_endpoint_is_sent_no_bifrost_header_at_all() -> None:
         await adapter.complete([LLMMessage(role="user", content="x")])
         request = route.calls[0].request
         assert not [h for h in request.headers if h.lower().startswith("x-bf-")]
-        assert json.loads(request.content)["tool_choice"] == "none"
+        assert "tool_choice" not in json.loads(request.content)
     await adapter.close()

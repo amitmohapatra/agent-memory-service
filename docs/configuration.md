@@ -155,9 +155,9 @@ tenant's policy, set through the API.
 | `LLM_AUTH` | `bearer` | `bearer` | no | the auth: `bearer` (`LLM_API_KEY`), `google` (a refreshed Google token, for Vertex AI; the `[google]` extra) or `aws` (SigV4, for Bedrock; the `[aws]` extra) |
 | `MEMORY__MODELS__LLM__MODEL` | unset | `openai/gpt-4.1-mini` | yes: the policy's, else one `/models` lists with enough to choose by | the model the service's own endpoint calls, as that endpoint names it |
 | `MEMORY__MODELS__LLM__PROFILE__REASONING_OUTPUT` | `false` | `false` | no | the model reasons before it answers: it is sent `max_completion_tokens` and no `temperature` |
-| `MEMORY__MODELS__LLM__PROFILE__TEMPERATURE` | `true` | `true` | no | the model accepts a `temperature` (`false`: the same request shape as a reasoning model) |
+| `MEMORY__MODELS__LLM__PROFILE__TEMPERATURE` | `true` | `true` | no | the model accepts a `temperature` (`false`: the same request shape as a reasoning model; set it where `/models` does not say, as Anthropic's does not) |
 | `MEMORY__MODELS__LLM__PROFILE__MAX_OUTPUT_TOKENS` | unset | `4096` | no | the most tokens one answer may hold; a call's budget is capped at it |
-| `MEMORY__MODELS__LLM__PROFILE__TOOL_CALLING` | `true` | `true` | no | the model takes tools, so calls carry `tool_choice: none` (`false`: they carry no tool field at all) |
+| `MEMORY__MODELS__LLM__PROFILE__TOOL_CALLING` | `true` | `true` | no | whether the model takes tools: part of the shared profile, no effect here (no memory call carries tools or a `tool_choice`) |
 | `MEMORY__MODELS__LLM__ACCEPT_AGENT_ENDPOINTS` | `true` | `true` | no | `false`: a registered endpoint is stored but never called; every call uses the service's own endpoint, or none |
 | `MEMORY__AGENT_CREDENTIALS__ACTIVE_KEY_ID` | unset | `v1` | yes in `dev`/`test`: a development key | the envelope key that encrypts newly registered model endpoints |
 | `MEMORY__AGENT_CREDENTIALS__ENCRYPTION_KEYS` | `{}` | `{"v1":"<base64 of 32 random bytes>"}` | yes in `dev`/`test`: a development key | the keyring, by version (keep old versions while rotating). Required in `staging` and `prod`, where registration is refused without it |
