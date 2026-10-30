@@ -320,7 +320,8 @@ answers went from 30.8 packed memories each to 0.9; at 0.25 the first evidence w
 window is the most recent messages after the thread summary, at most 20 and 2,000 tokens
 (`conversation_token_budget` on the request sets the tokens); `window=False` leaves it out for a
 framework that keeps its own history, and `window_format="messages"` gives it in layers — at
-most 20 turns, each its question, answer and a plain-text steps list of its tool calls, the
+most 20 turns, each its question and answer, with a steps list of its tool calls in the
+context's `## Run record` section, the
 newest with the calls and results too when they fit, its text and steps always, flagged
 `over_budget` when they alone are over the budget — for a framework that replays it
 as its own conversation (`modules/context/window.py`,

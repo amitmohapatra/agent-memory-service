@@ -9,8 +9,10 @@ each entry says which one moved. Decisions behind each change are in the
 
 ### Changed
 - **The messages window gives each turn a steps list, in layers.** `window_format="messages"`
-  now gives every turn that made tool calls a plain-text `ASSISTANT` message before its answer
-  ("Steps taken for this answer, from the run's record"): a numbered line per call with the
+  now gives every turn that made tool calls a steps list in the context's `## Run record`
+  section of `rendered` (written by the harness, it says, not by the model or the user: never
+  a replayed `ASSISTANT` message, which a model disowned as its own claim): the turn's
+  question and a numbered line per call with the
   tool, its arguments in short and the facts the caller wrote on its result under
   `custom_metadata.run_record` (`status`, `seconds`, `sources`), and the run's own (`status`,
   `seconds`, `approvals`, from the turn's last message). The budget is spent newest first in
@@ -18,8 +20,8 @@ each entry says which one moved. Decisions behind each change are in the
   results - so the results go first and the steps lists last; an older turn's results are no
   longer replayed (they read as fresh results to a small model), and a template that drops
   tool calls (Granite 3.3's) still shows what was done. The newest turn's question, answer and
-  steps list are always given (`over_budget` when they alone are over it). No new field: a
-  client that ignores the steps message replays a shorter conversation.
+  steps list are always given (`over_budget` when they alone are over it). No new field: the
+  messages are the turns' own, the record is in `rendered`.
 - **Any model provider, and memory follows the harness** (ADR 0042; service 0.4.0, SDK
   `trellis-memory` 0.6.0; breaking). A model call goes to an endpoint resolved per call, in one
   order: the endpoint the acting agent registered (else its tenant's), then the service's own,

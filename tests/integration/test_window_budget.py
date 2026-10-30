@@ -91,11 +91,17 @@ def _pairs_whole(body: dict[str, Any]) -> None:
     assert calls == {m["tool_call_id"] for m in messages if m["role"] == "TOOL"}
 
 
-STEPS = "Steps taken for this answer, from the run's record"
+RECORD = "## Run record\n"
 
 
 def _steps(body: dict[str, Any]) -> list[str]:
-    return [t for r, t in _said(body) if r == "ASSISTANT" and t.startswith(STEPS)]
+    """The steps lists of the context's run record (none is ever a replayed message)."""
+    assert not [t for _, t in _said(body) if t.startswith("For ")]
+    rendered = body["rendered"]
+    if RECORD not in rendered:
+        return []
+    section = rendered.split(RECORD, 1)[1].split("\n## ", 1)[0]
+    return section.split("\n\n")[1:]  # after the note saying who wrote it
 
 
 def test_a_10k_character_tool_result_comes_back_with_its_question_and_call(api) -> None:
@@ -105,18 +111,18 @@ def test_a_10k_character_tool_result_comes_back_with_its_question_and_call(api) 
     # gets the question, the steps list and the answer - the result does not fit 2000
     body = _context(api, thread, "Where did you get that answer?")
     assert _said(body)[0] == ("USER", Q1) and _said(body)[-1] == ("ASSISTANT", ANSWER)
-    assert _steps(body) == [f"{STEPS} (1 call):\n1. stock_quote(n=0)"]
+    assert _steps(body) == [f'For "{Q1}" (1 call):\n1. stock_quote(n=0)']
     assert "over_budget" not in body["conversation"]
     _pairs_whole(body)
     # a caller that sizes the window for its model: the result too, nothing to trim
     sized = _context(api, thread, "Where did you get that answer?", conversation_token_budget=8000)
-    assert [r for r, _ in _said(sized)] == ["USER", "ASSISTANT", "TOOL", "ASSISTANT", "ASSISTANT"]
+    assert [r for r, _ in _said(sized)] == ["USER", "ASSISTANT", "TOOL", "ASSISTANT"]
     assert SOURCE in _said(sized)[2][1] and "over_budget" not in sized["conversation"]
     _pairs_whole(sized)
     # the question written first, then asked: the earlier turn as its text and steps list
     _post(api, thread, {"role": "USER", "content": "Where did you get that answer?"})
     both = _context(api, thread, "Where did you get that answer?", conversation_token_budget=8000)
-    assert [r for r, _ in _said(both)] == ["USER", "ASSISTANT", "ASSISTANT", "USER"]
+    assert [r for r, _ in _said(both)] == ["USER", "ASSISTANT", "USER"]
 
 
 def test_twelve_calls_in_one_turn_are_read_and_listed(api) -> None:
@@ -141,7 +147,7 @@ def test_a_newest_turn_over_the_budget_keeps_its_steps_and_is_flagged(api) -> No
     _post(api, thread, *_turn("What is my plan?", [], "Pro."))
     _post(api, thread, *_turn(Q1 + " please" * 400, ["q" * 3000, "r" * 3000], ANSWER))
     body = _context(api, thread, "Why is it accurate?", conversation_token_budget=500)
-    assert [r for r, _ in _said(body)] == ["USER", "ASSISTANT", "ASSISTANT"]
+    assert [r for r, _ in _said(body)] == ["USER", "ASSISTANT"]
     assert len(_steps(body)) == 1 and body["conversation"]["over_budget"] is True
 
 
@@ -176,7 +182,7 @@ def test_the_run_record_a_caller_writes_is_in_the_steps_list(api) -> None:
     _post(api, thread, *turn)
     body = _context(api, thread, "Where is that from?")
     assert _steps(body) == [
-        f"{STEPS} (1 call):\n1. stock_quote(n=0): ok, 0.2 s, source: {SOURCE}\n"
+        f'For "{Q1}" (1 call):\n1. stock_quote(n=0): ok, 0.2 s, source: {SOURCE}\n'
         "The run: status SUCCESS, 4.0 s."
     ]
 

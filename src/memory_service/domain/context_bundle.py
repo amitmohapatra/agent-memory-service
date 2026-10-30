@@ -102,6 +102,14 @@ class WindowMessage(BaseModel):
     tool_call_id: str | None = None
 
 
+#: The heading the rendered context gives the window's run record, and what it says of it.
+RUN_RECORD_HEADING = "Run record"
+RUN_RECORD_NOTE = (
+    "The tool calls behind the earlier answers in this conversation, from the run's journal: "
+    "written by the harness, not by you or the user."
+)
+
+
 class ConversationWindow(BaseModel):
     """The thread's messages after its durable summary, the most recent that fit. ``form``:
     whether the rendered context shows them (``rendered``) or the caller replays them as its
@@ -118,6 +126,10 @@ class ConversationWindow(BaseModel):
     #: The messages form only: the newest turn alone is over the conversation budget and is
     #: given whole anyway (a turn is never cut), for the caller to trim to its model.
     over_budget: bool = False
+    #: The messages form only: the steps lists of the turns shown, oldest first (the run
+    #: record, ``modules/context/window.py``), which the rendered context carries under
+    #: :data:`RUN_RECORD_HEADING`: what the harness recorded, not what the model said.
+    record: str = ""
 
     @property
     def shown(self) -> bool:
@@ -516,6 +528,7 @@ class ContextBundle(BaseModel):
         parts = pinned_sections(self.profile, self.thread_summary, self.procedures, self.tools)
         if self.conversation.shown:
             parts.append(f"## Recent conversation\n{self.conversation.rendered}")
+        parts += record_section(self.conversation)
         repeated = self.redundant()
         memories = [m for m in self.memories if m.item_id not in repeated]
         facts = [f for f in self.graph_facts if f.item_id not in repeated]
@@ -595,6 +608,14 @@ def _contained(memories: Sequence[ContextItem], out: set[str]) -> set[str]:
                 found.add(m.item_id)
                 break
     return found
+
+
+def record_section(window: ConversationWindow) -> list[str]:
+    """The window's run record as the context's section, under a heading saying who wrote
+    it; nothing when it holds none."""
+    if not window.record:
+        return []
+    return [f"## {RUN_RECORD_HEADING}\n{RUN_RECORD_NOTE}\n\n{window.record}"]
 
 
 def profile_section(profile: Sequence[ProfileBlockView]) -> str | None:

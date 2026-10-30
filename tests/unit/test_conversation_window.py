@@ -1,7 +1,8 @@
 """The messages form of the conversation window (``modules/context/window.py``): in order, a
 tool call never parted from its results, cut from the newest turn back in layers - every
 turn's steps list, then its text, then the newest turn whole - the newest turn's text and steps
-always (flagged when they alone are over the budget)."""
+always (flagged when they alone are over the budget). The steps lists are the window's run
+record, rendered in the context: never a message the model would read as its own."""
 
 from __future__ import annotations
 
@@ -9,6 +10,7 @@ import itertools
 
 from memory_service.domain.context_bundle import (
     EVIDENCE_HEADING,
+    RUN_RECORD_HEADING,
     ContextBundle,
     ConversationWindow,
     EvidenceReport,
@@ -26,7 +28,6 @@ from memory_service.modules.context.views import conversation_body
 from memory_service.modules.context.window import (
     MESSAGE_OVERHEAD_TOKENS,
     RUN_RECORD,
-    STEPS_HEADING,
     message_tokens,
     replay_window,
     replayable,
@@ -95,14 +96,13 @@ def test_a_tool_call_comes_with_its_results() -> None:
         _m(A, "Shipped, Tuesday."),
     ]
     w = replay_window("thr", msgs, 2000)
-    roles = ["USER", "ASSISTANT", "TOOL", "TOOL", "ASSISTANT", "ASSISTANT"]
-    assert [m.role for m in w.messages] == roles
+    assert [m.role for m in w.messages] == ["USER", "ASSISTANT", "TOOL", "TOOL", "ASSISTANT"]
     assert [c.id for c in w.messages[1].tool_calls] == ["c1", "c2"]
     assert w.messages[1].tool_calls[0].arguments == {"q": "c1"}
     assert [m.tool_call_id for m in w.messages[2:4]] == ["c1", "c2"]
-    assert w.messages[4].text.startswith(STEPS_HEADING)  # the steps list, before the answer
-    assert w.messages[5].text == "Shipped, Tuesday."
-    assert w.message_ids == [m.message_id for m in msgs]  # stored messages only
+    assert w.messages[4].text == "Shipped, Tuesday."  # the answer as the agent gave it
+    assert w.record.startswith('For "where is it?" (2 calls):')  # the steps, in the record
+    assert w.message_ids == [m.message_id for m in msgs]
     assert units(msgs) == [[msgs[0]], msgs[1:4], [msgs[4]]]
 
 
@@ -192,6 +192,28 @@ def test_the_messages_form_is_not_rendered_but_still_dedupes_memories() -> None:
     assert "## Recent conversation\nUSER: My order is QX-4471." in rendered.render()
 
 
+def test_the_run_record_is_in_the_context_and_no_message_is_put_in_the_agent_s_mouth() -> None:
+    """The steps list used to be replayed as an ASSISTANT message, and a model asked about it
+    disowned it as a claim it had made up. It is the context's run record now, under a
+    heading that says who wrote it; the agent's own answer stays its message."""
+    turn = _turn("What did ACME close at?", ["123.45"], "123.45 USD.")
+    window = replay_window("thr", [*turn, _m(U, "Where is that from?")], 100_000)
+    assert [(m.role, m.text) for m in window.messages if m.role == "ASSISTANT"] == [
+        ("ASSISTANT", "123.45 USD.")
+    ]
+    bundle = ContextBundle(
+        query="source?",
+        query_type=QueryType.USER_MEMORY,
+        conversation=window,
+        evidence=EvidenceReport(status=EvidenceStatus.COMPLETE),
+        token_budget=2000,
+        token_estimate=window.token_estimate,
+    )
+    rendered = bundle.render()
+    assert f"## {RUN_RECORD_HEADING}\n" in rendered
+    assert 'For "What did ACME close at?" (1 call):\n1. lookup(q="What did-0")' in rendered
+
+
 # -- whole turns: a follow-up about an answer needs the calls and results behind it ---------
 
 
@@ -217,7 +239,7 @@ def _whole_pairs(window: ConversationWindow) -> None:
 
 
 def _steps(window: ConversationWindow) -> list[str]:
-    return [m.text for m in window.messages if m.text.startswith(STEPS_HEADING)]
+    return window.record.split("\n\n") if window.record else []
 
 
 def test_a_10k_character_tool_result_replays_with_its_question_and_call() -> None:
@@ -233,7 +255,9 @@ def test_a_10k_character_tool_result_replays_with_its_question_and_call() -> Non
         turn[-1].content,
     )
     assert all(m.role != "TOOL" and not m.tool_calls for m in w.messages)
-    assert _steps(w) == [f'{STEPS_HEADING} (1 call):\n1. lookup(q="What did-0")']
+    assert _steps(w) == [
+        'For "What did ACME close at yesterday?" (1 call):\n1. lookup(q="What did-0")'
+    ]
     assert not w.over_budget and w.token_estimate < 2000
     w = replay_window("thr", turn, 8000)  # sized for the model: kept whole
     assert [m.role for m in w.messages if m.role == "TOOL"] == ["TOOL"]
@@ -245,8 +269,8 @@ def test_an_older_turn_never_replays_its_results() -> None:
     first = _turn("What did ACME close at?", ["123.45"], "123.45 USD.")
     second = _m(U, "And ZETA?")
     w = replay_window("thr", [*first, second], 100_000)
-    assert [m.role for m in w.messages] == ["USER", "ASSISTANT", "ASSISTANT", "USER"]
-    assert w.messages[1].text.startswith(STEPS_HEADING) and not w.messages[1].tool_calls
+    assert [m.role for m in w.messages] == ["USER", "ASSISTANT", "USER"]
+    assert not any(m.tool_calls for m in w.messages) and len(_steps(w)) == 1
     assert w.message_ids == [first[0].message_id, first[-1].message_id, second.message_id]
 
 
@@ -327,14 +351,12 @@ def test_the_steps_list_carries_the_recorded_facts_and_nothing_else() -> None:
         "approvals": "none",
     }
     assert steps_list(turns(units(turn))[0]).splitlines() == [
-        f"{STEPS_HEADING} (1 call):",
+        'For "What did ACME close at?" (1 call):',
         '1. lookup(q="What did-0"): OK, 0.0 s, source: Nasdaq Last Sale feed, 2026-10-27',
         "The run: status SUCCESS, 3.2 s, approvals: none.",
     ]
     bare = _turn("again?", ["x"], "y")
-    assert (
-        steps_list(turns(units(bare))[0]) == f'{STEPS_HEADING} (1 call):\n1. lookup(q="again?-0")'
-    )
+    assert steps_list(turns(units(bare))[0]) == 'For "again?" (1 call):\n1. lookup(q="again?-0")'
     assert steps_list(turns(units(_turn("hi", [], "hello")))[0]) == ""
 
 

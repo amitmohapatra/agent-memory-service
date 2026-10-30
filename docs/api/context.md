@@ -140,10 +140,13 @@ the store: a message appended before the call is in it however far the worker is
 It is cut in **turns, in layers**: a turn is a `USER` message and everything after it up to the
 next one — the tool calls made to answer it, their results and the answer. A follow-up about an
 answer ("where did you get that?", "which steps did you take?") needs what was done, so every
-turn that made calls comes with a **steps list**: one plain-text `ASSISTANT` message, before
-the turn's answer, opening "Steps taken for this answer, from the run's record" and giving a
-numbered line per call — the tool, its arguments in short, and the facts the caller recorded
-on its result (below) — which a chat template that does not render tool calls still shows.
+turn that made calls comes with a **steps list**: the turn's question (`For "…" (2 calls):`)
+and a numbered line per call — the tool, its arguments in short, and the facts the caller
+recorded on its result (below). The steps lists are not messages: they are the context's
+**run record**, a `## Run record` section of `rendered` saying they were written by the
+harness, not by the model or the user (replayed as an `ASSISTANT` message, a model read the
+list as its own claim and disowned it). A chat template that does not render tool calls still
+shows them.
 Each turn has three layers, each kept longer than the next: its steps list; its text (the
 question and what the agent said); and, for the newest turn only, the calls and their results
 themselves (an older result is never replayed: it would read as a fresh one). The budget is

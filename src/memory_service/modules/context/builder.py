@@ -318,7 +318,7 @@ class ContextBuilder:
 
     def _config_fingerprint(self) -> str:
         parts = [
-            "source-lineage-v2:rag-evidence-v7:multilingual-packing-v1:whole-turn-window-v1",
+            "source-lineage-v2:rag-evidence-v7:multilingual-packing-v1:run-record-window-v1",
             self.retrieval_cfg.model_dump_json(),
             self.cfg.model_dump_json(),
             self.engine.indexer.fingerprint,

@@ -10,10 +10,12 @@ calls made to answer it, their results and the answer.
 
 A turn is given in layers, each cheaper than the one before and kept longer:
 
-* its *steps list*: one plain-text ASSISTANT message, placed before the turn's answer, with a
-  line per call (the tool, its arguments in short, and what the caller recorded of it:
-  :data:`RUN_RECORD`) - "what did you do?" and "where is that from?" are about these, and a
-  chat template that does not render tool calls still renders this text;
+* its *steps list*: the turn's question, then a line per call (the tool, its arguments in
+  short, and what the caller recorded of it: :data:`RUN_RECORD`) - "what did you do?" and
+  "where is that from?" are about these. The steps lists are the window's run record
+  (``ConversationWindow.record``), which the context renders under a heading saying who wrote
+  it, never a message: replayed as an ASSISTANT message, a model read it as its own claim
+  and disowned it. A chat template that does not render tool calls still renders the context;
 * its *text*: the question and what the agent said, without the calls and their results;
 * *whole*: the calls and their results too - the newest turn only, when it fits; an older
   result is never replayed (it would read as a fresh one).
@@ -53,10 +55,10 @@ from memory_service.modules.ingestion.hierarchy import estimate_tokens
 MESSAGE_OVERHEAD_TOKENS: Final = 4
 #: The ``custom_metadata`` key of the run-record facts a caller writes on what it records.
 RUN_RECORD: Final = "run_record"
-#: How a steps list opens.
-STEPS_HEADING: Final = "Steps taken for this answer, from the run's record"
 #: The most of one argument's value a steps list shows.
 ARGUMENT_CHARS: Final = 60
+#: The most of a turn's question a steps list shows.
+QUESTION_CHARS: Final = 120
 
 
 def replayable(message: Message) -> bool:
@@ -126,9 +128,19 @@ def from_a_question(found: list[list[list[Message]]]) -> list[list[list[Message]
     return found
 
 
+def _cut(text: str, most: int) -> str:
+    return text if len(text) <= most else text[: most - 1] + "…"
+
+
 def _short(value: object) -> str:
-    text = orjson.dumps(value).decode()
-    return text if len(text) <= ARGUMENT_CHARS else text[: ARGUMENT_CHARS - 1] + "…"
+    return _cut(orjson.dumps(value).decode(), ARGUMENT_CHARS)
+
+
+def _asked(turn: Sequence[list[Message]]) -> str:
+    first = turn[0][0]
+    if first.role is not MessageRole.USER or not first.content.strip():
+        return "an answer whose question is not in the conversation"
+    return '"' + _cut(" ".join(first.content.split()), QUESTION_CHARS) + '"'
 
 
 def _facts(message: Message | None) -> dict[str, Any]:
@@ -145,9 +157,9 @@ def _said(label: str, value: object) -> str | None:
 
 
 def steps_list(turn: Sequence[list[Message]]) -> str:
-    """The turn's calls as plain text, one numbered line each (the tool, its arguments in
-    short, and the facts the caller recorded on its result), and the run's own recorded facts
-    last; empty for a turn that made no call."""
+    """The turn's calls as plain text under its question, one numbered line each (the tool, its
+    arguments in short, and the facts the caller recorded on its result), and the run's own
+    recorded facts last; empty for a turn that made no call."""
     results = {m.tool_call_id: m for unit in turn for m in unit[1:]}
     lines: list[str] = []
     for unit in turn:
@@ -170,7 +182,7 @@ def steps_list(turn: Sequence[list[Message]]) -> str:
         _said("approvals", run.get("approvals")),
     ]
     told = ", ".join(x for x in said if x)
-    head = f"{STEPS_HEADING} ({len(lines)} {'call' if len(lines) == 1 else 'calls'}):"
+    head = f"For {_asked(turn)} ({len(lines)} {'call' if len(lines) == 1 else 'calls'}):"
     return "\n".join([head, *lines, *([f"The run: {told}."] if told else [])])
 
 
@@ -188,24 +200,18 @@ def _shown(m: Message, *, calls: bool) -> WindowMessage:
 class Layers:
     """One turn's three forms (the module says how they are spent)."""
 
-    steps: WindowMessage | None
+    #: its steps list (:func:`steps_list`); None for a turn that made no call
+    steps: str | None
     text: list[Message]
     whole: list[Message]
 
     @classmethod
     def of(cls, turn: Sequence[list[Message]]) -> Layers:
-        listed = steps_list(turn)
-        calls = [m for unit in turn for m in unit if m.tool_calls]
-        steps = (
-            WindowMessage(message_id=f"{calls[0].message_id}:steps", role="ASSISTANT", text=listed)
-            if listed
-            else None
-        )
         said = [m for unit in turn for m in unit if m.role is not MessageRole.TOOL and m.content]
-        return cls(steps, said, [m for unit in turn for m in unit])
+        return cls(steps_list(turn) or None, said, [m for unit in turn for m in unit])
 
     def cost(self, layer: str) -> int:
-        steps = estimate_tokens(self.steps.text) + MESSAGE_OVERHEAD_TOKENS if self.steps else 0
+        steps = estimate_tokens(self.steps) if self.steps else 0
         text = sum(message_tokens(m.model_copy(update={"tool_calls": []})) for m in self.text)
         if layer == "steps":
             return steps
@@ -214,15 +220,9 @@ class Layers:
         return sum(message_tokens(m) for m in self.whole) - text  # beyond the text
 
     def messages(self, *, text: bool, whole: bool) -> list[WindowMessage]:
-        """The turn as shown: its steps list before its answer (at the end when it gave none)."""
+        """The turn's messages as shown (its steps list is in the window's record)."""
         said = self.whole if whole else (self.text if text else [])
-        out = [_shown(m, calls=whole) for m in said]
-        if self.steps is None:
-            return out
-        at = len(out)
-        if out and out[-1].role == MessageRole.ASSISTANT.value and not out[-1].tool_calls:
-            at -= 1
-        return [*out[:at], self.steps, *out[at:]]
+        return [_shown(m, calls=whole) for m in said]
 
 
 def replay_window(
@@ -260,7 +260,6 @@ def replay_window(
     full = newest.steps is not None and used + newest.cost("whole") <= token_budget
     if full:
         used += newest.cost("whole")
-    listed = [t.steps for t in layers if t.steps is not None]  # no stored message of their own
     shown = [
         m
         for n, turn in reversed(list(enumerate(layers[:kept])))
@@ -268,8 +267,9 @@ def replay_window(
     ]
     return ConversationWindow(
         thread_id=thread_id,
-        message_ids=[m.message_id for m in shown if m not in listed],
+        message_ids=[m.message_id for m in shown],
         messages=shown,
+        record="\n\n".join(t.steps for t in reversed(layers[:kept]) if t.steps),
         # what ``ContextBundle.redundant`` compares the memories with; never shown
         rendered="\n".join(f"{m.role}: {m.text}" for m in shown if m.text),
         token_estimate=used,
