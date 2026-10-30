@@ -205,9 +205,10 @@ class ContextRequest(BaseModel):
         le=1_000_000,
         examples=[None],
         description="The most tokens the conversation window may take (100-1000000); omitted: "
-        "the service's default (2000). Spent from the newest turn back, whole turns only (a "
-        "question with its tool calls, their results and the answer), at most 20 turns; the "
-        "newest turn is given whole even past it, and conversation.over_budget then says so. "
+        "the service's default (2000). Spent from the newest turn back in layers, at most 20 "
+        "turns: each turn's steps list (its tool calls as text), then the turns' question and "
+        "answer, then the newest turn's calls and results; the newest turn's text and steps "
+        "are given even past it, and conversation.over_budget then says so. "
         "With window_format=messages the window is the caller's to replay and takes no more "
         "of token_budget than the default; ignored with window=false",
     )

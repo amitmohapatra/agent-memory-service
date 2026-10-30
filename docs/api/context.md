@@ -137,16 +137,28 @@ first, each `{id, role, text}`, an `ASSISTANT` message with the `tool_calls` it 
 (`tool_call_id`), and `rendered` leaves the window out. It is the thread as written, read from
 the store: a message appended before the call is in it however far the worker is behind.
 
-It is cut in **whole turns**: a turn is a `USER` message and everything after it up to the next
-one — the tool calls made to answer it, their results and the answer — and a turn is given
-whole or not at all, because a follow-up about an answer ("where did you get that?", "which
-steps did you take?") needs the calls and results behind it. The budget is
+It is cut in **turns, in layers**: a turn is a `USER` message and everything after it up to the
+next one — the tool calls made to answer it, their results and the answer. A follow-up about an
+answer ("where did you get that?", "which steps did you take?") needs what was done, so every
+turn that made calls comes with a **steps list**: one plain-text `ASSISTANT` message, before
+the turn's answer, opening "Steps taken for this answer, from the run's record" and giving a
+numbered line per call — the tool, its arguments in short, and the facts the caller recorded
+on its result (below) — which a chat template that does not render tool calls still shows.
+Each turn has three layers, each kept longer than the next: its steps list; its text (the
+question and what the agent said); and, for the newest turn only, the calls and their results
+themselves (an older result is never replayed: it would read as a fresh one). The budget is
 `conversation_token_budget` (100-1000000 tokens; omitted: the service's 2,000), spent from the
-newest turn back and stopping at the first turn that does not fit; at most 20 turns
-(`conversation_max_messages`). The newest turn is always given from its question on, even when
-it alone is over the budget: `conversation.over_budget` is then `true` (absent otherwise), and
-the caller trims the turn to its model's context with its own library — LangChain's
-`trim_messages`, for one. The service never shortens what was said. A tool call never comes
+newest turn back layer by layer: every turn's steps list (a turn without calls: its text) back
+to the first that does not fit, then the turns' text from the newest back, then the newest
+turn's calls and results; at most 20 turns (`conversation_max_messages`). Short of space the
+results go first and the steps lists last. The newest turn's question, answer and steps list
+are always given, even when they alone are over the budget: `conversation.over_budget` is then
+`true` (absent otherwise), and the caller trims them to its model's context with its own
+library — LangChain's `trim_messages`, for one. A caller that keeps a run record writes its
+facts with the turn, under `custom_metadata.run_record`, as plain values (custom metadata
+nests two levels at most): on a `TOOL` result its `status`, `seconds` and `sources` (text), on
+the turn's last message the run's `status`, `seconds` and `approvals` (text); the steps list
+says what is there and nothing else. A tool call never comes
 without its result nor a result without its call (a call left without its result, by a run
 stopped between them, comes without the call; a result whose call is not in the window, without
 the result). Size the budget from the model: its context window, less the system prompt,

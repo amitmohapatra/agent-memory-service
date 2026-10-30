@@ -1459,7 +1459,7 @@
                 "type": "null"
               }
             ],
-            "description": "The most tokens the conversation window may take (100-1000000); omitted: the service's default (2000). Spent from the newest turn back, whole turns only (a question with its tool calls, their results and the answer), at most 20 turns; the newest turn is given whole even past it, and conversation.over_budget then says so. With window_format=messages the window is the caller's to replay and takes no more of token_budget than the default; ignored with window=false",
+            "description": "The most tokens the conversation window may take (100-1000000); omitted: the service's default (2000). Spent from the newest turn back in layers, at most 20 turns: each turn's steps list (its tool calls as text), then the turns' question and answer, then the newest turn's calls and results; the newest turn's text and steps are given even past it, and conversation.over_budget then says so. With window_format=messages the window is the caller's to replay and takes no more of token_budget than the default; ignored with window=false",
             "examples": [
               null
             ],
@@ -1814,7 +1814,7 @@
                 "type": "null"
               }
             ],
-            "description": "window_format=messages: true when the newest turn alone is over the conversation budget and is given whole anyway (a turn is never cut): trim it to the model's context before replaying it. Absent otherwise.",
+            "description": "window_format=messages: true when the newest turn's text and steps list alone are over the conversation budget and are given anyway: trim them to the model's context before replaying them. Absent otherwise.",
             "title": "Over Budget"
           },
           "thread_id": {

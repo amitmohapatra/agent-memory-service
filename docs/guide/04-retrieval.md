@@ -319,9 +319,10 @@ answers went from 30.8 packed memories each to 0.9; at 0.25 the first evidence w
 **The budget.** The default `token_budget` is 8,000 (`ContextSettings`); the conversation
 window is the most recent messages after the thread summary, at most 20 and 2,000 tokens
 (`conversation_token_budget` on the request sets the tokens); `window=False` leaves it out for a
-framework that keeps its own history, and `window_format="messages"` gives it verbatim — whole
-turns, at most 20, each a question with its tool calls, their results and the answer, the newest
-always, flagged `over_budget` when it alone is over the budget — for a framework that replays it
+framework that keeps its own history, and `window_format="messages"` gives it in layers — at
+most 20 turns, each its question, answer and a plain-text steps list of its tool calls, the
+newest with the calls and results too when they fit, its text and steps always, flagged
+`over_budget` when they alone are over the budget — for a framework that replays it
 as its own conversation (`modules/context/window.py`,
 [context.md](../api/context.md#the-two-forms)).
 

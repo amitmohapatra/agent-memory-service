@@ -1,7 +1,9 @@
 """The conversation window in the messages form, through the API on PostgreSQL: the caller's
-``conversation_token_budget``, whole turns from the store (``conversation_max_messages``
-counts turns), the newest turn always and ``conversation.over_budget`` when it alone is over
-the budget, and the evidence status labelled as long-term memory's.
+``conversation_token_budget``, turns from the store in layers (``conversation_max_messages``
+counts turns) - each turn's steps list, its text, the newest turn whole when it fits - the
+newest turn's text and steps always, ``conversation.over_budget`` when they alone are over the
+budget, the run-record facts a caller writes carried by the steps list, and the evidence
+status labelled as long-term memory's.
 
 The reproduction behind it: an agent asked "where did you get that?" after an answer drawn from
 one ~10.9k-character tool result was replayed the bare answer - the window stopped at the
@@ -89,26 +91,35 @@ def _pairs_whole(body: dict[str, Any]) -> None:
     assert calls == {m["tool_call_id"] for m in messages if m["role"] == "TOOL"}
 
 
+STEPS = "Steps taken for this answer, from the run's record"
+
+
+def _steps(body: dict[str, Any]) -> list[str]:
+    return [t for r, t in _said(body) if r == "ASSISTANT" and t.startswith(STEPS)]
+
+
 def test_a_10k_character_tool_result_comes_back_with_its_question_and_call(api) -> None:
     thread = new_id("thread")
     _post(api, thread, *_turn(Q1, [QUOTE], ANSWER))
     # the follow-up's context, before its question is written: an older client (no budget)
+    # gets the question, the steps list and the answer - the result does not fit 2000
     body = _context(api, thread, "Where did you get that answer?")
-    assert [r for r, _ in _said(body)] == ["USER", "ASSISTANT", "TOOL", "ASSISTANT"]
-    assert _said(body)[0] == ("USER", Q1) and SOURCE in _said(body)[2][1]
-    assert body["conversation"]["over_budget"] is True
+    assert _said(body)[0] == ("USER", Q1) and _said(body)[-1] == ("ASSISTANT", ANSWER)
+    assert _steps(body) == [f"{STEPS} (1 call):\n1. stock_quote(n=0)"]
+    assert "over_budget" not in body["conversation"]
     _pairs_whole(body)
-    # a caller that sizes the window for its model: whole, and nothing to trim
+    # a caller that sizes the window for its model: the result too, nothing to trim
     sized = _context(api, thread, "Where did you get that answer?", conversation_token_budget=8000)
-    assert _said(sized) == _said(body) and "over_budget" not in sized["conversation"]
-    # the question written first, then asked: both turns, the earlier one whole
+    assert [r for r, _ in _said(sized)] == ["USER", "ASSISTANT", "TOOL", "ASSISTANT", "ASSISTANT"]
+    assert SOURCE in _said(sized)[2][1] and "over_budget" not in sized["conversation"]
+    _pairs_whole(sized)
+    # the question written first, then asked: the earlier turn as its text and steps list
     _post(api, thread, {"role": "USER", "content": "Where did you get that answer?"})
     both = _context(api, thread, "Where did you get that answer?", conversation_token_budget=8000)
-    assert [r for r, _ in _said(both)] == ["USER", "ASSISTANT", "TOOL", "ASSISTANT", "USER"]
-    _pairs_whole(both)
+    assert [r for r, _ in _said(both)] == ["USER", "ASSISTANT", "ASSISTANT", "USER"]
 
 
-def test_twelve_calls_in_one_turn_are_read_and_replayed_whole(api) -> None:
+def test_twelve_calls_in_one_turn_are_read_and_listed(api) -> None:
     """26 messages: the read counted messages (20) and lost the turn's question and its
     first three calls."""
     thread = new_id("thread")
@@ -118,57 +129,56 @@ def test_twelve_calls_in_one_turn_are_read_and_replayed_whole(api) -> None:
         *_turn("Compare the twelve stores.", [f"store {n}: 4" for n in range(12)], "S4."),
     )
     body = _context(api, thread, "Which steps did you take?")
-    assert len(_messages(body)) == 26 and _said(body)[0] == ("USER", "Compare the twelve stores.")
+    assert _said(body)[0] == ("USER", "Compare the twelve stores.")
     assert sum(len(m.get("tool_calls", [])) for m in _messages(body)) == 12
+    assert _steps(body)[0].splitlines()[-1] == "12. stock_quote(n=11)"
     assert "over_budget" not in body["conversation"]
     _pairs_whole(body)
 
 
-def test_a_newest_turn_over_the_budget_is_kept_whole_and_flagged(api) -> None:
+def test_a_newest_turn_over_the_budget_keeps_its_steps_and_is_flagged(api) -> None:
     thread = new_id("thread")
     _post(api, thread, *_turn("What is my plan?", [], "Pro."))
-    _post(api, thread, *_turn(Q1, ["q" * 3000, "r" * 3000], ANSWER))
+    _post(api, thread, *_turn(Q1 + " please" * 400, ["q" * 3000, "r" * 3000], ANSWER))
     body = _context(api, thread, "Why is it accurate?", conversation_token_budget=500)
-    assert [r for r, _ in _said(body)] == [
-        "USER",
-        "ASSISTANT",
-        "TOOL",
-        "ASSISTANT",
-        "TOOL",
-        "ASSISTANT",
-    ]
-    assert _said(body)[0] == ("USER", Q1) and body["conversation"]["over_budget"] is True
-    _pairs_whole(body)
+    assert [r for r, _ in _said(body)] == ["USER", "ASSISTANT", "ASSISTANT"]
+    assert len(_steps(body)) == 1 and body["conversation"]["over_budget"] is True
 
 
-def test_an_older_client_gets_the_window_it_got_before(api) -> None:
-    """No budget named, a thread within 20 messages whose turns fit: what the earlier build
-    returned - every message, oldest first, and no flag."""
+def test_a_chat_without_calls_is_given_as_before(api) -> None:
+    """No budget named, a plain chat within 20 messages: every message, oldest first."""
     thread = new_id("thread")
-    turns = [
-        _turn("Hi, my order number is QX-4471.", [], "Noted: QX-4471."),
-        _turn("Where is it?", ['{"status": "shipped"}', '{"eta": "Tuesday"}'], "Tuesday."),
-        _turn("Thanks!", [], "Any time."),
-    ]
+    turns = [_turn("Hi, my order number is QX-4471.", [], "Noted."), _turn("Thanks!", [], "Sure.")]
     for turn in turns:
         _post(api, thread, *turn)
     body = _context(api, thread, "What is my order number?")
     assert _said(body) == [(m["role"], m["content"]) for t in turns for m in t]
     assert "over_budget" not in body["conversation"]
-    _pairs_whole(body)
 
 
-def test_turns_that_do_not_fit_are_left_out_whole_from_the_oldest(api) -> None:
+def test_older_turns_give_their_steps_never_their_results(api) -> None:
     thread = new_id("thread")
     _post(api, thread, *_turn("oldest question", ["x" * 8000], "old answer"))
     _post(api, thread, *_turn("middle question", ["m" * 400], "middle answer"))
     _post(api, thread, *_turn("newest question", [], "new answer"))
     body = _context(api, thread, "and then?", conversation_token_budget=400)
     said = _said(body)
-    assert said[0] == ("USER", "middle question") and said[-1] == ("ASSISTANT", "new answer")
-    assert not any("old" in text for _, text in said)  # nothing of the oldest turn
+    assert said[0] == ("USER", "oldest question") and said[-1] == ("ASSISTANT", "new answer")
+    assert len(_steps(body)) == 2 and all(r != "TOOL" for r, _ in said)
     assert "over_budget" not in body["conversation"]
-    _pairs_whole(body)
+
+
+def test_the_run_record_a_caller_writes_is_in_the_steps_list(api) -> None:
+    thread = new_id("thread")
+    turn = _turn(Q1, ['{"close": 123.45}'], ANSWER)
+    turn[2]["custom_metadata"] = {"run_record": {"status": "ok", "seconds": 0.2, "sources": SOURCE}}
+    turn[-1]["custom_metadata"] = {"run_record": {"status": "SUCCESS", "seconds": 4.0}}
+    _post(api, thread, *turn)
+    body = _context(api, thread, "Where is that from?")
+    assert _steps(body) == [
+        f"{STEPS} (1 call):\n1. stock_quote(n=0): ok, 0.2 s, source: {SOURCE}\n"
+        "The run: status SUCCESS, 4.0 s."
+    ]
 
 
 def test_the_window_reaches_back_twenty_turns(api) -> None:

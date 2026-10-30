@@ -135,9 +135,10 @@ for job_id in ack.job_ids:
 - `context` returns `rendered`, `bundle_id`, `evidence_status` and `token_estimate` by
   default; items are cited by handle (`[m1]`, `[d2]`). `window=False` when your framework keeps
   its own history; `window_format="messages"` when it replays a conversation as messages: the
-  recent turns come verbatim and whole, with their tool calls and results, in
-  `conversation.messages`, within `conversation_token_budget` (default 2,000; the newest turn
-  always, with `conversation.over_budget` when it alone is over it)
+  recent turns come in `conversation.messages`, each with a plain-text steps list of its tool
+  calls, the newest with its calls and results when they fit `conversation_token_budget`
+  (default 2,000; the newest turn's text and steps always, with `conversation.over_budget` when
+  they alone are over it)
   ([context.md](api/context.md#the-two-forms)).
 - Memories are ranked by fixed weighted reciprocal-rank fusion of BM25, two dense spaces and
   ColBERT arms, then session/speaker/time/period rules (ADR 0026) — nothing to tune per call.

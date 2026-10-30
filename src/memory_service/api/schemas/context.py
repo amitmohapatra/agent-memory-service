@@ -296,9 +296,9 @@ class ConversationBody(BaseModel):
     )
     over_budget: bool | None = Field(
         default=None,
-        description="window_format=messages: true when the newest turn alone is over the "
-        "conversation budget and is given whole anyway (a turn is never cut): trim it to the "
-        "model's context before replaying it. Absent otherwise.",
+        description="window_format=messages: true when the newest turn's text and steps list "
+        "alone are over the conversation budget and are given anyway: trim them to the "
+        "model's context before replaying them. Absent otherwise.",
     )
 
 

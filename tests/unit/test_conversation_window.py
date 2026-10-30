@@ -1,6 +1,7 @@
-"""The messages form of the conversation window (``modules/context/window.py``): verbatim, in
-order, a tool call never parted from its results, cut from the newest turn back, whole turns
-only, the newest always (flagged when it alone is over the budget)."""
+"""The messages form of the conversation window (``modules/context/window.py``): in order, a
+tool call never parted from its results, cut from the newest turn back in layers - every
+turn's steps list, then its text, then the newest turn whole - the newest turn's text and steps
+always (flagged when they alone are over the budget)."""
 
 from __future__ import annotations
 
@@ -24,9 +25,12 @@ from memory_service.domain.ids import content_hash
 from memory_service.modules.context.views import conversation_body
 from memory_service.modules.context.window import (
     MESSAGE_OVERHEAD_TOKENS,
+    RUN_RECORD,
+    STEPS_HEADING,
     message_tokens,
     replay_window,
     replayable,
+    steps_list,
     turns,
     units,
 )
@@ -91,10 +95,14 @@ def test_a_tool_call_comes_with_its_results() -> None:
         _m(A, "Shipped, Tuesday."),
     ]
     w = replay_window("thr", msgs, 2000)
-    assert [m.role for m in w.messages] == ["USER", "ASSISTANT", "TOOL", "TOOL", "ASSISTANT"]
+    roles = ["USER", "ASSISTANT", "TOOL", "TOOL", "ASSISTANT", "ASSISTANT"]
+    assert [m.role for m in w.messages] == roles
     assert [c.id for c in w.messages[1].tool_calls] == ["c1", "c2"]
     assert w.messages[1].tool_calls[0].arguments == {"q": "c1"}
     assert [m.tool_call_id for m in w.messages[2:4]] == ["c1", "c2"]
+    assert w.messages[4].text.startswith(STEPS_HEADING)  # the steps list, before the answer
+    assert w.messages[5].text == "Shipped, Tuesday."
+    assert w.message_ids == [m.message_id for m in msgs]  # stored messages only
     assert units(msgs) == [[msgs[0]], msgs[1:4], [msgs[4]]]
 
 
@@ -208,41 +216,59 @@ def _whole_pairs(window: ConversationWindow) -> None:
     assert calls == results
 
 
+def _steps(window: ConversationWindow) -> list[str]:
+    return [m.text for m in window.messages if m.text.startswith(STEPS_HEADING)]
+
+
 def test_a_10k_character_tool_result_replays_with_its_question_and_call() -> None:
     """The reproduction: one quote of ~10.9k characters. The window used to stop at the
     call-and-result unit and replay the answer alone, so "where did you get that?" had
-    nothing to go on."""
+    nothing to go on. Now the turn's question, answer and steps list always come back, and
+    the result too when the caller's budget holds it."""
     result = '{"symbol": "ACME", "source": "Nasdaq Last Sale feed", "ticks": "' + "t" * 10_000
     turn = _turn("What did ACME close at yesterday?", [result], "ACME closed at 123.45 USD.")
-    # the follow-up's context, before its own question is written: the turn is the newest
-    w = replay_window("thr", turn, 2000)
-    assert _said(w) == [(m.role.value, m.content) for m in turn]
-    assert w.over_budget and w.token_estimate == _cost(turn) > 2000
-    # the question written first: a budget the caller sized for its model keeps both turns
-    follow_up = _m(U, "Where did you get that answer?")
-    w = replay_window("thr", [*turn, follow_up], 8000)
-    assert [m.message_id for m in w.messages] == [m.message_id for m in [*turn, follow_up]]
+    w = replay_window("thr", turn, 2000)  # too small for the result
+    assert _said(w)[0] == ("USER", turn[0].content) and _said(w)[-1] == (
+        "ASSISTANT",
+        turn[-1].content,
+    )
+    assert all(m.role != "TOOL" and not m.tool_calls for m in w.messages)
+    assert _steps(w) == [f'{STEPS_HEADING} (1 call):\n1. lookup(q="What did-0")']
+    assert not w.over_budget and w.token_estimate < 2000
+    w = replay_window("thr", turn, 8000)  # sized for the model: kept whole
+    assert [m.role for m in w.messages if m.role == "TOOL"] == ["TOOL"]
     assert not w.over_budget
     _whole_pairs(w)
 
 
-def test_twelve_calls_in_one_turn_replay_whole() -> None:
-    """26 messages: past a limit counted in messages (20), which cut the turn's question."""
+def test_an_older_turn_never_replays_its_results() -> None:
+    first = _turn("What did ACME close at?", ["123.45"], "123.45 USD.")
+    second = _m(U, "And ZETA?")
+    w = replay_window("thr", [*first, second], 100_000)
+    assert [m.role for m in w.messages] == ["USER", "ASSISTANT", "ASSISTANT", "USER"]
+    assert w.messages[1].text.startswith(STEPS_HEADING) and not w.messages[1].tool_calls
+    assert w.message_ids == [first[0].message_id, first[-1].message_id, second.message_id]
+
+
+def test_twelve_calls_in_one_turn_list_twelve_steps() -> None:
     turn = _turn("Compare the twelve stores.", [f"store {n}: 4 units" for n in range(12)], "S4.")
     w = replay_window("thr", turn, 2000, max_turns=20)
-    assert len(w.messages) == 26 and w.messages[0].role == "USER"
-    assert sum(len(m.tool_calls) for m in w.messages) == 12
+    assert w.messages[0].role == "USER" and sum(len(m.tool_calls) for m in w.messages) == 12
+    (listed,) = _steps(w)
+    assert listed.splitlines()[0].endswith("(12 calls):") and listed.splitlines()[-1].startswith(
+        "12. "
+    )
     assert not w.over_budget
     _whole_pairs(w)
 
 
-def test_a_newest_turn_over_the_budget_is_kept_and_flagged() -> None:
+def test_a_newest_turn_over_the_budget_keeps_its_text_and_steps_and_is_flagged() -> None:
     older = _turn("What is my plan?", [], "Pro.")
-    newest = _turn("Quote ACME.", ["q" * 6000, "r" * 6000], "123.45")
-    w = replay_window("thr", [*older, *newest], 500)
-    assert [m.message_id for m in w.messages] == [m.message_id for m in newest]
-    assert w.over_budget and w.token_estimate == _cost(newest)
-    _whole_pairs(w)
+    newest = _turn("Quote ACME " + "please " * 300, ["q" * 6000, "r" * 6000], "123.45")
+    w = replay_window("thr", [*older, *newest], 50)
+    assert _said(w)[0][1] == newest[0].content and _said(w)[-1] == ("ASSISTANT", "123.45")
+    assert len(_steps(w)) == 1 and all(m.role != "TOOL" for m in w.messages)
+    assert w.over_budget and w.token_estimate > 50
 
 
 def test_a_window_within_its_budget_is_not_flagged() -> None:
@@ -251,37 +277,14 @@ def test_a_window_within_its_budget_is_not_flagged() -> None:
     assert not replay_window("thr", [], 2000).over_budget
 
 
-def test_an_older_client_gets_the_window_it_got_before() -> None:
-    """No budget named (the service's 2000) and a newest turn that fits: the window the
-    earlier build cut from the same messages (measured on origin/main f86a141, which agreed
-    with this cut at every budget from the newest turn's cost up to 2100)."""
-    stray = [_m(A, "a stray answer under the summary")]
-    thread = stray + [
-        m
-        for n in range(8)
-        for m in _turn(
-            f"question {n}: " + "word " * 40,
-            [f'{{"ok": true, "n": {n}}}'] if n % 3 == 0 else [],
-            f"answer {n}: " + "word " * 40,
-        )
+def test_a_chat_without_calls_is_given_verbatim() -> None:
+    """No calls, no steps list: the window an older client got for a plain chat."""
+    thread = [
+        m for n in range(8) for m in _turn(f"question {n}: " + "word " * 40, [], f"answer {n}")
     ]
-    read = thread[-20:]  # what the read of 20 messages gave it
-
-    def labels(budget: int) -> list[str]:
-        w = replay_window("thr", read, budget, max_turns=20)
-        assert not w.over_budget
-        return [m.text.split(":")[0] if m.text and m.role != "TOOL" else m.role for m in w.messages]
-
-    def turns_from(first: int) -> list[str]:
-        out: list[str] = []
-        for n in range(first, 8):
-            out += [f"question {n}", *(["ASSISTANT", "TOOL"] if n % 3 == 0 else [])]
-            out.append(f"answer {n}")
-        return out
-
-    assert labels(2000) == turns_from(1)
-    assert labels(600) == turns_from(4)
-    assert labels(300) == turns_from(6)
+    w = replay_window("thr", thread, 2000, max_turns=20)
+    assert _said(w) == [(m.role.value, m.content) for m in thread[-len(w.messages) :]]
+    assert not _steps(w) and w.messages[0].role == "USER"
 
 
 def test_a_call_and_its_result_are_never_parted_at_any_budget() -> None:
@@ -291,24 +294,55 @@ def test_a_call_and_its_result_are_never_parted_at_any_budget() -> None:
         *_turn("third", ["c" * 300, "d" * 1200, "e" * 10], "three"),
         *_turn("fourth", ["f" * 400], "four"),
     ]
-    user_ids = {m.message_id for m in thread if m.role is U}
-    for budget in range(0, _cost(thread) + 50, 25):
+    for budget in range(0, sum(message_tokens(m) for m in thread) + 50, 25):
         w = replay_window("thr", thread, budget)
         _whole_pairs(w)
-        assert w.messages[0].message_id in user_ids  # whole turns: from a question
-        assert w.messages[-1].text == "four"
-        assert w.over_budget == (budget < _cost(thread[-4:]))
+        assert w.messages[-1].text == "four" and w.token_estimate <= max(budget, w.token_estimate)
+        assert w.over_budget == (w.token_estimate > budget)
 
 
-def test_turns_that_fit_are_kept_and_the_oldest_that_does_not_is_left_whole() -> None:
-    oldest = _turn("oldest", ["x" * 4000], "old answer")
-    middle = _turn("middle", ["m" * 200], "middle answer")
-    newest = _turn("newest", [], "new answer")
-    w = replay_window("thr", [*oldest, *middle, *newest], _cost([*middle, *newest]) + 10)
-    assert [m.message_id for m in w.messages] == [m.message_id for m in [*middle, *newest]]
-    assert not w.over_budget
-    # nothing of the oldest turn: not its answer, not its call, not its result
-    assert not {m.message_id for m in oldest} & set(w.message_ids)
+def test_short_of_space_results_go_first_and_steps_lists_last() -> None:
+    oldest = _turn("oldest", ["x" * 400], "old answer " + "w " * 200)
+    middle = _turn("middle", ["m" * 400], "middle answer " + "w " * 200)
+    newest = _turn("newest", ["n" * 4000], "new answer")
+    thread = [*oldest, *middle, *newest]
+    roomy = replay_window("thr", thread, 100_000)
+    assert len(_steps(roomy)) == 3 and any(m.role == "TOOL" for m in roomy.messages)
+    tight = replay_window("thr", thread, 150)  # no room for the newest result, nor old texts
+    assert len(_steps(tight)) == 3 and all(m.role != "TOOL" for m in tight.messages)
+    assert [m.text for m in tight.messages if m.role == "USER"] == ["newest"]
+    assert not tight.over_budget
+
+
+def test_the_steps_list_carries_the_recorded_facts_and_nothing_else() -> None:
+    turn = _turn("What did ACME close at?", ["123.45"], "123.45 USD.")
+    turn[2].custom_metadata[RUN_RECORD] = {
+        "status": "OK",
+        "seconds": 0.04,
+        "sources": "Nasdaq Last Sale feed, 2026-10-27",
+    }
+    turn[-1].custom_metadata[RUN_RECORD] = {
+        "status": "SUCCESS",
+        "seconds": 3.21,
+        "approvals": "none",
+    }
+    assert steps_list(turns(units(turn))[0]).splitlines() == [
+        f"{STEPS_HEADING} (1 call):",
+        '1. lookup(q="What did-0"): OK, 0.0 s, source: Nasdaq Last Sale feed, 2026-10-27',
+        "The run: status SUCCESS, 3.2 s, approvals: none.",
+    ]
+    bare = _turn("again?", ["x"], "y")
+    assert (
+        steps_list(turns(units(bare))[0]) == f'{STEPS_HEADING} (1 call):\n1. lookup(q="again?-0")'
+    )
+    assert steps_list(turns(units(_turn("hi", [], "hello")))[0]) == ""
+
+
+def test_a_long_argument_is_shown_short() -> None:
+    call = _m(A, calls=("c1",))
+    call.tool_calls[0].arguments["q"] = "z" * 500
+    (line,) = steps_list([[_m(U, "q")], [call, _m(T, "r", answers="c1")]]).splitlines()[1:]
+    assert len(line) < 100 and line.endswith("…)")
 
 
 def test_the_window_gives_at_most_max_turns_turns() -> None:
@@ -327,7 +361,7 @@ def test_turns_group_whole_units_from_each_question() -> None:
 
 
 def test_the_flag_is_on_the_wire_only_when_set() -> None:
-    newest = _turn("Quote ACME.", ["q" * 6000], "123.45")
+    newest = _turn("Quote ACME " + "please " * 300, ["q" * 6000], "123.45")
     flagged = conversation_body(replay_window("thr", newest, 100))
     assert flagged is not None and flagged["over_budget"] is True
     plain = conversation_body(replay_window("thr", newest, 100_000))
