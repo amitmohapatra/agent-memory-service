@@ -45,7 +45,7 @@ from benchmark.common import (
 from benchmark.env import bench_overrides, bench_retrieval
 from benchmark.harness import stats
 from benchmark.native_source_retrieval import DEPTHS, coverage, observation_sources
-from benchmark.retrieval import _settings
+from benchmark.retrieval import _settings, without_model
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
 from memory_service.domain.context import MemoryExecutionContext
@@ -151,7 +151,7 @@ async def run(args: argparse.Namespace) -> None:
     settings = _settings()
     dedicated_database(settings.database.url.get_secret_value())
     isolated_qdrant(settings.search.qdrant_url)
-    settings = settings.model_copy(update={"bifrost_url": None, "bifrost_virtual_key": None})
+    settings = without_model(settings)
     base = bench_overrides()
     overrides = replace(base, search=None, retrieval=bench_retrieval(base))
     container = await build_container(settings, __version__, overrides=overrides)

@@ -2,7 +2,7 @@
 
 All providers carry a :class:`ProviderInfo` (name, version, license, origin, locality,
 data residency) so the provider policy can allow/deny them by configuration.
-The generative LLM port is *optional*; the core service runs with ``llm.enabled=false``.
+The generative LLM port is *optional*; the core service runs with no model endpoint at all.
 """
 
 from __future__ import annotations
@@ -140,7 +140,7 @@ class LLMCompletion(BaseModel):
 
 @runtime_checkable
 class LLMProvider(Protocol):
-    """Optional generative model behind the Bifrost gateway. ``DisabledLLM`` raises
+    """Optional generative model at the endpoint a call resolves to. ``DisabledLLM`` raises
     ``ProviderNotConfigured``. ``use`` names the configured ``LLMSettings.uses`` entry making
     the call (metrics/tracing label and fast-vs-strong model selection)."""
 

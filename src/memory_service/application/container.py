@@ -98,6 +98,9 @@ class Overrides:
     document_parser: Literal["builtin"] | None = None
     #: no graph enrichment at all (memories must still land without it)
     graph_enrichment: Literal["disabled"] | None = None
+    #: ``accept``: a registered model endpoint is stored without probing its ``/models``
+    #: (the suite registers endpoints at hosts that do not exist)
+    endpoint_probe: Literal["accept"] | None = None
     # ---- frozen tuning replaced for one container --------------------------------------
     retrieval: RetrievalSettings | None = None
     context: ContextSettings | None = None
@@ -124,6 +127,7 @@ class Overrides:
             ("nli", self.nli),
             ("document_parser", self.document_parser),
             ("graph_enrichment", self.graph_enrichment),
+            ("endpoint_probe", self.endpoint_probe),
         )
         return {name: str(value) for name, value in pairs if value}
 

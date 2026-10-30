@@ -10,17 +10,24 @@ Provider keys are resolved by the gateway from its own environment (`env.ANTHROP
 
 ## Pointing the service at a gateway
 
+A Bifrost gateway is one of the endpoints the service can call: as an agent's registered
+endpoint (the harness sends `gateway: "bifrost"` with the agent's virtual key), or as the
+service's own:
+
 ```
-BIFROST_URL=https://<your-gateway>/v1
-BIFROST_VIRTUAL_KEY=<virtual key>     # optional: the operator's key, issued by the gateway
+LLM_BASE_URL=https://<your-gateway>/v1
+LLM_GATEWAY=bifrost
+LLM_API_KEY=<virtual key>     # the gateway's key for the service's own calls
 ```
 
-Those are the only two settings. Which uses may call the model, and on which model, is each
-tenant's policy (`PUT /v1/model-key/policy`: `uses`, `read_assist`, `models` per use); whose
-key pays is the agent's (`PUT /v1/agents/model-key`), else the tenant's (`PUT
-/v1/model-key`), else the operator's `BIFROST_VIRTUAL_KEY`. See `docs/USAGE.md`.
+On the `bifrost` route every memory call keeps its content out of the gateway's logs and
+carries Bifrost's deny-all MCP scope, so a virtual key's MCP tools never reach a memory call.
+Which uses may call the model, and on which model, is each tenant's policy (`PUT
+/v1/model-key/policy`: `uses`, `read_assist`, `models` per use); which endpoint serves a call
+is the agent's (`PUT /v1/agents/model-key`), else the tenant's (`PUT /v1/model-key`), else the
+service's own. See `docs/guide/08-models.md`.
 
-Without `BIFROST_URL` the service runs complete and every LLM-backed step falls back to its
+With no endpoint at all the service runs complete and every LLM-backed step falls back to its
 deterministic path. Generation is an enhancement here, never a dependency.
 
 ## Why no gateway service in `docker-compose.yml`

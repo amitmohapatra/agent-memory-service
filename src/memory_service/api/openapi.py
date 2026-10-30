@@ -87,7 +87,9 @@ Public routes live under `/v1`. 0.2.0 (ADR 0022) changed `/v1` in place once, be
 only consumers were the owner's own repositories: problem details replaced the error
 envelope, operation ids became `<tag>.<function>`, `X-Trace-ID` became a response header.
 0.3.0 removed the one-release aliases 0.2.0 kept (`POST /v1/files`, the `X-Memory-*` header
-spellings): each operation has exactly one route and each header one spelling.
+spellings): each operation has exactly one route and each header one spelling. 0.4.0 (ADR
+0042) made the model-key routes take a whole model endpoint (`endpoint`, a
+`trellis.contracts.Endpoint`) in place of a gateway key.
 """
 
 TAGS: list[dict[str, Any]] = [
@@ -137,8 +139,8 @@ TAGS: list[dict[str, Any]] = [
     },
     {
         "name": "agents",
-        "description": "An agent's own model credential (a Bifrost virtual key): status, "
-        "set and revoke.",
+        "description": "An agent's own model endpoint (where its model is and how to reach "
+        "it, so memory calls the same model): status, set and revoke.",
     },
     {"name": "jobs", "description": "Background job status."},
     {

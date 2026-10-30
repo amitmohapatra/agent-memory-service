@@ -28,6 +28,7 @@ from memory_service.domain import enums
 from memory_service.domain.grounding import ClaimVerdict, GroundingMethod
 from memory_service.domain.tools import SideEffects, ToolStatus
 from memory_service.modules.grounding import cascade
+from memory_service.modules.llm.endpoints import EndpointSource
 from trellis.memory import models as sdk
 
 HEADERS = {"X-API-Key": "test-key", "X-Trellis-Tenant": "acme", "X-Trellis-User": "u1"}
@@ -292,6 +293,7 @@ def test_sdk_literals_match_the_service_enums(sdk_literal: Any, service: Any) ->
         (sdk.GroundingMethod, GroundingMethod),
         (sdk.ToolStatus, ToolStatus),
         (sdk.SideEffects, SideEffects),
+        (sdk.EndpointSource, EndpointSource),
     ],
 )
 def test_sdk_literals_match_the_service_literals(sdk_literal: Any, service: Any) -> None:

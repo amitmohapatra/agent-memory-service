@@ -21,15 +21,15 @@ from fastapi.testclient import TestClient
 #: ``MEMORY_TEST_*`` is the suite's own namespace and is deliberately kept, as is everything
 #: when ``MEMORY_TEST_PROVIDERS=env`` asks for the real components on purpose.
 #:
-#: The gateway is read before the strip for the opt-in live tests alone
+#: The model endpoint is read before the strip for the opt-in live tests alone
 #: (``MEMORY_TEST_LIVE_LLM=1``, ``live_llm_settings``): stripped, they could never reach it.
-_LIVE_GATEWAY = {k: os.environ.get(k) for k in ("BIFROST_URL", "BIFROST_VIRTUAL_KEY")}
+LLM_VARIABLES = ("LLM_BASE_URL", "LLM_API_KEY", "LLM_GATEWAY", "LLM_AUTH")
+_LIVE_GATEWAY = {k: os.environ.get(k) for k in LLM_VARIABLES}
 if os.environ.get("MEMORY_TEST_PROVIDERS") != "env":
     for _leaked in [
         k
         for k in os.environ
-        if k.startswith("MEMORY__")
-        or k in ("BIFROST_URL", "BIFROST_VIRTUAL_KEY", "OTEL_EXPORTER_OTLP_ENDPOINT")
+        if k.startswith("MEMORY__") or k in (*LLM_VARIABLES, "OTEL_EXPORTER_OTLP_ENDPOINT")
     ]:
         del os.environ[_leaked]
 
@@ -44,14 +44,14 @@ from memory_service.config.settings import (  # noqa: E402
 
 
 def live_llm_settings() -> LLMSettings:
-    """The gateway the shell named for the live tests, else the local ``.env``'s."""
+    """The endpoint the shell named for the live tests, else the local ``.env``'s."""
     return Settings(**{k: v for k, v in _LIVE_GATEWAY.items() if v}).llm  # type: ignore[arg-type]
 
 
 def live_llm_tuning(**changes: object) -> LLMTuning:
     """``constants.LLM`` calling the model ``MEMORY_TEST_LIVE_LLM_MODEL`` names for every use;
-    unset, the one discovered through the gateway, which recognises only a few hosted
-    families - a local model has to be named."""
+    unset, the one ``auto`` chooses from the endpoint's ``/models`` (which needs a listing
+    that says what its models are, or a single model)."""
     from dataclasses import replace
 
     model = os.environ.get("MEMORY_TEST_LIVE_LLM_MODEL")
@@ -81,6 +81,11 @@ def _test_settings(**overrides: object) -> Settings:
         "service": {"environment": "test", "log_json": False, "log_level": "WARNING"},
         "authentication": {"trusted_dev_api_keys": ["test-key"]},
         "database": {"url": DB_URL},
+        # Model-free unless a test names an endpoint: the product's default accepts an
+        # agent's registered endpoint, which makes a model reachable (and the worker's
+        # topology the model one) in every deployment. The suite's flows are the model-free
+        # ones; a test of registered endpoints turns acceptance on itself.
+        "models": {"llm": {"accept_agent_endpoints": False}},
     }
     for key, value in overrides.items():
         if isinstance(value, dict) and isinstance(base.get(key), dict):
@@ -96,8 +101,11 @@ def _test_settings(**overrides: object) -> Settings:
         for section in ("search", "authorization", "cache"):
             if isinstance(env_only.get(section), dict):
                 base[section] = _deep_merge(base.get(section, {}), env_only[section])  # type: ignore[arg-type]
-        base.setdefault("bifrost_url", env.bifrost_url)
-        base.setdefault("bifrost_virtual_key", env.bifrost_virtual_key)
+        base.setdefault("LLM_BASE_URL", env.llm_base_url)
+        base.setdefault("LLM_API_KEY", env.llm_api_key)
+        base.setdefault("LLM_GATEWAY", env.llm_gateway)
+        base.setdefault("LLM_AUTH", env.llm_auth)
+        base["models"] = {"llm": {"accept_agent_endpoints": True}}
     # ``_env_file=None`` disables the dotenv source. Stripping MEMORY__* from os.environ is
     # not enough on its own: pydantic-settings also reads ./.env directly, so a suite run from
     # the repo root still inherited it. Both doors have to be shut for a run to be hermetic.
@@ -128,6 +136,7 @@ HERMETIC = Overrides(
     nli="lexical",
     document_parser="builtin",
     graph=UNHURRIED_GRAPH,
+    endpoint_probe="accept",
 )
 
 

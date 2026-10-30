@@ -19,7 +19,7 @@ looking at it is a prompt injected into every later run.
    a `SKILL.md` rendered from the procedure only (title, task pattern, strategy, steps, failure
    modes). No new job and no new model call: the draft is read on request.
 2. **The administrator publishes or dismisses.** Publishing writes it where agents already load
-   skills: `SKILLS_DIR` when set, else the gateway's repository (`BIFROST_URL`, with
+   skills: `SKILLS_DIR` when set, else the gateway's repository (`LLM_BASE_URL`, with
    `BIFROST_ADMIN_TOKEN` when its management API needs one), through bifrost-sdk's
    `Admin.skills`. Nothing configured is `503`.
 3. **Versions are the store's.** `1.0.0`, then the next minor. Rollback is the store's own

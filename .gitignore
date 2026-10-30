@@ -21,6 +21,7 @@ dump.rdb
 secrets.env
 vendor/
 .bifrost-sdk/
+.agent-contracts/
 .bifrost/
 .deploy_key
 deploy_key.pub

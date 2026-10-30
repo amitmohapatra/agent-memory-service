@@ -629,7 +629,7 @@ def _stack(tmp_path: Path, **env: str) -> subprocess.CompletedProcess[str]:
         ({"CAPEVAL_LOGS": "/tmp/capeval_logs"}, "not under /var/tmp/capeval"),
         ({"CAPEVAL_API_PORT": "80a"}, "is not a number"),
         ({"PGHOST": "db.example.com"}, "is not local"),
-        ({"CAPEVAL_GATEWAY": "1", "BIFROST_URL": "", "BIFROST_VIRTUAL_KEY": ""}, "needs BIFROST"),
+        ({"CAPEVAL_GATEWAY": "1", "LLM_BASE_URL": "", "LLM_API_KEY": ""}, "needs LLM_BASE_URL"),
     ],
 )
 def test_the_isolated_stack_refuses_a_live_resource(tmp_path: Path, env: dict, why: str) -> None:

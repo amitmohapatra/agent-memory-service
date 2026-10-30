@@ -138,23 +138,38 @@ port.
 ## Models
 
 **No model call is ever made.**
-A use runs only when all four hold: `BIFROST_URL` is set, the tenant's policy names the use (no
-policy row: every use except the opt-in `memory_restatement`), a key can pay (the agent's,
-else the tenant's, else the operator's `BIFROST_VIRTUAL_KEY`), and, on a read, the policy's
-`read_assist` is on ([chapter 8](guide/08-models.md#when-a-call-is-allowed)). Any model failure
-falls back to the deterministic path, so the service still answers.
+A use runs only when all four hold: an endpoint resolves (the agent's registered one, else
+its tenant's, else the service's own `LLM_BASE_URL`), the tenant's policy names the use (no
+policy row: every use except the opt-in `memory_restatement`), the registration is not
+revoked, and, on a read, the policy's `read_assist` is on
+([chapter 8](guide/08-models.md#when-a-call-is-allowed)). `GET /v1/agents/model-key` says which
+endpoint the agent's calls use and why (`source`, `reason`): `none` with
+`accept_agent_endpoints is false` means the operator turned registered endpoints off. Any model
+failure falls back to the deterministic path, so the service still answers.
 
-**Registering a model key is refused.**
-In `staging` and `prod` the envelope keys (`MEMORY__AGENT_CREDENTIALS__ACTIVE_KEY_ID` and
-`__ENCRYPTION_KEYS`) must be set first. `dev` and `test` derive a development key with a
-warning, which protects nothing.
+**Registering a model endpoint is refused (422).**
+The service lists the endpoint's models first (`GET {base_url}/models` with its auth) and
+refuses one it cannot reach: "cannot reach" is an address only the harness's machine resolves
+(its loopback address, a name in its own network), so register one the service can reach; an
+"answered 401/404" is the key, the auth, or a `base_url` that is not the API root (it usually
+ends in `/v1`); "unknown gateway/auth" names the registry's known names; "needs the [google]
+extra" (or `[aws]`) means the service was installed without that auth. In `staging` and `prod`
+the envelope keys (`MEMORY__AGENT_CREDENTIALS__ACTIVE_KEY_ID` and `__ENCRYPTION_KEYS`) must be
+set first. `dev` and `test` derive a development key with a warning, which protects nothing.
+
+**`auto` cannot choose a model.**
+The endpoint's `/models` lists several models and says nothing that tells them apart (Ollama,
+OpenAI): name one, in the harness agent's endpoint, `MEMORY__MODELS__LLM__MODEL` for the
+service's own, or the tenant's policy.
 
 ## Development
 
-**`uv sync` fails with `Distribution not found at: .../vendor/bifrost-sdk`, or
-`test_vendored_sdk` fails as stale.**
-`vendor/bifrost-sdk` is generated from a bifrost-sdk checkout and git-ignored. Run
-`make vendor` (with `BIFROST_SDK=/path/to/bifrost-sdk` when it is not at `../bifrost-sdk`).
+**`uv sync` fails with `Distribution not found at: .../vendor/bifrost-sdk` (or
+`.../vendor/trellis-contracts`), or `test_vendored_sdk` fails as stale.**
+`vendor/` is generated from bifrost-sdk and agent-contracts checkouts and git-ignored. Run
+`make vendor` (with `BIFROST_SDK=/path/to/bifrost-sdk` and
+`TRELLIS_CONTRACTS=/path/to/agent-contracts` when they are not at `../bifrost-sdk` and
+`../agent-contracts`).
 Every Makefile test target runs it first; a bare `pytest` does not.
 
 **The examples say PostgreSQL is not reachable.**

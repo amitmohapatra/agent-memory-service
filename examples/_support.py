@@ -143,7 +143,13 @@ async def service(*, onboarding: bool = False) -> AsyncIterator[Service]:
     # every machine, whatever the shell or a .env file says.
     for name in [k for k in os.environ if k.startswith("MEMORY__")]:
         del os.environ[name]
-    for name in ("BIFROST_URL", "BIFROST_VIRTUAL_KEY", "OTEL_EXPORTER_OTLP_ENDPOINT"):
+    for name in (
+        "LLM_BASE_URL",
+        "LLM_API_KEY",
+        "LLM_GATEWAY",
+        "LLM_AUTH",
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+    ):
         os.environ.pop(name, None)
 
     _prepare_database(DATABASE_URL)

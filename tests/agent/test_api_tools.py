@@ -46,7 +46,14 @@ CATALOG = [
         "server": "crm",
     },
 ]
+
+
 #: An envelope key an operator would hold; the agent key it wraps never leaves the store.
+def endpoint(key: str) -> dict[str, str]:
+    """A model endpoint as the harness registers it (the suite does not probe it)."""
+    return {"base_url": "http://models.test/v1", "model": "m", "api_key": key}
+
+
 ENVELOPE = base64.urlsafe_b64encode(b"p9b-agent-credential-key-32bytes").decode()
 
 
@@ -341,11 +348,11 @@ async def test_an_agent_registers_rotates_and_revokes_its_own_model_key(app, run
     fresh = await agent.advanced.model_keys.status()
     assert (fresh.registered, fresh.revoked, fresh.revision) == (False, False, 0)
 
-    registered = await agent.advanced.model_keys.set("vk-agent-first")
+    registered = await agent.advanced.model_keys.set(endpoint("vk-agent-first"))
     assert registered.registered is True and registered.revoked is False
     assert registered.revision == 1 and registered.updated_at is not None
 
-    rotated = await agent.advanced.model_keys.set("vk-agent-second")
+    rotated = await agent.advanced.model_keys.set(endpoint("vk-agent-second"))
     assert rotated.revision == 2 and rotated.registered is True
 
     status = await agent.advanced.model_keys.status()
@@ -376,7 +383,7 @@ async def test_another_tenant_reaches_no_tool_memory_and_no_agent_key(app, runni
     mine = acme.bind(user_id="u1").agent("quote-bot")
     await mine.advanced.tools.put_catalog(CATALOG)
     await _one_successful_run(mine)
-    await mine.advanced.model_keys.set("vk-acme-only")
+    await mine.advanced.model_keys.set(endpoint("vk-acme-only"))
 
     claiming = globex.bind(tenant_id="acme", user_id="u1").agent(
         "quote-bot", agent_run_id=mine.scope.agent_run_id
@@ -388,7 +395,7 @@ async def test_another_tenant_reaches_no_tool_memory_and_no_agent_key(app, runni
         claiming.advanced.tools.catalog(),
         claiming.advanced.tools.approval_suggestions(),
         claiming.advanced.tools.accept_suggestion("sug_x"),
-        claiming.advanced.model_keys.set("vk-stolen"),
+        claiming.advanced.model_keys.set(endpoint("vk-stolen")),
         claiming.advanced.model_keys.status(),
         claiming.advanced.model_keys.revoke(),
     ):

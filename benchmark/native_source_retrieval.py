@@ -37,7 +37,7 @@ from benchmark.locomo import (
     _evidence_ids,
     _ingest_conversation,
 )
-from benchmark.retrieval import _settings
+from benchmark.retrieval import _settings, without_model
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
 from memory_service.config.constants import DenseModel
@@ -191,7 +191,7 @@ def _ingestion_settings(settings: Any, args: argparse.Namespace) -> dict[str, An
     a corpus written with them is never reused as one written without."""
     uses = sorted(args.ingest_uses or [])
     return {
-        "llm": {"enabled": str(settings.llm.enabled), "model": None, "uses": uses},
+        "llm": {"enabled": str(settings.llm.endpoint is not None), "model": None, "uses": uses},
         "threaded_ingest": THREADED_INGEST,
         "graph_enrichment": BENCH.graph_enrichment,
     }
@@ -202,12 +202,12 @@ async def run(args) -> None:
     database = _guard(settings)
     if args.ingest_uses:
         # the model writes only what the named ingest uses write, through the gateway
-        # (BENCH_LLM=on, BIFROST_URL, BIFROST_VIRTUAL_KEY); every tenant is pinned to them
-        if not settings.llm.enabled:
-            raise SystemExit("--ingest-uses needs BENCH_LLM=on and BIFROST_URL set")
+        # (BENCH_LLM=on, LLM_BASE_URL, LLM_API_KEY); every tenant is pinned to them
+        if settings.llm.endpoint is None:
+            raise SystemExit("--ingest-uses needs BENCH_LLM=on and LLM_BASE_URL set")
     else:
         # no environment can authorize model calls: the gateway is not configured at all
-        settings = settings.model_copy(update={"bifrost_url": None, "bifrost_virtual_key": None})
+        settings = without_model(settings)
     base_overrides = bench_overrides()
     overrides = replace(
         base_overrides,

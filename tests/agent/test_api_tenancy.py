@@ -20,6 +20,12 @@ from trellis.memory import MemoryError
 
 pytestmark = pytest.mark.e2e
 
+
+def endpoint(key: str) -> dict[str, str]:
+    """A model endpoint as the harness registers it (the suite does not probe it)."""
+    return {"base_url": "http://models.test/v1", "model": "m", "api_key": key}
+
+
 ENVELOPE = base64.urlsafe_b64encode(b"p9b-tenancy-envelope-key-32bytes").decode()
 
 
@@ -186,9 +192,9 @@ async def test_a_model_key_is_set_read_and_revoked_at_the_tenant(app, running) -
     admin = sdk(app, acme.admin_key.token)
 
     assert (await admin.tenant.model_key_status()).registered is False
-    registered = await admin.tenant.set_model_key("vk-tenant-first")
+    registered = await admin.tenant.set_model_key(endpoint("vk-tenant-first"))
     assert registered.registered is True and registered.revision == 1
-    assert (await admin.tenant.set_model_key("vk-tenant-second")).revision == 2
+    assert (await admin.tenant.set_model_key(endpoint("vk-tenant-second"))).revision == 2
     status = await admin.tenant.model_key_status()
     assert status.revision == 2 and "vk-tenant" not in str(status.model_dump())
 
@@ -264,7 +270,7 @@ async def test_a_service_key_administers_nothing_and_a_tenant_admin_is_not_the_p
         service.tenant.keys.list(),
         service.tenant.keys.revoke(key.key_id),
         service.tenant.reads(),
-        service.tenant.set_model_key("vk-sneaky"),
+        service.tenant.set_model_key(endpoint("vk-sneaky")),
         service.tenant.model_key_status(),
         service.tenant.revoke_model_key(),
     ):

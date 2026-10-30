@@ -1,7 +1,8 @@
-"""Contract tests for the Bifrost LLM adapter — the only LLM path.
+"""Contract tests for the endpoint LLM adapter — the only LLM path.
 
-The gateway is mocked with respx; the ``bifrost``-marked test at the end hits a running
-Bifrost when ``MEMORY_TEST_LIVE_LLM=1`` and ``BIFROST_URL``/``BIFROST_VIRTUAL_KEY`` are set.
+The endpoint is mocked with respx; the ``live_llm``-marked test at the end hits a running
+OpenAI-compatible endpoint when ``MEMORY_TEST_LIVE_LLM=1`` and ``LLM_BASE_URL`` (with its
+``LLM_API_KEY``) are set.
 """
 
 from __future__ import annotations
@@ -14,15 +15,14 @@ from typing import Any
 import httpx
 import pytest
 import respx
-from pydantic import SecretStr
 
-from memory_service.adapters.models.llm import (
-    BifrostLLM as _BifrostLLM,
-)
 from memory_service.adapters.models.llm import (
     DisabledLLM,
     LLMCallFailed,
     LLMOutputInvalid,
+)
+from memory_service.adapters.models.llm import (
+    EndpointLLM as _EndpointLLM,
 )
 from memory_service.config.constants import LLMTransport, LLMTuning
 from memory_service.config.settings import LLMSettings
@@ -31,10 +31,11 @@ from memory_service.modules.llm.assist import LLMAssist
 from memory_service.observability.metrics import llm_requests_total
 from memory_service.ports.models import LLMMessage, LLMProvider
 from tests.conftest import live_llm_settings, live_llm_tuning
+from trellis.contracts import Endpoint
 
 pytestmark = pytest.mark.contract
 
-BASE = "http://bifrost.test/v1"
+BASE = "http://endpoint.test/v1"
 SCHEMA = {
     "type": "object",
     "properties": {"worthy": {"type": "boolean"}, "reason": {"type": "string"}},
@@ -54,7 +55,7 @@ TRANSPORT = LLMTransport(
 TUNING = LLMTuning(model="openai/gpt-4.1", fast_model="openai/gpt-4.1-mini", max_retries=2)
 
 
-class BifrostLLM(_BifrostLLM):
+class EndpointLLM(_EndpointLLM):
     """The adapter under test with the test transport and tuning as its defaults."""
 
     def __init__(self, settings: LLMSettings, **kwargs: Any) -> None:
@@ -63,8 +64,9 @@ class BifrostLLM(_BifrostLLM):
         super().__init__(settings, **kwargs)
 
 
-def _settings() -> LLMSettings:
-    return LLMSettings(base_url=BASE, api_key=SecretStr("vk-test"))
+def _settings(**endpoint: object) -> LLMSettings:
+    fields: dict = {"base_url": BASE, "api_key": "vk-test", **endpoint}
+    return LLMSettings(endpoint=Endpoint(**fields))
 
 
 def _chat(content: str, *, model: str = "openai/gpt-4.1", usage: bool = True) -> dict:
@@ -83,7 +85,7 @@ def _counter(use: str, outcome: str) -> float:
 
 
 def test_protocol_conformance() -> None:
-    assert isinstance(BifrostLLM(_settings()), LLMProvider)
+    assert isinstance(EndpointLLM(_settings()), LLMProvider)
     assert isinstance(DisabledLLM(), LLMProvider)
 
 
@@ -95,9 +97,24 @@ async def test_disabled_raises_provider_not_configured() -> None:
     assert (await DisabledLLM().ping()) is False
 
 
-def test_construction_guards() -> None:
-    with pytest.raises(ProviderNotConfigured):
-        BifrostLLM(LLMSettings())
+def test_the_services_own_endpoint_is_checked_at_construction() -> None:
+    """An unknown route or auth in ``LLM_GATEWAY``/``LLM_AUTH`` fails at startup, not at the
+    first call; with no endpoint of its own the adapter waits for registered ones."""
+    with pytest.raises(ValueError, match="unknown gateway"):
+        EndpointLLM(_settings(gateway="litellm"))
+    with pytest.raises(ValueError, match="unknown auth"):
+        EndpointLLM(_settings(auth="kerberos"))
+    with pytest.raises(ValueError, match="takes no key"):
+        EndpointLLM(_settings(auth="google"))
+    assert EndpointLLM(LLMSettings()).enabled
+
+
+async def test_no_endpoint_from_any_source_refuses_the_call_saying_why() -> None:
+    llm = EndpointLLM(LLMSettings(accept_agent_endpoints=False))
+    with pytest.raises(ProviderNotConfigured, match="no model endpoint") as raised:
+        await llm.complete(_messages())
+    assert raised.value.details == {"source": "none"}
+    assert await llm.ping() is False
 
 
 def test_models_default_to_gateway_discovery() -> None:
@@ -105,11 +122,11 @@ def test_models_default_to_gateway_discovery() -> None:
 
 
 @respx.mock
-async def test_complete_sends_bearer_virtual_key_and_maps_usage() -> None:
+async def test_complete_sends_the_bearer_key_and_maps_usage() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(
         return_value=httpx.Response(200, json=_chat("hello"))
     )
-    llm = BifrostLLM(_settings())
+    llm = EndpointLLM(_settings())
     before = _counter("generic", "ok")
     out = await llm.complete(_messages(), max_tokens=64, temperature=0.2)
     assert out.text == "hello" and out.input_tokens == 12 and out.output_tokens == 5
@@ -131,7 +148,7 @@ async def test_fast_model_is_used_for_fast_uses() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(
         return_value=httpx.Response(200, json=_chat("x", model="openai/gpt-4.1-mini"))
     )
-    llm = BifrostLLM(_settings())
+    llm = EndpointLLM(_settings())
     await llm.complete(_messages(), use="query_expansion")
     assert json.loads(route.calls.last.request.content)["model"] == "openai/gpt-4.1-mini"
     await llm.complete(_messages(), use="summaries")
@@ -143,7 +160,7 @@ async def test_structured_requests_json_schema_and_validates() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(
         return_value=httpx.Response(200, json=_chat('{"worthy": true, "reason": "fact"}'))
     )
-    llm = BifrostLLM(_settings())
+    llm = EndpointLLM(_settings())
     out = await llm.structured(_messages(), schema=SCHEMA, use="query_expansion")
     assert out == {"worthy": True, "reason": "fact"}
     body = json.loads(route.calls.last.request.content)
@@ -160,7 +177,7 @@ async def test_structured_repairs_once_then_fails() -> None:
             httpx.Response(200, json=_chat('```json\n{"worthy": "yes"}\n```')),
         ]
     )
-    llm = BifrostLLM(_settings())
+    llm = EndpointLLM(_settings())
     with pytest.raises(LLMOutputInvalid):
         await llm.structured(_messages(), schema=SCHEMA)
     assert route.call_count == 2
@@ -183,7 +200,7 @@ async def test_retries_transient_status_then_succeeds() -> None:
             httpx.Response(200, json=_chat("ok")),
         ]
     )
-    llm = BifrostLLM(_settings())
+    llm = EndpointLLM(_settings())
     assert (await llm.complete(_messages())).text == "ok"
     assert route.call_count == 3
 
@@ -191,7 +208,7 @@ async def test_retries_transient_status_then_succeeds() -> None:
 @respx.mock
 async def test_retries_are_bounded_and_non_retryable_status_fails_fast() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(return_value=httpx.Response(502))
-    llm = BifrostLLM(_settings(), tuning=replace(TUNING, max_retries=1))
+    llm = EndpointLLM(_settings(), tuning=replace(TUNING, max_retries=1))
     with pytest.raises(DependencyUnavailable, match="502"):
         await llm.complete(_messages())
     assert route.call_count == 2
@@ -205,7 +222,7 @@ async def test_retries_are_bounded_and_non_retryable_status_fails_fast() -> None
 @respx.mock
 async def test_timeouts_and_circuit_breaker() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(side_effect=httpx.ReadTimeout("slow"))
-    llm = BifrostLLM(
+    llm = EndpointLLM(
         _settings(),
         tuning=replace(TUNING, max_retries=0),
         transport=replace(TRANSPORT, circuit_failure_threshold=2),
@@ -227,7 +244,7 @@ async def test_bad_payloads_fail_loudly() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(
         return_value=httpx.Response(200, text="<html>")
     )
-    llm = BifrostLLM(_settings(), tuning=replace(TUNING, max_retries=0))
+    llm = EndpointLLM(_settings(), tuning=replace(TUNING, max_retries=0))
     with pytest.raises(DependencyUnavailable, match="non-JSON"):
         await llm.complete(_messages())
     route.return_value = httpx.Response(200, json={"choices": []})
@@ -248,14 +265,14 @@ async def test_usage_is_logged_without_prompt_text_by_default() -> None:
         return_value=httpx.Response(200, json=_chat("SECRET-ANSWER"))
     )
     with capture_logs() as events:
-        await BifrostLLM(_settings()).complete(
+        await EndpointLLM(_settings()).complete(
             [LLMMessage(role="user", content="SECRET-PROMPT")], use="summaries"
         )
     call = next(e for e in events if e.get("event") == "llm.call")
     assert call["use"] == "summaries" and call["input_tokens"] == 12
     assert "SECRET-PROMPT" not in json.dumps(call) and "SECRET-ANSWER" not in json.dumps(call)
     with capture_logs() as events:
-        await BifrostLLM(_settings(), log_source_text=True).complete(
+        await EndpointLLM(_settings(), log_source_text=True).complete(
             [LLMMessage(role="user", content="SECRET-PROMPT")]
         )
     call = next(e for e in events if e.get("event") == "llm.call")
@@ -265,15 +282,15 @@ async def test_usage_is_logged_without_prompt_text_by_default() -> None:
 @respx.mock
 async def test_ping_uses_models_endpoint() -> None:
     respx.get(f"{BASE}/models").mock(return_value=httpx.Response(200, json={"data": []}))
-    assert await BifrostLLM(_settings()).ping() is True
+    assert await EndpointLLM(_settings()).ping() is True
     respx.get(f"{BASE}/models").mock(side_effect=httpx.ConnectError("down"))
-    assert await BifrostLLM(_settings()).ping() is False
+    assert await EndpointLLM(_settings()).ping() is False
 
 
 @respx.mock
 async def test_assist_falls_back_to_none_on_any_failure() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(return_value=httpx.Response(500))
-    llm = BifrostLLM(_settings(), tuning=replace(TUNING, max_retries=0))
+    llm = EndpointLLM(_settings(), tuning=replace(TUNING, max_retries=0))
     assist = LLMAssist(llm, _settings())
     # unbound, the operator's key pays and every use is open; the tenant policy narrows it
     assert assist.wants("query_expansion") and assist.wants("reflection")
@@ -311,7 +328,7 @@ async def test_a_rate_limit_tells_the_caller_how_long_to_wait() -> None:
             },
         )
     )
-    llm = BifrostLLM(_settings(), tuning=replace(TUNING, max_retries=0))
+    llm = EndpointLLM(_settings(), tuning=replace(TUNING, max_retries=0))
 
     with pytest.raises(DependencyUnavailable) as raised:
         await llm.complete(_messages(), use="summaries")
@@ -327,7 +344,7 @@ async def test_a_rate_limit_with_no_advice_says_nothing_rather_than_guessing() -
     respx.post(f"{BASE}/chat/completions").mock(
         return_value=httpx.Response(429, json={"error": {"code": "429", "message": "slow down"}})
     )
-    llm = BifrostLLM(_settings(), tuning=replace(TUNING, max_retries=0))
+    llm = EndpointLLM(_settings(), tuning=replace(TUNING, max_retries=0))
 
     with pytest.raises(DependencyUnavailable) as raised:
         await llm.complete(_messages(), use="summaries")
@@ -360,7 +377,7 @@ async def test_an_exhausted_budget_is_not_counted_as_a_successful_call() -> None
     exhausted budget was recorded ok and then raised at the call site, so the error rate
     said the feature was healthy while every caller saw it fail."""
     respx.post(f"{BASE}/chat/completions").mock(return_value=httpx.Response(200, json=_exhausted()))
-    llm = BifrostLLM(_settings())
+    llm = EndpointLLM(_settings())
     ok_before = _counter("summaries", "ok")
     empty_before = _counter("summaries", "empty_output")
 
@@ -382,7 +399,7 @@ async def test_source_logging_does_not_change_how_a_failure_presents() -> None:
     Turning logging on to investigate a problem must not move where the problem comes from.
     """
     respx.post(f"{BASE}/chat/completions").mock(return_value=httpx.Response(200, json=_exhausted()))
-    llm = BifrostLLM(_settings(), log_source_text=True)
+    llm = EndpointLLM(_settings(), log_source_text=True)
     empty_before = _counter("summaries", "empty_output")
 
     with pytest.raises(DependencyUnavailable, match="output budget was exhausted"):
@@ -397,24 +414,24 @@ async def test_source_logging_still_records_the_response_when_there_is_one() -> 
     respx.post(f"{BASE}/chat/completions").mock(
         return_value=httpx.Response(200, json=_chat("the answer"))
     )
-    llm = BifrostLLM(_settings(), log_source_text=True)
+    llm = EndpointLLM(_settings(), log_source_text=True)
     assert (await llm.complete(_messages(), use="summaries")).text == "the answer"
     await llm.close()
 
 
-@pytest.mark.bifrost
-async def test_live_bifrost_roundtrip() -> None:
-    """Hits the running gateway: opt-in (``MEMORY_TEST_LIVE_LLM=1``, it spends tokens) and
-    needs BIFROST_URL plus a virtual key; the model is discovered through the gateway unless
-    ``MEMORY_TEST_LIVE_LLM_MODEL`` names one."""
+@pytest.mark.live_llm
+async def test_live_endpoint_roundtrip() -> None:
+    """Hits the running endpoint: opt-in (``MEMORY_TEST_LIVE_LLM=1``, it spends tokens) and
+    needs LLM_BASE_URL (and LLM_API_KEY, LLM_GATEWAY, LLM_AUTH as it needs them); the model is
+    chosen from its ``/models`` unless ``MEMORY_TEST_LIVE_LLM_MODEL`` names one."""
     if os.environ.get("MEMORY_TEST_LIVE_LLM") != "1":
         pytest.skip("live LLM tests are opt-in: MEMORY_TEST_LIVE_LLM=1")
     settings = live_llm_settings()
-    if not settings.enabled or not settings.api_key:
-        pytest.skip("Bifrost not configured (BIFROST_URL, BIFROST_VIRTUAL_KEY)")
-    llm = _BifrostLLM(settings, tuning=live_llm_tuning())
+    if settings.endpoint is None:
+        pytest.skip("no endpoint configured (LLM_BASE_URL)")
+    llm = _EndpointLLM(settings, tuning=live_llm_tuning())
     if not await llm.ping():
-        pytest.skip(f"Bifrost not reachable at {settings.base_url}")
+        pytest.skip(f"no endpoint reachable at {settings.endpoint.base_url}")
     # max_tokens=8 was enough when every model emitted text immediately. A reasoning model
     # spends the output budget on thinking first — measured against gemini-3.6-flash, "Reply
     # with exactly: OK" consumed 57 reasoning tokens — so a small budget returns 200 OK with
@@ -435,7 +452,7 @@ async def test_live_bifrost_roundtrip() -> None:
         schema=SCHEMA,
     )
     assert data["worthy"] is True
-    if os.environ.get("MEMORY_BIFROST_RECORD"):
+    if os.environ.get("MEMORY_LIVE_LLM_RECORD"):
         print({"model": out.model, "input_tokens": out.input_tokens})  # noqa: T201
     await llm.close()
 
@@ -466,7 +483,7 @@ async def test_structured_falls_back_when_the_model_rejects_response_format() ->
         return httpx.Response(200, json=_chat('{"worthy": true, "reason": "fact"}'))
 
     respx.post(f"{BASE}/chat/completions").mock(side_effect=handler)
-    llm = BifrostLLM(_settings())
+    llm = EndpointLLM(_settings())
     out = await llm.structured(
         [LLMMessage(role="user", content="grade this")],
         schema=SCHEMA,
@@ -505,7 +522,7 @@ async def test_the_repair_round_survives_the_envelope_fallback() -> None:
         return httpx.Response(200, json=_chat('{"worthy": true, "reason": "repaired"}'))
 
     respx.post(f"{BASE}/chat/completions").mock(side_effect=handler)
-    llm = BifrostLLM(_settings())
+    llm = EndpointLLM(_settings())
     out = await llm.structured(
         [LLMMessage(role="user", content="grade this")], schema=SCHEMA, use="query_expansion"
     )
@@ -522,6 +539,6 @@ async def test_a_bad_request_that_is_not_about_the_envelope_still_raises() -> No
             400, json={"error": {"message": "max_tokens must be a positive integer"}}
         )
     )
-    llm = BifrostLLM(_settings())
+    llm = EndpointLLM(_settings())
     with pytest.raises(LLMCallFailed):
         await llm.structured([LLMMessage(role="user", content="x")], schema=SCHEMA, use="generic")

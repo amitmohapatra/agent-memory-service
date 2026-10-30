@@ -41,7 +41,9 @@ ROWS = _rows()
 
 def _env_name(path: tuple[str, ...], field: Any) -> str:
     alias = field.validation_alias
-    if alias is not None:  # the platform's names (BIFROST_URL, OTEL_EXPORTER_OTLP_ENDPOINT)
+    if isinstance(alias, str):  # the platform's names (LLM_BASE_URL, ...)
+        return alias
+    if alias is not None:  # OTEL_EXPORTER_OTLP_ENDPOINT, also settable by its field name
         return next(a for a in alias.choices if a.isupper())
     return "MEMORY__" + "__".join(p.upper() for p in path)
 

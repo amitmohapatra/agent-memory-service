@@ -2,8 +2,8 @@
 
 A tenant is the wall nothing crosses. Inside it, a **workspace** is a team that shares what it
 stores, a **key** is a credential bound
-to the tenant that issued it, and a **model key** is the Bifrost virtual key a read may spend
-against. The read audit says who actually read which records (ADR 0021, ADR 0023).
+to the tenant that issued it, and a **model endpoint** is where the model a read may call is
+and how to reach it (a `trellis.contracts.Endpoint`). The read audit says who actually read which records (ADR 0021, ADR 0023).
 
 ## How a read is authorized
 
@@ -40,8 +40,8 @@ be forgotten by a caller, and a result that was never a candidate cannot leak th
 | `PUT /v1/workspaces/{id}/members/{principal_ref}` | admit `user:<id>` or `agent:<id>` with one role | `t.workspaces.set_member(id, "user:u1", role=…)` |
 | `DELETE /v1/workspaces/{id}/members/{principal_ref}` | remove a member; its next request no longer reads the workspace | `t.workspaces.remove_member(id, principal)` |
 | `GET /v1/workspaces/{id}/members` | who is in it, by principal (cursor paged) | `t.workspaces.members(id)`, `.members_page(id, cursor=…)` |
-| `GET` / `PUT` / `DELETE /v1/model-key` | the tenant's Bifrost virtual key (metadata only on read; `DELETE` answers `204`) | `t.model_key_status()`, `t.set_model_key(vk)`, `t.revoke_model_key()` (reads the status back) |
-| `GET` / `PUT` / `DELETE /v1/agents/model-key` | the **acting agent's** own key (`DELETE` answers `204`) | `ctx.advanced.model_keys.status()`, `ctx.advanced.model_keys.set(vk)`, `ctx.advanced.model_keys.revoke()` (reads the status back) |
+| `GET` / `PUT` / `DELETE /v1/model-key` | the tenant's model endpoint (never its key on read; `DELETE` answers `204`) | `t.model_key_status()`, `t.set_model_key(endpoint)`, `t.revoke_model_key()` (reads the status back) |
+| `GET` / `PUT` / `DELETE /v1/agents/model-key` | the **acting agent's** own endpoint (`DELETE` answers `204`) | `ctx.advanced.model_keys.status()`, `ctx.advanced.model_keys.set(endpoint)`, `ctx.advanced.model_keys.revoke()` (reads the status back) |
 | `GET` / `PUT /v1/model-key/policy` | the tenant's model policy: which uses may run, whether reads are assisted, the model per use | `t.model_policy()`, `t.set_model_policy(uses, read_assist=…, models=…)` |
 | `GET /v1/model-key/usage` | tokens and calls per day and use (default: the last 30 days) | `t.model_usage(since=…, until=…)` |
 | `GET /v1/reads` | who read which records, newest first (cursor paged) | `t.reads()`, `t.reads_page()` |
@@ -74,7 +74,7 @@ become a workspace (`in use as an anchor`), and a deleted workspace's id is neve
 | Role | May | Held by |
 | --- | --- | --- |
 | `platform` | onboard tenants and issue their first admin key; never a row in a tenant | the operator's bootstrap credential ([admin.md](admin.md)) |
-| `admin` | administer one tenant: keys, workspaces, model keys, the read audit | a tenant's own administrators |
+| `admin` | administer one tenant: keys, workspaces, model endpoints, the read audit | a tenant's own administrators |
 | `service` | act for that tenant's users and agents: read and write memory within the scope it is given | **a harness** |
 
 `POST /v1/keys` issues the `admin` and `service` roles; `platform` is not issuable through it.
@@ -120,38 +120,60 @@ route when a request names no tenant, so a laptop's harness needs no tenant conf
 it is administered, and the development stack also accepts the keys it issued: `POST /v1/keys`
 with the development key gives the service key a deployment would use, ready at once. `role` is `platform`, `admin`, `service`, `trusted_dev` or `jwt`.
 
-## Model keys: two registered levels and the operator's, resolved in order
+## Model endpoints: two registered levels and the service's own, resolved in order
 
-A read that is permitted to use an LLM spends *someone's* virtual key, and the service resolves the
-most specific level that has a row:
+A read that is permitted to use an LLM calls *someone's* endpoint, and the service resolves it
+per call, the first source that answers winning (`modules/llm/endpoints.py`):
 
 ```
-the acting agent's key  →  the tenant's key  →  (no row anywhere) the operator's
+the acting agent's endpoint  →  the tenant's  →  the service's own (LLM_*)  →  none
 ```
 
-The agent's key is `PUT /v1/agents/model-key` (the request names the `agent_id`; one key per
-`agent_id`, whichever user it acts for); the tenant's is `PUT /v1/model-key` (the admin key); the
-operator's is the deployment's `BIFROST_VIRTUAL_KEY`, on the gateway at `BIFROST_URL`. There is no
-workspace level.
+The agent's is `PUT /v1/agents/model-key` (the request names the `agent_id`; one endpoint per
+`agent_id`, whichever user it acts for): the harness registers the endpoint its agent's model
+is on, so the service calls that model ("configure the harness only, memory follows"). The
+tenant's is `PUT /v1/model-key` (the admin key). The service's own is the deployment's
+`LLM_BASE_URL` with `LLM_API_KEY`, `LLM_GATEWAY` and `LLM_AUTH`. There is no workspace level.
+An operator who pays for and chooses the model itself sets
+`MEMORY__MODELS__LLM__ACCEPT_AGENT_ENDPOINTS=false`: registrations are then stored but never
+called.
 
-Two rules make that safe rather than merely convenient:
+The body is a `trellis.contracts.Endpoint` as JSON, its key a plain string on the wire:
+
+```json
+PUT /v1/agents/model-key
+{"scope": {"agent_id": "research"},
+ "endpoint": {"base_url": "https://api.openai.com/v1", "gateway": "openai-compatible",
+              "auth": "bearer", "model": "gpt-4.1-mini", "api_key": "sk-…",
+              "profile": {"reasoning_output": false, "temperature": true,
+                          "max_output_tokens": null, "tool_calling": true}}}
+```
+
+Only `base_url` is required. Before it is stored the service lists the endpoint's models
+(`GET {base_url}/models` with its own auth, 5 s) and answers **422** when it cannot: a loopback
+address only the harness's machine resolves is the usual one, and the problem says so.
+
+Two rules make the order safe rather than merely convenient:
 
 * **a revocation at the resolved level refuses** — a revoked agent never silently borrows the
-  tenant's or the operator's key, because a tombstone raises instead of falling through;
-* **the operator fallback applies only while no row exists at any level**, and a key registered
-  mid-request fails that request closed rather than mixing keys.
+  tenant's or the service's endpoint, because a tombstone stops the order instead of falling
+  through;
+* **the service's own endpoint applies only while no row exists at any level**, and an
+  endpoint registered mid-request fails that request closed rather than mixing endpoints.
 
-Each key is stored encrypted, and a read returns **metadata only** — `registered`, `revoked`,
-`revision`, `updated_at` — never the key or its ciphertext. Revoking one invalidates the assisted
-read output built with it.
+Each endpoint is stored encrypted, whole, and a read returns **no key** — `registered`,
+`revoked`, `revision`, `updated_at`, the stored `endpoint` without its key (`has_api_key`
+says whether one is held) — and which endpoint a call at that level uses now and why:
+`source` (`agent`, `tenant`, `service` or `none`) and `reason`. Revoking one invalidates the
+assisted read output built with it.
 
 ```python
-status = await ctx.advanced.model_keys.set("vk-…")  # the acting agent's own key
-print(status.registered, status.revision)
-print(await t.model_key_status())  # the tenant level, metadata only
+status = await ctx.advanced.model_keys.set(endpoint)  # a trellis.contracts.Endpoint, or a dict
+print(status.source, status.reason)  # "agent", "the endpoint the agent registered (revision 1)"
+print(await t.model_key_status())  # the tenant level, never its key
 ```
 
-## Model policies: what a key may be spent on
+## Model policies: what an endpoint may be used for
 
 A policy narrows what the model is used for. It is the tenant's alone (there is no agent- or
 workspace-level policy) and has exactly three fields: `uses`, `read_assist` and
@@ -163,31 +185,31 @@ policy's `uses` is exactly what runs: name `memory_restatement` there to opt in.
 only when all of these hold:
 
 ```
-the gateway is configured (BIFROST_URL)  ∧  the tenant policy's uses  ∧  a key that can pay
+an endpoint resolves (above)  ∧  the tenant policy's uses
 ```
 
-There is no deployment-level allow-list of uses and no environment variable that names a
-model: the service's defaults are the `LLMTuning` constants (`model` and `fast_model`, both
-`auto`: discovered through the gateway's model catalogue), and the policy's `models` map
-overrides them per use.
+There is no deployment-level allow-list of uses. The model a use calls is the policy's
+`models` entry for it, else the resolved endpoint's `model` (the harness's agent model, or
+`MEMORY__MODELS__LLM__MODEL` for the service's own), else `auto`: chosen from the endpoint's
+`/models` by what the listing says about each model, never by its name.
 
 `read_assist` decides whether a read (`/v1/context`, `/v1/recall`, `/v1/verify`, the graph
 routes) consults the model; a request cannot override the policy. Background work — extraction, reflection,
-connections, summaries — runs bound to the owner of the data, so the owner's key pays and the
-owner's policy decides; a periodic job scans only tenants that hold a live key (every tenant when
-the operator's key pays). Changing a policy invalidates the assisted read output built under it.
+connections, summaries — runs bound to the owner of the data, so the owner's endpoint serves it
+and the owner's policy decides; a periodic job scans only tenants that hold a live registration
+(every tenant when the service has an endpoint of its own). Changing a policy invalidates the assisted read output built under it.
 
 ```python
 await t.set_model_policy(
     ["contextual_extraction", "summaries", "memory_restatement"],  # restatement: opt-in
     read_assist=False,
-    models={"memory_restatement": "openai/gpt-4.1-mini"},  # provider/model, through Bifrost
+    models={"memory_restatement": "gpt-4.1-mini"},  # as the endpoint names it
 )
 for day in (await t.model_usage()).days:  # one row per day and use
     print(day.day, day.use, day.tokens, day.calls)
 ```
 
-Every successful gateway call adds its tokens to the tenant's day (`GET /v1/model-key/usage`) and
+Every successful model call adds its tokens to the tenant's day (`GET /v1/model-key/usage`) and
 to `memory_llm_tokens_total{tenant,use,direction}`; a request reports its own spend in
 `X-Trellis-LLM-Tokens`, and a background job logs its spend as `job.llm_tokens`.
 
@@ -212,6 +234,6 @@ boundary need a larger page.
   disagrees with a trusted header is refused;
 * it does not provision external authorization for you — a WORKSPACE audience means membership in
   this service's authorization store, and nothing else grants it;
-* it does not show a key or a model key twice;
+* it does not show a key twice, or a model endpoint's key at all;
 * it does not have per-user ACLs on individual memories: the audience levels are the vocabulary,
   and they are deliberately few.
