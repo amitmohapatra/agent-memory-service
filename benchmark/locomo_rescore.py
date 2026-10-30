@@ -45,7 +45,7 @@ async def rescore(
     container = await build_container(settings, "bench", overrides=bench_overrides(llm=tuning))
     llm = container.llm
     if not getattr(llm, "enabled", False):
-        raise SystemExit("rescoring needs a generative model: BENCH_LLM=on and BIFROST_URL")
+        raise SystemExit("rescoring needs a generative model: BENCH_LLM=on and LLM_BASE_URL")
     pacer = _Pacer(calls_per_minute)
     out = copy.deepcopy(result)
     by_cat: dict[str, list[bool]] = {}

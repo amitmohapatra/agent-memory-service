@@ -34,7 +34,7 @@ def test_the_ledger_records_the_phase_start_once_and_the_spend_since(tmp_path: P
 
 def test_the_gateway_root_drops_the_inference_suffix(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("BENCH_GATEWAY_URL", raising=False)
-    monkeypatch.setenv("BIFROST_URL", "http://host.docker.internal:8091/v1")
+    monkeypatch.setenv("LLM_BASE_URL", "http://host.docker.internal:8091/v1")
     assert gateway_root() == "http://host.docker.internal:8091"
     monkeypatch.setenv("BENCH_GATEWAY_URL", "http://localhost:8091/")
     assert gateway_root() == "http://localhost:8091"

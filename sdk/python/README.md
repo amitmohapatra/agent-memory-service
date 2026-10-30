@@ -93,23 +93,32 @@ under `ctx.advanced`.
 
 `ctx.advanced` holds `documents`, `graph`, `tools` (the catalog and approval
 suggestions), `skills` (what each agent learned: `list(agent=)`, `dismiss(id)`, an
-administrator's key), `model_keys` (this agent's key), `memories` (the inventory), `job(id)`, and the
+administrator's key), `model_keys` (this agent's model endpoint), `memories` (the inventory), `job(id)`, and the
 client's `tenant` and `admin` administration objects.
 
-## Agent credentials and model-free reads
+## Agent model endpoints and model-free reads
 
 ```python
 agent = memory.bind(tenant_id="acme", user_id="u1", agent_id="research")
-await agent.advanced.model_keys.set(virtual_key, idempotency_key="research-key-v1")
-status = await agent.advanced.model_keys.status()  # status only; never the secret
+await agent.advanced.model_keys.set(
+    {"base_url": "https://api.openai.com/v1", "model": "gpt-4.1-mini", "api_key": key},
+    idempotency_key="research-endpoint-v1",
+)
+status = await agent.advanced.model_keys.status()  # never the key
+status.source, status.reason  # which endpoint this agent's memory calls use, and why
 bundle = await agent.context("What did we decide?")
 ```
 
-The service encrypts the virtual key and binds it to the tenant and agent owner. Registration
-requires the operator's envelope-key configuration (a local `dev` service derives a
-development one, so it works there with nothing set). Rotation and revocation also affect
-background jobs and retries. `await agent.advanced.model_keys.revoke()` prevents using that agent's
-credential and does not switch it to the operator key. Memory-service model calls exclude MCP.
+The endpoint is a `trellis.contracts.Endpoint` (pass one as it is, or its JSON as a dict:
+`base_url`, `gateway`, `auth`, `model`, `api_key`, `profile`); the harness registers its agent's
+endpoint on its own, so the service calls the model the agent was configured with. The
+service probes the endpoint (`GET /models` with its auth) and refuses one it cannot reach, such
+as a `localhost` address only the agent's machine resolves. It encrypts the endpoint and binds
+it to the tenant and agent owner. Registration requires the operator's envelope-key
+configuration (a local `dev` service derives a development one, so it works there with nothing
+set). Rotation and revocation also affect background jobs and retries.
+`await agent.advanced.model_keys.revoke()` refuses that agent's model calls and does not switch
+them to the service's own endpoint. Memory-service model calls exclude MCP.
 
 Ingestion model uses and read model uses are independent. Whether context, search, verify and
 graph queries consult a model is the tenant's model policy (`read_assist`, set with

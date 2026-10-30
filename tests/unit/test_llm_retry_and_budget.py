@@ -1,4 +1,4 @@
-"""Gateway failure modes that are silent by default.
+"""Endpoint failure modes that are silent by default.
 
 Both were found by pointing the service at a real gateway with a reasoning model behind a
 free-tier quota — the configuration most first-time users will have.
@@ -6,21 +6,23 @@ free-tier quota — the configuration most first-time users will have.
 
 from __future__ import annotations
 
+import dataclasses
+
 import httpx
 import pytest
 
-from memory_service.adapters.models.llm import BifrostLLM, LLMCallFailed
-from memory_service.config.constants import LLMTransport
+from memory_service.adapters.models.llm import EndpointLLM, LLMCallFailed
+from memory_service.config.constants import LLM, LLMTransport
 from memory_service.config.settings import LLMSettings
+from trellis.contracts import Endpoint
 
 
-def _settings(**over: object) -> LLMSettings:
-    base = {"base_url": "http://gateway/v1", "api_key": "vk-operator"}
-    return LLMSettings(**{**base, **over})  # type: ignore[arg-type]
-
-
-#: what the gateway lists on /models
-CATALOG = {"data": [{"id": "gemini/gemini-3.6-flash"}, {"id": "gemini/gemini-3.6-pro"}]}
+def _settings() -> LLMSettings:
+    return LLMSettings(
+        endpoint=Endpoint(
+            base_url="http://gateway/v1", api_key="vk-operator", model="gemini/gemini-3.6-flash"
+        )
+    )
 
 
 #: no backoff between retries: these tests count requests, not seconds
@@ -29,34 +31,23 @@ FAST = LLMTransport(retry_backoff_seconds=0.0)
 TWO_STRIKES = LLMTransport(retry_backoff_seconds=0.0, circuit_failure_threshold=2)
 
 
-def _no_retries(settings: LLMSettings, client: httpx.AsyncClient) -> BifrostLLM:
+def _no_retries(settings: LLMSettings, transport: httpx.MockTransport) -> EndpointLLM:
     """The breaker tests count calls one request each: no retries inside a call."""
-    import dataclasses
-
-    from memory_service.config.constants import LLM
-
-    return BifrostLLM(
+    return EndpointLLM(
         settings,
-        client=client,
+        http=transport,
         transport=TWO_STRIKES,
         tuning=dataclasses.replace(LLM, max_retries=0),
     )
 
 
-def _client(handler) -> httpx.AsyncClient:
-    """A gateway that lists ``CATALOG`` on /models and answers everything else with
-    ``handler``."""
-
-    def routed(request: httpx.Request) -> httpx.Response:
-        if request.url.path.endswith("/models"):
-            return httpx.Response(200, json=CATALOG)
-        return handler(request)
-
-    return httpx.AsyncClient(transport=httpx.MockTransport(routed), base_url="http://gateway/v1")
+def _client(handler) -> httpx.MockTransport:
+    """An endpoint that answers every request with ``handler``."""
+    return httpx.MockTransport(handler)
 
 
-def _llm(handler) -> BifrostLLM:
-    return BifrostLLM(_settings(), client=_client(handler), transport=FAST)
+def _llm(handler) -> EndpointLLM:
+    return EndpointLLM(_settings(), http=_client(handler), transport=FAST)
 
 
 # ``Retry-After`` parsing moved to the shared gateway client when this service stopped

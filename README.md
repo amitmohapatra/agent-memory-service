@@ -61,8 +61,10 @@ and applies both database schemas before the API and the worker start, so a fres
 reaches a working service with no further steps. The API is on **http://localhost:8080**:
 interactive docs at `/docs`, liveness at `/health/live`, readiness at `/health/ready` (the one
 to wire to a load balancer). The development key is `dev-key`; it acts in the tenant `default`
-unless a request names another (`bind(tenant_id=...)`). There is deliberately no model gateway
-in the stack: without `BIFROST_URL` the service runs complete, with no model call
+unless a request names another (`bind(tenant_id=...)`). There is deliberately no model server
+in the stack: configure the harness only and memory follows (the harness registers each
+agent's endpoint, and the service calls that agent's model), or give the service its own with
+`LLM_BASE_URL`; with neither the service runs complete, with no model call
 ([chapter 8](docs/guide/08-models.md)).
 
 To upgrade, pull and run the same command (`git pull`, then `docker compose up -d --build`):

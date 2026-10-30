@@ -237,8 +237,9 @@ async def test_keys_model_keys_and_the_policy_are_tenant_administration(
     status = {"registered": True, "revoked": False, "revision": 1, "updated_at": None}
     tenant_put = respx.put(f"{BASE}/v1/model-key").respond(200, json=status)
     tenant_get = respx.get(f"{BASE}/v1/model-key").respond(200, json=status)
-    assert (await admin.set_model_key("vk-tenant")).revision == 1
-    assert json.loads(tenant_put.calls.last.request.content) == {"virtual_key": "vk-tenant"}
+    endpoint = {"base_url": "https://models.test/v1", "api_key": "sk-tenant"}
+    assert (await admin.set_model_key(endpoint)).revision == 1
+    assert json.loads(tenant_put.calls.last.request.content) == {"endpoint": endpoint}
     assert (await admin.model_key_status()).registered and tenant_get.called
     policy = {
         "stored": True,

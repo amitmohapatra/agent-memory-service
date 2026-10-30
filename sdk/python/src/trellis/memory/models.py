@@ -13,14 +13,54 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+#: Where a model call's endpoint comes from: the agent's registration, its tenant's, the
+#: service's own (``LLM_*``), or nowhere (no model call is made).
+EndpointSource = Literal["agent", "tenant", "service", "none"]
+
+
+class EndpointInfo(BaseModel):
+    """A registered endpoint as the service returns it: everything but its key."""
+
+    model_config = ConfigDict(extra="allow")
+
+    base_url: str
+    gateway: str
+    auth: str
+    model: str | None = None
+    has_api_key: bool = False
+    profile: dict[str, Any] = Field(default_factory=dict)
+
 
 class AgentKeyStatus(BaseModel):
-    """Metadata only; neither a virtual key nor encrypted material is returned."""
+    """A level's registered endpoint and where its model calls go; never the key or the
+    encrypted material. ``source``/``reason``: which endpoint a call at this level uses now
+    (``agent``, ``tenant``, ``service`` or ``none``) and why."""
+
+    model_config = ConfigDict(extra="allow")
 
     registered: bool
     revoked: bool
     revision: int
     updated_at: datetime | None = None
+    endpoint: EndpointInfo | None = None
+    source: EndpointSource = "none"
+    reason: str = ""
+
+
+def endpoint_json(endpoint: Any) -> dict[str, Any]:
+    """An endpoint as the wire takes it: a mapping as it is, or a ``trellis.contracts.Endpoint``
+    (any pydantic model) dumped with its ``api_key`` unmasked, since ``model_dump`` masks a
+    ``SecretStr`` and the service needs the key itself."""
+    if isinstance(endpoint, dict):
+        return dict(endpoint)
+    dump = getattr(endpoint, "model_dump", None)
+    if dump is None:
+        raise TypeError("endpoint must be a mapping or a trellis.contracts.Endpoint")
+    data: dict[str, Any] = dump(mode="json")
+    key = getattr(endpoint, "api_key", None)
+    reveal = getattr(key, "get_secret_value", None)
+    data["api_key"] = reveal() if reveal is not None else key
+    return data
 
 
 class ModelPolicy(BaseModel):

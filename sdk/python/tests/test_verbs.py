@@ -459,7 +459,9 @@ async def test_the_catalog_and_the_agent_s_model_key_are_advanced(ctx) -> None:
     assert listed.calls.last.request.url.params.get_list("names") == ["erp-get_stock"]
     await ctx.advanced.tools.put_catalog([{"name": "erp-get_stock", "side_effects": "read"}])
     assert _body(put)["tools"][0]["name"] == "erp-get_stock"
-    await ctx.advanced.model_keys.set("vk-1", idempotency_key="model-key:buyer")
+    await ctx.advanced.model_keys.set(
+        {"base_url": "https://models.test/v1", "api_key": "sk-1"}, idempotency_key="model-key:buyer"
+    )
     assert key.calls.last.request.headers["Idempotency-Key"] == "model-key:buyer"
     assert await ctx.advanced.tools.approval_suggestions() == [] and suggestions.called
     assert (await ctx.advanced.tools.accept_suggestion("s1")).approve_when == "amount > 1"

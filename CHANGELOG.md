@@ -7,6 +7,54 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed
+- **Any model provider, and memory follows the harness** (ADR 0042; service 0.4.0, SDK
+  `trellis-memory` 0.6.0; breaking). A model call goes to an endpoint resolved per call, in one
+  order: the endpoint the acting agent registered (else its tenant's), then the service's own,
+  then none (no model call; every path keeps its native result). An endpoint is
+  `trellis.contracts.Endpoint` (base URL, route, auth, model, key, profile): anything
+  OpenAI-compatible (OpenAI, OpenRouter, a LiteLLM proxy, Bifrost, Ollama, vLLM, llama.cpp,
+  the Anthropic and Gemini compatible endpoints), Vertex AI with a Google login and Bedrock
+  with AWS SigV4. The service now depends on `trellis-contracts>=0.6.3` (vendored like
+  `bifrost-sdk`, `make vendor`) and `bifrost-sdk>=0.4`.
+  - Settings: `BIFROST_URL` and `BIFROST_VIRTUAL_KEY` are gone, with no alias; the service's
+    own endpoint is `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_GATEWAY` (`openai-compatible`, the
+    default, or `bifrost`) and `LLM_AUTH` (`bearer`, `google`, `aws`; the new `[google]` and
+    `[aws]` extras), the names the harness reads. `MEMORY__MODELS__LLM__MODEL` and
+    `MEMORY__MODELS__LLM__PROFILE__*` name that endpoint's model and what it accepts;
+    `MEMORY__MODELS__LLM__ACCEPT_AGENT_ENDPOINTS=false` (default `true`) stores registered
+    endpoints but never calls them. With nothing set, a model is reachable whenever an agent
+    registers one, so the worker runs its model topology; set that switch off (and no
+    `LLM_BASE_URL`) for a deployment that never calls a model. The service's own endpoint now
+    serves every tenant and agent without a registration whether or not it has a key (a local
+    server takes none); before, a gateway URL without the operator's key served no one.
+  - `PUT /v1/agents/model-key` and `PUT /v1/model-key` take `{"endpoint": {...}}` (plus
+    `scope` on the agent route) in place of `{"virtual_key": ...}`, probe it first
+    (`GET {base_url}/models` with its own auth, 5 s) and answer 422 when the service cannot
+    reach it, such as a loopback address only the harness's machine resolves. The whole
+    endpoint is sealed with the existing credential cipher. The status (`GET` and `PUT`) adds
+    `endpoint` (what is stored, without the key), `source` (`agent`, `tenant`, `service`,
+    `none`: where a call at that level goes now) and `reason` (why). `GET /version` reports
+    `providers.llm` as `registered`, `service:<route>`, both joined by `+`, or `disabled`.
+  - Migration `0031_endpoint_credentials` deletes the stored bare keys (a key alone says
+    nowhere to send it, and the envelope cannot be opened in a migration) and bumps those
+    tenants' revisions; revocations are kept. The harness registers its agent's endpoint again
+    at its next start; a tenant administrator registers the tenant's again.
+  - A reasoning model is sent `max_completion_tokens` and no `temperature`, from its profile
+    (the registered endpoint's, `MEMORY__MODELS__LLM__PROFILE__*`, or what `/models` lists for
+    it), never from its name; `max_output_tokens` caps a call's budget, and a model without
+    `tool_calling` is sent no `tool_choice`. Bifrost's per-call headers (no content logging,
+    the deny-all MCP scope) go only to a `bifrost` route.
+  - `auto` no longer picks by a model-family pattern: it reads what `/models` says about each
+    model (writes text, price, profile) and chooses the cheapest text model, any name
+    accepted; a listing that says nothing is used only when it holds one model, and anything
+    ambiguous is an error asking for an explicit model. A circuit breaker is per endpoint.
+  - SDK `trellis-memory` 0.6.0: `ctx.advanced.model_keys.set(endpoint)` and
+    `client.tenant.set_model_key(endpoint)` take a `trellis.contracts.Endpoint` (its key sent
+    unmasked) or its JSON as a dict; `AgentKeyStatus` gains `endpoint`, `source` and `reason`
+    (`EndpointInfo`, `EndpointSource`).
+  - The live-endpoint test marker is `live_llm` (was `bifrost`).
+
 ### Added
 - The caller sizes the conversation window: `POST /v1/context` takes an optional
   `conversation_token_budget` (100-1000000 tokens; omitted: the service's 2000, as before), SDK
@@ -57,7 +105,7 @@ each entry says which one moved. Decisions behind each change are in the
   calls in half. For an older client the window is the one it got whenever its newest turn
   fits the budget; a thread of more than 20 short messages now gives up to 20 turns within
   the same 2000 tokens. The rendered form of the window is cut per message as before
-  (within the caller's budget when it names one). Service and SDK 0.6.0.
+  (within the caller's budget when it names one). SDK 0.6.0.
 - The evidence status is labelled as what it is: the rendered heading is
   `## Evidence status (long-term memory)` (was `## Evidence status`), and `evidence_status` is
   described as what long-term memory holds for the question, not the conversation. An

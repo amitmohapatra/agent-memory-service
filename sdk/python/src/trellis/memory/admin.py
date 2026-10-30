@@ -26,6 +26,7 @@ from trellis.memory.models import (
     TenantInfo,
     WorkspaceInfo,
     WorkspaceMemberInfo,
+    endpoint_json,
 )
 from trellis.memory.transport import HEADER_TENANT
 
@@ -116,22 +117,24 @@ class TenantAPI:
         return await self._t.request_page(path, params=query, headers=self._headers)
 
     async def model_key_status(self) -> AgentKeyStatus:
-        """The tenant's model key: what every agent without a key of its own calls with."""
+        """The tenant's model endpoint: what every agent without one of its own calls."""
         return AgentKeyStatus.model_validate(await self._request("GET", "/v1/model-key"))
 
     async def set_model_key(
-        self, virtual_key: str, *, idempotency_key: str | None = None
+        self, endpoint: Any, *, idempotency_key: str | None = None
     ) -> AgentKeyStatus:
+        """Register or rotate the tenant's endpoint: a ``trellis.contracts.Endpoint`` or its
+        JSON as a dict. The service probes it first and refuses one it cannot reach."""
         data = await self._request(
             "PUT",
             "/v1/model-key",
-            json={"virtual_key": virtual_key},
+            json={"endpoint": endpoint_json(endpoint)},
             idempotency_key=idempotency_key,
         )
         return AgentKeyStatus.model_validate(data)
 
     async def revoke_model_key(self, *, idempotency_key: str | None = None) -> AgentKeyStatus:
-        """Revoke the tenant's key. The service answers 204; the status is read back."""
+        """Revoke the tenant's endpoint. The service answers 204; the status is read back."""
         await self._request("DELETE", "/v1/model-key", idempotency_key=idempotency_key)
         return await self.model_key_status()
 

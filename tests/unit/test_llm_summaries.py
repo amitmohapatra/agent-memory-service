@@ -19,7 +19,7 @@ from memory_service.modules.context.summaries import (
 from memory_service.modules.jobs.registry import register_handlers
 from memory_service.modules.rag.indexer import KNOWLEDGE, Indexer
 from tests.integration.conftest import container, uow_factory  # noqa: F401
-from tests.support_llm import mocked_gateway
+from tests.support_llm import MODEL, mocked_gateway
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "acme_fy26_annual_report.md"
 TITLE = "ACME FY26"
@@ -100,7 +100,7 @@ async def test_document_summaries_are_rewritten_from_extractive_and_source() -> 
             gw.assist(uses=["summaries"]), nodes, chunks, extractive, title=TITLE
         )
         prompts = gw.prompts()
-    assert len(prompts) == 2 and all(p["model"] == "gemini/gemini-3.8-pro" for p in prompts)
+    assert len(prompts) == 2 and all(p["model"] == MODEL for p in prompts)
     first = prompts[0]["messages"]
     assert "at most 900 characters" in first[0]["content"]
     assert first[1]["content"].startswith(f"Document: {TITLE}\nSection: {TITLE}\n")

@@ -85,50 +85,82 @@
         "additionalProperties": false,
         "examples": [
           {
+            "endpoint": {
+              "api_key": "sk-example",
+              "auth": "bearer",
+              "base_url": "https://api.openai.com/v1",
+              "gateway": "openai-compatible",
+              "model": "gpt-4.1-mini",
+              "profile": {
+                "reasoning_output": false,
+                "temperature": true
+              }
+            },
             "scope": {
               "agent_id": "research"
-            },
-            "virtual_key": "vk-example"
+            }
           }
         ],
         "properties": {
+          "endpoint": {
+            "$ref": "#/components/schemas/Endpoint",
+            "description": "The endpoint (trellis.contracts.Endpoint): base_url (http or https, the API root), gateway (openai-compatible or bifrost), auth (bearer, google or aws), model, api_key (the bearer key; stored encrypted and never returned) and profile (what the model accepts). The service must reach base_url itself: it is probed before it is stored."
+          },
           "scope": {
             "$ref": "#/components/schemas/ScopeBody",
-            "description": "The agent the key is for: agent_id is required."
-          },
-          "virtual_key": {
-            "description": "The Bifrost virtual key (1-4096 characters); stored encrypted and never returned.",
-            "format": "password",
-            "maxLength": 4096,
-            "minLength": 1,
-            "title": "Virtual Key",
-            "type": "string",
-            "writeOnly": true
+            "description": "The agent the endpoint is for: agent_id is required."
           }
         },
         "required": [
           "scope",
-          "virtual_key"
+          "endpoint"
         ],
         "title": "AgentKeyRequest",
         "type": "object"
       },
       "AgentKeyStatus": {
         "properties": {
+          "endpoint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EndpointInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The endpoint stored at this level, without its key."
+          },
+          "reason": {
+            "description": "Why that source, in a sentence.",
+            "title": "Reason",
+            "type": "string"
+          },
           "registered": {
-            "description": "true: a key (or a revocation of one) is stored at this level.",
+            "description": "true: an endpoint (or a revocation of one) is stored at this level.",
             "title": "Registered",
             "type": "boolean"
           },
           "revision": {
-            "description": "How many times the key was set or revoked (0: never); it changes on every rotation.",
+            "description": "How many times the endpoint was set or revoked (0: never); it changes on every rotation.",
             "title": "Revision",
             "type": "integer"
           },
           "revoked": {
-            "description": "true: the stored key was revoked; calls at this level are refused rather than falling back to another level's key.",
+            "description": "true: the stored endpoint was revoked; calls at this level are refused rather than falling back to another level's endpoint or the service's.",
             "title": "Revoked",
             "type": "boolean"
+          },
+          "source": {
+            "description": "Which endpoint a model call at this level uses now: agent (the agent's registration), tenant (the tenant's), service (the service's own LLM_* endpoint) or none (no model call is made).",
+            "enum": [
+              "agent",
+              "tenant",
+              "service",
+              "none"
+            ],
+            "title": "Source",
+            "type": "string"
           },
           "updated_at": {
             "anyOf": [
@@ -147,7 +179,9 @@
         "required": [
           "registered",
           "revoked",
-          "revision"
+          "revision",
+          "source",
+          "reason"
         ],
         "title": "AgentKeyStatus",
         "type": "object"
@@ -2261,6 +2295,121 @@
           }
         },
         "title": "EditBlockRequest",
+        "type": "object"
+      },
+      "Endpoint": {
+        "additionalProperties": false,
+        "description": "Where a model is and how to reach it: what the harness hands the Memory Service, so\nmemory calls the model the harness was configured with.\n\n``gateway`` and ``auth`` are names each consumer looks up in its own registry (routes:\n``openai-compatible``, ``bifrost``; auth: ``bearer``, ``google``, ``aws``). They are open\nstrings, so a registry grows without a contracts release. ``api_key`` is a ``SecretStr``:\n``repr`` and ``model_dump`` mask it, so a sender writes ``api_key.get_secret_value()`` onto\nthe wire itself, and a receiver's ``Endpoint.model_validate`` takes the plain string.",
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The bearer key; None for an auth that carries no secret.",
+            "title": "Api Key"
+          },
+          "auth": {
+            "default": "bearer",
+            "description": "The auth strategy's name: bearer, google, aws, or one a registry adds.",
+            "minLength": 1,
+            "title": "Auth",
+            "type": "string"
+          },
+          "base_url": {
+            "description": "The OpenAI-compatible API root (http or https).",
+            "examples": [
+              "https://api.openai.com/v1",
+              "http://bifrost:8080/v1"
+            ],
+            "title": "Base Url",
+            "type": "string"
+          },
+          "gateway": {
+            "default": "openai-compatible",
+            "description": "The route's name: openai-compatible, bifrost, or one a registry adds.",
+            "minLength": 1,
+            "title": "Gateway",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The model as the endpoint names it; None lets the user pick.",
+            "title": "Model"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/ModelProfile",
+            "description": "What the model accepts; a plain chat model."
+          }
+        },
+        "required": [
+          "base_url"
+        ],
+        "title": "Endpoint",
+        "type": "object"
+      },
+      "EndpointInfo": {
+        "description": "A stored endpoint without its key.",
+        "properties": {
+          "auth": {
+            "description": "The auth strategy: bearer, google or aws.",
+            "title": "Auth",
+            "type": "string"
+          },
+          "base_url": {
+            "description": "The API root the service calls.",
+            "title": "Base Url",
+            "type": "string"
+          },
+          "gateway": {
+            "description": "The route: openai-compatible or bifrost.",
+            "title": "Gateway",
+            "type": "string"
+          },
+          "has_api_key": {
+            "description": "Whether a bearer key is stored (never returned).",
+            "title": "Has Api Key",
+            "type": "boolean"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The model it names; null: the policy's or auto.",
+            "title": "Model"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/ModelProfile",
+            "description": "What the model accepts."
+          }
+        },
+        "required": [
+          "base_url",
+          "gateway",
+          "auth",
+          "model",
+          "has_api_key",
+          "profile"
+        ],
+        "title": "EndpointInfo",
         "type": "object"
       },
       "EntityListResponse": {
@@ -5148,22 +5297,27 @@
         "additionalProperties": false,
         "examples": [
           {
-            "virtual_key": "vk-example"
+            "endpoint": {
+              "api_key": "sk-example",
+              "auth": "bearer",
+              "base_url": "https://api.openai.com/v1",
+              "gateway": "openai-compatible",
+              "model": "gpt-4.1-mini",
+              "profile": {
+                "reasoning_output": false,
+                "temperature": true
+              }
+            }
           }
         ],
         "properties": {
-          "virtual_key": {
-            "description": "The Bifrost virtual key (1-4096 characters); stored encrypted and never returned.",
-            "format": "password",
-            "maxLength": 4096,
-            "minLength": 1,
-            "title": "Virtual Key",
-            "type": "string",
-            "writeOnly": true
+          "endpoint": {
+            "$ref": "#/components/schemas/Endpoint",
+            "description": "The endpoint (trellis.contracts.Endpoint): base_url (http or https, the API root), gateway (openai-compatible or bifrost), auth (bearer, google or aws), model, api_key (the bearer key; stored encrypted and never returned) and profile (what the model accepts). The service must reach base_url itself: it is probed before it is stored."
           }
         },
         "required": [
-          "virtual_key"
+          "endpoint"
         ],
         "title": "ModelKeyRequest",
         "type": "object"
@@ -5188,7 +5342,7 @@
             "additionalProperties": {
               "type": "string"
             },
-            "description": "the gateway model (provider/model) a use calls; a use not named here calls the service's default for it",
+            "description": "the model a use calls, as the endpoint names it; a use not named here calls the service's default for it",
             "propertyNames": {
               "enum": [
                 "contextual_extraction",
@@ -5248,7 +5402,7 @@
             "additionalProperties": {
               "type": "string"
             },
-            "description": "The gateway model (provider/model) each use calls; a use not named calls the service's default.",
+            "description": "The model each use calls, as the endpoint names it; a use not named calls the service's default.",
             "title": "Models",
             "type": "object"
           },
@@ -5310,6 +5464,44 @@
           "revision"
         ],
         "title": "ModelPolicyStatus",
+        "type": "object"
+      },
+      "ModelProfile": {
+        "description": "What a model accepts, as data: a client shapes its requests from this, never from the\nmodel's name.\n\nThe field names are LangChain's model-profile keys, so a chat model's ``profile`` (a dict\nwith many more keys) validates as one: ``ModelProfile.model_validate(chat_model.profile)``.\nThe keys this type does not carry are ignored. The defaults are a plain chat model.",
+        "properties": {
+          "max_output_tokens": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The most tokens one answer may hold; None when unknown.",
+            "title": "Max Output Tokens"
+          },
+          "reasoning_output": {
+            "default": false,
+            "description": "Whether the model reasons before it answers (max_completion_tokens).",
+            "title": "Reasoning Output",
+            "type": "boolean"
+          },
+          "temperature": {
+            "default": true,
+            "description": "Whether the model accepts a temperature.",
+            "title": "Temperature",
+            "type": "boolean"
+          },
+          "tool_calling": {
+            "default": true,
+            "description": "Whether the model can call tools.",
+            "title": "Tool Calling",
+            "type": "boolean"
+          }
+        },
+        "title": "ModelProfile",
         "type": "object"
       },
       "ModelUsageResponse": {
@@ -7858,7 +8050,7 @@
           "version": {
             "description": "The running release.",
             "examples": [
-              "0.3.0"
+              "0.4.0"
             ],
             "title": "Version",
             "type": "string"
@@ -8113,13 +8305,13 @@
       "name": "trellis-memory maintainers",
       "url": "https://github.com/amitmohapatra/agent-memory-service"
     },
-    "description": "\ntrellis-memory: durable, scope-aware, context-preserving memory for chat, agents and RAG.\n\n**Durable**: a `2xx/202` is returned only after the source record and its processing job\nhave committed to PostgreSQL. **Scoped**: every retrieval is authorized and filtered by\ntenant / workspace / user / group / thread / agent *before* any model sees data.\n**Honest**: when evidence is insufficient the service says so (`INSUFFICIENT_EVIDENCE`)\nrather than pretending retrieval succeeded.\n\n### Authentication\nThe calling *service* authenticates with `api_key` (keys the service issues:\n`mk_<key_id>.<secret>` in `X-API-Key` or as a Bearer token, each naming its tenant and\noptionally a workspace; one bootstrap secret onboards tenants), `jwt` (JWKS) or\n`trusted_dev` (static key, laptops only). The end-user identity and scope travel in\ntrusted context headers (`X-Trellis-Tenant`, `X-Trellis-Workspace`, `X-Trellis-User`) which\nare only honored from an authenticated caller; in `api_key` mode the tenant comes from the\nkey and a header may agree with it, never contradict it. Fine-grained authorization is\nevaluated by OpenFGA on every request.\n\n### Standard headers\n| Header | Direction | Purpose |\n|---|---|---|\n| `Idempotency-Key` | request | Makes every write safe to retry (24h window). |\n| `Location` | response | 201: the created resource; 202 that queued a job: `/v1/jobs/{id}`. |\n| `traceparent` | both | W3C Trace Context: continued when sent; the response names the trace. |\n| `X-Request-ID` | both | Per-request id; generated when absent or not an id. |\n| `X-Correlation-ID` | both | Groups related requests; echoed when it is an id, else replaced. |\n| `X-Trace-ID` | response | The 32-hex trace id the request ran under (as in `traceparent`). |\n| `X-Trellis-LLM-Tokens` | response | LLM tokens the request spent, when it spent any. |\n\nThe read-only POSTs (`/v1/recall`, `/v1/context`, `/v1/verify`, `/v1/tools/hints`) take no\n`Idempotency-Key`: repeating them changes nothing. An id starts with a letter or digit,\ncontinues with letters, digits and `._:-`, and is at most 200 characters. A request carrying\nany scope or credential header more than once with different values is refused (422) before\nthe credential is read.\n\n### Errors\nEvery error is an RFC 9457 problem (`application/problem+json`, schema `Problem`):\n`type` is `urn:trellis:problem:<code in kebab case>`, `code` the stable category,\n`retryable=true` means the same request may succeed later, and `trace_id` / `request_id`\nare what to quote. A retryable 429, 503 or 504 carries `Retry-After` (seconds): 503 is a\ndependency that is down (PostgreSQL unreachable or its pool exhausted, the search or\nauthorization server away), 504 a database statement stopped at its time budget.\n\n### Instants and pagination\nEvery instant is ISO 8601; a request instant without an offset is read as UTC, and every\nresponse instant carries one. Every list takes `cursor` and `limit` and answers\n`Link: <...>; rel=\"next\"` exactly when a next page exists (envelopes also `next_cursor`).\n\n### Versioning\nPublic routes live under `/v1`. 0.2.0 (ADR 0022) changed `/v1` in place once, because its\nonly consumers were the owner's own repositories: problem details replaced the error\nenvelope, operation ids became `<tag>.<function>`, `X-Trace-ID` became a response header.\n0.3.0 removed the one-release aliases 0.2.0 kept (`POST /v1/files`, the `X-Memory-*` header\nspellings): each operation has exactly one route and each header one spelling.\n",
+    "description": "\ntrellis-memory: durable, scope-aware, context-preserving memory for chat, agents and RAG.\n\n**Durable**: a `2xx/202` is returned only after the source record and its processing job\nhave committed to PostgreSQL. **Scoped**: every retrieval is authorized and filtered by\ntenant / workspace / user / group / thread / agent *before* any model sees data.\n**Honest**: when evidence is insufficient the service says so (`INSUFFICIENT_EVIDENCE`)\nrather than pretending retrieval succeeded.\n\n### Authentication\nThe calling *service* authenticates with `api_key` (keys the service issues:\n`mk_<key_id>.<secret>` in `X-API-Key` or as a Bearer token, each naming its tenant and\noptionally a workspace; one bootstrap secret onboards tenants), `jwt` (JWKS) or\n`trusted_dev` (static key, laptops only). The end-user identity and scope travel in\ntrusted context headers (`X-Trellis-Tenant`, `X-Trellis-Workspace`, `X-Trellis-User`) which\nare only honored from an authenticated caller; in `api_key` mode the tenant comes from the\nkey and a header may agree with it, never contradict it. Fine-grained authorization is\nevaluated by OpenFGA on every request.\n\n### Standard headers\n| Header | Direction | Purpose |\n|---|---|---|\n| `Idempotency-Key` | request | Makes every write safe to retry (24h window). |\n| `Location` | response | 201: the created resource; 202 that queued a job: `/v1/jobs/{id}`. |\n| `traceparent` | both | W3C Trace Context: continued when sent; the response names the trace. |\n| `X-Request-ID` | both | Per-request id; generated when absent or not an id. |\n| `X-Correlation-ID` | both | Groups related requests; echoed when it is an id, else replaced. |\n| `X-Trace-ID` | response | The 32-hex trace id the request ran under (as in `traceparent`). |\n| `X-Trellis-LLM-Tokens` | response | LLM tokens the request spent, when it spent any. |\n\nThe read-only POSTs (`/v1/recall`, `/v1/context`, `/v1/verify`, `/v1/tools/hints`) take no\n`Idempotency-Key`: repeating them changes nothing. An id starts with a letter or digit,\ncontinues with letters, digits and `._:-`, and is at most 200 characters. A request carrying\nany scope or credential header more than once with different values is refused (422) before\nthe credential is read.\n\n### Errors\nEvery error is an RFC 9457 problem (`application/problem+json`, schema `Problem`):\n`type` is `urn:trellis:problem:<code in kebab case>`, `code` the stable category,\n`retryable=true` means the same request may succeed later, and `trace_id` / `request_id`\nare what to quote. A retryable 429, 503 or 504 carries `Retry-After` (seconds): 503 is a\ndependency that is down (PostgreSQL unreachable or its pool exhausted, the search or\nauthorization server away), 504 a database statement stopped at its time budget.\n\n### Instants and pagination\nEvery instant is ISO 8601; a request instant without an offset is read as UTC, and every\nresponse instant carries one. Every list takes `cursor` and `limit` and answers\n`Link: <...>; rel=\"next\"` exactly when a next page exists (envelopes also `next_cursor`).\n\n### Versioning\nPublic routes live under `/v1`. 0.2.0 (ADR 0022) changed `/v1` in place once, because its\nonly consumers were the owner's own repositories: problem details replaced the error\nenvelope, operation ids became `<tag>.<function>`, `X-Trace-ID` became a response header.\n0.3.0 removed the one-release aliases 0.2.0 kept (`POST /v1/files`, the `X-Memory-*` header\nspellings): each operation has exactly one route and each header one spelling. 0.4.0 (ADR\n0042) made the model-key routes take a whole model endpoint (`endpoint`, a\n`trellis.contracts.Endpoint`) in place of a gateway key.\n",
     "license": {
       "identifier": "Apache-2.0",
       "name": "Apache-2.0"
     },
     "title": "trellis-memory API",
-    "version": "0.3.0"
+    "version": "0.4.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -11094,7 +11286,7 @@
     },
     "/v1/agents/model-key": {
       "delete": {
-        "description": "204: the key is revoked (a revocation tombstone, so the agent never borrows the tenant's key); `GET /v1/agents/model-key` reads the status afterwards.",
+        "description": "204: the endpoint is revoked (a revocation tombstone, so the agent never borrows the tenant's or the service's); `GET /v1/agents/model-key` reads the status afterwards.",
         "operationId": "agents.revoke_key",
         "parameters": [
           {
@@ -11726,7 +11918,7 @@
             }
           }
         },
-        "summary": "Revoke the acting agent's model key and invalidate assisted read caches",
+        "summary": "Revoke the acting agent's model endpoint and invalidate assisted read caches",
         "tags": [
           "agents"
         ]
@@ -12289,12 +12481,13 @@
             }
           }
         },
-        "summary": "Read the acting agent's model-key status, without its secret",
+        "summary": "Read the acting agent's model endpoint and which endpoint its calls use, without its key",
         "tags": [
           "agents"
         ]
       },
       "put": {
+        "description": "The harness registers the endpoint its agent's model is on, so the service calls the same model for that agent's memory. 422 when the service cannot reach the endpoint (`GET {base_url}/models` with its auth), e.g. a loopback address only the harness's machine resolves.",
         "operationId": "agents.set_key",
         "parameters": [
           {
@@ -12799,7 +12992,7 @@
             }
           }
         },
-        "summary": "Register or rotate the acting agent's encrypted Bifrost virtual key",
+        "summary": "Register or rotate the acting agent's model endpoint (stored encrypted)",
         "tags": [
           "agents"
         ]
@@ -27438,7 +27631,7 @@
     },
     "/v1/model-key": {
       "delete": {
-        "description": "204: the key is revoked; `GET /v1/model-key` reads the status afterwards.",
+        "description": "204: the endpoint is revoked; `GET /v1/model-key` reads the status afterwards.",
         "operationId": "tenancy.revoke_tenant_key",
         "parameters": [
           {
@@ -27935,7 +28128,7 @@
             }
           }
         },
-        "summary": "Revoke the tenant's model key",
+        "summary": "Revoke the tenant's model endpoint",
         "tags": [
           "tenancy"
         ]
@@ -28363,12 +28556,13 @@
             }
           }
         },
-        "summary": "Read the tenant's model-key status (used by agents without a key of their own)",
+        "summary": "Read the tenant's model endpoint (used by agents without one of their own) and which endpoint its calls use, without its key",
         "tags": [
           "tenancy"
         ]
       },
       "put": {
+        "description": "422 when the service cannot reach the endpoint (`GET {base_url}/models` with its auth).",
         "operationId": "tenancy.set_tenant_key",
         "parameters": [
           {
@@ -28882,7 +29076,7 @@
             }
           }
         },
-        "summary": "Register or rotate the tenant's encrypted Bifrost virtual key",
+        "summary": "Register or rotate the tenant's model endpoint (stored encrypted)",
         "tags": [
           "tenancy"
         ]
@@ -42854,7 +43048,7 @@
       "name": "agent_tools"
     },
     {
-      "description": "An agent's own model credential (a Bifrost virtual key): status, set and revoke.",
+      "description": "An agent's own model endpoint (where its model is and how to reach it, so memory calls the same model): status, set and revoke.",
       "name": "agents"
     },
     {

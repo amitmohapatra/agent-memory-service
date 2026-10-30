@@ -52,9 +52,11 @@ flowchart LR
 | `memory-validate` | profile `validation`: runs `make validate` against the real services with the repository bind-mounted | chapter 12 |
 | `otel-collector`, `prometheus` | profile `observability` | `deploy/otel/collector.yaml`, `deploy/prometheus.yml` |
 
-**The model gateway is not in the stack.** Bifrost is deployed separately and owns all
-outbound model traffic; the service is given a URL and, optionally, the operator's virtual
-key (`deploy/bifrost/README.md`, chapter 8). Without `BIFROST_URL` the service runs complete.
+**No model endpoint is in the stack.** Configure the harness only and memory follows: the
+harness registers each agent's endpoint and the service calls that agent's model. The
+service's own endpoint, for agents that registered none, is any OpenAI-compatible API (a
+Bifrost gateway: `deploy/bifrost/README.md`), given by `LLM_BASE_URL` and the other `LLM_*`
+(chapter 8). With neither, the service runs complete.
 
 **The image** (`deploy/Dockerfile`): `runtime` is Python 3.12 slim with the extras named by
 the `EXTRAS` build argument — `gcp models docling` by default, because the default parser is
@@ -69,7 +71,7 @@ Tesseract when Docling is included. `validation` adds the dev tooling and every 
 | blobs on the filesystem (`/data/blob`) | GCS — chosen by itself when `service.environment` is `staging` or `prod`; set the buckets |
 | `.env.example`'s `TRUSTED_DEV_API_KEYS=["dev-key"]` (`trusted_dev` mode) | remove it; set `MEMORY__AUTHENTICATION__BOOTSTRAP_ADMIN_KEY` (at least 32 characters), onboard tenants, then unset it — refused otherwise (`_production_guards`) |
 | every store in the compose network | external PostgreSQL, Qdrant, Dragonfly and OpenFGA; the target is a single VM with external stores (ADR 0019 status) |
-| `.env.example`'s `BIFROST_URL` pointing at a local gateway | your gateway's URL, or unset to run with no model |
+| `.env.example`'s `LLM_BASE_URL` pointing at a local gateway | your endpoint's URL, or unset to call only the endpoints agents register |
 
 Onboarding after deployment: `POST /v1/admin/tenants` with the bootstrap key returns the
 tenant's first admin key once ([api/admin.md](../api/admin.md)). `tools/onboard.py` is an
@@ -85,8 +87,8 @@ gateway are, the secrets, ports and worker counts. Sources, highest first: envir
 variables (`MEMORY__SECTION__KEY`), then `.env`, then `secrets.env` (git-ignored), then
 defaults. Every credential is a `SecretStr`, and `/version` shows a redacted snapshot.
 
-**Every setting** (42 under `MEMORY__`, plus `WEB_CONCURRENCY`, `BIFROST_URL`,
-`BIFROST_VIRTUAL_KEY` and `OTEL_EXPORTER_OTLP_ENDPOINT`), with its default, a working example
+**Every setting** (45 under `MEMORY__`, plus `WEB_CONCURRENCY`, `LLM_BASE_URL`,
+`LLM_API_KEY`, `LLM_GATEWAY`, `LLM_AUTH` and `OTEL_EXPORTER_OTLP_ENDPOINT`), with its default, a working example
 and whether the service works it out for itself, is in the
 [configuration reference](../configuration.md); a test keeps that page, `.env.example` and the
 code in step. The ones a deployment always sets:
@@ -98,10 +100,10 @@ code in step. The ones a deployment always sets:
 | `MEMORY__SEARCH__QDRANT_URL`, `MEMORY__CACHE__URL`, `MEMORY__AUTHORIZATION__OPENFGA_API_URL` | the other stores |
 | `MEMORY__BLOB__CHAT_BUCKET`, `__FILE_BUCKET` | the archive (GCS) |
 | `MEMORY__AUTHENTICATION__BOOTSTRAP_ADMIN_KEY` (then unset), or `__JWT_JWKS_URL` | how callers authenticate |
-| `MEMORY__AGENT_CREDENTIALS__*` | before any model key is registered |
-| `BIFROST_URL` (optional) | the model gateway; unset, no model call is made |
+| `MEMORY__AGENT_CREDENTIALS__*` | before any model endpoint is registered |
+| `LLM_BASE_URL` (optional) | the service's own model endpoint; unset, only registered endpoints are called |
 
-What is **derived** is derived: the model is available when the gateway is configured, the
+What is **derived** is derived: the model is available when an endpoint can resolve, the
 authentication mode follows from the credentials configured, tracing follows from its
 endpoint, worker counts follow the CPUs the container may use. Domain code never reads
 environment variables.
@@ -359,7 +361,7 @@ and trace fields. Source text — prompts, model output, message bodies — is n
 | jobs pile up | the worker's `memory_queue_depth` and `memory_queue_oldest_lag_seconds`; `memory_outbox_backlog` rising means the relay, not the worker |
 | a benchmark number looks wrong | `/version` → `degraded`; any `representative: false` in the artifact (chapter 12) |
 | graph facts are missing under load | `memory_graph_budget_expired_total`: the 150 ms budget is stopping traversals |
-| a model use is not running | `BIFROST_URL`, the tenant's policy (`GET /v1/model-key/policy`), whether a key can pay, `memory_llm_assist_total` |
+| a model use is not running | `GET /v1/agents/model-key` (`source` and `reason`: which endpoint, and why), the tenant's policy (`GET /v1/model-key/policy`), `memory_llm_assist_total` |
 | search returns nothing after a model change | the collection fingerprint changed: `make reindex` |
 
 ---

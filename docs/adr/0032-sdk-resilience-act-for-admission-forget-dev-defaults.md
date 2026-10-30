@@ -24,7 +24,7 @@ together made the service feel broken before it was used:
   platform names them (`MEMORY_URL`, `TRELLIS_API_KEY`); a development key answered
   `tenant_id: null` from `GET /v1/keys/self`, so the harness refused to start without a tenant
   the operator had to know to pass, and every memory call without `X-Trellis-Tenant` was a 422.
-- **Registering a model key failed on a laptop.** The harness registers `BIFROST_VIRTUAL_KEY` for
+- **Registering a model key failed on a laptop.** The harness registers `LLM_API_KEY` for
   each agent on its first run; with the `.env.example` defaults that was `503 Agent credential
   encryption is not configured`, which reads as an outage.
 - **`may_act_as` checked half of itself.** Only `user:<id>` entries were compared with the

@@ -365,7 +365,7 @@ make eval-capabilities-validate                   # every assertion satisfiable 
 Environment: `MEMORY_URL`, `CAPEVAL_ADMIN_KEY` (a credential that may onboard a tenant - the
 platform key, or a development key on a laptop), `MEMORY_WORKER_METRICS_URL` (the worker's
 metrics port), `CAPEVAL_LLM_MODEL` / `CAPEVAL_ANSWER_MODEL`, and for harness mode the
-agent-harness environment (`BIFROST_URL`, `BIFROST_VIRTUAL_KEY`; `HARNESS_PY` is its Python).
+agent-harness environment (`LLM_BASE_URL`, `LLM_API_KEY`; `HARNESS_PY` is its Python).
 `CAPEVAL_ARGS` passes runner options: `--languages`, `--split dev`, `--capabilities`,
 `--domains`, `--kinds`, `--scenarios`, `--placements`, `--surfaces`, `--scale`.
 

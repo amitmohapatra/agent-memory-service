@@ -124,7 +124,7 @@
       "first_rank": {
         "margin_result": 1,
         "integration": 7,
-        "warranty_footnote": 4
+        "warranty_footnote": 3
       },
       "query_type": {
         "expected": "DOCUMENT_MULTI_HOP",
@@ -194,8 +194,8 @@
       "complete": true,
       "missing": [],
       "first_rank": {
-        "definition": 1,
-        "value": 7
+        "definition": 2,
+        "value": 8
       },
       "query_type": {
         "expected": "TEMPORAL",
@@ -298,16 +298,16 @@
     "cross_document": "COMPLETE"
   },
   "provenance": {
-    "timestamp": "2026-10-02T09:01:18.973228+00:00",
-    "git_commit": "13e7b065d30bba2757bf915f40fba84c6e919278",
+    "timestamp": "2026-10-30T08:28:00.066641+00:00",
+    "git_commit": "f86a1412a1b3df637047b433c6be4d1bce9309de",
     "host_load": {
-      "loadavg_1m": 6.36,
-      "loadavg_5m": 5.53,
-      "loadavg_15m": 4.68,
-      "load_per_core": 1.59
+      "loadavg_1m": 0.79,
+      "loadavg_5m": 4.14,
+      "loadavg_15m": 5.71,
+      "load_per_core": 0.2
     },
     "python": "3.13.14",
-    "platform": "Linux-6.18.44-fc-v51-x86_64-with-glibc2.39",
+    "platform": "Linux-6.18.44-fc-v185-x86_64-with-glibc2.39",
     "machine": "x86_64",
     "cpu_count": 4,
     "memory_gb": 15.7,
@@ -317,22 +317,13 @@
       "qdrant-client": "1.19.0",
       "procrastinate": "3.9.0",
       "zstandard": "0.25.0",
-      "sentence-transformers": "5.3.0",
-      "torch": "2.11.0",
-      "transformers": "5.3.0",
+      "sentence-transformers": "6.0.1",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
       "onnxruntime": "1.30.0",
-      "docling": "not-installed"
+      "docling": "2.127.0"
     },
-    "models": {
-      "bekko-embedding-v1-a8m": {
-        "repo": "hotchpotch/bekko-embedding-v1-a8m",
-        "revision": "c721113d59a1d91b447450324f51c4b3332c924a"
-      },
-      "granite-embedding-small-english-r2": {
-        "repo": "ibm-granite/granite-embedding-small-english-r2",
-        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
-      }
-    },
+    "models": {},
     "llm": {
       "enabled": false,
       "provider": "disabled"

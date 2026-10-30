@@ -390,8 +390,8 @@ def test_model_jobs_are_registered_whenever_a_model_may_be_reached(make_settings
     can appear at any time), so the jobs exist unless the model is prohibited outright."""
     from memory_service.adapters.tasks.inline_queue import RecordingTaskQueue
 
-    def handlers(bifrost_url):
-        settings = make_settings(bifrost_url=bifrost_url)
+    def handlers(llm_base_url):
+        settings = make_settings(llm_base_url=llm_base_url)
         container = Container(settings=settings, version="test")
         container.tasks = RecordingTaskQueue()
         container.services["uow_factory"] = None

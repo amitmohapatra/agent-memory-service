@@ -31,7 +31,7 @@ BANNED_IN_CORE = {
 CORE_PACKAGES = ("domain", "application", "modules", "ports", "api")
 
 # LLM provider SDKs are banned in *every* package, adapters included: the only LLM path is the
-# Bifrost gateway adapter speaking plain HTTP (adapters/models/llm.py).
+# endpoint adapter speaking OpenAI-compatible HTTP through bifrost-sdk (adapters/models/llm.py).
 LLM_SDKS = {
     "openai",
     "anthropic",
@@ -89,7 +89,7 @@ def test_no_llm_provider_sdk_anywhere_under_src() -> None:
         for name in _dotted_imports(path):
             if name in LLM_SDKS or any(name.startswith(f"{sdk}.") for sdk in LLM_SDKS):
                 offenders.append(f"{path.relative_to(root)}: {name}")
-    assert not offenders, "LLM SDK imported outside Bifrost:\n" + "\n".join(offenders)
+    assert not offenders, "LLM provider SDK imported:\n" + "\n".join(offenders)
 
 
 def test_llm_settings_offer_no_way_to_name_a_provider() -> None:
@@ -313,7 +313,7 @@ def test_the_suite_configures_itself_and_never_the_developers_shell(
     (leaky / ".env").write_text(
         "MEMORY__BLOB__FILESYSTEM_ROOT=/leaked/blob\n"
         "MEMORY__SEARCH__QDRANT_URL=http://leaked.invalid:6333\n"
-        "BIFROST_URL=http://leaked.invalid:8080\n"
+        "LLM_BASE_URL=http://leaked.invalid:8080\n"
     )
     monkeypatch.chdir(leaky)
     assert Settings().blob.filesystem_root == "/leaked/blob", "sanity: the .env is not read"

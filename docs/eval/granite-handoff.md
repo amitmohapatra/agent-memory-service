@@ -23,8 +23,8 @@ llama-server -m models/llm/granite-3.3-2b-q4km.gguf --alias granite-3.3-2b --jin
 ```
 
 Put Bifrost in front of it on `127.0.0.1:8080`, with a custom provider `granite` that points at
-`http://127.0.0.1:8099`. Create a virtual key, then export `BIFROST_URL=http://127.0.0.1:8080/v1` and
-`BIFROST_VIRTUAL_KEY`. Load one model stack at a time: an API + worker pair takes about 2.3 GB.
+`http://127.0.0.1:8099`. Create a virtual key, then export `LLM_BASE_URL=http://127.0.0.1:8080/v1`,
+`LLM_GATEWAY=bifrost` and `LLM_API_KEY`. Load one model stack at a time: an API + worker pair takes about 2.3 GB.
 
 ## The evaldet fixes (an LLM-mode run is not valid without them)
 
