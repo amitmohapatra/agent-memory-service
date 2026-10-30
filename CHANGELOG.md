@@ -72,7 +72,7 @@ each entry says which one moved. Decisions behind each change are in the
 ### Added
 - The caller sizes the conversation window: `POST /v1/context` takes an optional
   `conversation_token_budget` (100-1000000 tokens; omitted: the service's 2000, as before), SDK
-  `trellis-memory` 0.6.0 `ctx.context(..., conversation_token_budget=...)`. A window that holds
+  `trellis-memory` 0.6.1 `ctx.context(..., conversation_token_budget=...)`. A window that holds
   its newest turn whole although that turn alone is over the budget says so in
   `conversation.over_budget` (absent otherwise; SDK `Conversation.over_budget`), for the
   caller to trim it to its model with its own library (LangChain's `trim_messages`): the
@@ -119,7 +119,7 @@ each entry says which one moved. Decisions behind each change are in the
   calls in half. For an older client the window is the one it got whenever its newest turn
   fits the budget; a thread of more than 20 short messages now gives up to 20 turns within
   the same 2000 tokens. The rendered form of the window is cut per message as before
-  (within the caller's budget when it names one). SDK 0.6.0.
+  (within the caller's budget when it names one). SDK 0.6.1.
 - The evidence status is labelled as what it is: the rendered heading is
   `## Evidence status (long-term memory)` (was `## Evidence status`), and `evidence_status` is
   described as what long-term memory holds for the question, not the conversation. An
