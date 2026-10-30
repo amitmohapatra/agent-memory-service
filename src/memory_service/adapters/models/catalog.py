@@ -80,7 +80,6 @@ def _profile_facts(row: Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(supported, list):
         facts["temperature"] = "temperature" in supported
         facts["reasoning_output"] = "reasoning" in supported
-        facts["tool_calling"] = "tools" in supported
     provider = row.get("top_provider")
     ceiling = provider.get("max_completion_tokens") if isinstance(provider, Mapping) else None
     ceiling = ceiling if ceiling is not None else row.get("max_output_tokens")
