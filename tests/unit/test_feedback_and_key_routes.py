@@ -18,6 +18,10 @@ OTHER = f"globex-{secrets.token_hex(3)}"
 ADMIN = {"X-API-Key": "test-key", "X-Trellis-Tenant": TENANT}
 USER = {**ADMIN, "X-Trellis-User": "alice", "X-Trellis-Workspace": "fin"}
 BOB = {**ADMIN, "X-Trellis-User": "bob"}
+#: a tenant of its own, whose levels no other test has registered or revoked
+FOLLOWING = f"following-{secrets.token_hex(3)}"
+FOLLOWING_ADMIN = {"X-API-Key": "test-key", "X-Trellis-Tenant": FOLLOWING}
+FOLLOWING_USER = {**FOLLOWING_ADMIN, "X-Trellis-User": "alice"}
 
 
 @pytest.fixture
@@ -141,43 +145,160 @@ def test_a_malformed_cursor_is_a_problem_not_a_500(app_client: TestClient) -> No
 # --------------------------------------------------------------------------- model keys
 
 
+def _endpoint(key: str, **fields: object) -> dict[str, object]:
+    return {"base_url": "http://models.test/v1", "model": "gpt-4.1-mini", "api_key": key, **fields}
+
+
 def test_tenant_and_agent_model_keys_are_administered_without_showing_secrets(
     app_client: TestClient,
 ) -> None:
     status = app_client.get("/v1/model-key", headers=ADMIN)
-    assert status.status_code == 200 and status.json() == {
+    assert status.status_code == 200
+    assert status.json() == {
         "registered": False,
         "revoked": False,
         "revision": 0,
         "updated_at": None,
+        "endpoint": None,
+        "source": "none",
+        "reason": status.json()["reason"],
     }
-    tenant = app_client.put("/v1/model-key", headers=ADMIN, json={"virtual_key": "vk-tenant-test"})
-    assert tenant.status_code == 200 and tenant.json()["registered"]
+    assert "accept_agent_endpoints is false" in status.json()["reason"]
+    tenant = app_client.put(
+        "/v1/model-key", headers=ADMIN, json={"endpoint": _endpoint("vk-tenant-test")}
+    )
+    assert tenant.status_code == 200 and tenant.json()["registered"], tenant.text
     assert "vk-tenant-test" not in tenant.text
-    rotated = app_client.put("/v1/model-key", headers=ADMIN, json={"virtual_key": "vk-tenant-2"})
+    assert tenant.json()["endpoint"] == {
+        "base_url": "http://models.test/v1",
+        "gateway": "openai-compatible",
+        "auth": "bearer",
+        "model": "gpt-4.1-mini",
+        "has_api_key": True,
+        "profile": {
+            "reasoning_output": False,
+            "temperature": True,
+            "max_output_tokens": None,
+            "tool_calling": True,
+        },
+    }
+    rotated = app_client.put(
+        "/v1/model-key", headers=ADMIN, json={"endpoint": _endpoint("vk-tenant-2")}
+    )
     assert rotated.json()["revision"] == 2
+    assert app_client.get("/v1/model-key", headers=ADMIN).json()["endpoint"]["has_api_key"]
     revoked = app_client.delete("/v1/model-key", headers=ADMIN)
     assert revoked.status_code == 204 and revoked.content == b""
-    assert app_client.get("/v1/model-key", headers=ADMIN).json()["revoked"]
-    assert (
-        app_client.put(
-            "/v1/model-key", headers=ADMIN, json={"virtual_key": "has space"}
-        ).status_code
-        == 422
-    )
-    # the agent's key: registered without a user (the harness at startup), read with one
+    after = app_client.get("/v1/model-key", headers=ADMIN).json()
+    assert after["revoked"] and after["endpoint"] is None
+    for invalid in (
+        {"endpoint": _endpoint("has space")},
+        {"endpoint": _endpoint("k", base_url="ftp://models.test")},
+        {"endpoint": _endpoint("k", model="deepseek/deepseek-chat")},
+        {"virtual_key": "vk-old-shape"},
+    ):
+        refused = app_client.put("/v1/model-key", headers=ADMIN, json=invalid)
+        assert refused.status_code == 422, invalid
+    # the agent's endpoint: registered without a user (the harness at startup), read with one
     service = {**ADMIN}
     put = app_client.put(
         "/v1/agents/model-key",
         headers=service,
-        json={"scope": {"agent_id": "ref"}, "virtual_key": "vk-agent-test"},
+        json={"scope": {"agent_id": "ref"}, "endpoint": _endpoint("vk-agent-test")},
     )
     assert put.status_code == 200, put.text
+    assert "vk-agent-test" not in put.text
     own = app_client.get("/v1/agents/model-key", headers=USER, params={"agent_id": "ref"})
     assert own.status_code == 200 and own.json()["registered"], "the same agent-level row"
     assert own.json()["revision"] == put.json()["revision"]
+    assert own.json()["endpoint"]["model"] == "gpt-4.1-mini"
     other = app_client.get("/v1/agents/model-key", headers=USER, params={"agent_id": "other"})
     assert not other.json()["registered"]
+
+
+@pytest.fixture
+def following_client(make_settings, make_overrides) -> Iterator[TestClient]:
+    """The product's defaults: registered endpoints are called, the service has one of its own
+    for agents that registered none, and a registration is probed for real."""
+    settings = make_settings(
+        agent_credentials={"active_key_id": "test", "encryption_keys": {"test": TEST_KEY}},
+        models={"llm": {"accept_agent_endpoints": True}},
+        LLM_BASE_URL="http://own-endpoint.test/v1",
+    )
+    app = create_app(settings, overrides=make_overrides(endpoint_probe=None))
+    with TestClient(app) as client:
+        _onboard(client, FOLLOWING)
+        yield client
+
+
+def test_the_status_says_which_endpoint_an_agent_s_calls_use_and_why(
+    following_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from memory_service.adapters.models import llm
+
+    before = following_client.get(
+        "/v1/agents/model-key", headers=FOLLOWING_USER, params={"agent_id": "follower"}
+    )
+    assert before.json()["source"] == "service", before.text
+    assert "neither the agent nor its tenant registered" in before.json()["reason"]
+
+    # an address only the harness's machine resolves: the service probes it and refuses
+    unreachable = {"base_url": "http://127.0.0.1:9/v1", "api_key": "sk-local"}
+    refused = following_client.put(
+        "/v1/agents/model-key",
+        headers=FOLLOWING_ADMIN,
+        json={"scope": {"agent_id": "follower"}, "endpoint": unreachable},
+    )
+    problem = _problem(refused, 422)
+    assert "cannot reach http://127.0.0.1:9/v1/models" in problem["detail"]
+    assert "sk-local" not in refused.text
+
+    seen: list[str] = []
+
+    def reachable(request: httpx.Request) -> httpx.Response:
+        seen.append(f"{request.method} {request.url} {request.headers['authorization']}")
+        return httpx.Response(200, json={"data": [{"id": "gpt-4.1-mini"}]})
+
+    monkeypatch.setattr(
+        following_client.app.state.container.services["endpoint_probe"],
+        "http",
+        httpx.MockTransport(reachable),
+    )
+    assert isinstance(
+        following_client.app.state.container.services["endpoint_probe"], llm.HttpEndpointProbe
+    )
+    harness = {"base_url": "https://api.openai.com/v1", "model": "gpt-4.1-mini", "api_key": "sk-h"}
+    put = following_client.put(
+        "/v1/agents/model-key",
+        headers=FOLLOWING_ADMIN,
+        json={"scope": {"agent_id": "follower"}, "endpoint": harness},
+    )
+    assert put.status_code == 200, put.text
+    assert seen == ["GET https://api.openai.com/v1/models Bearer sk-h"]
+    assert (put.json()["source"], put.json()["reason"]) == (
+        "agent",
+        "the endpoint the agent registered (revision 1)",
+    )
+    after = following_client.get(
+        "/v1/agents/model-key", headers=FOLLOWING_USER, params={"agent_id": "follower"}
+    )
+    assert after.json()["source"] == "agent" and after.json()["endpoint"]["model"] == "gpt-4.1-mini"
+    other = following_client.get(
+        "/v1/agents/model-key", headers=FOLLOWING_USER, params={"agent_id": "follower-2"}
+    )
+    assert other.json()["source"] == "service"
+    assert (
+        following_client.delete(
+            "/v1/agents/model-key", headers=FOLLOWING_USER, params={"agent_id": "follower"}
+        ).status_code
+        == 204
+    )
+    revoked = following_client.get(
+        "/v1/agents/model-key", headers=FOLLOWING_USER, params={"agent_id": "follower"}
+    )
+    assert revoked.json()["source"] == "none" and "revoked" in revoked.json()["reason"]
+    version = following_client.get("/version").json()
+    assert version["providers"]["llm"] == "registered+service:openai-compatible"
 
 
 def test_the_tenant_policy_names_uses_read_assist_and_the_model_per_use(

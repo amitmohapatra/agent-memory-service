@@ -31,9 +31,12 @@
     "BaseModel"
    ],
    "fields": {
+    "endpoint": "EndpointInfo | None = None",
+    "reason": "str = ''",
     "registered": "bool (required)",
     "revision": "int (required)",
     "revoked": "bool (required)",
+    "source": "Literal['agent', 'tenant', 'service', 'none'] = 'none'",
     "updated_at": "datetime | None = None"
    },
    "kind": "model",
@@ -339,6 +342,25 @@
     "document": "(self, document_id: 'str') -> 'DocumentInfo'",
     "wait_ready": "(self, document_id: 'str', *, max_wait: 'float' = 60.0, interval: 'float' = 0.5) -> 'DocumentInfo'"
    }
+  },
+  "EndpointInfo": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "auth": "str (required)",
+    "base_url": "str (required)",
+    "gateway": "str (required)",
+    "has_api_key": "bool = False",
+    "model": "str | None = None",
+    "profile": "dict[str, Any] = ..."
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "EndpointSource": {
+   "kind": "function",
+   "signature": "(*args, **kwargs)"
   },
   "EntityProfile": {
    "bases": [
@@ -888,7 +910,7 @@
    "members": {
     "__init__": "(self, ctx: 'MemoryContext') -> 'None'",
     "revoke": "(self, *, idempotency_key: 'str | None' = None) -> 'AgentKeyStatus'",
-    "set": "(self, virtual_key: 'str', *, idempotency_key: 'str | None' = None) -> 'AgentKeyStatus'",
+    "set": "(self, endpoint: 'Any', *, idempotency_key: 'str | None' = None) -> 'AgentKeyStatus'",
     "status": "(self) -> 'AgentKeyStatus'"
    }
   },
@@ -1169,7 +1191,7 @@
     "reads": "(self, *, since: 'Any' = None, before: 'Any' = None, limit: 'int' = 100, cursor: 'str | None' = None) -> 'list[ReadAuditRecord]'",
     "reads_page": "(self, *, since: 'Any' = None, before: 'Any' = None, limit: 'int' = 100, cursor: 'str | None' = None) -> 'Page[ReadAuditRecord]'",
     "revoke_model_key": "(self, *, idempotency_key: 'str | None' = None) -> 'AgentKeyStatus'",
-    "set_model_key": "(self, virtual_key: 'str', *, idempotency_key: 'str | None' = None) -> 'AgentKeyStatus'",
+    "set_model_key": "(self, endpoint: 'Any', *, idempotency_key: 'str | None' = None) -> 'AgentKeyStatus'",
     "set_model_policy": "(self, uses: 'Sequence[str]', *, read_assist: 'bool', models: 'Mapping[str, str] | None' = None, idempotency_key: 'str | None' = None) -> 'ModelPolicy'"
    }
   },
@@ -1422,5 +1444,5 @@
    "signature": "() -> 'MemoryContext | None'"
   }
  },
- "version": "0.5.1"
+ "version": "0.6.0"
 }

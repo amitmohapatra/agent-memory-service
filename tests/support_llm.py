@@ -1,4 +1,5 @@
-"""Test helpers for LLM-assisted paths: a Bifrost adapter pointed at a respx-mocked gateway.
+"""Test helpers for LLM-assisted paths: the endpoint adapter pointed at a respx-mocked
+OpenAI-compatible endpoint.
 
 Usage::
 
@@ -23,29 +24,42 @@ from typing import Any
 
 import httpx
 import respx
-from pydantic import SecretStr
 
-from memory_service.adapters.models.llm import BifrostLLM
+from memory_service.adapters.models.llm import EndpointLLM
 from memory_service.config.constants import LLMTransport
 from memory_service.config.settings import LLMSettings, LLMUse
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import DEFAULT_ACCESS, ModelAccess, ModelBinding, bind
 from memory_service.ports.credentials import ModelIdentity
+from trellis.contracts import Endpoint
 
-BASE = "http://bifrost.test/v1"
+BASE = "http://endpoint.test/v1"
 #: retries without sleeping: these tests count calls, not seconds
 NO_BACKOFF = LLMTransport(retry_backoff_seconds=0.0)
-#: what the mocked gateway lists on /models: the strong and the fast model it picks
-STRONG = "gemini/gemini-3.8-pro"
-FAST = "gemini/gemini-3.8-flash"
-CATALOG = {"data": [{"id": STRONG}, {"id": FAST}]}
+#: what the mocked endpoint lists on /models: two text models with prices, so ``auto``
+#: chooses the cheaper one
+MODEL = "gemini/gemini-3.8-flash"
+CATALOG = {
+    "data": [
+        {
+            "id": "gemini/gemini-3.8-pro",
+            "architecture": {"output_modalities": ["text"]},
+            "pricing": {"completion": "0.00001"},
+        },
+        {
+            "id": MODEL,
+            "architecture": {"output_modalities": ["text"]},
+            "pricing": {"completion": "0.0000025"},
+        },
+    ]
+}
 
 
-def llm_settings(**overrides: Any) -> LLMSettings:
-    """The gateway at ``BASE`` with an operator key (so an unbound call can pay)."""
-    base: dict[str, Any] = {"base_url": BASE, "api_key": SecretStr("vk-test")}
-    base.update(overrides)
-    return LLMSettings(**base)
+def llm_settings(**endpoint: Any) -> LLMSettings:
+    """The service's own endpoint at ``BASE`` with a key (so an unbound call is served);
+    ``endpoint`` replaces its fields."""
+    fields: dict[str, Any] = {"base_url": BASE, "api_key": "vk-test", **endpoint}
+    return LLMSettings(endpoint=Endpoint(**fields))
 
 
 class StaticPolicies:
@@ -69,7 +83,7 @@ class StaticPolicies:
         return []
 
 
-def chat_response(content: str, *, model: str = STRONG) -> dict[str, Any]:
+def chat_response(content: str, *, model: str = MODEL) -> dict[str, Any]:
     return {
         "model": model,
         "choices": [{"message": {"role": "assistant", "content": content}}],
@@ -82,19 +96,20 @@ class Gateway:
     route: respx.Route
     bindings: ExitStack
 
-    def assist(self, uses: Sequence[LLMUse], **overrides: Any) -> LLMAssist:
-        """An assist over the mocked gateway that may call the model for ``uses`` only: the
+    def assist(self, uses: Sequence[LLMUse], *, own: bool = True, **endpoint: Any) -> LLMAssist:
+        """An assist over the mocked endpoint that may call the model for ``uses`` only: the
         work the code binds resolves that policy, and the test's own work is bound to it
-        until the gateway closes (what a tenant policy naming ``uses`` does)."""
-        settings = llm_settings(**overrides)
+        until the endpoint closes (what a tenant policy naming ``uses`` does). ``own=False``:
+        the service has no endpoint of its own, so only a registered one serves a call."""
+        settings = llm_settings(**endpoint) if own else LLMSettings()
         policies = StaticPolicies(uses)
         self.bindings.enter_context(
             bind(ModelBinding(ModelIdentity("test", "service:test"), policies.access_value))
         )
-        return LLMAssist(BifrostLLM(settings, transport=NO_BACKOFF), settings, policies)
+        return LLMAssist(EndpointLLM(settings, transport=NO_BACKOFF), settings, policies)
 
     def prompts(self) -> list[dict[str, Any]]:
-        """Request bodies sent to the gateway, in order."""
+        """Request bodies sent to the endpoint, in order."""
         return [json.loads(call.request.content) for call in self.route.calls]
 
 

@@ -113,8 +113,8 @@ for p in "$QDRANT_HTTP" "$API_PORT" "$METRICS_PORT" "$FGA_HTTP"; do
   if answers "$p"; then refuse "port $p already answers: another service is there"; fi
 done
 
-if [ "${CAPEVAL_GATEWAY:-0}" = 1 ] && { [ -z "${BIFROST_URL:-}" ] || [ -z "${BIFROST_VIRTUAL_KEY:-}" ]; }; then
-  refuse "CAPEVAL_GATEWAY=1 needs BIFROST_URL and BIFROST_VIRTUAL_KEY"
+if [ "${CAPEVAL_GATEWAY:-0}" = 1 ] && { [ -z "${LLM_BASE_URL:-}" ] || [ -z "${LLM_API_KEY:-}" ]; }; then
+  refuse "CAPEVAL_GATEWAY=1 needs LLM_BASE_URL and LLM_API_KEY"
 fi
 
 # one isolated stack at a time
@@ -296,7 +296,8 @@ service_env() {  # root: the service's clean environment, serving that checkout'
     MEMORY__AUTHORIZATION__OPENFGA_API_URL="http://127.0.0.1:$FGA_HTTP"
   )
   if [ "${CAPEVAL_GATEWAY:-0}" = 1 ]; then
-    SERVICE_ENV+=(BIFROST_URL="$BIFROST_URL" BIFROST_VIRTUAL_KEY="$BIFROST_VIRTUAL_KEY"
+    SERVICE_ENV+=(LLM_BASE_URL="$LLM_BASE_URL" LLM_API_KEY="$LLM_API_KEY"
+      LLM_GATEWAY="${LLM_GATEWAY:-openai-compatible}" LLM_AUTH="${LLM_AUTH:-bearer}"
       CAPEVAL_LLM_TIMEOUT_SECONDS="$LLM_TIMEOUT" CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS="$EXPANSION_MS")
     [ -n "${CAPEVAL_WORKER_CONCURRENCY:-}" ] && SERVICE_ENV+=(MEMORY__TASKS__WORKER_CONCURRENCY="$CAPEVAL_WORKER_CONCURRENCY")
   fi

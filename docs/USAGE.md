@@ -46,7 +46,7 @@ service = await admin.tenant.keys.issue("service", "support-bot")
 print((await MemoryClient(url, api_key=service.token).tenant.keys.whoami()).role)  # "service"
 ```
 
-- **Admin key vs service key.** `admin` administers one tenant (keys, workspaces, model keys and
+- **Admin key vs service key.** `admin` administers one tenant (keys, workspaces, model endpoints and
   policy, the read audit, the feedback review queue); `service` reads and writes memory for the
   users and agents it may act for. Give an agent a service key, never the admin key.
 - The tenant comes from the key; a `X-Trellis-Tenant` header that disagrees is a `403`.
@@ -140,7 +140,7 @@ for job_id in ack.job_ids:
 - Memories are ranked by fixed weighted reciprocal-rank fusion of BM25, two dense spaces and
   ColBERT arms, then session/speaker/time/period rules (ADR 0026) — nothing to tune per call.
 - No read calls a model unless the tenant policy's `read_assist` is on and a key can pay
-  ([§11](#11-model-keys-policy-and-spend)); there is no per-request switch.
+  ([§11](#11-model-endpoints-policy-and-spend)); there is no per-request switch.
 
 ## 6. Profile blocks and standing questions
 
@@ -279,15 +279,19 @@ for vote in page.items:
   admin (`403` otherwise); a `reject` needs only read access, because it waits for review.
 - A `POST` answers before the projector runs: `projection` is null until then.
 
-## 11. Model keys, policy and spend
+## 11. Model endpoints, policy and spend
 
-**Who pays** (most specific row wins):
+**Which endpoint serves a call** (the first that answers wins; configure the harness only and
+memory follows):
 
-| Level | Endpoint | SDK |
+| Source | Endpoint | SDK |
 | --- | --- | --- |
-| The agent (a request whose scope names the `agent_id`) | `PUT`/`GET`/`DELETE /v1/agents/model-key` | `ctx.advanced.model_keys.set(vk)`, `.status()`, `.revoke()` |
-| The tenant (admin key) | `PUT`/`GET`/`DELETE /v1/model-key` | `admin.tenant.set_model_key(vk)`, `.model_key_status()`, `.revoke_model_key()` |
-| The operator (only while no row exists) | `BIFROST_VIRTUAL_KEY` env, gateway `BIFROST_URL` | — |
+| The agent (a request whose scope names the `agent_id`; the harness registers it) | `PUT`/`GET`/`DELETE /v1/agents/model-key` | `ctx.advanced.model_keys.set(endpoint)`, `.status()`, `.revoke()` |
+| The tenant (admin key) | `PUT`/`GET`/`DELETE /v1/model-key` | `admin.tenant.set_model_key(endpoint)`, `.model_key_status()`, `.revoke_model_key()` |
+| The service's own (only while no row exists) | `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_GATEWAY`, `LLM_AUTH` env | — |
+
+An endpoint is a `trellis.contracts.Endpoint` (or its JSON as a dict); the status says which
+source a call at that level uses and why (`source`, `reason`).
 
 **What it may be spent on** — the tenant policy, three fields only: `uses`, `read_assist`,
 `models`:
@@ -296,7 +300,7 @@ for vote in page.items:
 await admin.tenant.set_model_policy(
     ["contextual_extraction", "summaries", "grounding_judge", "memory_restatement"],
     read_assist=False,  # reads stay deterministic
-    models={"memory_restatement": "openai/gpt-4.1-mini"},  # per-use model through Bifrost
+    models={"memory_restatement": "gpt-4.1-mini"},  # per-use model, as the endpoint names it
 )
 print(await admin.tenant.model_policy())  # GET /v1/model-key/policy
 for day in (await admin.tenant.model_usage()).days:  # GET /v1/model-key/usage
@@ -305,10 +309,11 @@ for day in (await admin.tenant.model_usage()).days:  # GET /v1/model-key/usage
 
 - No policy row = every use **except** `memory_restatement` (opt-in), reads assisted. A stored
   policy runs exactly the uses it names: list `memory_restatement` to opt in.
-- A revoked key refuses; it never falls through to the tenant's or the operator's.
-- There is no workspace-level key or policy, no per-request `use_llm`, and no
-  `MEMORY__MODELS__*` variable; model defaults are code constants (`auto` via the gateway).
-- Changing a policy or key invalidates cached model-assisted reads.
+- A revoked endpoint refuses; it never falls through to the tenant's or the service's own.
+- There is no workspace-level endpoint or policy and no per-request `use_llm`. The model a use
+  calls is the policy's, else the endpoint's, else `auto` (chosen from the endpoint's
+  `/models` by what it lists, never by a name).
+- Changing a policy or an endpoint invalidates cached model-assisted reads.
 - Each use, its tier and its fallback: [the eleven uses](guide/08-models.md#the-eleven-uses).
 
 ## 12. Tenancy operations
@@ -356,7 +361,8 @@ shows one turn. Way 1: if your agent runs under
 - **Outcome:** `system` feedback on the run (`SUCCESS` → `confirm`, `ERROR` → `reject`).
 - **Grounding:** on a 10 % sample of runs, `/v1/verify` with the run's `bundle_id`; the score
   goes on the run's trace.
-- **Model key:** registers `BIFROST_VIRTUAL_KEY` as each agent's model key.
+- **Model endpoint:** registers each agent's model endpoint (its route, auth, model and
+  profile), so memory calls the model the agent was configured with.
 - **Documents:** `h.add_document(file, user=…, thread=None)` uploads into the user's (or
   thread's) scope and waits until it is indexed; the next context cites it.
 - **People's verdicts:** `h.feedback(run_id, verdict)` returns the stored record, pending
@@ -388,8 +394,8 @@ shows one turn. Way 1: if your agent runs under
 | Agent tools | `GET /v1/agent-tools`, `POST /v1/agent-tools/{name}` | `ctx.agent_tools()`, `ctx.call_agent_tool(name, args)` |
 | A verdict | `POST /v1/feedback` | `ctx.feedback(kind, id, verdict, …)` |
 | Review votes (admin) | `GET /v1/feedback?review=pending[&group=target]`, `POST …/approve`, `…/dismiss`, `POST /v1/feedback/approve`, `/dismiss` | `ctx.feedback.pending()`, `.approve(id)`, `.dismiss(id)`, `.approve_many(…)`, `.dismiss_many(…)` |
-| Agent model key | `PUT /v1/agents/model-key` | `ctx.advanced.model_keys.set(vk)` |
-| Tenant model key (admin) | `PUT /v1/model-key` | `client.tenant.set_model_key(vk)` |
+| Agent model endpoint | `PUT /v1/agents/model-key` | `ctx.advanced.model_keys.set(endpoint)` |
+| Tenant model endpoint (admin) | `PUT /v1/model-key` | `client.tenant.set_model_key(endpoint)` |
 | Model policy (admin) | `PUT /v1/model-key/policy` | `client.tenant.set_model_policy(uses, read_assist=…, models=…)` |
 | Spend (admin) | `GET /v1/model-key/usage` | `client.tenant.model_usage()` |
 | Keys (admin) | `POST`/`GET /v1/keys`, `PATCH`/`DELETE /v1/keys/{id}` | `client.tenant.keys.issue/list/update/revoke` |

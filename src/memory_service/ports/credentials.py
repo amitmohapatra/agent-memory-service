@@ -1,8 +1,10 @@
-"""Protected model credentials; plaintext never belongs to a memory or job.
+"""Registered model endpoints, stored encrypted; plaintext never belongs to a memory or job.
 
-A key is stored at one of two levels: the agent's (``agent:<agent_id>``, whichever user it
-acts for - the harness registers it once, at startup) or the tenant's (``tenant``). A call
-resolves the most specific row that exists: the acting agent's key, else the tenant's.
+An endpoint (``trellis.contracts.Endpoint``: where the model is, the route and auth names, the
+model, its key and profile) is stored at one of two levels: the agent's (``agent:<agent_id>``,
+whichever user it acts for - the harness registers it once, at startup) or the tenant's
+(``tenant``). A call resolves the most specific row that exists: the acting agent's endpoint,
+else the tenant's.
 """
 
 from collections.abc import Sequence
@@ -11,6 +13,8 @@ from datetime import datetime
 from typing import Final, Protocol
 
 from pydantic import SecretStr
+
+from trellis.contracts import Endpoint
 
 AGENT_PRINCIPAL_PREFIX: Final = "agent:"
 TENANT_PRINCIPAL: Final = "tenant"
@@ -58,9 +62,9 @@ class StoredCredential:
 
 @dataclass(frozen=True)
 class ResolvedCredential:
-    key: SecretStr = field(repr=False)
+    endpoint: Endpoint = field(repr=False)
     revision: int
-    #: The row the key came from: the agent's or the tenant's.
+    #: The row the endpoint came from: the agent's or the tenant's.
     identity: ModelIdentity
 
 
@@ -87,8 +91,18 @@ class CredentialCipher(Protocol):
     def decrypt(self, record: StoredCredential) -> SecretStr: ...
 
 
+class EndpointProbe(Protocol):
+    async def __call__(self, endpoint: Endpoint) -> None:
+        """Return when the service can reach ``endpoint`` (its ``/models`` answers with the
+        endpoint's own auth); raise ``ValidationFailed`` saying why it cannot."""
+        ...
+
+
 class CredentialResolver(Protocol):
-    async def resolve(self, identity: ModelIdentity) -> ResolvedCredential | None: ...
+    async def resolve(self, identity: ModelIdentity) -> ResolvedCredential | None:
+        """The registered endpoint of the most specific level that has a row; None when no
+        level has one. A revoked row raises ``ProviderNotConfigured``."""
+        ...
 
     async def confirm(self, identity: ModelIdentity, resolved: ResolvedCredential | None) -> None:
         """Refuse a result obtained under a credential that has since changed."""

@@ -6,8 +6,9 @@ the identity that owns the work (``bound`` / ``reading``); a module then asks
 (disabled provider, gateway error, invalid output, timeout) returns ``None`` and the module
 decides whether to keep native evidence or fail an explicitly assisted operation.
 
-``wants(use)`` is the bound tenant's policy, and true only when the gateway is configured and
-something can pay: the acting agent's or the tenant's registered key, or the operator.
+``wants(use)`` is the bound tenant's policy, and true only when an endpoint can serve it: the
+one the acting agent or its tenant registered (while the operator accepts them), or the
+service's own (``modules.llm.endpoints`` resolves which, per call).
 """
 
 from __future__ import annotations
@@ -78,8 +79,8 @@ class LLMAssist:
 
     @asynccontextmanager
     async def bound(self, identity: ModelIdentity) -> AsyncIterator[ModelAccess]:
-        """Bind the work that follows to ``identity``: its key pays and its policy decides.
-        Resolved once (no lookup at all when no model is reachable)."""
+        """Bind the work that follows to ``identity``: its endpoint serves it and its policy
+        decides. Resolved once (no lookup at all when no model is reachable)."""
         access = (
             await self.policies.access(identity)
             if self.available and self.policies is not None
@@ -98,15 +99,15 @@ class LLMAssist:
 
     async def payable_tenants(self, use: LLMUse, only: str | None = None) -> list[str | None]:
         """The tenants background ``use`` may run for. ``[None]`` means every tenant (the
-        operator pays) and ``[only]`` that one; otherwise the tenants holding a live key at
-        some level, so a job never scans the memories of tenants nothing can pay for. Empty
-        when the deployment does not allow ``use`` at all; each tenant's policy is still
-        decided per identity (``bound``)."""
+        service's own endpoint serves them) and ``[only]`` that one; otherwise the tenants
+        holding a live registered endpoint at some level, so a job never scans the memories
+        of tenants no endpoint can serve. Empty when the deployment does not allow ``use`` at
+        all; each tenant's policy is still decided per identity (``bound``)."""
         if not (self.available and self.settings.wants(use)):
             return []
         if self.settings.operator_pays:
             return [only]
-        if self.policies is None:
+        if self.policies is None or not self.settings.accept_agent_endpoints:
             return []
         keyed = await self.policies.tenants_with_keys()
         return [tenant for tenant in keyed if only is None or tenant == only]
@@ -117,31 +118,34 @@ class LLMAssist:
         binding = current_binding()
         if binding is None:
             return self.settings.operator_pays
-        return use in binding.access.uses and (
-            binding.access.has_key or self.settings.operator_pays
-        )
+        registered = binding.access.has_key and self.settings.accept_agent_endpoints
+        return use in binding.access.uses and (registered or self.settings.operator_pays)
 
     def cache_fingerprint(self, uses: Sequence[LLMUse]) -> str:
-        """Bind cached assisted output to its gateway/model policy without exposing keys."""
+        """Bind cached assisted output to the service's endpoint and model policy without
+        exposing keys. A registered endpoint's rotation bumps the tenant's revision, which
+        invalidates the cache on its own."""
         active = sorted(use for use in uses if self.wants(use))
         if not active:
             return ""
-        settings = self.settings
+        own = self.settings.endpoint
         tuning = getattr(self.provider, "tuning", LLM)
         return stable_key(
-            "bifrost-output-v2",
-            (settings.base_url or "").rstrip("/"),
+            "llm-output-v3",
+            own.model_dump_json(exclude={"api_key"}) if own is not None else "",
+            str(self.settings.accept_agent_endpoints),
             ",".join(f"{use}={model_for(use, tuning)}" for use in active),
             str(tuning.max_tokens),
-            settings.api_key.get_secret_value() if settings.api_key else "",
+            own.api_key.get_secret_value() if own is not None and own.api_key else "",
         )
 
     async def model(self, use: LLMUse) -> str:
-        """The model ``use`` calls under the current binding: the policy's or the service's,
-        with ``auto`` resolved through the gateway (still ``auto`` if it cannot be)."""
+        """The model ``use`` calls under the current binding: the policy's, the resolved
+        endpoint's or the service's, with ``auto`` resolved through the endpoint (the
+        configured name when it cannot be)."""
         configured = model_for(use)
         resolve = getattr(self.provider, "resolve_model", None)
-        if configured != "auto" or resolve is None:
+        if resolve is None:
             return configured
         try:
             return await resolve(use)

@@ -53,12 +53,21 @@ def current_binding() -> ModelBinding | None:
     return _BINDING.get()
 
 
-def model_for(use: str, tuning: LLMTuning = LLM) -> str:
-    """The model ``use`` calls: the one the bound tenant's policy names for it, else the
-    service's (``tuning``; ``auto`` is discovered through the gateway per call)."""
+def policy_model(use: str) -> str | None:
+    """The model the bound tenant's policy names for ``use``; None when it names none."""
     binding = _BINDING.get()
-    named = binding.access.models.get(use) if binding is not None else None
-    return named or (tuning.fast_model if use in tuning.fast_uses else tuning.model)
+    return binding.access.models.get(use) if binding is not None else None
+
+
+def model_for(use: str, tuning: LLMTuning = LLM, endpoint_model: str | None = None) -> str:
+    """The model ``use`` calls: the one the bound tenant's policy names for it, else the
+    endpoint's (``endpoint_model``), else the service's (``tuning``; ``auto`` is chosen from
+    the endpoint's ``/models`` per call)."""
+    return (
+        policy_model(use)
+        or endpoint_model
+        or (tuning.fast_model if use in tuning.fast_uses else tuning.model)
+    )
 
 
 def current_model_identity() -> ModelIdentity | None:

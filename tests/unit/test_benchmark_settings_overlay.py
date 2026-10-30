@@ -28,7 +28,7 @@ pytestmark = pytest.mark.unit
 #: budgets or retries - those are the benchmark's to pin.
 JUDGED_ENV = {
     "BENCH_LLM": "on",
-    "BIFROST_URL": "http://gateway.test/v1",
+    "LLM_BASE_URL": "http://gateway.test/v1",
     "BENCH_LLM_MODEL": "gemini/gemini-3.8-flash",
 }
 
@@ -43,7 +43,7 @@ def judged(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     for name in [n for n in list(os.environ) if n.startswith("MEMORY__")]:
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.delenv("BIFROST_VIRTUAL_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.setenv("BENCH_DEPTH", "judged")
     for name, value in JUDGED_ENV.items():
         monkeypatch.setenv(name, value)
@@ -68,9 +68,9 @@ def test_the_environment_still_wins_for_what_it_names(judged: None) -> None:
 
 
 def test_a_gateway_in_the_shell_does_not_enable_the_model(monkeypatch) -> None:
-    """``BIFROST_URL`` is the harness's variable too; without ``BENCH_LLM=on`` a benchmark
+    """``LLM_BASE_URL`` is the harness's variable too; without ``BENCH_LLM=on`` a benchmark
     process must not become a paid one because the shell happened to carry it."""
-    monkeypatch.setenv("BIFROST_URL", "http://gateway.test/v1")
+    monkeypatch.setenv("LLM_BASE_URL", "http://gateway.test/v1")
     monkeypatch.delenv("BENCH_LLM", raising=False)
     assert _settings().llm.enabled is False
 
@@ -112,7 +112,7 @@ def shipped(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     for name in [n for n in list(os.environ) if n.startswith("MEMORY__")]:
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.delenv("BIFROST_VIRTUAL_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.setenv("BENCH_DEPTH", "shipped")
     for name, value in JUDGED_ENV.items():
         monkeypatch.setenv(name, value)

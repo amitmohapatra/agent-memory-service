@@ -170,7 +170,9 @@ async def version(request: Request) -> VersionResponse:
             # the single-encoder arm, so a benchmark artifact stamped from this endpoint
             # can say which one it measured.
             "dense_spaces": _spaces(c.dense_spaces),
-            "llm": "bifrost" if s.llm.enabled else "disabled",
+            # where a model call can go: agents' registered endpoints, the service's own
+            # (by its route), both, or nowhere
+            "llm": _llm_sources(s),
             "memory_intelligence": "native",
             "graph_enrichment": _active(c.graph_enrichment, "native"),
             # what is *running*, not what was asked for: the parser is "docling" even in an
@@ -180,6 +182,15 @@ async def version(request: Request) -> VersionResponse:
         },
         degraded=_degraded(c),
     )
+
+
+def _llm_sources(settings: Any) -> str:
+    """``registered+service:<gateway>``, either half alone, or ``disabled``."""
+    llm = settings.llm
+    sources = ["registered"] if llm.accept_agent_endpoints else []
+    if llm.endpoint is not None:
+        sources.append(f"service:{llm.endpoint.gateway}")
+    return "+".join(sources) or "disabled"
 
 
 def _spaces(spaces: Any) -> dict[str, str]:

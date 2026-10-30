@@ -52,10 +52,10 @@ async def test_agent_key_methods_use_existing_scope_and_return_only_metadata(cli
     # the service answers a revocation with 204; the SDK reads the status back
     delete = respx.delete("http://memory.test/v1/agents/model-key").respond(204)
     ctx = client.bind(tenant_id="acme", user_id="alice").agent("research")
-    assert (
-        await ctx.advanced.model_keys.set("vk-sdk-test", idempotency_key="rotate-1")
-    ).revision == 1
+    endpoint = {"base_url": "https://models.test/v1", "model": "m", "api_key": "sk-sdk-test"}
+    assert (await ctx.advanced.model_keys.set(endpoint, idempotency_key="rotate-1")).revision == 1
     assert put.calls.last.request.headers["Idempotency-Key"] == "rotate-1"
+    assert json.loads(put.calls.last.request.content)["endpoint"] == endpoint
     assert (await ctx.advanced.model_keys.status()).registered
     assert get.calls.last.request.url.params["agent_id"] == "research"
     assert (await ctx.advanced.model_keys.revoke()).revoked
@@ -688,3 +688,48 @@ async def test_a_message_without_a_turn_is_not_deduplicated_by_content(
         route.calls[-1].request.headers["Idempotency-Key"]
         == (route.calls[-2].request.headers["Idempotency-Key"])
     ), "with a turn, lineage + content is the message's identity"
+
+
+@respx.mock
+async def test_an_endpoint_model_goes_on_the_wire_with_its_key_unmasked(client):
+    """A ``trellis.contracts.Endpoint`` masks its ``SecretStr`` key in ``model_dump``; the SDK
+    sends the key itself, which is the one thing the service needs from it."""
+    from pydantic import BaseModel, SecretStr
+
+    class Endpoint(BaseModel):  # the contracts shape, without depending on the package
+        base_url: str
+        gateway: str = "openai-compatible"
+        auth: str = "bearer"
+        model: str | None = None
+        api_key: SecretStr | None = None
+
+    put = respx.put("http://memory.test/v1/agents/model-key").respond(
+        200,
+        json={
+            "registered": True,
+            "revoked": False,
+            "revision": 1,
+            "source": "agent",
+            "reason": "the endpoint the agent registered (revision 1)",
+            "endpoint": {
+                "base_url": "https://models.test/v1",
+                "gateway": "openai-compatible",
+                "auth": "bearer",
+                "model": "m",
+                "has_api_key": True,
+                "profile": {},
+            },
+        },
+    )
+    ctx = client.bind(tenant_id="acme").agent("research")
+    status = await ctx.advanced.model_keys.set(
+        Endpoint(base_url="https://models.test/v1", model="m", api_key=SecretStr("sk-x"))
+    )
+    sent = json.loads(put.calls.last.request.content)["endpoint"]
+    assert sent["api_key"] == "sk-x" and sent["model"] == "m"
+    assert status.source == "agent" and status.endpoint and status.endpoint.has_api_key
+    unkeyed = Endpoint(base_url="https://vertex.test/v1", auth="google")
+    await ctx.advanced.model_keys.set(unkeyed)
+    assert json.loads(put.calls.last.request.content)["endpoint"]["api_key"] is None
+    with pytest.raises(TypeError):
+        await ctx.advanced.model_keys.set("sk-a-bare-key")

@@ -79,7 +79,10 @@ def test_administration_without_a_tenant_acts_on_the_development_tenant(
     agent_key = dev_client.put(
         "/v1/agents/model-key",
         headers=KEY,
-        json={"scope": {"agent_id": "ref"}, "virtual_key": "vk-dev-agent"},
+        json={
+            "scope": {"agent_id": "ref"},
+            "endpoint": {"base_url": "http://models.test/v1", "api_key": "vk-dev-agent"},
+        },
     )
     assert agent_key.status_code == 200, agent_key.text
     assert "vk-dev-agent" not in agent_key.text

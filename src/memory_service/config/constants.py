@@ -473,7 +473,8 @@ AUTHORIZATION = AuthorizationTuning()
 
 @dataclass(frozen=True)
 class LLMTransport:
-    """Passed straight to the shared Bifrost client, which owns retries and the breaker."""
+    """Passed straight to the shared bifrost-sdk client (one per endpoint), which owns retries
+    and the breaker."""
 
     retry_backoff_seconds: float = 0.5
     #: consecutive failures that open the circuit

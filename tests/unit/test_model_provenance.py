@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from memory_service.adapters.models.catalog import choose_model
+from memory_service.adapters.models.catalog import ListedModel, choose_model, listed
 from memory_service.config.constants import FROZEN_MODELS
 from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.domain.provenance import EXCLUDED_MODEL_ORIGINS, permitted_model
@@ -117,9 +117,16 @@ def test_a_tenant_policy_refuses_an_excluded_model() -> None:
 
 
 def test_gateway_discovery_never_selects_an_excluded_family() -> None:
+    chat = {"architecture": {"output_modalities": ["text"]}, "pricing": {"completion": "1e-6"}}
+    excluded = [
+        ListedModel("openrouter/deepseek/deepseek-chat", True, 0.0),
+        ListedModel("openrouter/qwen/qwen3-235b", True, 0.0),
+    ]
     with pytest.raises(ProviderNotConfigured):
-        choose_model(("openrouter/deepseek/deepseek-chat", "openrouter/qwen/qwen3-235b"), fast=True)
-    chosen = choose_model(
-        ("openrouter/deepseek/deepseek-chat", "openrouter/openai/gpt-4.1-mini"), fast=True
+        choose_model(excluded)
+    # the excluded one is the cheapest, and still not chosen
+    listing = [listed({"id": m.id, **chat}) for m in excluded]
+    listing.append(
+        listed({"id": "openrouter/openai/gpt-4.1-mini", **chat, "pricing": {"completion": "2e-6"}})
     )
-    assert chosen.endswith("gpt-4.1-mini")
+    assert choose_model([m for m in listing if m]).id.endswith("gpt-4.1-mini")

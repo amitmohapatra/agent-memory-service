@@ -39,28 +39,34 @@ jobs:
       # the gcs blob contract and tests/integration/test_gcs_blob.py, against the fake GCS
       # server started below; without it both skipped (no credentials)
       MEMORY_TEST_GCS_EMULATOR: http://localhost:4443
-      # tests/unit/test_vendored_sdk.py compares the vendored copy with this checkout; it
+      # tests/unit/test_vendored_sdk.py compares the vendored copies with these checkouts; it
       # looks beside this repository by default, where CI has nothing, and skipped
       BIFROST_SDK: .bifrost-sdk
+      TRELLIS_CONTRACTS: .agent-contracts
     steps:
       - uses: actions/checkout@v4
-      # The gateway client is a path dependency on vendor/bifrost-sdk, and vendor/ is
-      # generated (gitignored) because a Docker build cannot reach a sibling directory.
-      # A fresh checkout therefore does not have it, and `uv sync` below died on
-      # "Distribution not found at: .../vendor/bifrost-sdk" as the first real step of the
-      # job — which is why nothing downstream of it had ever run.
+      # The model client and the contracts are path dependencies on vendor/bifrost-sdk and
+      # vendor/trellis-contracts, and vendor/ is generated (gitignored) because a Docker
+      # build cannot reach a sibling directory. A fresh checkout therefore does not have it,
+      # and `uv sync` below died on "Distribution not found at: .../vendor/bifrost-sdk" as
+      # the first real step of the job — which is why nothing downstream of it had ever run.
       - uses: actions/checkout@v4
         with:
           repository: amitmohapatra/bifrost-sdk
           path: .bifrost-sdk
-      - run: make vendor BIFROST_SDK=.bifrost-sdk
+      - uses: actions/checkout@v4
+        with:
+          repository: amitmohapatra/agent-contracts
+          path: .agent-contracts
+      - run: make vendor BIFROST_SDK=.bifrost-sdk TRELLIS_CONTRACTS=.agent-contracts
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
       # the light extras whose tests otherwise skip here: gcp (the GCS blob store), hindsight
-      # (its SDK contract), eval (datasets, to fetch the SciFact distractor corpus below)
-      - run: uv sync --dev --extra gcp --extra hindsight --extra eval
+      # (its SDK contract), eval (datasets, to fetch the SciFact distractor corpus below),
+      # google and aws (the model auth strategies' conformance tests)
+      - run: uv sync --dev --extra gcp --extra hindsight --extra eval --extra google --extra aws
       # A step, not a service container: a service cannot be given the arguments that make
       # the server speak plain HTTP from memory.
       - run: >-
@@ -77,9 +83,9 @@ jobs:
         run: |
           git fetch --depth 1 origin "${{ github.base_ref }}"
           uv run python scripts/sdk_api.py --check-base FETCH_HEAD
-      # ``bifrost``: the live-gateway tests, which need a running gateway and its key; models
-      # as on every other step (the runner has Docker, so the OpenFGA contract stays in)
-      - run: uv run pytest tests/contract -m "not bifrost and not models" -q
+      # ``live_llm``: the live-endpoint tests, which need a running model endpoint and its key;
+      # models as on every other step (the runner has Docker, so the OpenFGA contract stays in)
+      - run: uv run pytest tests/contract -m "not live_llm and not models" -q
         env:
           # dedicated backends for the cache and search contracts (CI's own, so they may be
           # written freely); the cache contract uses its own database index

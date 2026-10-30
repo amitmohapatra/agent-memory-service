@@ -135,7 +135,7 @@ async def run(n_observations: int) -> dict[str, Any]:
             },
             "budgets_ms": {"chat_accept_p95": BUDGETS.chat_accept_p95_ms},
             "provider": "native",
-            "llm_enabled": settings.llm.enabled,
+            "llm_enabled": settings.llm.endpoint is not None,
             "provenance": provenance(),
         }
     finally:

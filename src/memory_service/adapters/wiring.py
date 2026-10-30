@@ -20,6 +20,7 @@ from memory_service.observability.logging import get_logger
 if TYPE_CHECKING:
     from memory_service.application.container import Container
     from memory_service.config.settings import PoolPlan
+    from trellis.contracts import Endpoint
 
 log = get_logger(__name__)
 
@@ -396,18 +397,21 @@ def _wire_late(container: Container) -> None:
 
 
 def _wire_llm(container: Container) -> None:
-    """The generative model is optional and reachable only through the Bifrost gateway.
+    """The generative model is optional, and reached through whichever endpoint a call
+    resolves to (``modules.llm.endpoints``): the agent's registered one, the service's own
+    (``LLM_*``), or none.
 
-    Model keys, per-level policies and the daily usage ledger are wired whatever the
-    configuration, so a tenant can register a key or a policy before the operator turns the
-    model on."""
+    Registered endpoints, per-level policies and the daily usage ledger are wired whatever the
+    configuration, so a tenant can register an endpoint or a policy before the operator turns
+    the model on."""
     from memory_service.adapters.models.credential_cipher import (
         AesCredentialCipher,
         envelope_settings,
     )
-    from memory_service.adapters.models.llm import BifrostLLM, DisabledLLM
+    from memory_service.adapters.models.llm import DisabledLLM, EndpointLLM, HttpEndpointProbe
     from memory_service.modules.llm.assist import LLMAssist
     from memory_service.modules.llm.credentials import ModelCredentials
+    from memory_service.modules.llm.endpoints import EndpointResolver
     from memory_service.modules.llm.policies import LLMUsage, ModelPolicies
 
     uow_factory = container.services["uow_factory"]
@@ -415,31 +419,41 @@ def _wire_llm(container: Container) -> None:
     credentials = ModelCredentials(uow_factory, cipher)
     policies = ModelPolicies(uow_factory)
     usage = LLMUsage(uow_factory)
+    cfg = container.settings.llm
+    resolver = EndpointResolver(cfg, credentials)
     container.services["model_credentials"] = credentials
     container.services["model_policies"] = policies
     container.services["llm_usage"] = usage
-    cfg = container.settings.llm
+    container.services["llm_endpoints"] = resolver
+    container.services["endpoint_probe"] = (
+        _accept_endpoint if container.overrides.endpoint_probe == "accept" else HttpEndpointProbe()
+    )
     if not cfg.enabled:
         container.llm = DisabledLLM()
         container.services["llm_assist"] = LLMAssist.disabled()
         return
-    llm = BifrostLLM(
+    llm = EndpointLLM(
         cfg,
         log_source_text=constants.LOG_SOURCE_TEXT,
         credentials=credentials,
+        resolver=resolver,
         usage=usage,
         tuning=container.tuning.llm,
     )
     container.llm = llm
     container.services["llm_assist"] = LLMAssist(llm, cfg, policies)
     if not cfg.operator_pays:
-        # Agent credentials are resolved only in their authenticated request/job scope.
-        # An unauthenticated background health probe cannot represent their gateway access.
+        # Registered endpoints are resolved only in their authenticated request/job scope.
+        # An unauthenticated background health probe cannot represent them.
         container.add_closer("llm", llm.close)
         return
     container.add_dependency(
         Dependency(name="llm", mandatory=False, ping=llm.ping, close=llm.close)
     )
+
+
+async def _accept_endpoint(endpoint: Endpoint) -> None:
+    """The test suite's stand-in probe: every endpoint is taken as reachable."""
 
 
 def _wire_nli(container: Container) -> None:

@@ -314,21 +314,24 @@ services:
       db-migrate:
         condition: service_completed_successfully
 
-  # The LLM gateway is NOT part of this stack.
+  # No model endpoint is part of this stack.
   #
-  # Bifrost is deployed separately and owns all outbound model traffic: provider keys, prompts
-  # and MCP. This repository ships a *client* and nothing else — the service is given a URL, a
-  # model name and (optionally) a virtual key, and no provider SDK is importable anywhere under
-  # src (enforced by tests/unit/test_architecture.py). There is deliberately no gateway service
-  # here: running one from this compose file would put provider keys inside the application's
-  # own deployment, which is the coupling the gateway exists to remove.
+  # Configure the harness only and memory follows: the harness registers each agent's model
+  # endpoint (PUT /v1/agents/model-key) and the service calls that agent's model for its
+  # memory. The service's own endpoint, for agents that registered none, is any
+  # OpenAI-compatible API (a Bifrost gateway, OpenAI, OpenRouter, a LiteLLM proxy, Ollama,
+  # vLLM, llama.cpp ...), deployed elsewhere: this repository ships a *client* and nothing
+  # else, and no provider SDK is importable anywhere under src (enforced by
+  # tests/unit/test_architecture.py). Running one from this compose file would put provider
+  # keys inside the application's own deployment.
   #
-  #   BIFROST_URL=https://<your-gateway>/v1
-  #   BIFROST_VIRTUAL_KEY=<the operator's virtual key issued by the gateway, optional>
+  #   LLM_BASE_URL=https://<your-endpoint>/v1
+  #   LLM_API_KEY=<its bearer key, optional>
+  #   LLM_GATEWAY=openai-compatible   # or bifrost
+  #   LLM_AUTH=bearer                 # or google, aws
   #
-  # Without BIFROST_URL the service runs complete without any gateway at all; generation is an
-  # enhancement, never a dependency. Tenants and agents register their own keys through the
-  # API (PUT /v1/model-key, PUT /v1/agents/model-key).
+  # With neither, the service runs complete without any model at all; generation is an
+  # enhancement, never a dependency.
 
   # Release-gate runner: the repository is bind-mounted so `make gates` / `make validate`
   # run on the working tree against the real services above with the weights in ./models.

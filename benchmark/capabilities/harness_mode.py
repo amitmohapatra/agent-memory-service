@@ -152,7 +152,7 @@ async def run(settings: Settings, model: str) -> dict[str, Any]:
         )
         harness_memory = MemoryClient(settings.url, api_key=token, timeout=settings.timeout)
         async with Harness(config=hs, memory=harness_memory) as h:
-            assert h.gateway is not None, "the harness mode needs BIFROST_URL (the gateway)"
+            assert h.gateway is not None, "the harness mode needs LLM_BASE_URL (the gateway)"
             gateway = h.gateway
             model_wait = await wait_for_model(gateway, model)
             print(f"model {model} answered after {model_wait:.1f} s", file=sys.stderr)

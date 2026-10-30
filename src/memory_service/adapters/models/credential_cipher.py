@@ -26,17 +26,17 @@ _DEVELOPMENT_KEY_LABEL: Final = b"trellis-memory development envelope key, not a
 
 def envelope_settings(settings: Settings) -> AgentCredentialSettings:
     """The operator's envelope keys, or - in ``dev``/``test`` with none configured - a
-    development key, so registering a model key works on a laptop with nothing set.
+    development key, so registering a model endpoint works on a laptop with nothing set.
 
-    The harness registers ``BIFROST_VIRTUAL_KEY`` for each agent on its first run, and with
-    the ``.env.example`` defaults that was a ``503 Agent credential encryption is not
+    The harness registers each agent's model endpoint on its first run, and with the
+    ``.env.example`` defaults that was a ``503 Agent credential encryption is not
     configured`` on every first run, which looked like an outage rather than a missing key.
 
     The development key is derived at startup and never stored: from a fixed label and the
     database URL, so every API worker and the background worker (which decrypts keys for
     jobs) derive the same one, and a restart can still read what was written before it.
     That makes it a key anyone with the configuration can recompute - fine for a laptop's
-    throwaway virtual key, which is why it is loudly logged and why deployed environments
+    throwaway model key, which is why it is loudly logged and why deployed environments
     never get one.
     """
     configured = settings.agent_credentials
@@ -51,8 +51,8 @@ def envelope_settings(settings: Settings) -> AgentCredentialSettings:
     ).digest()
     log.warning(
         "agent_credentials.development_key",
-        message="no envelope key is configured: registered model keys are encrypted with a "
-        "development key derived from the configuration, which protects nothing. Set "
+        message="no envelope key is configured: registered model endpoints are encrypted with "
+        "a development key derived from the configuration, which protects nothing. Set "
         "MEMORY__AGENT_CREDENTIALS__ACTIVE_KEY_ID and __ENCRYPTION_KEYS before storing a "
         "real key; staging and prod refuse registration without them.",
         environment=settings.service.environment,
