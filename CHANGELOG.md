@@ -56,8 +56,8 @@ each entry says which one moved. Decisions behind each change are in the
     at its next start; a tenant administrator registers the tenant's again.
   - A reasoning model is sent `max_completion_tokens` and no `temperature`, from its profile
     (the registered endpoint's, `MEMORY__MODELS__LLM__PROFILE__*`, or what `/models` lists for
-    it), never from its name; `max_output_tokens` caps a call's budget, and a model without
-    `tool_calling` is sent no `tool_choice`. Bifrost's per-call headers (no content logging,
+    it), never from its name; `max_output_tokens` caps a call's budget, and no call carries tools
+    or a `tool_choice` (an endpoint may refuse one without tools: Anthropic's answers 400). Bifrost's per-call headers (no content logging,
     the deny-all MCP scope) go only to a `bifrost` route.
   - `auto` no longer picks by a model-family pattern: it reads what `/models` says about each
     model (writes text, price, profile) and chooses the cheapest text model, any name

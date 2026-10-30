@@ -621,13 +621,12 @@ class EndpointLLM:
         extra: dict[str, Any],
     ) -> tuple[dict[str, Any], str, float, Any]:
         """One request on ``connection``, shaped by ``choice``'s profile: its output ceiling
-        caps the budget, the sdk sends a reasoning model ``max_completion_tokens`` and no
-        temperature, and ``tool_choice`` goes only to a model that takes tools."""
+        caps the budget, and the sdk sends a reasoning model ``max_completion_tokens`` and no
+        temperature. No tools and so no ``tool_choice``, which an endpoint may refuse without
+        them (400); a reply that calls a tool anyway is refused (``_completion``)."""
         model, profile = choice.model, choice.profile
         if profile.max_output_tokens is not None:
             max_tokens = min(max_tokens, profile.max_output_tokens)
-        if profile.tool_calling:
-            extra = {"tool_choice": "none", **extra}
         gateway = self._gateway(connection, profile)
         started = time.perf_counter()
         with span("llm.chat", use=use, model=model) as current:

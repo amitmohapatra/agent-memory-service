@@ -86,7 +86,7 @@ def test_a_listing_s_profile_facts_shape_the_request() -> None:
     assert model is not None
     profile = profile_of(model, ModelProfile())
     assert profile == ModelProfile(
-        reasoning_output=True, temperature=False, tool_calling=False, max_output_tokens=32000
+        reasoning_output=True, temperature=False, max_output_tokens=32000
     )
     plain = listed({"id": "m", **TEXT})
     assert plain is not None and profile_of(plain, ModelProfile()) == ModelProfile()
@@ -149,7 +149,7 @@ async def test_a_registered_endpoint_auto_discovers_then_calls_with_its_own_key(
             return httpx.Response(200, json={"data": [{"id": "gpt-4.1-mini"}]})
         body = json.loads(request.content)
         assert body["model"] == "gpt-4.1-mini"
-        assert body["tool_choice"] == "none" and "tools" not in body
+        assert "tool_choice" not in body and "tools" not in body
         return httpx.Response(200, json={"choices": [{"message": {"content": "accepted"}}]})
 
     credentials = AsyncMock()
