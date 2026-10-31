@@ -284,6 +284,12 @@ class WindowMessageBody(BaseModel):
     tool_call_id: str | None = Field(
         default=None, description="A TOOL message: the call (in the window) whose result it is."
     )
+    run_record: dict[str, Any] | None = Field(
+        default=None,
+        description="What the caller's run record says of the message, as it wrote it under "
+        "custom_metadata.run_record (a tool result: status, seconds, sources, fetched, max_age; "
+        "the turn's last message: the run's status, seconds, approvals); omitted when none.",
+    )
 
 
 class ConversationBody(BaseModel):

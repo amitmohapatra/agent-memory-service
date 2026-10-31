@@ -453,6 +453,9 @@ class WindowMessage(BaseModel):
     text: str
     tool_calls: list[ToolCall] = Field(default_factory=list)
     tool_call_id: str | None = None
+    #: what the caller's run record says of the message (``custom_metadata["run_record"]``:
+    #: a tool result's status, seconds, sources, fetch time; the turn's run), when it says any
+    run_record: dict[str, Any] | None = None
 
 
 class Conversation(BaseModel):

@@ -7,6 +7,7 @@ record, rendered in the context: never a message the model would read as its own
 from __future__ import annotations
 
 import itertools
+from datetime import UTC, datetime
 
 from memory_service.domain.context_bundle import (
     EVIDENCE_HEADING,
@@ -350,14 +351,88 @@ def test_the_steps_list_carries_the_recorded_facts_and_nothing_else() -> None:
         "seconds": 3.21,
         "approvals": "none",
     }
-    assert steps_list(turns(units(turn))[0]).splitlines() == [
+    assert steps_list(turns(units(turn))[0], NOW).splitlines() == [
         'For "What did ACME close at?" (1 call):',
         '1. lookup(q="What did-0"): OK, 0.0 s, source: Nasdaq Last Sale feed, 2026-10-27',
         "The run: status SUCCESS, 3.2 s, approvals: none.",
+        "Evidence: 1 of 1 calls succeeded; 1 source: Nasdaq Last Sale feed, 2026-10-27 (named "
+        "by 1 of 1). How sure, from this record: high.",
     ]
     bare = _turn("again?", ["x"], "y")
-    assert steps_list(turns(units(bare))[0]) == 'For "again?" (1 call):\n1. lookup(q="again?-0")'
+    assert (
+        steps_list(turns(units(bare))[0], NOW) == 'For "again?" (1 call):\n1. lookup(q="again?-0")'
+    )
+    unstatused = _recorded(_turn("q", ["a"], "x"), {"sources": "Tape"})
+    assert "no call status recorded; 1 source: Tape" in steps_list(turns(units(unstatused))[0])
     assert steps_list(turns(units(_turn("hi", [], "hello")))[0]) == ""
+
+
+NOW = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)
+
+
+def _recorded(turn: list[Message], *facts: dict[str, object]) -> list[Message]:
+    """``turn`` with each tool result's run-record ``facts``, in order."""
+    for result, said in zip([m for m in turn if m.role is T], facts, strict=True):
+        result.custom_metadata[RUN_RECORD] = said
+    return turn
+
+
+def test_the_fetch_time_is_said_once_in_the_steps_list() -> None:
+    turn = _recorded(
+        _turn("ACME?", ["123.45"], "123.45"),
+        {"status": "ok", "fetched": "2026-10-31T11:00:00+00:00", "max_age": 0},
+    )
+    record = steps_list(turns(units(turn))[0], NOW)
+    assert '1. lookup(q="ACME?-0"): ok, fetched: 2026-10-31T11:00:00+00:00' in record
+    assert record.count("2026-10-31T11:00:00") == 1
+    assert "out of date now: lookup (fetch again for current values)" in record
+    assert record.endswith("How sure, from this record: medium.")
+
+
+def test_how_sure_is_graded_from_the_record_never_from_the_answer() -> None:
+    sourced = {"status": "ok", "sources": "Tape", "fetched": "2026-10-31T11:59:00Z"}
+    high = _recorded(_turn("q", ["a", "b"], "I am certain."), sourced, sourced | {"max_age": 600})
+    assert steps_list(turns(units(high))[0], NOW).endswith(
+        "Evidence: 2 of 2 calls succeeded; 1 source: Tape (named by 2 of 2). How sure, from "
+        "this record: high."
+    )
+    half = _recorded(_turn("q", ["a", "b"], "I am certain."), sourced, {"status": "error"})
+    assert "1 of 2 calls succeeded" in steps_list(turns(units(half))[0], NOW)
+    assert steps_list(turns(units(half))[0], NOW).endswith("medium.")
+    none = _recorded(_turn("q", ["a"], "I am certain."), {"status": "timeout"})
+    assert steps_list(turns(units(none))[0], NOW).endswith("low.")
+    failed = _recorded(_turn("q", ["a"], "ok"), sourced)
+    failed[-1].custom_metadata[RUN_RECORD] = {"status": "FAILED"}
+    assert steps_list(turns(units(failed))[0], NOW).endswith("low.")
+    two = _recorded(_turn("q", ["a", "b"], "x"), sourced, sourced | {"sources": "Feed; Tape"})
+    assert "2 sources: Tape (named by 2 of 2); Feed (named by 1 of 2)" in steps_list(
+        turns(units(two))[0], NOW
+    )
+    odd = _recorded(_turn("q", ["a"], "x"), {"status": "ok", "fetched": "soon", "max_age": 1})
+    assert "out of date" not in steps_list(turns(units(odd))[0], NOW)
+    naive = _recorded(_turn("q", ["a"], "x"), {"fetched": "2026-10-31T10:00:00", "max_age": 60})
+    assert "out of date now: lookup" in steps_list(turns(units(naive))[0], NOW)
+
+
+def test_a_step_says_which_earlier_result_its_argument_came_from() -> None:
+    first, second = _m(A, calls=("c1",)), _m(A, calls=("c2",))
+    first.tool_calls[0].arguments["q"] = "ACME"
+    second.tool_calls[0].arguments.update({"q": "SKU-77", "n": 1})
+    turn = [_m(U, "stock of ACME?"), first, _m(T, '{"sku": "SKU-77"}', answers="c1")]
+    turn += [second, _m(T, "7", answers="c2"), _m(A, "7")]
+    lines = steps_list(turns(units(turn))[0], NOW).splitlines()
+    assert lines[1] == '1. lookup(q="ACME")'
+    assert lines[2] == '2. lookup(q="SKU-77", n=1): from step 1'
+
+
+def test_each_window_message_carries_its_run_record() -> None:
+    turn = _recorded(_turn("q", ["r"], "a"), {"status": "ok", "fetched": "2026-10-31T11:00Z"})
+    window = replay_window("thr", turn, 100_000, now=NOW)
+    (result,) = [m for m in window.messages if m.role == "TOOL"]
+    assert result.run_record == {"status": "ok", "fetched": "2026-10-31T11:00Z"}
+    body = conversation_body(window)
+    assert body is not None
+    assert [m.get("run_record") for m in body["messages"]] == [None, None, result.run_record, None]
 
 
 def test_a_long_argument_is_shown_short() -> None:

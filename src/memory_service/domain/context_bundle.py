@@ -100,6 +100,9 @@ class WindowMessage(BaseModel):
     #: an ASSISTANT message's tool calls; a TOOL message's call (``WindowFormat.MESSAGES``)
     tool_calls: list[MessageToolCall] = Field(default_factory=list)
     tool_call_id: str | None = None
+    #: what the caller's run record says of the message (``window.RUN_RECORD``), when it
+    #: says anything (``WindowFormat.MESSAGES``)
+    run_record: dict[str, Any] | None = None
 
 
 #: The heading the rendered context gives the window's run record, and what it says of it.

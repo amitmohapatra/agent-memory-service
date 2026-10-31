@@ -1406,6 +1406,7 @@
    "fields": {
     "id": "str (required)",
     "role": "Literal['USER', 'ASSISTANT', 'SYSTEM', 'TOOL', 'AGENT', 'EVENT'] (required)",
+    "run_record": "dict[str, Any] | None = None",
     "text": "str (required)",
     "tool_call_id": "str | None = None",
     "tool_calls": "list[ToolCall] = ..."
@@ -1445,5 +1446,5 @@
    "signature": "() -> 'MemoryContext | None'"
   }
  },
- "version": "0.6.1"
+ "version": "0.6.2"
 }

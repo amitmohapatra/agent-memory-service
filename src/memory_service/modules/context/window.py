@@ -33,15 +33,26 @@ answer reads as one whose question was lost.
 
 A caller that keeps a run record writes its facts on the messages it records, under
 ``custom_metadata[RUN_RECORD]`` (plain values: custom metadata nests two levels at most): on a
-tool result, ``status``, ``seconds`` and ``sources`` (the result's sources, as text); on the
-turn's last message, the run's ``status``, ``seconds`` and ``approvals`` (as text). The steps
-list carries what is there, and nothing that is not.
+tool result, ``status``, ``seconds``, ``sources`` (the result's sources, as text), ``fetched``
+(when the call returned: ISO 8601, UTC) and ``max_age`` (the seconds its value stays current,
+when the tool says); on the turn's last message, the run's ``status``, ``seconds`` and
+``approvals`` (as text). The steps list carries what is there, and nothing that is not: the
+fetch time is said there and nowhere else, and each window message carries its facts
+(``WindowMessage.run_record``) for the caller to act on.
+
+"Why" and "how sure" are the record's, never the model's own account. A step whose argument
+is a value an earlier step's result returned says so (``from step 2``): the evidence of why it
+was taken. The turn's *evidence* line (:func:`evidence`) counts the calls that succeeded, the
+sources named and how many calls name each, and the fetch times against the tools' ages
+(:data:`OUT_OF_DATE`), and grades them :data:`SURE`: ``high`` (every call succeeded, a source
+named, nothing out of date), ``low`` (no call succeeded, or the run failed), else ``medium``.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Final
 
 import orjson
@@ -59,6 +70,16 @@ RUN_RECORD: Final = "run_record"
 ARGUMENT_CHARS: Final = 60
 #: The most of a turn's question a steps list shows.
 QUESTION_CHARS: Final = 120
+#: The fewest characters an argument value has for a steps list to say an earlier step's
+#: result returned it (a shorter one, ``1`` or ``US``, matches by chance).
+FROM_STEP_CHARS: Final = 3
+#: The tool status of a call that succeeded, and the run statuses of a run that did not.
+CALL_OK: Final = "ok"
+RUN_FAILED: Final = frozenset({"FAILED", "CANCELLED", "TIMED_OUT", "REJECTED"})
+#: The grades of the evidence line, from the record alone (the module says when each holds).
+SURE: Final = ("high", "medium", "low")
+#: What the evidence line says of values older than their tools' ``max_age``.
+OUT_OF_DATE: Final = "out of date now: {tools} (fetch again for current values)"
 
 
 def replayable(message: Message) -> bool:
@@ -156,25 +177,119 @@ def _said(label: str, value: object) -> str | None:
     return f"{label}: {value}" if isinstance(value, str) and value else None
 
 
-def steps_list(turn: Sequence[list[Message]]) -> str:
-    """The turn's calls as plain text under its question, one numbered line each (the tool, its
-    arguments in short, and the facts the caller recorded on its result), and the run's own
-    recorded facts last; empty for a turn that made no call."""
+def _from_step(arguments: dict[str, Any], earlier: Sequence[str]) -> str | None:
+    """Which earlier step's result (``earlier``: their texts, in order) returned one of
+    ``arguments``' values — the first, as ``from step N`` — or ``None``."""
+    values = [str(v) for v in arguments.values() if len(str(v)) >= FROM_STEP_CHARS]
+    for n, text in enumerate(earlier, start=1):
+        if any(v in text for v in values):
+            return f"from step {n}"
+    return None
+
+
+@dataclass(frozen=True)
+class Step:
+    """One call of a turn, with what the caller recorded of its result."""
+
+    name: str
+    arguments: dict[str, Any]
+    facts: dict[str, Any]
+    result: str
+
+    def line(self, n: int, earlier: Sequence[str]) -> str:
+        args = ", ".join(f"{k}={_short(v)}" for k, v in self.arguments.items())
+        facts = self.facts
+        said = [
+            str(facts["status"]) if facts.get("status") else None,
+            _seconds(facts.get("seconds")),
+            _said("fetched", facts.get("fetched")),
+            _said("source", facts.get("sources")),
+            _from_step(self.arguments, earlier),
+        ]
+        told = ", ".join(x for x in said if x)
+        return f"{n}. {self.name}({args})" + (f": {told}" if told else "")
+
+    def out_of_date(self, now: datetime) -> bool:
+        """Whether the value is older now than its tool's ``max_age`` (unknown: no)."""
+        age, at = self.facts.get("max_age"), _when(self.facts.get("fetched"))
+        if not isinstance(age, int | float) or at is None:
+            return False
+        return (now - at).total_seconds() > age
+
+
+def _when(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        at = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return at if at.tzinfo else at.replace(tzinfo=UTC)
+
+
+def _steps(turn: Sequence[list[Message]]) -> list[Step]:
     results = {m.tool_call_id: m for unit in turn for m in unit[1:]}
-    lines: list[str] = []
-    for unit in turn:
-        for call in unit[0].tool_calls:
-            args = ", ".join(f"{k}={_short(v)}" for k, v in call.arguments.items())
-            facts = _facts(results.get(call.id))
-            said = [
-                str(facts["status"]) if facts.get("status") else None,
-                _seconds(facts.get("seconds")),
-                _said("source", facts.get("sources")),
-            ]
-            told = ", ".join(x for x in said if x)
-            lines.append(f"{len(lines) + 1}. {call.name}({args})" + (f": {told}" if told else ""))
-    if not lines:
+    return [
+        Step(
+            call.name,
+            call.arguments,
+            _facts(results.get(call.id)),
+            results[call.id].content if call.id in results else "",
+        )
+        for unit in turn
+        for call in unit[0].tool_calls
+    ]
+
+
+def _sources(steps: Sequence[Step]) -> str:
+    named: dict[str, int] = {}
+    for s in steps:
+        for source in str(s.facts.get("sources") or "").split("; "):
+            if source:
+                named[source] = named.get(source, 0) + 1
+    if not named:
+        return "no call named a source"
+    each = "; ".join(f"{name} (named by {k} of {len(steps)})" for name, k in named.items())
+    return f"{len(named)} {'source' if len(named) == 1 else 'sources'}: {each}"
+
+
+def _grade(
+    steps: Sequence[Step], run: dict[str, Any], *, ok: int, recorded: bool, stale: bool
+) -> str:
+    """:data:`SURE`'s grade of the evidence (the module says when each holds)."""
+    if str(run.get("status", "")).upper() in RUN_FAILED or (recorded and ok == 0):
+        return SURE[2]
+    named = any(s.facts.get("sources") for s in steps)
+    return SURE[0] if ok == len(steps) and named and not stale else SURE[1]
+
+
+def evidence(steps: Sequence[Step], run: dict[str, Any], now: datetime) -> str | None:
+    """The turn's evidence for "why" and "how sure", from its record alone: the calls that
+    succeeded, the sources and how many calls name each, the values now out of date, and the
+    grade they make (:data:`SURE`); ``None`` when the caller recorded nothing of the turn."""
+    if not run and not any(s.facts for s in steps):
+        return None
+    ok = sum(1 for s in steps if str(s.facts.get("status", "")).lower() == CALL_OK)
+    recorded = any(s.facts.get("status") for s in steps)
+    stale = list(dict.fromkeys(s.name for s in steps if s.out_of_date(now)))
+    sure = _grade(steps, run, ok=ok, recorded=recorded, stale=bool(stale))
+    said = [
+        f"{ok} of {len(steps)} calls succeeded" if recorded else "no call status recorded",
+        _sources(steps),
+        OUT_OF_DATE.format(tools=", ".join(stale)) if stale else None,
+    ]
+    return f"Evidence: {'; '.join(x for x in said if x)}. How sure, from this record: {sure}."
+
+
+def steps_list(turn: Sequence[list[Message]], now: datetime | None = None) -> str:
+    """The turn's calls as plain text under its question, one numbered line each (the tool, its
+    arguments in short, and the facts the caller recorded on its result), the run's own
+    recorded facts, then its :func:`evidence` as of ``now`` (default: the current time); empty
+    for a turn that made no call."""
+    steps = _steps(turn)
+    if not steps:
         return ""
+    lines = [s.line(n, [e.result for e in steps[: n - 1]]) for n, s in enumerate(steps, 1)]
     run = _facts(turn[-1][-1])
     said = [
         f"status {run['status']}" if run.get("status") else None,
@@ -183,7 +298,10 @@ def steps_list(turn: Sequence[list[Message]]) -> str:
     ]
     told = ", ".join(x for x in said if x)
     head = f"For {_asked(turn)} ({len(lines)} {'call' if len(lines) == 1 else 'calls'}):"
-    return "\n".join([head, *lines, *([f"The run: {told}."] if told else [])])
+    sure = evidence(steps, run, now or datetime.now(UTC))
+    return "\n".join(
+        [head, *lines, *([f"The run: {told}."] if told else []), *([sure] if sure else [])]
+    )
 
 
 def _shown(m: Message, *, calls: bool) -> WindowMessage:
@@ -193,6 +311,7 @@ def _shown(m: Message, *, calls: bool) -> WindowMessage:
         text=m.content,
         tool_calls=list(m.tool_calls) if calls else [],
         tool_call_id=m.tool_call_id if calls else None,
+        run_record=_facts(m) or None,
     )
 
 
@@ -206,9 +325,9 @@ class Layers:
     whole: list[Message]
 
     @classmethod
-    def of(cls, turn: Sequence[list[Message]]) -> Layers:
+    def of(cls, turn: Sequence[list[Message]], now: datetime) -> Layers:
         said = [m for unit in turn for m in unit if m.role is not MessageRole.TOOL and m.content]
-        return cls(steps_list(turn) or None, said, [m for unit in turn for m in unit])
+        return cls(steps_list(turn, now) or None, said, [m for unit in turn for m in unit])
 
     def cost(self, layer: str) -> int:
         steps = estimate_tokens(self.steps) if self.steps else 0
@@ -225,46 +344,70 @@ class Layers:
         return [_shown(m, calls=whole) for m in said]
 
 
+def _cores(layers: Sequence[Layers], budget: int) -> tuple[int, int]:
+    """How many turns, from the newest back, give their core (a steps list, or the text of a
+    turn without calls) within ``budget`` — the newest always, its text too — and the tokens
+    used."""
+    newest = layers[0]
+    used = newest.cost("steps") + newest.cost("text")
+    kept = 1
+    for turn in layers[1:]:
+        core = turn.cost("steps") if turn.steps else turn.cost("text")
+        if used + core > budget:
+            break
+        used, kept = used + core, kept + 1
+    return kept, used
+
+
+def _texts(layers: Sequence[Layers], kept: int, used: int, budget: int) -> tuple[int, int]:
+    """How many of the ``kept`` turns, from the newest back, give their text too, and the
+    tokens used then."""
+    texts = 1
+    for turn in layers[1:kept]:
+        if turn.steps is not None:
+            if used + turn.cost("text") > budget:
+                break
+            used += turn.cost("text")
+        texts += 1
+    return texts, used
+
+
+def _shown_turns(layers: Sequence[Layers], texts: int, *, full: bool) -> list[WindowMessage]:
+    """The messages of ``layers`` (newest first), oldest first: the newest ``texts`` turns'
+    text, and the newest turn whole when ``full``."""
+    return [
+        m
+        for n, turn in reversed(list(enumerate(layers)))
+        for m in turn.messages(text=n < texts, whole=n == 0 and full)
+    ]
+
+
 def replay_window(
     thread_id: str,
     messages: Sequence[Message],
     token_budget: int,
     max_turns: int | None = None,
+    now: datetime | None = None,
 ) -> ConversationWindow:
     """The most recent replayable turns of ``messages`` (oldest first) within
     ``token_budget``, at most ``max_turns`` of them, each in the layers that fit, oldest first
-    (the module says how it is cut)."""
+    (the module says how it is cut); the steps lists' evidence as of ``now`` (default: the
+    current time)."""
     pieces = [u for u in map(whole, units([m for m in messages if replayable(m)])) if u]
     found = from_a_question(turns(pieces))
     if max_turns is not None:
         found = found[-max_turns:] if max_turns > 0 else []
-    layers = [Layers.of(t) for t in reversed(found)]  # newest first
+    at = now or datetime.now(UTC)
+    layers = [Layers.of(t, at) for t in reversed(found)]  # newest first
     if not layers:
         return ConversationWindow(thread_id=thread_id, form=WindowFormat.MESSAGES)
+    kept, used = _cores(layers, token_budget)
+    texts, used = _texts(layers, kept, used, token_budget)
     newest = layers[0]
-    used = newest.cost("steps") + newest.cost("text")
-    kept = 1  # the newest turn: its steps list and its text, whatever they cost
-    for turn in layers[1:]:
-        core = turn.cost("steps") if turn.steps else turn.cost("text")
-        if used + core > token_budget:
-            break
-        used, kept = used + core, kept + 1
-    texts = 1  # the newest turns, from the newest back, whose text is given too
-    for turn in layers[1:kept]:
-        if turn.steps is None:  # its text is its core, already counted
-            texts += 1
-            continue
-        if used + turn.cost("text") > token_budget:
-            break
-        used, texts = used + turn.cost("text"), texts + 1
     full = newest.steps is not None and used + newest.cost("whole") <= token_budget
     if full:
         used += newest.cost("whole")
-    shown = [
-        m
-        for n, turn in reversed(list(enumerate(layers[:kept])))
-        for m in turn.messages(text=n < texts, whole=n == 0 and full)
-    ]
+    shown = _shown_turns(layers[:kept], texts, full=full)
     return ConversationWindow(
         thread_id=thread_id,
         message_ids=[m.message_id for m in shown],

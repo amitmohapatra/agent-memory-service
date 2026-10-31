@@ -8,6 +8,16 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Changed
+- **The steps list says when each value was fetched, and grades its evidence.** A tool
+  result's `custom_metadata.run_record` may also carry `fetched` (when the call returned, ISO
+  8601 UTC) and `max_age` (the seconds its value stays current); the steps list shows the
+  fetch time on the call's line (the one place it is said), marks a step whose argument an
+  earlier step's result returned (`from step 1`), and ends each turn with an evidence line for
+  "why" and "how sure": the calls that succeeded, the sources and how many calls name each,
+  the values out of date by now, and a grade from those alone (`high`, `medium`, `low`), never
+  from what the answer claimed. A turn the caller recorded nothing of has no evidence line.
+  Each `conversation.messages` item carries the caller's record of it as `run_record` (absent
+  when none; SDK `trellis-memory` 0.6.2 `WindowMessage.run_record`).
 - **The messages window gives each turn a steps list, in layers.** `window_format="messages"`
   now gives every turn that made tool calls a steps list in the context's `## Run record`
   section of `rendered` (written by the harness, it says, not by the model or the user: never

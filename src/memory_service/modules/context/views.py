@@ -77,7 +77,7 @@ def full_view(bundle: ContextBundle) -> dict[str, Any]:
 
 def conversation_body(window: ConversationWindow) -> dict[str, Any] | None:
     """The window's messages, oldest first, each with its tool calls or the call it answers
-    when it has them; ``None`` for an empty window."""
+    and the caller's run record of it when it has them; ``None`` for an empty window."""
     if not window.messages:
         return None
     messages: list[dict[str, Any]] = []
@@ -85,6 +85,7 @@ def conversation_body(window: ConversationWindow) -> dict[str, Any] | None:
         message: dict[str, Any] = {"id": m.message_id, "role": m.role, "text": m.text}
         _put(message, "tool_calls", [c.model_dump(mode="json") for c in m.tool_calls])
         _put(message, "tool_call_id", m.tool_call_id)
+        _put(message, "run_record", m.run_record)
         messages.append(message)
     body: dict[str, Any] = {"thread_id": window.thread_id, "messages": messages}
     if window.over_budget:
