@@ -8,6 +8,12 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Changed
+- **A search marks the messages and conversations that said a replaced value** (ADR 0038,
+  extended; service). A replaced memory already came back `superseded: true`; the message
+  that said it and an earlier conversation (episode) holding nothing else of what its speaker
+  said came back unmarked beside the new value. Both are now marked, read from the replaced
+  verbatim turns of the threads the results come from (one indexed read; a second only when
+  the first finds a replacement). The `memory_search` tool description says so.
 - **A refused agent names the user's statement it may not touch** (service). The 403 an agent
   gets for updating or forgetting what the user said (`reason: users_own_statement`) carries
   the memory's id in `details.memory_id`, resolved from the handle it was called with: a caller

@@ -118,6 +118,13 @@ inside one conversation and only for a turn whose reading has the same words.
    (`engine._follow_replacements`: the indexed `replaced_by`, a chain followed to its current
    end, at most two batched reads of four, the reader's visibility checked), so the old value
    never comes alone.
+   *Extended 2026-10-31:* a search's messages and earlier conversations (episodes) are marked
+   too (`Searcher._mark_replaced`, `MemoryRepository.verbatim_turns`): a message whose
+   verbatim turn was replaced (every piece of a long one), and a conversation in which every
+   verbatim turn of each person whose words were replaced there was, carry `superseded: true`,
+   as a replaced memory does. A conversation that also said something still current is not
+   marked. Before, the capability eval's update/contradiction search surface was 0.00: the
+   replaced memory was marked, the message and the episode that said the same words were not.
 9. **A failing model never costs the message.** A head that refuses (its queue full) or fails,
    or a model call that fails, leaves the statement stored and nothing replaced
    (`memory_replacement_skipped_total`); what was decided is counted by grade
