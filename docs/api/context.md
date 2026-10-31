@@ -159,9 +159,16 @@ are always given, even when they alone are over the budget: `conversation.over_b
 `true` (absent otherwise), and the caller trims them to its model's context with its own
 library — LangChain's `trim_messages`, for one. A caller that keeps a run record writes its
 facts with the turn, under `custom_metadata.run_record`, as plain values (custom metadata
-nests two levels at most): on a `TOOL` result its `status`, `seconds` and `sources` (text), on
-the turn's last message the run's `status`, `seconds` and `approvals` (text); the steps list
-says what is there and nothing else. A tool call never comes
+nests two levels at most): on a `TOOL` result its `status`, `seconds`, `sources` (text),
+`fetched` (when the call returned, ISO 8601 UTC) and `max_age` (the seconds its value stays
+current), on the turn's last message the run's `status`, `seconds` and `approvals` (text); the
+steps list says what is there and nothing else — the fetch time on the call's line, the one
+place it is said, and `from step N` on a call whose argument an earlier result returned — and
+each window message carries its own record as `run_record`. A recorded turn's steps list ends
+with its evidence for "why" and "how sure": the calls that succeeded, the sources and how many
+calls name each, the values out of date by now (past `max_age`), and a grade from those alone:
+`high` (every call succeeded, a source named, nothing out of date), `low` (no call succeeded,
+or the run failed), else `medium`. A tool call never comes
 without its result nor a result without its call (a call left without its result, by a run
 stopped between them, comes without the call; a result whose call is not in the window, without
 the result). Size the budget from the model: its context window, less the system prompt,
