@@ -8,6 +8,11 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Changed
+- **A search marks the assistant's reply that the user corrected next** (ADR 0038, extended;
+  service). "Torque the PX-400 flange bolts to 40 Nm." then "That's wrong - 55 Nm": the
+  correction reached later conversations, but a search of what was said served the wrong
+  reply unmarked beside it. A reply whose next message is a user turn the statement labeller
+  read as a `CORRECTION` now comes back `superseded: true`.
 - **A search marks the messages and conversations that said a replaced value** (ADR 0038,
   extended; service). A replaced memory already came back `superseded: true`; the message
   that said it and an earlier conversation (episode) holding nothing else of what its speaker
