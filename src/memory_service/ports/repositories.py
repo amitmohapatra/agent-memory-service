@@ -401,6 +401,15 @@ class MemoryRepository(Protocol):
         whatever their status: what to reinstate when those go."""
         ...
 
+    async def verbatim_turns(
+        self, tenant_id: str, thread_ids: Sequence[str], *, replaced: bool
+    ) -> list[CanonicalMemory]:
+        """The live (not forgotten) verbatim turns of ``thread_ids``: those a later statement
+        replaced (``system_metadata["replaced_by"]``, either grade) when ``replaced``, else
+        the others. What tells a search whether a message, or a whole earlier conversation,
+        says only what was since replaced (ADR 0038). An indexed range (tenant, thread)."""
+        ...
+
     async def get(self, tenant_id: str, memory_id: str) -> CanonicalMemory | None: ...
     async def get_many(
         self, tenant_id: str, memory_ids: Sequence[str]

@@ -143,7 +143,8 @@ TOOLS: Final = (
     AgentTool(
         "memory_search",
         "Search what is remembered for this user, agent and conversation, and the documents "
-        "they may read. Returns items with id, kind, text and observed_on.",
+        "they may read. Returns items with id, kind, text and observed_on; an item a later "
+        "statement replaced is marked superseded.",
         MemorySearchArgs,
     ),
     AgentTool(

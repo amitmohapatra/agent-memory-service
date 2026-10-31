@@ -427,6 +427,25 @@ class SqlMemoryRepository:
         ).all()
         return [_to_domain(r) for r in rows]
 
+    async def verbatim_turns(
+        self, tenant_id: str, thread_ids: Sequence[str], *, replaced: bool
+    ) -> list[CanonicalMemory]:
+        if not thread_ids:
+            return []
+        marked = MemoryRow.system_metadata.has_key("replaced_by")
+        rows = (
+            await self.s.scalars(
+                select(MemoryRow).where(
+                    MemoryRow.tenant_id == tenant_id,
+                    MemoryRow.thread_id.in_(sorted(set(thread_ids))),
+                    MemoryRow.deleted_at.is_(None),
+                    MemoryRow.system_metadata["category"].astext == "verbatim_turn",
+                    marked if replaced else ~marked,
+                )
+            )
+        ).all()
+        return [_to_domain(r) for r in rows]
+
     async def candidates(
         self,
         tenant_id: str,

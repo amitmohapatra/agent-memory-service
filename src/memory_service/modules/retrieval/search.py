@@ -29,8 +29,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.conversation import Message
 from memory_service.domain.enums import MessageKind, QueryType
+from memory_service.domain.memory import CanonicalMemory
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.rag.indexer import episode_id
 from memory_service.modules.retrieval.engine import (
     Candidate,
     ObservedRange,
@@ -54,6 +56,8 @@ OWNED_THREADS: Final = 100
 #: The query's longest words the database filters earlier conversations by.
 OWNED_WORDS: Final = 16
 _WORD: Final = re.compile(r"\w+")
+#: The kinds that carry what was said as said: marked when a later statement replaced it.
+_SAID: Final = frozenset({"message", "episode"})
 
 
 class SearchItem(BaseModel):
@@ -88,8 +92,9 @@ class SearchItem(BaseModel):
     )
     superseded: bool | None = Field(
         default=None,
-        description="true when a later memory replaced this one (only a search with as_of "
-        "or known_at returns those)",
+        description="true when a later statement replaced what this says: a memory, the "
+        "message that said it, or an earlier conversation that holds nothing else of what "
+        "its speaker said. Use the newer value; observed_on says when each was said.",
     )
     debug: dict[str, Any] | None = Field(
         default=None, description="ranking detail; only with debug=true"
@@ -156,6 +161,24 @@ def _message_item(m: Message, overlap: int, *, debug: bool, text_chars: int | No
         thread_id=m.thread_id,
         debug={"overlap": overlap, "sequence": m.sequence} if debug else None,
     )
+
+
+def _said_in(turns: Sequence[CanonicalMemory]) -> set[str]:
+    """The messages ``turns`` were taken from."""
+    return {e.message_id for m in turns for e in m.evidence if e.message_id}
+
+
+def _replaced_items(
+    replaced: Sequence[CanonicalMemory], live: Sequence[CanonicalMemory]
+) -> set[str]:
+    """The search item ids that say only what was replaced, from the verbatim turns of their
+    threads: a message none of whose turns is still live, and an episode (its id is
+    ``episode_id(thread)``) of a thread in which no person whose words were replaced has a
+    live turn left."""
+    speakers = {(m.scope.thread_id, m.owner_principal) for m in replaced}
+    still = {t for t, _ in speakers & {(m.scope.thread_id, m.owner_principal) for m in live}}
+    ended = {t for t, _ in speakers if t and t not in still}
+    return (_said_in(replaced) - _said_in(live)) | {episode_id(t) for t in ended}
 
 
 def _within(when: datetime, observed: ObservedRange | None) -> bool:
@@ -229,11 +252,32 @@ class Searcher:
             if item is not None
         ]
         return SearchResult(
-            items=merged[:limit],
+            items=await self._mark_replaced(ctx, merged[:limit]),
             query_type=retrieved.routed.query_type if retrieved else QueryType.CONVERSATION_HISTORY,
             diagnostics=retrieved.diagnostics if retrieved else {},
             retrieval=retrieved,
         )
+
+    async def _mark_replaced(
+        self, ctx: MemoryExecutionContext, items: list[SearchItem]
+    ) -> list[SearchItem]:
+        """``items`` with a message, or an earlier conversation, that says only what a later
+        statement of the user replaced marked ``superseded``, as a replaced memory already is
+        (ADR 0038). A message is replaced when its verbatim turn is (every piece of a long
+        one); a conversation when every verbatim turn of each person whose words were replaced
+        there is. A conversation that also said something still current is not marked: it
+        still answers. One indexed read, and a second only when the first finds a replacement."""
+        threads = sorted({i.thread_id for i in items if i.kind in _SAID and i.thread_id})
+        if not threads:
+            return items
+        async with self.uow_factory() as uow:
+            replaced = await uow.memories.verbatim_turns(ctx.tenant_id, threads, replaced=True)
+            if not replaced:
+                return items
+            held = sorted({t for m in replaced if (t := m.scope.thread_id)})
+            live = await uow.memories.verbatim_turns(ctx.tenant_id, held, replaced=False)
+        stale = _replaced_items(replaced, live)
+        return [i.model_copy(update={"superseded": True}) if i.id in stale else i for i in items]
 
     async def _messages(
         self,
