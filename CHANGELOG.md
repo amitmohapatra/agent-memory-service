@@ -19,6 +19,10 @@ each entry says which one moved. Decisions behind each change are in the
   said came back unmarked beside the new value. Both are now marked, read from the replaced
   verbatim turns of the threads the results come from (one indexed read; a second only when
   the first finds a replacement). The `memory_search` tool description says so.
+- **A refused agent names the user's statement it may not touch** (service). The 403 an agent
+  gets for updating or forgetting what the user said (`reason: users_own_statement`) carries
+  the memory's id in `details.memory_id`, resolved from the handle it was called with: a caller
+  that asks the person, and is approved, can act on it as them (the harness's forget by chat).
 - **Any model provider, and memory follows the harness** (ADR 0042; service 0.4.0, SDK
   `trellis-memory` 0.6.0; breaking). A model call goes to an endpoint resolved per call, in one
   order: the endpoint the acting agent registered (else its tenant's), then the service's own,
