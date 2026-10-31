@@ -189,6 +189,9 @@ async def test_an_agent_run_cannot_rewrite_or_forget_what_the_user_said(said, to
     # what the model reads back: why, and what to do instead
     assert "user's own statement" in str(refused.value)
     assert "memory_remember" in str(refused.value)
+    # and what its caller needs to ask the person and act as them: the memory, resolved
+    assert refused.value.details["reason"] == "users_own_statement"
+    assert refused.value.details["memory_id"] == said.memory_id
     assert uow.memories.added == [] and uow.memories.forgotten == []
     kept = uow.memories.rows[said.memory_id]
     assert kept.temporal.status is TemporalStatus.CURRENT and kept.content == said.content

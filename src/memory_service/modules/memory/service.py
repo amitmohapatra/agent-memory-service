@@ -263,11 +263,17 @@ class MemoryService:
     ) -> None:
         if ctx.is_agent and said_by_a_person(memory):
             # what the user said is theirs to restate or retract, admin or not: a run's
-            # memory_update overwrote the user's own statements with its answers
+            # memory_update overwrote the user's own statements with its answers. The memory
+            # is named (resolved from a handle): a caller that asks the person, and is
+            # approved, acts on it as them
             raise ScopeDenied(
                 f"memory {memory.memory_id} is the user's own statement: an agent cannot "
                 f"{action} it; use memory_remember to add your note",
-                details={"principal": ctx.principal_id, "reason": "users_own_statement"},
+                details={
+                    "principal": ctx.principal_id,
+                    "reason": "users_own_statement",
+                    "memory_id": memory.memory_id,
+                },
             )
         if memory.owner_principal in (ctx.principal_id, f"user:{ctx.user_id}"):
             return
