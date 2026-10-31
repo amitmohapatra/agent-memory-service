@@ -59,11 +59,16 @@ class _Store:
 
 def _indexer(tool_cosine: float) -> Any:
     primary = SimpleNamespace(tool_cosine=tool_cosine)
+
+    async def embed_primary_query(text: str) -> list[float]:
+        return TASK_VECTOR
+
     return SimpleNamespace(
         spaces=SimpleNamespace(
             primary=primary,
             primary_space=SimpleNamespace(name=VectorName.DENSE_ML, encoder=primary),
             dimensions={},
+            embed_primary_query=embed_primary_query,
         ),
         sparse=SimpleNamespace(server_side_idf=True),
         collection=lambda name: name,
@@ -100,6 +105,19 @@ async def test_a_task_no_tool_is_about_finds_its_tools_but_none_matches() -> Non
     found = await index.search("acme", None, "What's the weather on Mars?", vectors=_vectors())
     assert found[0].name == "excess_stock" and found[0].relevance == 1.0
     assert not any(m.matches for m in found)
+
+
+async def test_vectors_without_the_primary_space_have_it_encoded() -> None:
+    """Vectors a retrieval encoded for other spaces only: the task is encoded in the primary
+    one, as a learned procedure's meaning match does (``matching``)."""
+    store = _Store(HITS, {"tol_a": 0.46})
+    index = ToolIndex(None, _indexer(0.3), store)  # type: ignore[arg-type]
+    english = QueryVectors(
+        dense={VectorName.DENSE_EN: [0.0, 1.0]}, sparse=None, script=Script.LATIN
+    )
+    found = await index.search("acme", None, "overstock at S40", vectors=english)
+    assert [m.matches for m in found] == [True, False, False]
+    assert store.similarity_reads[0][0] is VectorName.DENSE_ML
 
 
 async def test_an_encoder_with_no_calibrated_tool_cosine_reads_no_similarity() -> None:
