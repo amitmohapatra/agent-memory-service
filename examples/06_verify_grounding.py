@@ -35,7 +35,8 @@ async def main() -> None:
         print("per-claim hallucination rate:", report.per_claim_hallucination_rate)
         assert [c.verdict for c in report.claims] == ["supported", "contradicted"]
 
-        # the run was judged: the report is the judge's RUN feedback, applied without review
+        # the run was judged: the report is the judge's RUN feedback, pending a tenant admin's
+        # review (a model's word is never applied on its own)
         assert report.feedback_id
         verdict = await run.feedback.get(report.feedback_id)
         print("recorded as feedback:", verdict.target_kind, verdict.target_id, verdict.verdict)

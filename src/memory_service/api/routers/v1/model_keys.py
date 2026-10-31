@@ -1,5 +1,10 @@
-"""Register/rotate/revoke model keys at agent and tenant level; never return secret material.
-A call resolves the acting agent's key, else the tenant's.
+"""Register/rotate/revoke model endpoints at agent and tenant level; never return a key.
+A call resolves the acting agent's endpoint, else the tenant's, else the service's own.
+
+An endpoint is ``trellis.contracts.Endpoint`` as JSON (its ``api_key`` a plain string on the
+wire): where the model is, the route and auth by name, the model and what it accepts. It is
+probed before it is stored (``GET /models`` with its own auth) and stored encrypted. The status
+says which endpoint a call at that level would use, and why.
 
 The tenant's model policy (which uses may run, whether reads are assisted, which model each
 use calls) and its usage ledger are read and set here too."""
@@ -9,7 +14,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Query, Request
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from memory_service.api.deps import (
     AdministeredTenantDep,
@@ -25,11 +30,19 @@ from memory_service.api.idempotent import NO_CONTENT, default_idempotency_key, r
 from memory_service.config.settings import ALL_LLM_USES, LLMUse
 from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.provenance import require_permitted_model
-from memory_service.modules.llm.credentials import ModelCredentials
+from memory_service.modules.llm.credentials import ModelCredentials, agent_identity, sealed
+from memory_service.modules.llm.endpoints import EndpointResolver, EndpointSource
 from memory_service.modules.llm.policies import LLMUsage, ModelPolicies
 from memory_service.modules.llm.policy import DEFAULT_ACCESS
-from memory_service.ports.credentials import ModelIdentity, StoredCredential, tenant_identity
+from memory_service.ports.credentials import (
+    EndpointProbe,
+    ModelIdentity,
+    ResolvedCredential,
+    StoredCredential,
+    tenant_identity,
+)
 from memory_service.ports.llm import StoredPolicy
+from trellis.contracts import Endpoint, ModelProfile
 
 router = APIRouter()
 _ERRORS = error_responses(401, 403, 404, 409, 422, 503)
@@ -39,69 +52,154 @@ _READ_ERRORS = error_responses(401, 403, 404, 422, 503)
 USAGE_DEFAULT_DAYS = 30
 USAGE_MAX_DAYS = 366
 
+_ENDPOINT_EXAMPLE = {
+    "base_url": Endpoint.model_fields["base_url"].examples[0],  # type: ignore[index]
+    "gateway": "openai-compatible",
+    "auth": "bearer",
+    "model": "gpt-4.1-mini",
+    "api_key": "sk-example",
+    "profile": {"reasoning_output": False, "temperature": True},
+}
+_ENDPOINT = (
+    "The endpoint (trellis.contracts.Endpoint): base_url (http or https, the API root), "
+    "gateway (openai-compatible or bifrost), auth (bearer, google or aws), model, api_key "
+    "(the bearer key; stored encrypted and never returned) and profile (what the model "
+    "accepts). The service must reach base_url itself: it is probed before it is stored."
+)
+
+
+def _model_named(endpoint: Endpoint) -> Endpoint:
+    if endpoint.model is not None:
+        require_permitted_model(endpoint.model)
+    return endpoint
+
 
 class AgentKeyRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
         json_schema_extra={
-            "examples": [{"scope": {"agent_id": "research"}, "virtual_key": "vk-example"}]
+            "examples": [{"scope": {"agent_id": "research"}, "endpoint": _ENDPOINT_EXAMPLE}]
         },
     )
 
-    scope: ScopeBody = Field(description="The agent the key is for: agent_id is required.")
-    virtual_key: SecretStr = Field(
-        min_length=1,
-        max_length=4096,
-        description="The Bifrost virtual key (1-4096 characters); stored encrypted and "
-        "never returned.",
-    )
+    scope: ScopeBody = Field(description="The agent the endpoint is for: agent_id is required.")
+    endpoint: Endpoint = Field(description=_ENDPOINT)
+
+    _permitted = field_validator("endpoint")(_model_named)
 
 
 class ModelKeyRequest(BaseModel):
     model_config = ConfigDict(
-        extra="forbid", json_schema_extra={"examples": [{"virtual_key": "vk-example"}]}
+        extra="forbid", json_schema_extra={"examples": [{"endpoint": _ENDPOINT_EXAMPLE}]}
     )
 
-    virtual_key: SecretStr = Field(
-        min_length=1,
-        max_length=4096,
-        description="The Bifrost virtual key (1-4096 characters); stored encrypted and "
-        "never returned.",
-    )
+    endpoint: Endpoint = Field(description=_ENDPOINT)
+
+    _permitted = field_validator("endpoint")(_model_named)
+
+
+class EndpointInfo(BaseModel):
+    """A stored endpoint without its key."""
+
+    base_url: str = Field(description="The API root the service calls.")
+    gateway: str = Field(description="The route: openai-compatible or bifrost.")
+    auth: str = Field(description="The auth strategy: bearer, google or aws.")
+    model: str | None = Field(description="The model it names; null: the policy's or auto.")
+    has_api_key: bool = Field(description="Whether a bearer key is stored (never returned).")
+    profile: ModelProfile = Field(description="What the model accepts.")
 
 
 class AgentKeyStatus(BaseModel):
     registered: bool = Field(
-        description="true: a key (or a revocation of one) is stored at this level."
+        description="true: an endpoint (or a revocation of one) is stored at this level."
     )
     revoked: bool = Field(
-        description="true: the stored key was revoked; calls at this level are refused "
-        "rather than falling back to another level's key."
+        description="true: the stored endpoint was revoked; calls at this level are refused "
+        "rather than falling back to another level's endpoint or the service's."
     )
     revision: int = Field(
-        description="How many times the key was set or revoked (0: never); it changes on "
-        "every rotation."
+        description="How many times the endpoint was set or revoked (0: never); it changes "
+        "on every rotation."
     )
     updated_at: datetime | None = Field(
         default=None, description="When it was last set or revoked; null when never."
     )
+    endpoint: EndpointInfo | None = Field(
+        default=None, description="The endpoint stored at this level, without its key."
+    )
+    source: EndpointSource = Field(
+        description="Which endpoint a model call at this level uses now: agent (the agent's "
+        "registration), tenant (the tenant's), service (the service's own LLM_* endpoint) "
+        "or none (no model call is made)."
+    )
+    reason: str = Field(description="Why that source, in a sentence.")
 
 
-def _status(record: StoredCredential | None) -> AgentKeyStatus:
+def _info(endpoint: Endpoint | None) -> EndpointInfo | None:
+    if endpoint is None:
+        return None
+    return EndpointInfo(
+        base_url=endpoint.base_url,
+        gateway=endpoint.gateway,
+        auth=endpoint.auth,
+        model=endpoint.model,
+        has_api_key=endpoint.api_key is not None,
+        profile=endpoint.profile,
+    )
+
+
+async def _status(
+    container,  # type: ignore[no-untyped-def]
+    identity: ModelIdentity,
+    record: StoredCredential | None,
+    *,
+    stored: Endpoint | None = None,
+) -> AgentKeyStatus:
+    """``record``'s status and where a call at ``identity`` goes. ``stored``: the endpoint
+    just written in this unit of work, which a fresh read would not see yet."""
+    if stored is not None and record is not None:
+        written = ResolvedCredential(stored, record.revision, record.identity)
+        choice = await EndpointResolver(container.settings.llm, _Written(written)).resolve(identity)
+        endpoint: Endpoint | None = stored
+    else:
+        resolver: EndpointResolver = container.services["llm_endpoints"]
+        choice = await resolver.resolve(identity)
+        endpoint = _service(container).endpoint_of(record) if record is not None else None
     return AgentKeyStatus(
         registered=record is not None,
         revoked=record is not None and record.ciphertext is None,
         revision=record.revision if record else 0,
         updated_at=record.updated_at if record else None,
+        endpoint=_info(endpoint),
+        source=choice.source,
+        reason=choice.reason,
     )
+
+
+class _Written:
+    """The endpoint just registered, as the resolver's registered source reads it."""
+
+    def __init__(self, written: ResolvedCredential) -> None:
+        self.written = written
+
+    async def resolve(self, identity: ModelIdentity) -> ResolvedCredential | None:
+        return self.written
+
+    async def confirm(self, identity: ModelIdentity, resolved: ResolvedCredential | None) -> None:
+        return None
 
 
 def _service(container) -> ModelCredentials:  # type: ignore[no-untyped-def]
     return container.services["model_credentials"]
 
 
-def _digest(key: SecretStr) -> str:
-    return hashlib.sha256(key.get_secret_value().encode()).hexdigest()
+async def _probe(container, endpoint: Endpoint) -> None:  # type: ignore[no-untyped-def]
+    probe: EndpointProbe = container.services["endpoint_probe"]
+    await probe(endpoint)
+
+
+def _digest(endpoint: Endpoint) -> str:
+    return hashlib.sha256(sealed(endpoint).get_secret_value().encode()).hexdigest()
 
 
 # --------------------------------------------------------------------------- the agent's own
@@ -112,10 +210,12 @@ def _digest(key: SecretStr) -> str:
     response_model=AgentKeyStatus,
     tags=["agents"],
     responses=_READ_ERRORS,
-    summary="Read the acting agent's model-key status, without its secret",
+    summary="Read the acting agent's model endpoint and which endpoint its calls use, "
+    "without its key",
 )
 async def key_status(container: ContainerDep, ctx: HeaderContextDep) -> AgentKeyStatus:
-    return _status(await _service(container).metadata(ctx))
+    identity = agent_identity(ctx)
+    return await _status(container, identity, await _service(container).metadata_for(identity))
 
 
 @router.put(
@@ -123,16 +223,23 @@ async def key_status(container: ContainerDep, ctx: HeaderContextDep) -> AgentKey
     response_model=AgentKeyStatus,
     tags=["agents"],
     responses=_ERRORS,
-    summary="Register or rotate the acting agent's encrypted Bifrost virtual key",
+    summary="Register or rotate the acting agent's model endpoint (stored encrypted)",
+    description="The harness registers the endpoint its agent's model is on, so the service "
+    "calls the same model for that agent's memory. 422 when the service cannot reach the "
+    "endpoint (`GET {base_url}/models` with its auth), e.g. a loopback address only the "
+    "harness's machine resolves.",
 )
 async def set_key(
     request: Request, body: AgentKeyRequest, container: ContainerDep, _: ServicePrincipalDep
 ):
     ctx = build_context(request, container, body.scope)
+    identity = agent_identity(ctx)
+    await _probe(container, body.endpoint)
 
     async def write(uow):  # type: ignore[no-untyped-def]
-        record = await _service(container).set(uow, ctx, body.virtual_key)
-        return 200, _status(record).model_dump(mode="json"), None
+        record = await _service(container).set(uow, ctx, body.endpoint)
+        status = await _status(container, identity, record, stored=body.endpoint)
+        return 200, status.model_dump(mode="json"), None
 
     return await run_idempotent(
         request,
@@ -143,7 +250,7 @@ async def set_key(
         payload={
             "principal": ctx.principal_id,
             "action": "rotate",
-            "digest": _digest(body.virtual_key),
+            "digest": _digest(body.endpoint),
         },
         handler=write,
     )
@@ -154,9 +261,10 @@ async def set_key(
     status_code=204,
     tags=["agents"],
     responses=_ERRORS,
-    summary="Revoke the acting agent's model key and invalidate assisted read caches",
-    description="204: the key is revoked (a revocation tombstone, so the agent never borrows "
-    "the tenant's key); `GET /v1/agents/model-key` reads the status afterwards.",
+    summary="Revoke the acting agent's model endpoint and invalidate assisted read caches",
+    description="204: the endpoint is revoked (a revocation tombstone, so the agent never "
+    "borrows the tenant's or the service's); `GET /v1/agents/model-key` reads the status "
+    "afterwards.",
 )
 async def revoke_key(request: Request, container: ContainerDep, ctx: HeaderContextDep):
     async def write(uow):  # type: ignore[no-untyped-def]
@@ -182,20 +290,23 @@ async def _put_level(
     container,
     tenant_id: str,
     identity: ModelIdentity,
-    key: SecretStr | None,
+    endpoint: Endpoint | None,
     action: str,
 ):  # type: ignore[no-untyped-def]
     ctx = request_context(request, tenant_id)
+    if endpoint is not None:
+        await _probe(container, endpoint)
 
     async def write(uow):  # type: ignore[no-untyped-def]
-        record = await _service(container).set_for(uow, identity, key)
-        if key is None:
+        record = await _service(container).set_for(uow, identity, endpoint)
+        if endpoint is None:
             return NO_CONTENT, {}, None
-        return 200, _status(record).model_dump(mode="json"), None
+        status = await _status(container, identity, record, stored=endpoint)
+        return 200, status.model_dump(mode="json"), None
 
     payload = {"principal": identity.principal_id, "action": action}
-    if key is not None:
-        payload["digest"] = _digest(key)
+    if endpoint is not None:
+        payload["digest"] = _digest(endpoint)
     return await run_idempotent(
         request,
         container,
@@ -212,12 +323,14 @@ async def _put_level(
     response_model=AgentKeyStatus,
     tags=["tenancy"],
     responses=_READ_ERRORS,
-    summary="Read the tenant's model-key status (used by agents without a key of their own)",
+    summary="Read the tenant's model endpoint (used by agents without one of their own) and "
+    "which endpoint its calls use, without its key",
 )
 async def tenant_key_status(
     container: ContainerDep, tenant_id: AdministeredTenantDep
 ) -> AgentKeyStatus:
-    return _status(await _service(container).metadata_for(tenant_identity(tenant_id)))
+    identity = tenant_identity(tenant_id)
+    return await _status(container, identity, await _service(container).metadata_for(identity))
 
 
 @router.put(
@@ -225,7 +338,9 @@ async def tenant_key_status(
     response_model=AgentKeyStatus,
     tags=["tenancy"],
     responses=_ERRORS,
-    summary="Register or rotate the tenant's encrypted Bifrost virtual key",
+    summary="Register or rotate the tenant's model endpoint (stored encrypted)",
+    description="422 when the service cannot reach the endpoint (`GET {base_url}/models` "
+    "with its auth).",
 )
 async def set_tenant_key(
     request: Request,
@@ -234,7 +349,7 @@ async def set_tenant_key(
     tenant_id: AdministeredTenantDep,
 ):
     return await _put_level(
-        request, container, tenant_id, tenant_identity(tenant_id), body.virtual_key, "rotate"
+        request, container, tenant_id, tenant_identity(tenant_id), body.endpoint, "rotate"
     )
 
 
@@ -243,8 +358,8 @@ async def set_tenant_key(
     status_code=204,
     tags=["tenancy"],
     responses=_ERRORS,
-    summary="Revoke the tenant's model key",
-    description="204: the key is revoked; `GET /v1/model-key` reads the status afterwards.",
+    summary="Revoke the tenant's model endpoint",
+    description="204: the endpoint is revoked; `GET /v1/model-key` reads the status afterwards.",
 )
 async def revoke_tenant_key(
     request: Request, container: ContainerDep, tenant_id: AdministeredTenantDep
@@ -280,7 +395,7 @@ class ModelPolicyRequest(BaseModel):
     )
     models: dict[LLMUse, str] = Field(
         default_factory=dict,
-        description="the gateway model (provider/model) a use calls; a use not named here "
+        description="the model a use calls, as the endpoint names it; a use not named here "
         "calls the service's default for it",
     )
 
@@ -306,7 +421,7 @@ class ModelPolicyStatus(BaseModel):
         "/v1/graph/entities) consult the model."
     )
     models: dict[str, str] = Field(
-        description="The gateway model (provider/model) each use calls; a use not named "
+        description="The model each use calls, as the endpoint names it; a use not named "
         "calls the service's default."
     )
     revision: int = Field(description="How many times the policy was set (0: never).")

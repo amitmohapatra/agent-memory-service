@@ -6,7 +6,6 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from pydantic import SecretStr
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.revisions import RevisionKind
@@ -14,6 +13,7 @@ from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policies import LLMUsage, ModelPolicies
 from memory_service.modules.memory.reflection import ReflectionService
 from memory_service.ports.credentials import ModelIdentity, tenant_identity
+from tests.integration.test_agent_credentials import endpoint
 from tests.integration.test_agent_credentials import service as credentials_service
 from tests.integration.test_reflection import _memories, _observe
 from tests.support_llm import mocked_gateway
@@ -27,7 +27,7 @@ G1 = MemoryExecutionContext(tenant_id="globex", user_id="u1", workspace_id="ws1"
 
 async def _set_key(credentials, uow_factory, identity: ModelIdentity, key: str | None) -> None:
     async with uow_factory() as uow:
-        await credentials.set_for(uow, identity, SecretStr(key) if key else None)
+        await credentials.set_for(uow, identity, endpoint(key) if key else None)
         await uow.commit()
 
 
@@ -121,7 +121,7 @@ async def test_reflection_runs_only_where_a_key_pays_and_the_policy_allows(
         ]
     }
     with mocked_gateway([reply]) as gw:
-        auto = gw.assist(uses=["reflection"], api_key=None)
+        auto = gw.assist(uses=["reflection"], own=False)
         auto.provider.credentials = credentials
         auto.provider.usage = LLMUsage(uow_factory)  # as production wires it
         assist = LLMAssist(auto.provider, auto.settings, policies)

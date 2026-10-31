@@ -9,12 +9,14 @@ from datetime import UTC, datetime
 
 import pytest
 
-from memory_service.domain.context_bundle import skills_section
+from memory_service.domain.context_bundle import pinned_sections, skills_section
 from memory_service.domain.errors import NotFound
 from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.tools import (
     SkillView,
     StoredProcedure,
+    ToolCandidate,
+    ToolHints,
     ToolInvocation,
     agent_audience,
 )
@@ -40,7 +42,6 @@ def _procedure(**kw) -> StoredProcedure:
         "tenant_id": "acme",
         "scope_key": agent_audience("acme", "support"),
         "pattern": "update quote {id} with {entity} price for {id}",
-        "title": "Update a quote's regional price",
         "steps": [
             {"ordinal": 0, "tool": "lookup_price", "expected_output": ["price", "quote"]},
             {
@@ -172,13 +173,12 @@ def test_a_dismissed_skill_stays_dismissed_until_its_steps_change() -> None:
 # --- how a skill is named and shown ------------------------------------------------------
 
 
-def test_a_skill_is_named_from_its_title_in_lowercase_words() -> None:
-    assert skill_name(_procedure()) == "update-a-quote-s-regional-price"
-    assert skill_name(_procedure(title="")) == "update-quote-with-price-for"
+def test_a_skill_is_named_from_its_pattern_in_lowercase_words() -> None:
+    assert skill_name(_procedure()) == "update-quote-with-price-for"
 
 
 @pytest.mark.parametrize(
-    ("title", "name"),
+    ("pattern", "name"),
     [
         ("Rückerstattung einer Bestellung", "rückerstattung-einer-bestellung"),
         ("استرداد الطلب", "استرداد-الطلب"),
@@ -186,14 +186,14 @@ def test_a_skill_is_named_from_its_title_in_lowercase_words() -> None:
         ("退款", "退款"),
     ],
 )
-def test_a_skill_is_named_in_the_script_its_task_is_in(title: str, name: str) -> None:
-    assert skill_name(_procedure(title=title)) == name
+def test_a_skill_is_named_in_the_script_its_task_is_in(pattern: str, name: str) -> None:
+    assert skill_name(_procedure(pattern=pattern)) == name
 
 
 def test_a_name_is_cut_at_a_word_and_never_empty() -> None:
-    long = skill_name(_procedure(title=" ".join(["refund"] * 30)))
+    long = skill_name(_procedure(pattern=" ".join(["refund"] * 30)))
     assert len(long) <= 64 and not long.endswith("-")
-    assert skill_name(_procedure(title="", pattern="{id} {id}")) == "procedure"
+    assert skill_name(_procedure(pattern="{id} {id}")) == "procedure"
 
 
 def test_the_steps_shown_leave_out_the_skill_machinery() -> None:
@@ -217,7 +217,7 @@ def test_the_view_and_the_listing_carry_the_same_skill() -> None:
     procedure = _procedure(**_with_skill_steps())
     view = skill_view(procedure)
     assert (view.name, view.steps, view.with_skill) == (
-        "update-a-quote-s-regional-price",
+        "update-quote-with-price-for",
         ["find_order", "refund"],
         "refund-policy",
     )
@@ -233,12 +233,39 @@ def test_the_context_shows_each_skill_in_full_and_an_addition_as_one() -> None:
     assert text is not None
     assert text.startswith("## Learned skills for this task\n")
     assert (
-        "- update-a-quote-s-regional-price: lookup_price -> update_quote (worked 75% of 4 runs)"
-        in text
+        "- update-quote-with-price-for: lookup_price -> update_quote (worked 75% of 4 runs)" in text
     )
     assert "  - if update_quote on Locked: ask the owner to unlock it" in text
     assert "- adds to your skill refund-policy: find_order -> refund" in text
     assert skills_section([]) is None
+
+
+def test_the_learned_plan_is_spelled_out_once() -> None:
+    """B7: the plan was rendered in full under Learned skills and again, as its tools, under
+    Tools. Its steps are now the tools listed first under Tools, in its order; its skill line
+    keeps the name, the track record and the fixes. Another skill is shown in full."""
+    plan = skill_view(_procedure())
+    other = skill_view(_procedure(procedure_id="prc_2", **_with_skill_steps()))
+    hints = ToolHints(
+        candidates=[
+            ToolCandidate(name=n, score=s, confidence=0.5)
+            for n, s in [("search", 2.0), ("update_quote", 1.5), ("mail", 1.4)]
+        ]
+        + [ToolCandidate(name="lookup_price", score=1.0, confidence=0.4)],
+        plan=plan,
+        next="lookup_price",
+    )
+    skills, tools = pinned_sections([], None, [plan, other], hints)
+    assert "lookup_price -> update_quote" not in skills
+    assert "- update-quote-with-price-for: the first 2 tools under Tools, in that order" in (skills)
+    assert "  - if update_quote on Locked: ask the owner to unlock it" in skills
+    assert "- adds to your skill refund-policy: find_order -> refund" in skills
+    lines = tools.splitlines()[1:]
+    assert [line.split(" (")[0] for line in lines] == [
+        "- lookup_price",
+        "- update_quote",
+        "- search",
+    ]
 
 
 # --- which toolbox earns tool hints ------------------------------------------------------
@@ -324,7 +351,7 @@ async def test_the_listing_is_one_agents_when_asked() -> None:
     uow = _Uow(_procedure(updated_at=datetime(2026, 10, 1, tzinfo=UTC)))
     skills = LearnedSkills(lambda: uow)  # type: ignore[arg-type,return-value]
     assert [s.name for s in await skills.list("acme", agent_id="support")] == [
-        "update-a-quote-s-regional-price"
+        "update-quote-with-price-for"
     ]
     assert await skills.list("acme", agent_id="billing") == []
 

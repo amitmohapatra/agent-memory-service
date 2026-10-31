@@ -93,7 +93,8 @@ def test_approval_suggestions_page_most_supported_first(client, container) -> No
         async with container.services["uow_factory"]() as uow:
             for shape, times in (("amount:num:1e2", 9), ("amount:num:1e3", 7), ("id:str", 5)):
                 for _ in range(times):
-                    await uow.tools.count_approval("acme", "bot", "erp-pay", shape, "approvals")
+                    # rejections: "always ask" needs no second reviewer
+                    await uow.tools.count_approval("acme", "bot", "erp-pay", shape, "rejections")
             await uow.commit()
 
     client.portal.call(decide)

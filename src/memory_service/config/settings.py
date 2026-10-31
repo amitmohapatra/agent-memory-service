@@ -6,16 +6,17 @@ Sources, highest precedence first:
 2. ``.env`` then ``secrets.env`` in the working directory
 3. defaults below
 
-Four variables are read outside that scheme, under the names the rest of the platform uses:
-``WEB_CONCURRENCY`` (the default of ``service.workers``), ``BIFROST_URL`` and
-``BIFROST_VIRTUAL_KEY`` (the model gateway, and the operator's key on it) and
-``OTEL_EXPORTER_OTLP_ENDPOINT`` (where traces go; tracing is on exactly when it is set).
+Some variables are read outside that scheme, under the names the rest of the platform uses:
+``WEB_CONCURRENCY`` (the default of ``service.workers``), ``LLM_BASE_URL``, ``LLM_API_KEY``,
+``LLM_GATEWAY`` and ``LLM_AUTH`` (the service's own model endpoint, the same names the harness
+reads) and ``OTEL_EXPORTER_OTLP_ENDPOINT`` (where traces go; tracing is on exactly when it is
+set).
 
 Only deployment facts live here - where the stores and the gateway are, the secrets, ports
 and worker counts. Everything that makes the product what it is (models, retrieval depth,
 budgets, timeouts, retries, thresholds, rate limits) is a constant in ``config/constants.py``;
 the test suite's in-process stand-ins are ``application.container.Overrides``. What is
-derived is derived: the model is available when the gateway is configured, the
+derived is derived: the model is available when an endpoint can be resolved, the
 authentication mode follows from the credentials configured, tracing from its endpoint.
 Domain code never reads environment variables.
 
@@ -29,11 +30,21 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, ClassVar, Literal, get_args
 
-from pydantic import AliasChoices, BaseModel, Field, SecretStr, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from memory_service.domain.fiscal import parse_calendar
+from memory_service.domain.provenance import require_permitted_model
 from memory_service.domain.tenancy import is_valid_tenant_id
+from trellis.contracts import Endpoint, ModelProfile
 
 # ---------------------------------------------------------------------------
 # Sections
@@ -416,9 +427,6 @@ LLMUse = Literal[
     #: (``modules.memory.restatement``, ADR 0027).
     "memory_restatement",
     "grounding_judge",
-    #: Distil a stored procedure's title and strategy from the runs that followed it (the
-    #: tool learning job); the miner's own rendering is kept without it.
-    "procedure_abstraction",
 ]
 #: Every use: the default tenant policy.
 ALL_LLM_USES: tuple[LLMUse, ...] = get_args(LLMUse)
@@ -443,23 +451,57 @@ class HindsightSettings(BaseModel):
     api_key: SecretStr | None = None
 
 
+class ModelsLLMSettings(BaseModel):
+    """``MEMORY__MODELS__LLM__*``: how the service's own endpoint is used, and whether an
+    agent's registered one is.
+
+    The endpoint itself is ``LLM_BASE_URL`` / ``LLM_API_KEY`` / ``LLM_GATEWAY`` / ``LLM_AUTH``
+    (unprefixed, the harness's names). Which endpoint a call goes to is decided per call, in
+    one order (``modules.llm.endpoints``): the acting agent's registered endpoint (else its
+    tenant's), then this service's own, then none.
+    """
+
+    #: false: a registered endpoint is stored but never called; every call uses the service's
+    #: own endpoint (or none). For an operator who pays for and chooses the model itself.
+    accept_agent_endpoints: bool = True
+    #: The model the service's own endpoint calls for every use, as the endpoint names it.
+    #: Unset: a tenant policy's model, else one chosen from the endpoint's ``/models``.
+    model: str | None = Field(default=None, min_length=1)
+    #: What that model accepts (``trellis.contracts.ModelProfile``): a reasoning model, or one
+    #: that takes no temperature, is sent ``max_completion_tokens`` and no ``temperature``.
+    profile: ModelProfile = Field(default_factory=ModelProfile)
+
+    @field_validator("model")
+    @classmethod
+    def _permitted(cls, value: str | None) -> str | None:
+        return require_permitted_model(value) if value is not None else None
+
+
+class ModelsSettings(BaseModel):
+    llm: ModelsLLMSettings = Field(default_factory=ModelsLLMSettings)
+
+
 class LLMSettings(BaseModel):
-    """The model gateway. The model is available exactly when ``base_url`` is set; a call runs
-    only when a key can pay for it - the acting agent's or its tenant's registered key
-    (``PUT /v1/agents/model-key``, ``PUT /v1/model-key``) or the operator's ``api_key`` - and
-    the tenant's policy allows the use. Models, budgets and retries are
+    """The model endpoints a call may resolve to: the service's own (``endpoint``, from the
+    ``LLM_*`` variables) and, unless the operator turned it off, the one the acting agent or
+    its tenant registered (``PUT /v1/agents/model-key``, ``PUT /v1/model-key``). A call runs
+    only when one resolves and the tenant's policy allows the use. Budgets and retries are
     ``constants.LLM``; the tenant's policy may name the model a use calls."""
 
-    base_url: str | None = Field(
-        default=None, description="Bifrost OpenAI-compatible endpoint, e.g. http://bifrost:8080/v1"
+    model_config = ConfigDict(frozen=True)
+
+    endpoint: Endpoint | None = Field(
+        default=None, description="the service's own endpoint (LLM_*); None when unset"
     )
-    api_key: SecretStr | None = Field(
-        default=None, description="the operator's Bifrost virtual key: pays for tenants without one"
+    accept_agent_endpoints: bool = Field(
+        default=True, description="whether a registered endpoint is called (else stored only)"
     )
 
     @property
     def enabled(self) -> bool:
-        return self.base_url is not None
+        """A model may be reached: the service has its own endpoint, or an agent may bring
+        one."""
+        return self.endpoint is not None or self.accept_agent_endpoints
 
     def wants(self, use: LLMUse) -> bool:
         """Whether the deployment can call the model for ``use`` at all (before any policy)."""
@@ -467,8 +509,8 @@ class LLMSettings(BaseModel):
 
     @property
     def operator_pays(self) -> bool:
-        """A call may proceed without a registered key: the operator's key pays."""
-        return self.api_key is not None
+        """A call may proceed without a registered endpoint: the service's own serves it."""
+        return self.endpoint is not None
 
 
 # ---------------------------------------------------------------------------
@@ -488,14 +530,17 @@ class Settings(BaseSettings):
     #: built per Settings() rather than once at import, so ``workers`` reads the
     #: environment the process actually has (see ``_workers_default``)
     service: ServiceSettings = Field(default_factory=ServiceSettings)
-    #: the model gateway and the operator's key on it (the platform's names, unprefixed)
-    bifrost_url: str | None = Field(
-        default=None, validation_alias=AliasChoices("BIFROST_URL", "bifrost_url")
+    #: The service's own model endpoint (the platform's names, unprefixed: the harness reads
+    #: the same four). Set, the service calls it for tenants and agents that registered none.
+    llm_base_url: str | None = Field(default=None, validation_alias="LLM_BASE_URL")
+    llm_api_key: SecretStr | None = Field(default=None, validation_alias="LLM_API_KEY")
+    #: the route by name: ``openai-compatible`` (any endpoint) or ``bifrost``
+    llm_gateway: str = Field(
+        default="openai-compatible", min_length=1, validation_alias="LLM_GATEWAY"
     )
-    bifrost_virtual_key: SecretStr | None = Field(
-        default=None,
-        validation_alias=AliasChoices("BIFROST_VIRTUAL_KEY", "bifrost_virtual_key"),
-    )
+    #: the auth strategy by name: ``bearer`` (``LLM_API_KEY``), ``google`` or ``aws``
+    llm_auth: str = Field(default="bearer", min_length=1, validation_alias="LLM_AUTH")
+    models: ModelsSettings = Field(default_factory=ModelsSettings)
     #: where traces go (OTLP over HTTP); tracing is on exactly when it is set
     otel_endpoint: str | None = Field(
         default=None,
@@ -528,7 +573,26 @@ class Settings(BaseSettings):
 
     @property
     def llm(self) -> LLMSettings:
-        return LLMSettings(base_url=self.bifrost_url, api_key=self.bifrost_virtual_key)
+        own = self.models.llm
+        endpoint = (
+            Endpoint(
+                base_url=self.llm_base_url,
+                gateway=self.llm_gateway,
+                auth=self.llm_auth,
+                model=own.model,
+                api_key=self.llm_api_key,
+                profile=own.profile,
+            )
+            if self.llm_base_url
+            else None
+        )
+        return LLMSettings(endpoint=endpoint, accept_agent_endpoints=own.accept_agent_endpoints)
+
+    @model_validator(mode="after")
+    def _llm_endpoint(self) -> Settings:
+        """``LLM_BASE_URL`` is checked where it is read, not at the first model call."""
+        _ = self.llm
+        return self
 
     #: Environments that are *deployed*, and so may not run the laptop defaults. ``test`` is
     #: absent on purpose: the suite and the benchmarks run under it with ``trusted_dev`` and a

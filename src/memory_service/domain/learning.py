@@ -48,6 +48,11 @@ CITED_MEMORIES_MAX: Final = 20
 APPROVAL_MIN_SUPPORT: Final = 5
 #: Approval rate at or above which "approve automatically" is suggested.
 AUTO_APPROVE_RATE: Final = 0.95
+#: Different reviewers who must have approved calls of one shape before "approve
+#: automatically" is offered: one person's approvals, however many, are no team's rule.
+APPROVAL_MIN_REVIEWERS: Final = 2
+#: The newest counted decisions on one agent's tool read for its reviewers.
+APPROVAL_DECISIONS_READ: Final = 500
 #: Approval rate at or below which "always ask" is suggested.
 ALWAYS_ASK_RATE: Final = 0.5
 #: Suggestions one listing returns.

@@ -1,4 +1,4 @@
-"""Model keys resolve agent -> tenant, and a call fails closed on any change."""
+"""Registered endpoints resolve agent -> tenant, and a call fails closed on any change."""
 
 from __future__ import annotations
 
@@ -7,17 +7,21 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import SecretStr
 
-from memory_service.adapters.models.llm import _catalog_key
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ProviderNotConfigured, ValidationFailed
-from memory_service.modules.llm.credentials import ModelCredentials, agent_identity
+from memory_service.modules.llm.credentials import (
+    ModelCredentials,
+    agent_identity,
+    sealed,
+    unsealed,
+)
 from memory_service.modules.llm.policy import current_model_identity, identity_of
 from memory_service.ports.credentials import (
     ModelIdentity,
-    ResolvedCredential,
     StoredCredential,
     tenant_identity,
 )
+from trellis.contracts import Endpoint, ModelProfile
 
 CTX = MemoryExecutionContext(tenant_id="acme", workspace_id="fin", user_id="alice", agent_id="ref")
 
@@ -83,9 +87,18 @@ def _service() -> tuple[ModelCredentials, _Repo]:
     return ModelCredentials(lambda: _Uow(repo), _Cipher()), repo
 
 
+def _endpoint(key: str) -> Endpoint:
+    return Endpoint(base_url="http://models.test/v1", model="m", api_key=key)
+
+
 async def _set(service: ModelCredentials, identity: ModelIdentity, key: str | None):
     async with service.uow_factory() as uow:
-        return await service.set_for(uow, identity, SecretStr(key) if key else None)
+        return await service.set_for(uow, identity, _endpoint(key) if key else None)
+
+
+def _key(resolved) -> str:
+    assert resolved is not None and resolved.endpoint.api_key is not None
+    return resolved.endpoint.api_key.get_secret_value()
 
 
 def test_the_levels_are_the_agent_then_the_tenant() -> None:
@@ -116,18 +129,18 @@ async def test_the_most_specific_key_wins_and_a_tombstone_never_borrows_one() ->
     assert await service.resolve(identity) is None
     await _set(service, tenant_identity("acme"), "vk-tenant")
     tenant = await service.resolve(identity)
-    assert tenant is not None and tenant.key.get_secret_value() == "vk-tenant"
+    assert tenant is not None and _key(tenant) == "vk-tenant"
     assert tenant.identity == tenant_identity("acme") and tenant.revision == 1
     # another agent still gets the tenant key
     other = await service.resolve(ModelIdentity("acme", "agent:bob/other"))
     assert other is not None and other.identity == tenant_identity("acme")
     await _set(service, agent_identity(CTX), "vk-own")
     own = await service.resolve(identity)
-    assert own is not None and own.key.get_secret_value() == "vk-own"
+    assert own is not None and _key(own) == "vk-own"
     assert own.identity == ModelIdentity("acme", "agent:ref")
     # the same agent acting for another user resolves the same key
     carol = await service.resolve(ModelIdentity("acme", "agent:carol/ref"))
-    assert carol is not None and carol.key.get_secret_value() == "vk-own"
+    assert carol is not None and _key(carol) == "vk-own"
     # revoking the agent's key refuses: it must not fall through to the tenant's
     await _set(service, agent_identity(CTX), None)
     with pytest.raises(ProviderNotConfigured, match="revoked"):
@@ -168,9 +181,19 @@ async def test_keys_are_validated_and_metadata_is_per_level() -> None:
     assert (await service.metadata(CTX)) == (await service.metadata(unattended))
 
 
-def test_the_discovery_cache_is_keyed_by_row_and_revision_never_by_key_material() -> None:
-    identity = identity_of(CTX)
-    assert _catalog_key(None) is None
-    assert _catalog_key((identity, None)) == (identity, None)
-    resolved = ResolvedCredential(SecretStr("vk"), 3, tenant_identity("acme"))
-    assert _catalog_key((identity, resolved)) == (tenant_identity("acme"), 3)
+def test_the_whole_endpoint_is_sealed_with_its_key_in_the_clear_inside() -> None:
+    """One envelope: the key is unmasked inside it (a ``SecretStr`` dumps as asterisks, which
+    would store nothing), and the route, auth, model and profile come back as registered."""
+    endpoint = Endpoint(
+        base_url="https://bedrock.test/v1",
+        gateway="openai-compatible",
+        auth="aws",
+        model="anthropic.claude",
+        profile=ModelProfile(reasoning_output=True, max_output_tokens=4096),
+    )
+    assert unsealed(sealed(endpoint)) == endpoint
+    keyed = _endpoint("sk-secret")
+    assert "sk-secret" in sealed(keyed).get_secret_value()
+    assert _key(type("R", (), {"endpoint": unsealed(sealed(keyed))})()) == "sk-secret"
+    with pytest.raises(ProviderNotConfigured, match="register it again"):
+        unsealed(SecretStr("vk-a-bare-key-from-before"))

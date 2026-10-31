@@ -302,8 +302,12 @@ class RetrievalEngine:
         observed: ObservedRange | None = None,
         at: PointInTime | None = None,
         on_encoded: Callable[[RoutedQuery, QueryVectors], None] | None = None,
+        follow_up: str | None = None,
     ) -> RetrievalResult:
-        """Ranked candidates for ``query``. ``observed`` keeps only what was observed within
+        """Ranked candidates for ``query``. ``follow_up``: the conversation's previous question,
+        when ``query`` follows it up ("and the second one?"): it widens the search text the way
+        expansion's terms do, while the route and the coverage stay the question's own.
+        ``observed`` keeps only what was observed within
         the range, filtered in the store before ranking (a record with no observation time,
         a document passage, is out). ``at`` searches memories as of a past moment
         (``PointInTime``) instead of now. ``on_encoded`` is told the final route and the
@@ -331,6 +335,9 @@ class RetrievalEngine:
         routed, search_text, speculative = await self._expanded(
             routed, has_thread=has_thread, encode=query_embedding is None, diagnostics=diagnostics
         )
+        if follow_up:
+            search_text = f"{follow_up} {search_text}"
+            diagnostics["follow_up"] = follow_up
         diagnostics["query_type"] = routed.query_type.value
         diagnostics["query_lang"] = routed.lang
         diagnostics["signals"] = routed.signals
@@ -362,11 +369,7 @@ class RetrievalEngine:
                     with timings.stage("visibility"):
                         async with self.uow_factory() as uow:
                             visibility = await self.authz.visibility(ctx, revisions=uow.revisions)
-                if self.indexer.fingerprint not in self._ensured:
-                    # a fresh deployment answers "nothing yet" before anything was indexed,
-                    # instead of failing on a missing collection
-                    await self.indexer.ensure_collections()
-                    self._ensured.add(self.indexer.fingerprint)
+                await self.ensure_collections()
                 # a post-stage that depends only on the route and the scope (the graph
                 # traversal) starts now and is awaited when its turn comes
                 for name, stage in self.post_stages.items():
@@ -1171,6 +1174,14 @@ class RetrievalEngine:
             weights=self.cfg.hybrid_weights,
             late=vectors.late,
         )
+
+    async def ensure_collections(self) -> None:
+        """The collections this engine searches, once per index build: a fresh deployment
+        answers "nothing yet" before anything was indexed, instead of failing on a missing
+        collection (a search outside ``retrieve``, ``modules.context.standing``, too)."""
+        if self.indexer.fingerprint not in self._ensured:
+            await self.indexer.ensure_collections()
+            self._ensured.add(self.indexer.fingerprint)
 
     def memory_scope(self, visibility: VisibilitySpecification) -> tuple[str, SearchFilter]:
         """The memories collection and the filter a current-memory search of ``visibility``

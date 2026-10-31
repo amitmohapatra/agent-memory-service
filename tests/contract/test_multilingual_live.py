@@ -1,9 +1,9 @@
 # ruff: noqa: RUF001 - literal multilingual fixtures.
-"""Opt-in: the real gateway reading messages the English rules cannot.
+"""Opt-in: a real model reading messages the English rules cannot.
 
-Runs only with ``MEMORY_TEST_LIVE_LLM=1`` and the gateway configured in the environment
-(``BIFROST_URL`` and ``BIFROST_VIRTUAL_KEY``; the model is discovered through the gateway
-unless ``MEMORY_TEST_LIVE_LLM_MODEL`` names one): it spends real tokens. What it checks is
+Runs only with ``MEMORY_TEST_LIVE_LLM=1`` and an endpoint configured in the environment
+(``LLM_BASE_URL``, and ``LLM_API_KEY``, ``LLM_GATEWAY``, ``LLM_AUTH`` as it needs them; the
+model is chosen from its ``/models`` unless ``MEMORY_TEST_LIVE_LLM_MODEL`` names one): it spends real tokens. What it checks is
 what the scripted tests cannot, that a real model follows the source-language rule and cites
 sentences, and that what it returns survives the service's own checks.
 """
@@ -16,14 +16,14 @@ from collections.abc import AsyncIterator
 import pytest
 import pytest_asyncio
 
-from memory_service.adapters.models.llm import BifrostLLM
+from memory_service.adapters.models.llm import EndpointLLM
 from memory_service.domain.language import detect_language
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.native import split_sentences
 from memory_service.modules.memory.source_facts import extract_source_facts
 from tests.conftest import live_llm_settings, live_llm_tuning
 
-pytestmark = [pytest.mark.contract, pytest.mark.bifrost]
+pytestmark = [pytest.mark.contract, pytest.mark.live_llm]
 
 MESSAGES = {
     "ja": "私は東京に住んでいます。毎朝コーヒーを飲むのが好きです。",
@@ -42,9 +42,9 @@ async def assist() -> AsyncIterator[LLMAssist]:
     if os.environ.get("MEMORY_TEST_LIVE_LLM") != "1":
         pytest.skip("live LLM tests are opt-in: MEMORY_TEST_LIVE_LLM=1")
     settings = live_llm_settings()
-    if not settings.enabled or not settings.api_key:
-        pytest.skip("gateway not configured (BIFROST_URL, BIFROST_VIRTUAL_KEY)")
-    llm = BifrostLLM(settings, tuning=live_llm_tuning(timeout_seconds=90))
+    if settings.endpoint is None:
+        pytest.skip("no endpoint configured (LLM_BASE_URL)")
+    llm = EndpointLLM(settings, tuning=live_llm_tuning(timeout_seconds=90))
     try:
         yield LLMAssist(llm, settings)
     finally:
@@ -56,7 +56,7 @@ async def test_a_real_model_extracts_facts_in_the_source_language(assist, lang) 
     sentences = split_sentences(MESSAGES[lang])
     facts = await extract_source_facts(assist, sentences, set(range(len(sentences))))
     if facts is None:
-        pytest.skip("the gateway did not answer (rate limit, quota or outage)")
+        pytest.skip("the endpoint did not answer (rate limit, quota or outage)")
     assert facts, f"{lang}: the model returned nothing that passed the checks"
     for fact in facts:
         assert detect_language(fact.text) in (lang, "und"), fact.text

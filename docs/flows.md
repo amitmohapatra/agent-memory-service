@@ -62,7 +62,7 @@ sequenceDiagram
 `role: "EVENT"` is stored as an internal message and learned from as an event. A message in a
 language other than English is kept verbatim and indexed in the multilingual dense space; the
 model reads it into typed facts only when the tenant's key and policy allow
-([chapter 8](guide/08-models.md#the-twelve-uses)). `ctx.remember(...)` (`POST /v1/memories`) is
+([chapter 8](guide/08-models.md#the-eleven-uses)). `ctx.remember(...)` (`POST /v1/memories`) is
 the direct path: one memory, stored verbatim, never gated.
 
 ## 2. Context build
@@ -95,7 +95,7 @@ sequenceDiagram
       E->>PG: one budgeted graph statement (150 ms)
     end
     E-->>B: fused candidates (memories ranked by ADR 0026), graph facts
-    B->>PG: side sections in parallel: profile, thread summary, procedures, prefetched memories, recent messages, tool hints
+    B->>PG: side sections in parallel: profile, thread summary, procedures, recent messages, tool hints
     B->>B: expand over the document graph, verify evidence groups, relevance floor
     B->>B: pack within the token budget, render with handles ([m1], [k1])
     B->>K: one pipelined write: the bundle record, the prompt form, the full form
@@ -167,7 +167,7 @@ sequenceDiagram
     A->>API: GET /v1/feedback?review=pending&group=target (the admin key)
     A->>API: POST /v1/feedback/approve {target_kind, target_id} (or /dismiss, or one id)
     API->>PG: review recorded, and on approve the feedback.project job
-  else applied as it arrives: the judge, a run's own status, an owner's correction with text, a tool call, an admin
+  else applied as it arrives: a run's own status, an owner's correction with text, a tool call, an admin
     F->>PG: feedback row + feedback.project job, one transaction
     API-->>U: 201 {review: null, projection: null}
   end
@@ -175,7 +175,7 @@ sequenceDiagram
   alt memory
     W->>PG: confirm reinforces, reject retracts, correct supersedes with the correction
   else run
-    W->>PG: the run's outcome (a person over the judge over the run), cited memories' confidence
+    W->>PG: the run's outcome (a person over the judge over the run); only if it labels the run, cited memories' confidence
   else tool call or procedure
     W->>PG: tool statistics and approval pattern, or the procedure retired
   end
@@ -212,9 +212,8 @@ sequenceDiagram
   end
   G->>G: contradiction scan over retrieved-but-unused evidence
   G-->>API: per claim: supported, unsupported, contradicted or borderline
-  API->>API: the supported evidence counts as used (agent-tool pull statistics)
   opt a run in the scope or in the body
-    API->>F: the report as the judge's RUN feedback (applied without review)
+    API->>F: the report as the judge's RUN feedback (pending: a tenant admin decides it)
   end
   API-->>C: {claims, per_claim_hallucination_rate, feedback_id?}
 ```

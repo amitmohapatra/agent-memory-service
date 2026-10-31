@@ -7,6 +7,65 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed
+- **A short follow-up is searched with the question before it** (service). "Who is in charge of
+  it?" names nothing the search can find. A question of at most 8 words asked in a thread,
+  whose own search finds nothing close (best similarity under 0.45), is searched again with
+  the thread's previous question in its search text; the route and the coverage stay the
+  question's own (`builder.FOLLOW_UP_*`, `RetrievalEngine.retrieve(follow_up=)`, the
+  bundle's `diagnostics.follow_up`). A short question on a new topic finds its own evidence
+  and is searched as asked. Measured with `benchmark/follow_ups.py`.
+- **A refused agent names the user's statement it may not touch** (service). The 403 an agent
+  gets for updating or forgetting what the user said (`reason: users_own_statement`) carries
+  the memory's id in `details.memory_id`, resolved from the handle it was called with: a caller
+  that asks the person, and is approved, can act on it as them (the harness's forget by chat).
+- **Any model provider, and memory follows the harness** (ADR 0042; service 0.4.0, SDK
+  `trellis-memory` 0.6.0; breaking). A model call goes to an endpoint resolved per call, in one
+  order: the endpoint the acting agent registered (else its tenant's), then the service's own,
+  then none (no model call; every path keeps its native result). An endpoint is
+  `trellis.contracts.Endpoint` (base URL, route, auth, model, key, profile): anything
+  OpenAI-compatible (OpenAI, OpenRouter, a LiteLLM proxy, Bifrost, Ollama, vLLM, llama.cpp,
+  the Anthropic and Gemini compatible endpoints), Vertex AI with a Google login and Bedrock
+  with AWS SigV4. The service now depends on `trellis-contracts>=0.6.3` (vendored like
+  `bifrost-sdk`, `make vendor`) and `bifrost-sdk>=0.4`.
+  - Settings: `BIFROST_URL` and `BIFROST_VIRTUAL_KEY` are gone, with no alias; the service's
+    own endpoint is `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_GATEWAY` (`openai-compatible`, the
+    default, or `bifrost`) and `LLM_AUTH` (`bearer`, `google`, `aws`; the new `[google]` and
+    `[aws]` extras), the names the harness reads. `MEMORY__MODELS__LLM__MODEL` and
+    `MEMORY__MODELS__LLM__PROFILE__*` name that endpoint's model and what it accepts;
+    `MEMORY__MODELS__LLM__ACCEPT_AGENT_ENDPOINTS=false` (default `true`) stores registered
+    endpoints but never calls them. With nothing set, a model is reachable whenever an agent
+    registers one, so the worker runs its model topology; set that switch off (and no
+    `LLM_BASE_URL`) for a deployment that never calls a model. The service's own endpoint now
+    serves every tenant and agent without a registration whether or not it has a key (a local
+    server takes none); before, a gateway URL without the operator's key served no one.
+  - `PUT /v1/agents/model-key` and `PUT /v1/model-key` take `{"endpoint": {...}}` (plus
+    `scope` on the agent route) in place of `{"virtual_key": ...}`, probe it first
+    (`GET {base_url}/models` with its own auth, 5 s) and answer 422 when the service cannot
+    reach it, such as a loopback address only the harness's machine resolves. The whole
+    endpoint is sealed with the existing credential cipher. The status (`GET` and `PUT`) adds
+    `endpoint` (what is stored, without the key), `source` (`agent`, `tenant`, `service`,
+    `none`: where a call at that level goes now) and `reason` (why). `GET /version` reports
+    `providers.llm` as `registered`, `service:<route>`, both joined by `+`, or `disabled`.
+  - Migration `0031_endpoint_credentials` deletes the stored bare keys (a key alone says
+    nowhere to send it, and the envelope cannot be opened in a migration) and bumps those
+    tenants' revisions; revocations are kept. The harness registers its agent's endpoint again
+    at its next start; a tenant administrator registers the tenant's again.
+  - A reasoning model is sent `max_completion_tokens` and no `temperature`, from its profile
+    (the registered endpoint's, `MEMORY__MODELS__LLM__PROFILE__*`, or what `/models` lists for
+    it), never from its name; `max_output_tokens` caps a call's budget, and no call carries tools
+    or a `tool_choice` (an endpoint may refuse one without tools: Anthropic's answers 400). Bifrost's per-call headers (no content logging,
+    the deny-all MCP scope) go only to a `bifrost` route.
+  - `auto` no longer picks by a model-family pattern: it reads what `/models` says about each
+    model (writes text, price, profile) and chooses the cheapest text model, any name
+    accepted; a listing that says nothing is used only when it holds one model, and anything
+    ambiguous is an error asking for an explicit model. A circuit breaker is per endpoint.
+  - SDK `trellis-memory` 0.6.0: `ctx.advanced.model_keys.set(endpoint)` and
+    `client.tenant.set_model_key(endpoint)` take a `trellis.contracts.Endpoint` (its key sent
+    unmasked) or its JSON as a dict; `AgentKeyStatus` gains `endpoint`, `source` and `reason`
+    (`EndpointInfo`, `EndpointSource`).
+  - The live-endpoint test marker is `live_llm` (was `bifrost`).
+
 ### Added
 - The prompt form of the context names the memories it shows: `POST /v1/context`
   (`format="prompt"`) returns `memory_ids`, the ids of the memories `rendered` shows, in bundle
@@ -32,6 +91,189 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- `POST /v1/tools/hints` and the `tool_search` memory tool no longer hand over a call the
+  user's standing rule forbids. They read the stored profile, which never lists the
+  `standing_rules` section (the context computes it per request), so with "Never create a stock
+  rule at store S40" said in an earlier conversation, a task at S40 still got
+  `create_stock_rule` as `next`, with its arguments filled. Given the caller's visibility, the
+  hints now read the rules that apply to the task themselves (`ToolHintsService._standing`:
+  `standing.standing_blocks`, the read the context makes, on the task's one encoding, which the
+  tool index and the memories share, beside the catalog search and the procedures); the context
+  passes its profile, which already lists them, and reads them once. The guard is the one the
+  context has: no `next`, `args` or `missing` for the forbidden call, and a rule about another
+  store, an "always" rule, or one superseded, replaced or forgotten forbids nothing. A tool
+  choice now carries the rule as `forbidden` (`POST /v1/tools/hints`, `tool_search`, and
+  `format=full` contexts): additive, an SDK client reads it as an extra field. A deployment
+  with no memory indexed yet reads no rule rather than failing on the missing collection
+  (`RetrievalEngine.ensure_collections`). Service only; the SDK is unchanged.
+- A learned skill says which standing rule forbids its step with the tool hints off too. With
+  `tools.hints=false` (no `ToolHints`), "Never create a stock rule at store S40" in the
+  context's `standing_rules` and a task at S40, the skill line read only
+  "create-a-stock-rule...: create_stock_rule (worked 100% of 3 runs)", and the model called it:
+  the note came only from the hints (`ToolHints.forbidden`). Each skill's steps are now checked
+  against the section's rules with or without hints (`hints.ruled`, the same `standing.forbids`
+  test the hints apply, on the task's values; with hints, their verdict for a step they hinted
+  stands), carried as `SkillView.forbidden` and rendered under the skill. A rule about another
+  store or an "always" rule adds no note. Service only; the wire form of a skill is unchanged.
+- A tool that changes something gets no argument values and no "missing" question when the task
+  is a question. Asked "How many units of style ZZ999999 do we hold?", the Tools section listed
+  `create_stock_rule` with `store='S12', style='ZZ999999'`, in another run `min_units = 1,
+  max_units = 3`, and the model created a rule nobody asked for. Such a tool may still be listed
+  as a candidate (it was already never the next step, `hints._may_lead`); a read tool is
+  prefilled as before, and a write tool on a request to act is too. The question marks are the
+  ones the hints already read (`?`, `？`, `؟`). Service only.
+- An earlier request's values no longer fill another call's arguments. The `min_units = 1,
+  max_units = 3` above came from the memory of the earlier request "Create a stock rule for
+  ST-101 at S40, min 1 max 3.", whose words "min 1 max 3" the memory-text source
+  (`hints._from_memory_text`) read as labelled values for any task. A memory's labelled value
+  now fills an argument only when the memory is about what the task is about: it names an
+  identifier or name the task names ("Acme Steel"), or nothing but the value itself ("their
+  supplier id is SUP-40"). Service only.
+- Of two values of a one-valued slot, the one said later stays current, whatever order they are
+  read in. "I work at Globex now." (`occurred_at` 5 days ago) sent first, then "I work at ACME
+  Corp." (45 days ago) in a separate call: consolidation closed Globex and kept ACME current, so
+  "where do I work?" answered ACME. When each was said decides (`TemporalState.since`: the date
+  the statement names, else its `occurred_at` - when it was stored if none was given), the order
+  of reading only on a tie; a value said before the current one is stored as its history
+  (`SUPERSEDED`, `superseded_by` the current one, `valid_to` where that one begins), the event-time
+  rule ADR 0040 set for replacement across conversations, now on the consolidation path too. A
+  replacement holds from when it was said, not from when it was read, on both paths, so a search
+  as of six weeks ago (`as_of`) reads ACME and one as of yesterday Globex. And two conversations of
+  one user read at the same time each compared themselves with a store the other had not
+  committed to, and both values stayed current (2 of 6 users' batches under load): the queue runs
+  one conversation's messages one at a time (#57), and now one user's statements are compared and
+  written one message at a time too (a transaction-scoped advisory lock on the user, taken by the
+  write of an observation only: reading the message - the model's work - still runs in parallel,
+  and other users never wait). No new setting; service only.
+- An agent run can no longer rewrite or forget what the user said. Asked "What is 12 times 7?",
+  a run called `memory_update` on the user's "I raised PO-77812 for 2,000 corrugated boxes; it's
+  late." and replaced it with "12 times 7 = 84"; the new version kept the user as its owner and
+  `user:<u> said` as its subject and predicate, so every later context presented the agent's
+  words as the user's. A memory a person said (a `user:` owner, or a `said` turn of a `user:`
+  subject, which a harness may relay; `pipeline.said_by_a_person`) is refused to an agent by
+  `memory_update`, `memory_forget`, `POST /v1/memories/{id}/supersede`, `DELETE
+  /v1/memories/{id}` and restore, whatever its rights (403: "... is the user's own statement:
+  an agent cannot supersede it; use memory_remember to add your note"). An agent still updates
+  and forgets its own memories, and a version it writes is its own: its owner, a kind an agent
+  states (`authored_type`), no person as subject. The user's and a tenant admin's updates are
+  unchanged. Service only.
+- Two values of a one-valued slot sent in one `history.add` batch ("I work at ACME Corp.", "I
+  work at Globex now.") no longer both stay current. Each message's memories are formed by its
+  own job, and the jobs of one batch ran side by side: each compared its statement with the
+  store before the other had committed, so neither replaced the other, where two calls did. A
+  conversation's messages are now read one at a time, in the order they were stored (the
+  queue's `lock` on `memory.process_observation`, per thread; the post-commit dispatch defers
+  them in outbox order); other conversations run beside them. Service only.
+- A learned skill no longer hands over a call the user's standing rule forbids. With "Never
+  create a stock rule at store S40" in the context's `standing_rules` section, a skill learned
+  from three runs at S12 made `create_stock_rule` the hints' next step, prefilled at S40, and
+  the model called it twice. A candidate a current "never" rule of the section forbids
+  (`standing.forbids`: the rule says every word of the tool's name, as stems, and names no code
+  or number the call does not have: the task's values and those found for its arguments) is
+  no next step and gets no next-step bonus, nothing is prefilled or asked for it, and the
+  Tools section and the learned skill's line say which rule forbids it
+  (`ToolHints.forbidden`). A rule about another store, an "always" rule, and one replaced,
+  superseded or forgotten (not in the section) forbid nothing. The "never" words are the
+  standing words the section already reads (`standing.NEVER_WORDS`: English, German, Spanish,
+  Arabic); a rule in another language matches a tool it names (`create_stock_rule`). The
+  `/v1/tools/hints` endpoint and the `tool_search` memory tool read the stored profile, which
+  has no such section, and are unchanged. Service only.
+- A value of the wrong type is never prefilled. Asked "How many units of style ZZ999999 do
+  we hold?", the hints prefilled `min_units = 'ST-101'` and `max_units = 'ST-101'` from the
+  memory "S12 should never hold fewer than 2 or more than 6 units of ST-101": only the
+  task's own values were held to the argument's declared type. Every source (a learned
+  binding, the graph, the profile, a memory, the task) now goes through one check
+  (`hints._as_declared`): a value that is no number for a `number` or `integer` argument, or
+  no whole one for an `integer`, is no value of it, and the next source is read. Service
+  only.
+- An agent no longer writes the user's profile. A memory an agent states (`memory_remember`,
+  `POST /v1/memories` with an agent on the request) as `USER` or `PREFERENCE` is kept as the
+  agent's own `AGENT` memory, by the rule that already re-typed an agent-authored observation's
+  readings (ADR 0013, now one function, `pipeline.authored_type`), so it is never a line of the
+  pinned `user` block: a help-desk run that remembered an asset's owner ("omar (u-77)",
+  `kind="USER"`) had every later context say the user is Omar. It keeps the audience it was
+  given and is still retrieved. The user's own statements (no agent on the request, or their
+  turn relayed by a harness) state their profile as before. Service only.
+- A user's question no longer becomes a memory, and a statement said again no longer replaces
+  itself. A question behind a heading with no question mark ("For employee e-401: how many
+  trips this year ...") was read as a statement and kept as a lasting turn; the question word
+  after a heading now opens a question (`statements._HEADING`). A turn whose every sentence
+  asks still forms nothing, in any language and with `?`, `？` or `؟`, and a turn that also
+  states something ("I moved to Pune. Which store is nearest?") keeps it. A user's turn in the
+  same words in a later conversation was compared with the earlier copy as a replacement, and a
+  request repeated in four runs had three copies served under "Earlier values (since
+  replaced)": the same words replace nothing (ADR 0038). The copies stay one per conversation;
+  said twice in one conversation it is one memory, as before. Service only.
+- A learned skill reaches a task worded otherwise: a procedure was offered (the context's
+  skills, the hints' plan) only when the task's pattern shared 60% of its words with the
+  procedure's, so "MFA lockout again" or "Re-enrol two-factor for a user who is locked out"
+  got nothing from a skill learned on "reset multi-factor authentication for a locked-out
+  user" (the context abstained). A procedure the words miss now matches by meaning: the
+  cosine of the task's vector to its pattern's, in the space every query is searched in (so
+  every script), at the encoder's own `DenseModel.procedure_cosine` (0.45 for the
+  multilingual encoder, 0.86 for the English one where it is the only space; 0, words alone,
+  for the hash stand-in). Calibrated on the capability eval's MFA skill: 32 of 50 phrasings
+  in five languages match, none of the other 450 procedural queries, nor "reset a store's
+  POS terminal" (0.36). The word match stays the fast path and ranks first. The task is
+  encoded once per request - the context hands the procedures the retrieval's own vectors,
+  the tool hints share theirs with the tool search - and each pattern once per process (an
+  in-process cache behind the embedding cache): about 1 ms per request for 100 visible
+  procedures. One matcher (`modules/tools/matching.py`) serves the context and the hints.
+  Service only; the SDK is unchanged.
+- The grounding judge (`/v1/verify`) no longer rejects a run that called tools only because
+  its claims are not in the context: the judge never sees the tool results, so every
+  tool-built answer read as unsupported and a live test put a false reject in the review
+  queue for 40 of 40 correct answers. Such a run gets no verdict unless a claim is
+  contradicted; a fully supported answer still confirms, and a run without tools is judged
+  as before.
+- Concurrent forgets of related memories (twins, and what one replaced) no longer deadlock,
+  refuse a memory a twin's forget had just removed as "not visible in this scope", or reopen
+  a forgotten old value as CURRENT: a forget locks the memory, its twins and what they
+  replaced in one statement, in id order, and decides under that lock; a memory forgotten
+  meanwhile is a success (204), a memory outside the caller's scope is still refused.
+- The capability eval's harness mode (`--mode harness`) wraps its agent with
+  `h.wrap(..., run_timeout=)`: the harness had removed `timeout=`, so the mode failed with a
+  `TypeError` before asking anything. Its grounding sampling is turned off with
+  `without={"grounding"}` on that wrap: the `grounding_sample` it set on the harness's
+  `Settings` is no field there and was silently ignored. Its runs no longer pass
+  `without={"records"}` (the harness has no such name now: it refused the run); instead each
+  question is asked as a user of its own, the scenario written for it, so what a run records
+  stays in that question's scope. A scenario is written once per question. Service and SDK
+  unchanged.
+- What the service learns from, after a live learning test (memory, procedures, hints,
+  approvals):
+  - the grounding judge's verdict waits for a tenant admin's review and is never a person's
+    vote; a reject cites only the memories behind contradicted claims, a confirm none, and a
+    run that called tools moves no memory; a passage about something else no longer
+    contradicts a claim (`CONTRADICTION_MIN_COVERAGE`, same script only);
+  - an agent run's own words, its tools' errors and raw tool output form no memory;
+  - an unlabelled run whose calls all worked is no evidence for a procedure, however old (the
+    24-hour weak positive is gone), and neither is a `system` failure of a run whose calls all
+    worked (a time limit, a model error);
+  - a failed call and its retry are one procedure step; a value is a learned literal only when
+    it is the same across runs of different tasks, and is never prefilled for a task naming
+    another; Code Mode's meta-tools are no steps;
+  - tool hints fill an argument only from the task's words that match it (its label, its
+    spelling, its documented example's shape), read no number out of an identifier ("ST-101"),
+    rank a general view (overview, summary, dashboard) below a specific tool, never make a tool
+    that changes something the next step of a question, and offer no candidates when nothing is
+    relevant and no plan is learned; a learned plan is spelled out once in the context;
+  - a tool-call decision counts only on an interrupt of the calling run, naming its reviewer,
+    once per interrupt, and an approval only once the run recorded that call; a learned rule
+    never relaxes an administrator's `approve_when`;
+  - `GET /v1/tools` says whether each entry is indexed (`indexed`), so a client can wait for
+    tool search before its first hints; and the context leaves out its "Evidence status"
+    section when a hinted tool answers the question.
+- A learned "approve automatically" rule needs at least 2 different reviewers: one reviewer's
+  approvals of a tool's calls, however many, no longer make it a suggestion (the reviewers are
+  read from the counted decisions; no new table). And each call a run recorded backs one counted
+  approval: the interrupt id is the client's, so naming a new one made one call back any number.
+  `GET /v1/tools/approval-suggestions` may list fewer suggestions; accepting one that fewer
+  than 2 reviewers support is a 409.
+- The capability eval's learned-procedure scenarios learn again: the runner labels its recorded
+  tool runs as a person (`source="human"`) through the tenant's administrator credential, so the
+  label is applied as it arrives and taught from; it labelled them `system`, a run's own report of
+  success, which teaches no procedure. Eval only; service and SDK unchanged.
 - Tool search reads the arguments' descriptions: a catalog entry is embedded with what its input
   schema says each argument is (`properties.<arg>.description`, nested objects and array items
   included, three levels deep), each distinct text once and at most 4,000 characters, so a tool
@@ -381,6 +623,22 @@ each entry says which one moved. Decisions behind each change are in the
   deselects them instead of skipping the whole module; the pure fingerprint test still runs.
 
 ### Removed
+- Two learning features that never fed anything (migration `0030_drop_dead_learning`):
+  - **Prefetch learning.** `/v1/context` pre-included memories an agent's earlier tool calls
+    kept using for requests of the same pattern, from counts the `periodic.prefetch_learn` job
+    folded every 5 minutes. On a live stack 0 of 60 runs pre-included anything and no counted
+    item was ever eligible: a pull was keyed by the model's own query wording, which differs
+    every run. Gone with it: the agent-tool pull log (a row per memory agent-tool call), which
+    nothing else read - `POST /v1/verify` and a confirmed run's feedback only marked pulls
+    used. Tables `agent_tool_pulls` and `prefetch_stats` are dropped. The context's
+    `diagnostics.prefetched` key is no longer set.
+  - **Procedure distillation.** With the `procedure_abstraction` model use the tool-learning
+    job had the tenant's model write a procedure's title and strategy; no read path showed
+    them. The use is removed from the model policy vocabulary (`LLMUse`): stored policies drop
+    it, and its usage rows go with it. Columns `procedures.title`, `strategy`, `distilled` and
+    `owner_principal` (whose key paid for it) are dropped. A learned skill is named from its
+    task pattern, as it already was without a model. SDK `trellis-memory` 0.5.1: `LLMUse`
+    loses `procedure_abstraction`.
 - The `MEMORY__BLOB__PROVIDER` setting. The blob store follows from where the service runs:
   GCS when `MEMORY__SERVICE__ENVIRONMENT` is `staging` or `prod`, or when a GCS emulator is
   configured (`STORAGE_EMULATOR_HOST`); the filesystem otherwise. A leftover
@@ -408,7 +666,7 @@ each entry says which one moved. Decisions behind each change are in the
   methods and keywords that exist. Run in CI.
 - Dated reports moved out of the user docs to `benchmark/reports/`, design records to
   `design/`; superseded handoffs, plans and logs deleted (git history keeps them). The model
-  uses page merged into [chapter 8](docs/guide/08-models.md#the-twelve-uses).
+  uses page merged into [chapter 8](docs/guide/08-models.md#the-eleven-uses).
 - ADR headers carry their amendments (0004, 0009, 0021, 0022, 0023); ADR 0017 is closed as
   superseded by 0024-0026.
 - `.env.example` lists `MEMORY__RETAIL_CALENDAR`, the one setting it was missing.

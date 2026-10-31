@@ -43,16 +43,31 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"
 GOLDEN = ROOT / "tests" / "eval" / "golden" / "acme_fy26.json"
 TABLES = (
-    "tool_invocations, run_outcomes, tools, tool_stats, approval_patterns, procedures, profile_blocks, thread_summaries, agent_tool_pulls, prefetch_stats, graph_relations, graph_entities, memories, context_edges, chunks, document_nodes, document_versions, file_staging, documents, "
+    "tool_invocations, run_outcomes, tools, tool_stats, approval_patterns, procedures, profile_blocks, thread_summaries, graph_relations, graph_entities, memories, context_edges, chunks, document_nodes, document_versions, file_staging, documents, "
     "archive_segments, job_outbox, idempotency_keys, revisions, observations, "
     "agent_runs, message_attachments, messages, turns, sessions, threads"
 )
 
 
+#: No model at all: no endpoint of the service's own, and none an agent registers is called.
+MODEL_OFF: dict[str, Any] = {
+    "LLM_BASE_URL": None,
+    "LLM_API_KEY": None,
+    "models": {"llm": {"accept_agent_endpoints": False}},
+}
+
+
+def without_model(settings: Settings) -> Settings:
+    """``settings`` with no model reachable (``MODEL_OFF``)."""
+    llm = settings.models.llm.model_copy(update={"accept_agent_endpoints": False})
+    models = settings.models.model_copy(update={"llm": llm})
+    return settings.model_copy(update={"llm_base_url": None, "llm_api_key": None, "models": models})
+
+
 def _settings() -> Settings:
     """Sandbox-friendly defaults; any ``MEMORY__*`` environment variable overrides them.
 
-    The model gateway (``BIFROST_URL``, ``BIFROST_VIRTUAL_KEY``) is read only when the run
+    The model gateway (``LLM_BASE_URL``, ``LLM_API_KEY``) is read only when the run
     opts in with ``BENCH_LLM=on`` (the Makefile's ``BENCH_LLM_ENV``): a shell that happens to
     carry the harness's gateway variables must not turn a retrieval benchmark into a paid one.
     Its budgets and models are ``BenchEnv.llm_tuning``, its uses the tenant policy the harness
@@ -61,7 +76,7 @@ def _settings() -> Settings:
     defaults = {
         "service": {"environment": "test", "log_json": False, "log_level": "WARNING"},
         "authentication": {"trusted_dev_api_keys": ["bench"]},
-        **({} if llm_on else {"bifrost_url": None, "bifrost_virtual_key": None}),
+        **({} if llm_on else MODEL_OFF),
         "database": {
             "url": os.environ.get(
                 "MEMORY__DATABASE__URL", "postgresql+psycopg://memory:memory@localhost:5432/memory"

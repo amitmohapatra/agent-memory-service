@@ -73,6 +73,14 @@ ADR 0038 left a state change the head reads as no contradiction unreplaced witho
    left "Forklift #4 is out of service" current in 11 of 15 phrasings while the no-LLM runs,
    which store messages in order, replaced it; the same code decides, in the other
    direction. Without later statements (messages stored in order) nothing changes.
+   *Extended 2026-10-27:* consolidation follows the same rule. A one-valued slot's value said
+   before the current one ("I work at ACME Corp." 45 days ago, read after "I work at Globex
+   now." 5 days ago) is stored as the current one's history instead of closing it
+   (`pipeline._replace`, `TemporalState.since`: the date a statement names, else when it was
+   said; the order of reading only on a tie), and a replaced value closes where the newer one
+   begins on both paths. One user's statements are compared and written one message at a time
+   (`pipeline._one_writer_per_user`, an advisory lock held by the write only): two of their
+   conversations read side by side each missed the other.
 
 ## Consequences
 

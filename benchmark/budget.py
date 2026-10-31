@@ -57,11 +57,11 @@ class Budget:
 
 
 def gateway_root() -> str:
-    """The gateway's root URL: ``BENCH_GATEWAY_URL``, else ``BIFROST_URL`` without ``/v1``."""
+    """The gateway's root URL: ``BENCH_GATEWAY_URL``, else ``LLM_BASE_URL`` without ``/v1``."""
     explicit = os.environ.get("BENCH_GATEWAY_URL")
     if explicit:
         return explicit.rstrip("/")
-    inference = os.environ.get("BIFROST_URL", "http://localhost:8091/v1").rstrip("/")
+    inference = os.environ.get("LLM_BASE_URL", "http://localhost:8091/v1").rstrip("/")
     return inference[: -len("/v1")] if inference.endswith("/v1") else inference
 
 

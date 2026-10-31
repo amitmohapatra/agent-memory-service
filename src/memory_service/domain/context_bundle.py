@@ -26,6 +26,12 @@ from memory_service.domain.tools import SkillView, ToolCandidate, ToolHints
 MENTIONS = "mentions"
 #: Tool candidates the rendered Tools section shows (the next step is shown even past it).
 TOOLS_SHOWN_MAX = 3
+#: The confidence from which a hinted tool is taken to answer the question: memory's own
+#: evidence status is then not shown (an INSUFFICIENT drove the model to search memory in
+#: loops on questions its tools answer).
+TOOL_ANSWERS_CONFIDENCE = 0.5
+#: How a tool hint or a learned skill's step says a standing rule of the user forbids it.
+_FORBIDDEN = "a standing rule of the user forbids {tool} here"
 
 #: What produced ``ContextItem.score``; the scales are not comparable across kinds.
 ScoreKind = Literal["fusion", "exact"]
@@ -553,7 +559,7 @@ class ContextBundle(BaseModel):
                     for k in self.knowledge
                 )
             )
-        if self.evidence.status is not EvidenceStatus.COMPLETE:
+        if self.evidence.status is not EvidenceStatus.COMPLETE and not tool_answers(self.tools):
             parts.append(f"## Evidence status\n{self.evidence.status}")
         return "\n\n".join(parts)
 
@@ -590,28 +596,58 @@ def summary_section(summary: ThreadSummaryView | None) -> str | None:
     return f"## Conversation summary\n{summary.text}" if summary else None
 
 
-def skills_section(skills: Sequence[SkillView]) -> str | None:
+def skills_section(skills: Sequence[SkillView], tools: ToolHints | None = None) -> str | None:
     """The learned skills that match the task, in full: their steps, what fixed a failing
-    step and their track record. One the agent's own skill was opened for says so."""
+    step and their track record. One the agent's own skill was opened for says so. The one
+    the Tools section lays out (``planned``) is not spelled out twice: its line names it,
+    its track record and its fixes, and its steps are the tools listed first there. A step a
+    standing rule of the user forbids for this task (``SkillView.forbidden``, with or without
+    tool hints) says so, with the rule: what the runs did is no step to take against it."""
     if not skills:
         return None
+    laid_out = tools.plan.id if tools is not None and tools.plan and planned(tools) else None
     lines = []
     for skill in skills:
         steps = " -> ".join(skill.steps)
+        if skill.id == laid_out:
+            steps = f"the first {len(skill.steps)} tools under Tools, in that order"
         what = f"adds to your skill {skill.with_skill}" if skill.with_skill else skill.name
         lines.append(f"- {what}: {steps} (worked {skill.success_rate:.0%} of {skill.support} runs)")
         lines.extend(f"  - if {fix}" for fix in skill.fixes)
+        lines.extend(
+            f"  - but {_FORBIDDEN.format(tool=step)}: {skill.forbidden[step]}"
+            for step in dict.fromkeys(skill.steps)
+            if step in skill.forbidden
+        )
     return "## Learned skills for this task\n" + "\n".join(lines)
 
 
+def tool_answers(hints: ToolHints | None) -> bool:
+    """Whether a hinted tool fits the question well enough to answer it."""
+    return hints is not None and any(
+        c.confidence >= TOOL_ANSWERS_CONFIDENCE for c in hints.candidates
+    )
+
+
+def planned(hints: ToolHints | None) -> bool:
+    """Whether the Tools section lays out the learned plan: every step of it is a candidate."""
+    if hints is None or hints.plan is None or not hints.plan.steps:
+        return False
+    return set(hints.plan.steps) <= {c.name for c in hints.candidates}
+
+
 def tools_section(hints: ToolHints | None) -> str | None:
-    """The tools that fit, best first, each with its confidence, the arguments already found
-    and the required ones nothing found - what the model acts on and what it must ask."""
+    """The tools that fit - the learned plan's steps first, in its order, then the best of
+    the rest - each with its confidence, the arguments already found and the required ones
+    nothing found: what the model acts on and what it must ask."""
     if hints is None or not hints.candidates:
         return None
-    shown = [
-        c for i, c in enumerate(hints.candidates) if i < TOOLS_SHOWN_MAX or c.name == hints.next
-    ]
+    steps = hints.plan.steps if planned(hints) and hints.plan is not None else []
+    ranked = sorted(
+        hints.candidates, key=lambda c: steps.index(c.name) if c.name in steps else len(steps)
+    )
+    room = max(TOOLS_SHOWN_MAX, len(steps))
+    shown = [c for i, c in enumerate(ranked) if i < room or c.name == hints.next]
     return "## Tools\n" + "\n".join(_tool_line(c, hints) for c in shown)
 
 
@@ -625,6 +661,8 @@ def _tool_line(candidate: ToolCandidate, hints: ToolHints) -> str:
     head += ", next step)" if candidate.name == hints.next else ")"
     details = [", ".join(f"{arg} = {value!r}" for arg, value in found.items())] if found else []
     details += [f"missing {m.arg}: {m.question}" for m in absent]
+    if candidate.name in hints.forbidden:
+        details.append(f"{_FORBIDDEN.format(tool='this')}: {hints.forbidden[candidate.name]}")
     return head + (": " + "; ".join(details) if details else "")
 
 
@@ -639,7 +677,7 @@ def pinned_sections(
     sections = (
         profile_section(profile),
         summary_section(summary),
-        skills_section(procedures),
+        skills_section(procedures, tools),
         tools_section(tools),
     )
     return [s for s in sections if s]

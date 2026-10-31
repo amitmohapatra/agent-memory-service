@@ -2,8 +2,8 @@
 
 > The service uses two very different kinds of model. A small, frozen set of encoders and a
 > claim-checking classifier runs in-process, on CPU, on every request; a generative model is
-> optional, reached only through an external gateway on someone's virtual key, and every
-> path works without it. This chapter covers which model runs where and why, how a model call
+> optional, reached over HTTP at whichever endpoint the call resolves to (by default the one
+> the agent's harness registered), and every path works without it. This chapter covers which model runs where and why, how a model call
 > is allowed and paid for, and what you give up — and keep — by running with no LLM at all.
 
 **Previous:** [7 · Authorization](07-authorization.md) · **Next:** [9 · API and SDK](../api/README.md) · **Up:** [Documentation](../README.md)
@@ -52,8 +52,8 @@ Rows for models since excluded by provenance remain in `embedding.json` as evide
 candidates.
 
 **Provenance rule.** No Chinese-developed checkpoint or derivative runs anywhere in the stack
-— not as a default, a benchmark challenger, an operator's choice or a model discovered through
-the gateway. One pattern (`domain/provenance.py`) is consulted wherever a model is named, and
+— not as a default, a benchmark challenger, an operator's or a harness's choice, or a model
+chosen from an endpoint's listing. One pattern (`domain/provenance.py`) is consulted wherever a model is named, and
 `tests/unit/test_model_provenance.py` asserts it on every surface.
 
 ### Where they run
@@ -71,7 +71,7 @@ flowchart LR
   W1 --> R1["per model: one thread, one caller at a time<br/>(SerialRunner), intra-op threads = cores / workers"]
   J --> R2["capped at 2 CPUs, one math thread<br/>(docker-compose.yml)"]
   M[("./models or /models<br/>read-only")] --> W1 & W2 & W3 & J
-  W1 & W2 & W3 & J -. "optional, HTTP, virtual key" .-> GW["Bifrost gateway<br/>(not in this repository)"]
+  W1 & W2 & W3 & J -. "optional, HTTP, the resolved endpoint" .-> GW["a model endpoint<br/>(not in this repository)"]
 ```
 
 - **In-process, in every process.** Each API worker and the background worker build their own
@@ -101,72 +101,118 @@ flowchart LR
 
 ---
 
-## The generative model: optional, through a gateway
+## The generative model: optional, at the endpoint the call resolves to
 
-The service never talks to a model provider. When `BIFROST_URL` is set, `adapters/models/llm.py`
-speaks the OpenAI-compatible HTTP API of a [Bifrost](https://github.com/maximhq/bifrost)
-gateway that runs outside the service and holds the provider keys; no provider SDK is
-importable under `src/` (Ruff `banned-api` and `tests/unit/test_architecture.py`). There is
-deliberately no gateway in `docker-compose.yml`: starting one there would put provider keys
-inside the application's own deployment, which is the coupling the gateway exists to remove
-(`deploy/bifrost/README.md`).
+**Configure the harness only, and memory follows.** The harness registers each agent's model
+endpoint with the service (`PUT /v1/agents/model-key`, a `trellis.contracts.Endpoint`: base
+URL, route, auth, model, key and what the model accepts) when the agent first runs, and the
+service then calls that agent's model for its memory work. Nothing about models needs setting
+on the service at all. The service never imports a provider SDK (Ruff `banned-api` and
+`tests/unit/test_architecture.py`): `adapters/models/llm.py` speaks the OpenAI-compatible
+HTTP API through the shared `bifrost-sdk` client, and there is deliberately no model server
+in `docker-compose.yml`.
+
+### Which endpoint a call goes to
+
+One resolver (`modules/llm/endpoints.py`), its sources asked in order; the first that answers
+wins:
+
+1. **the agent's registered endpoint**, else **its tenant's** (`PUT /v1/model-key`, admin
+   key). A revoked registration stops here: the call is refused, never rerouted. Skipped when
+   the operator sets `MEMORY__MODELS__LLM__ACCEPT_AGENT_ENDPOINTS=false`.
+2. **the service's own endpoint**: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_GATEWAY`, `LLM_AUTH`
+   (the names the harness reads), with `MEMORY__MODELS__LLM__MODEL` and `__PROFILE__*`
+   ([configuration](../configuration.md#the-model-endpoint)), for agents that registered
+   none and for running the service on its own.
+3. **none**: no model call; every use keeps its native result.
+
+`GET /v1/agents/model-key` (and `GET /v1/model-key` for a tenant) answers which source a
+call at that level uses now and why (`source`: `agent`, `tenant`, `service` or `none`, and a
+`reason`); the harness's `trellis doctor` prints it per agent. A registration is probed first
+(`GET {base_url}/models` with the endpoint's own auth, 5 s) and refused with a 422 saying why
+when the service cannot reach it: a loopback address only the harness's machine resolves is
+the usual one. Registrations are stored encrypted, the whole endpoint in one envelope, under
+the operator's envelope keys (`MEMORY__AGENT_CREDENTIALS__*`), and never returned with their
+key. In `dev` and `test` with none set, the service derives a development envelope key at
+startup (from a fixed label and the database URL, so every process agrees; never stored) and
+logs `agent_credentials.development_key` as a warning: registration works on a laptop and
+protects nothing. `staging` and `prod` never get one and refuse registration until the keys
+are set (`adapters/models/credential_cipher.py:envelope_settings`).
+
+### Providers
+
+Three strategies decide how a call travels, each picked by name from one registry: the
+**route** (`LLM_GATEWAY` / `Endpoint.gateway`: `ROUTES` in `adapters/models/llm.py`), the
+**auth** (`LLM_AUTH` / `Endpoint.auth`: `bifrost_sdk.AUTH_STRATEGIES`) and the model's
+**profile** (`ModelProfile`: what the request's shape follows). Every row is in the
+conformance suite (`tests/contract/test_llm_conformance.py`) against a stub of its wire format.
+
+| Provider | `base_url` | route | auth | notes |
+|---|---|---|---|---|
+| OpenAI | `https://api.openai.com/v1` | `openai-compatible` | `bearer` (API key) | a reasoning model: `profile.reasoning_output=true` |
+| OpenRouter | `https://openrouter.ai/api/v1` | `openai-compatible` | `bearer` | its `/models` lists modalities and prices, so `auto` can choose |
+| LiteLLM proxy | `http://<proxy>:4000/v1` | `openai-compatible` | `bearer` (its virtual key) | the proxy holds the provider keys |
+| Bifrost | `http://<gateway>:8080/v1` | `bifrost` | `bearer` (its virtual key) | no content logging and Bifrost's deny-all MCP scope on every call |
+| Ollama | `http://<host>:11434/v1` | `openai-compatible` | `bearer`, no key | name the model: its `/models` says nothing to choose by |
+| vLLM, llama.cpp | `http://<host>:8000/v1` | `openai-compatible` | `bearer`, key optional | one model listed: `auto` takes it |
+| Anthropic | `https://api.anthropic.com/v1` | `openai-compatible` | `bearer` (API key) | its OpenAI-compatible endpoint; name the model, and for one that takes no temperature set `profile.temperature=false`: its `/models` says neither |
+| Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `openai-compatible` | `bearer` (API key) | its OpenAI-compatible endpoint |
+| Vertex AI | `https://<region>-aiplatform.googleapis.com/v1/projects/<p>/locations/<region>/endpoints/openapi` | `openai-compatible` | `google` | application default credentials, refreshed; the `[google]` extra |
+| Bedrock | `https://bedrock-runtime.<region>.amazonaws.com/openai/v1` | `openai-compatible` | `aws` | SigV4 from the AWS environment or role; the `[aws]` extra |
 
 ### When a call is allowed
 
 A use runs only when all four hold (`LLMAssist.wants`, `modules/llm/assist.py`; each use is
-in [the twelve uses](#the-twelve-uses)):
+in [the eleven uses](#the-eleven-uses)):
 
 ```mermaid
 flowchart TB
-  U["a module asks: wants(use)?"] --> G{"BIFROST_URL set?"}
+  U["a module asks: wants(use)?"] --> G{"can any endpoint resolve?<br/>(own LLM_BASE_URL, or agents' accepted)"}
   G -->|no| N["no: the native path answers"]
   G -->|yes| P{"the tenant's policy names the use?<br/>(no policy row: every use except<br/>the opt-in memory_restatement)"}
   P -->|no| N
-  P -->|yes| K{"who pays? the acting agent's key,<br/>else the tenant's key,<br/>else (no row anywhere) the operator's"}
-  K -->|"a revoked key at the resolved level"| N
-  K -->|nothing can pay| N
-  K -->|a key| RD{"on a read: policy read_assist on?"}
+  P -->|yes| K{"which endpoint? the acting agent's,<br/>else the tenant's,<br/>else the service's own"}
+  K -->|"a revoked registration at the resolved level"| N
+  K -->|none| N
+  K -->|an endpoint| RD{"on a read: policy read_assist on?"}
   RD -->|no| N
-  RD -->|"yes, or not a read"| CALL["call the gateway on the use's model<br/>(policy's choice, else fast or strong tier)"]
-  CALL -->|"any failure: timeout, gateway error,<br/>rate limit, invalid output"| N
+  RD -->|"yes, or not a read"| CALL["call the endpoint on the use's model<br/>(policy's choice, else the endpoint's, else auto)"]
+  CALL -->|"any failure: timeout, endpoint error,<br/>rate limit, invalid output"| N
   CALL -->|success| USE["use the result#59; count tokens"]
 ```
 
-- **Who pays** is resolved from the most specific row (`modules/llm/credentials.py`): the
-  acting agent's key (`PUT /v1/agents/model-key`, one per `agent_id` whichever user it acts
-  for), else the tenant's (`PUT /v1/model-key`, admin key), else — only while neither level
-  has a row — the operator's `BIFROST_VIRTUAL_KEY`. A revoked key refuses rather than falling
-  through, and a key registered or rotated mid-call fails that call closed instead of mixing
-  keys. Keys are stored encrypted under the operator's envelope keys
-  (`MEMORY__AGENT_CREDENTIALS__*`) and never returned. In `dev` and `test` with none set, the
-  service derives a development envelope key at startup (from a fixed label and the database
-  URL, so every process agrees; never stored) and logs `agent_credentials.development_key` as
-  a warning: registration works on a laptop and protects nothing. `staging` and `prod` never
-  get one and refuse registration until the keys are set
-  (`adapters/models/credential_cipher.py:envelope_settings`). There is no workspace-level key: ADR
-  0023's workspace model keys were removed (migration `0021_final_surface`).
+- **Which endpoint** is the resolver's answer above. A registration changed mid-call fails
+  that call closed rather than mixing endpoints. There is no workspace-level registration:
+  ADR 0023's workspace model keys were removed (migration `0021_final_surface`).
 - **What it may be spent on** is the tenant's policy (`PUT /v1/model-key/policy`), with
-  exactly three fields: `uses`, `read_assist` and `models` (a gateway model per use). There
-  is no deployment-level allow-list, no per-request `use_llm`, and no `MEMORY__MODELS__*`
-  variable.
-- **Background work is bound to the owner of the data**, so the owner's key pays and the
-  owner's policy decides; a periodic job scans only tenants that hold a live key, or every
-  tenant when the operator's key pays.
-- **Which model**: the tenant's `models` entry for the use, else the tier's constant —
-  `LLMTuning.fast_model` for `contextual_extraction`, `query_expansion`, `chunk_context` and
-  `memory_restatement`, `LLMTuning.model` for the rest. Both are `auto`: the service lists
-  the gateway's authenticated model catalogue and picks a recognised text-model family,
-  never guessing at an opaque alias (`adapters/models/catalog.py`).
+  exactly three fields: `uses`, `read_assist` and `models` (a model per use, as the endpoint
+  names it). There is no deployment-level allow-list and no per-request `use_llm`.
+- **Background work is bound to the owner of the data**, so the owner's endpoint serves it
+  and the owner's policy decides; a periodic job scans only tenants that hold a live
+  registration, or every tenant when the service has an endpoint of its own.
+- **Which model**: the tenant's `models` entry for the use, else the endpoint's `model` (the
+  harness's agent model; `MEMORY__MODELS__LLM__MODEL` for the service's own), else `auto`:
+  the service lists the endpoint's `/models` and takes the cheapest model the listing says
+  writes text, by what each row states (modalities, type, price), never by its name. A listing
+  that says nothing is used only when it holds one model; anything ambiguous is an error
+  asking for an explicit model (`adapters/models/catalog.py`).
+- **What the request looks like** is the model's profile, never its name: a reasoning model,
+  or one that takes no temperature, is sent `max_completion_tokens` and no `temperature` (the
+  sdk shapes it); `max_output_tokens` caps the budget; no call carries tools or a
+  `tool_choice` (an endpoint may refuse one without tools). The profile is the registered endpoint's (the harness sends LangChain's
+  model profile), `MEMORY__MODELS__LLM__PROFILE__*` for the service's own, refined by what
+  `/models` lists for an `auto` choice.
 - **Language**: every system prompt ends with one rule — return text in the language of its
   source, never translated (`SOURCE_LANGUAGE_RULE`).
 
 ### Bounded and metered
 
 The transport is the shared `bifrost-sdk` client, the same one the agent harness uses
-(`vendor/bifrost-sdk`, regenerated by `make vendor`): a 30-second timeout, two retries, and a
-circuit breaker that opens for 30 seconds after five consecutive failures (`LLMTuning`,
-`LLMTransport` in `config/constants.py`). A `429` is retried after the delay the gateway asks
-for — read from `Retry-After` and from the response body, because some providers put it only
+(`vendor/bifrost-sdk`, regenerated by `make vendor`), one per endpoint: a 30-second timeout,
+two retries, and a circuit breaker per endpoint that opens for 30 seconds after five
+consecutive failures (`LLMTuning`, `LLMTransport` in `config/constants.py`), so one agent's
+broken endpoint never stops another's calls. A `429` is retried after the delay the endpoint
+asks for — read from `Retry-After` and from the response body, because some providers put it only
 there — and never counts toward the breaker: backpressure is the gateway working
 (`docs/MEASUREMENTS.md` §5b records the run where it did not, and every judge call failed
 silently). A reasoning model that spends its whole output budget thinking returns an error
@@ -175,19 +221,20 @@ naming the cause rather than an empty answer (§5).
 Every successful call adds to `llm_usage_daily` (`GET /v1/model-key/usage`) and
 `memory_llm_tokens_total{tenant,use,direction}`; a request reports its own spend in
 `X-Trellis-LLM-Tokens`, and a job logs `job.llm_tokens`. Prompt text is never logged
-(`LOG_SOURCE_TEXT = False`). Changing a key or a policy invalidates cached model-assisted
-reads, because which uses are active is part of the context cache key (chapter 4).
+(`LOG_SOURCE_TEXT = False`). Changing a registration or a policy invalidates cached
+model-assisted reads, because which uses are active is part of the context cache key (chapter 4).
 
 ---
 
-## The twelve uses
+## The eleven uses
 
-`LLMUse` in `config/settings.py` names twelve. Each is optional work layered on a
-deterministic path, and any model failure (no key, gateway error, rate limit, invalid output)
-falls back to that path. The tier is the model the call goes to: `fast`
+`LLMUse` in `config/settings.py` names eleven. Each is optional work layered on a
+deterministic path, and any model failure (no endpoint, endpoint error, rate limit, invalid
+output) falls back to that path. The tier is the model the call goes to: `fast`
 (`LLMTuning.fast_model`) for `contextual_extraction`, `query_expansion`, `chunk_context` and
-`memory_restatement`, `strong` (`LLMTuning.model`) for the rest; a tenant's policy may name a
-gateway model per use instead (`models: {"memory_restatement": "<gateway model id>"}`).
+`memory_restatement`, `strong` (`LLMTuning.model`) for the rest. Both are the endpoint's
+model when it names one, and `auto` otherwise; a tenant's policy may name a model per use
+instead (`models: {"memory_restatement": "<model id>"}`).
 `/v1/context` and `/v1/recall` make no model call unless the read is assisted (the policy's
 `read_assist`), and then only `query_expansion`.
 
@@ -204,7 +251,6 @@ gateway model per use instead (`models: {"memory_restatement": "<gateway model i
 | `reflection` | periodic job, per principal with a key, over recent memories | strong | cited insights (≥ 2 sources) | none |
 | `memory_connections` | periodic job over recent memory pairs | strong | typed edges between memories (supersedes / contradicts / relates) | none |
 | `memory_restatement` | **opt-in** (ADR 0027): a conversation message, at ingest, when the tenant's policy names this use. The model sees the turn, the turn before it, the speakers and the date, and returns a standalone restatement, up to three facts and up to four relations, checked against what it was shown (every number and capitalised name must occur there). Backfill earlier turns with `python -m memory_service.tools.restate --tenant <id> [--limit N] [--force]` | fast | the restatement appended to the turn's own index key (`system_metadata["restatement"]`; the content stays verbatim) and model-extracted graph relations bound to the turn (confidence ≤ 0.6) | the turn indexed as said |
-| `procedure_abstraction` | the tool-learning job, for a procedure that clears support and success-rate gates | strong | title and strategy text distilled from successes and failures | the miner's own rendering |
 
 ### Reads (only when the read is assisted)
 
@@ -214,7 +260,7 @@ gateway model per use instead (`models: {"memory_restatement": "<gateway model i
 | `entity_resolution` | `GET /v1/graph/entities?q=` names that match no entity lexically | strong | lexical match only; the retrieval-time graph stage never uses it (it runs under the graph budget) |
 | `grounding_judge` | `/v1/verify`: claims the NLI cascade could not decide | strong | the claim stays undecided |
 
-Reflection and connections are only registered as jobs when a gateway is configured
+Reflection and connections are only registered as jobs when a model can be reached
 (`modules/jobs/registry.py`, crons `53 */6 * * *` and `19 */6 * * *`). The read path makes no
 model call unless the policy's `read_assist` is on, and then only `query_expansion`,
 `entity_resolution` on the entity route, and `grounding_judge` in verify; query decomposition
@@ -223,16 +269,17 @@ budget (`docs/MEASUREMENTS.md` §8.4).
 
 An optional **Hindsight** extraction service can take non-agent contextual extraction when a
 deployment runs one (`MEMORY__HINDSIGHT__BASE_URL` and the `[hindsight]` extra;
-`adapters/models/hindsight.py`); agent extraction stays on the Bifrost path because that SDK
-cannot carry a per-request virtual key. The Hindsight server owns its own model configuration;
+`adapters/models/hindsight.py`); agent extraction stays on the agent's endpoint because that
+SDK cannot carry a per-request endpoint. The Hindsight server owns its own model configuration;
 source storage and authorization stay in this service.
 
 ---
 
 ## Running without an LLM
 
-This is the default, and a supported mode: leave `BIFROST_URL` unset and no model call is
-ever made. Every use above falls back to its deterministic path, every gate in chapter 12 runs
+This is a supported mode: leave `LLM_BASE_URL` unset and set
+`MEMORY__MODELS__LLM__ACCEPT_AGENT_ENDPOINTS=false`, and no model call is ever made (with only
+`LLM_BASE_URL` unset, an agent that registers an endpoint still gets one). Every use above falls back to its deterministic path, every gate in chapter 12 runs
 this way, and the `/v1/context` latency figures in chapter 4 are with the model off. What
 changes:
 
@@ -267,6 +314,6 @@ the gateway has not been recorded yet.
 
 ## What to read next
 
-- The routes for model keys, policy and usage → [api/tenancy.md](../api/tenancy.md#model-keys-two-registered-levels-and-the-operators-resolved-in-order)
-- Configuring the gateway in a deployment → [chapter 11](11-operations.md)
+- The routes for model endpoints, policy and usage → [api/tenancy.md](../api/tenancy.md#model-endpoints-two-registered-levels-and-the-services-own-resolved-in-order)
+- Configuring the model endpoint in a deployment → [chapter 11](11-operations.md)
 - Every endpoint, side by side with its SDK call → [chapter 9, the API](../api/README.md)

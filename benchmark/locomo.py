@@ -837,7 +837,7 @@ def _ingestion_settings(settings: Any, uses: Sequence[str]) -> dict[str, Any]:
     tuning = BENCH.llm_tuning()
     return {
         "llm": {
-            "enabled": str(settings.llm.enabled),
+            "enabled": str(settings.llm.endpoint is not None),
             "model": tuning.model,
             "uses": sorted(uses),
             "fast_uses": sorted(tuning.fast_uses),
@@ -868,13 +868,13 @@ async def run(
     data = json.loads(raw)[:conversations] if conversations else json.loads(raw)
 
     settings = _settings()
-    if llm_ingestion and not settings.llm.enabled:
+    if llm_ingestion and settings.llm.endpoint is None:
         raise SystemExit(
-            "--llm-ingestion needs a generative model: run with BENCH_LLM=on and BIFROST_URL "
+            "--llm-ingestion needs a generative model: run with BENCH_LLM=on and LLM_BASE_URL "
             "set (the Makefile's BENCH_LLM_ENV)."
         )
-    if ingest_uses and not settings.llm.enabled:
-        raise SystemExit("--ingest-uses needs BENCH_LLM=on and BIFROST_URL set")
+    if ingest_uses and settings.llm.endpoint is None:
+        raise SystemExit("--ingest-uses needs BENCH_LLM=on and LLM_BASE_URL set")
     uses = _model_uses(llm_ingestion, ingest_uses)
     overrides = bench_overrides()
     if ablate:
@@ -889,7 +889,7 @@ async def run(
     pacer = _Pacer(calls_per_minute)
     if judge and not getattr(llm, "enabled", False):
         raise SystemExit(
-            "--judge needs a generative model: run with BENCH_LLM=on and BIFROST_URL set "
+            "--judge needs a generative model: run with BENCH_LLM=on and LLM_BASE_URL set "
             "(the Makefile's BENCH_LLM_ENV)."
         )
     per_category: dict[int, dict[str, int]] = defaultdict(lambda: {"n": 0, "hit": 0})
@@ -1205,7 +1205,7 @@ async def run(
     # to avoid.
     judged_rows = [r for r in records if r.get("judged")]
     judged_ok = [r for r in judged_rows if "error" not in (r["judged"] or {})]
-    llm_on = settings.llm.enabled and bool(judged_ok)
+    llm_on = settings.llm.endpoint is not None and bool(judged_ok)
     if judge and len(judged_ok) < len(judged_rows):
         caveats.append(
             f"{len(judged_rows) - len(judged_ok)} of {len(judged_rows)} judged calls failed; "
@@ -1444,7 +1444,7 @@ def main() -> int:
         "--judge",
         action="store_true",
         help="generate an answer from each bundle and grade it with a model (LoCoMo's own "
-        "method); makes the adversarial category measurable. Needs BENCH_LLM=on and BIFROST_URL.",
+        "method); makes the adversarial category measurable. Needs BENCH_LLM=on and LLM_BASE_URL.",
     )
     parser.add_argument(
         "--calls-per-minute",

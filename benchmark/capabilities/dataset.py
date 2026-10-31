@@ -85,8 +85,8 @@ class Repeat:
 
 @dataclass(frozen=True)
 class ToolRun:
-    """``count`` recorded runs of one tool sequence for ``task``, each labelled by the run's
-    own outcome - how an agent's procedure is learned (``record_tool`` + ``feedback``)."""
+    """``count`` recorded runs of one tool sequence for ``task``, each labelled ``verdict`` by
+    a person - how an agent's procedure is learned (``record_tool`` + ``feedback``)."""
 
     agent: str
     task: Text

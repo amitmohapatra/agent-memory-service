@@ -31,7 +31,13 @@ from memory_service.domain.context_bundle import (
     WindowMessage,
 )
 from memory_service.domain.conversation import Message
-from memory_service.domain.enums import EvidenceStatus, MessageKind, QueryType, WindowFormat
+from memory_service.domain.enums import (
+    EvidenceStatus,
+    MessageKind,
+    MessageRole,
+    QueryType,
+    WindowFormat,
+)
 from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.ids import stable_key
 from memory_service.domain.memory import unverified_representation
@@ -65,6 +71,7 @@ from memory_service.modules.retrieval.engine import (
 )
 from memory_service.modules.retrieval.periods import months_dated
 from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
+from memory_service.modules.tools.hints import asks_change, ruled
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import evidence_status_total, stage_seconds
 from memory_service.observability.timings import Timings
@@ -77,6 +84,22 @@ log = get_logger(__name__)
 
 #: Standing rules and preferences that apply to the request, as profile sections (ADR 0041).
 STANDING = True
+#: A short question asked in a thread (at most this many words) whose own search finds nothing
+#: close (its best similarity under :data:`FOLLOW_UP_FLOOR`) is searched again together with
+#: the thread's previous question: "who runs that?" names nothing the search can find, the
+#: question before it does. The concatenation baseline of conversational search (TREC CAsT),
+#: gated on a weak first retrieval as corrective retrieval does (CRAG), so a short question on
+#: a new topic, which finds its own evidence, keeps its ranking and its size. Measured on
+#: pronoun follow-ups and topic changes (``benchmark/follow_ups.py``).
+FOLLOW_UP_WORDS: Final = 8
+#: The best dense similarity under which a short question's own search counts as weak. On the
+#: frozen English encoder the benchmark's topic changes found their evidence at 0.49 to 0.77,
+#: and the follow-ups whose evidence ranked past third, or was missed, peaked at 0.40 or less.
+FOLLOW_UP_FLOOR: Final = 0.45
+#: The most of the previous question the search text takes.
+FOLLOW_UP_CHARS: Final = 500
+#: How many of the thread's newest messages are looked through for its previous question.
+FOLLOW_UP_MESSAGES: Final = 6
 
 
 def _cacheable(bundle: ContextBundle) -> bool:
@@ -247,6 +270,28 @@ class _StandingRead:
             )
 
 
+class _Encoded:
+    """The query's vectors, handed over the moment the retrieval has them
+    (``RetrievalEngine.retrieve(on_encoded=...)``): they start the standing rules' read, and
+    a learned procedure the query's words miss is matched by them (``ContextSections``)."""
+
+    def __init__(self, standing: _StandingRead) -> None:
+        self.standing = standing
+        self.vectors: asyncio.Future[QueryVectors | None] = (
+            asyncio.get_running_loop().create_future()
+        )
+
+    def __call__(self, routed: RoutedQuery, vectors: QueryVectors) -> None:
+        self.standing.start(routed, vectors)
+        self.settle(vectors)
+
+    def settle(self, vectors: QueryVectors | None) -> None:
+        """Hand ``vectors`` over unless they were: a retrieval that reported none still
+        lets the procedures read finish, on the result's own."""
+        if not self.vectors.done():
+            self.vectors.set_result(vectors)
+
+
 class ContextBuilder:
     def __init__(
         self,
@@ -353,7 +398,7 @@ class ContextBuilder:
         # the namespace binds the tools by their digest (``ToolsRequest.fingerprint``: the
         # sorted names, k, hints), so a request with tools reuses only a bundle built for the
         # same toolbox, whose hints and skills were found for the same words
-        semantic = self._semantic_key(namespace, ctx, query)
+        semantic = self._semantic_key(namespace, ctx, query, tools)
         scope_key = AuthorizationService.scope_cache_key(ctx, authz_fp)
         answer = {"prompt": prompt_key, "full": full_key}.get(output, cache_key)
         keys = [scope_key, answer, semantic]
@@ -401,7 +446,13 @@ class ContextBuilder:
     def _revision_fingerprint(revisions: dict[str, int]) -> str:
         return stable_key(*(f"{k}={v}" for k, v in sorted(revisions.items())))
 
-    def _semantic_key(self, namespace: str, ctx: MemoryExecutionContext, query: str) -> str | None:
+    def _semantic_key(
+        self,
+        namespace: str,
+        ctx: MemoryExecutionContext,
+        query: str,
+        tools: ToolsRequest | None = None,
+    ) -> str | None:
         if self.semantic_cache is None or not self.retrieval_cfg.dense:
             return None
         if self.assist.wants("query_expansion"):
@@ -409,6 +460,11 @@ class ContextBuilder:
         route = self._cache_router.route(query, has_thread=ctx.thread_id is not None)
         if route.query_type not in {QueryType.USER_MEMORY, QueryType.GENERAL_SEMANTIC}:
             return None
+        if tools:
+            # the hints' next step depends on whether the task is a question (a tool that
+            # changes something never leads one), and the guarded words drop the question
+            # mark: a question's hints are no hints for a request to act, nor the reverse
+            namespace = stable_key(namespace, f"asks_change={asks_change(query)}")
         return semantic_key(namespace, query)
 
     async def build(
@@ -504,6 +560,10 @@ class ContextBuilder:
                 ctx, revision_fingerprint=found.authz_fp, cached_scope=found.scope
             )
         tokens_before = self.assist.tokens_used()
+        # the standing rules and preferences need only the route and the query's vectors:
+        # read under the ranking, from the moment the vectors exist
+        standing = _StandingRead(self.engine, query, visibility)
+        encoded = _Encoded(standing)
         # the pinned sections and the thread's recent messages are independent of retrieval:
         # they are read under it
         sections = (
@@ -513,6 +573,7 @@ class ContextBuilder:
                     query,
                     visibility,
                     procedures=tools is not None and tools.any,
+                    vectors=encoded.vectors,
                 )
             )
             if self.sections is not None
@@ -521,9 +582,7 @@ class ContextBuilder:
         recent = asyncio.ensure_future(
             self._recent_messages(ctx, window) if window is not None else _nothing()
         )
-        # the standing rules and preferences need only the route and the query's vectors:
-        # read under the ranking, from the moment the vectors exist
-        standing = _StandingRead(self.engine, query, visibility)
+        previous = asyncio.ensure_future(self._previous_question(ctx, query))
         try:
             with timings.stage("retrieve"):
                 result = await self.engine.retrieve(
@@ -532,20 +591,25 @@ class ContextBuilder:
                     document_ids=document_ids,
                     visibility=visibility,
                     query_embedding=(query, embedding) if embedding is not None else None,
-                    on_encoded=standing.start,
+                    on_encoded=encoded,
                 )
+            encoded.settle(result.query_vectors)
             with timings.stage("sections"):
                 pinned = await sections if sections is not None else Pinned()
                 conversation = self._window(
                     ctx, await recent, after=pinned.covered_to, form=window or WindowFormat.RENDERED
                 )
+                asked_before = await previous
         except BaseException:
-            for side in (sections, recent, standing.task):
+            for side in (sections, recent, previous, standing.task):
                 if side is not None:
                     side.cancel()
             raise
         with timings.stage("similarity"):
             await self._similarity_and_standing(query, visibility, result, pinned, standing.task)
+        result = await self._followed_up(
+            ctx, query, document_ids, visibility, result, asked_before, timings
+        )
         await self._add_extras(ctx, query, tools, visibility, result, pinned, timings)
         # the engine's own stage split, plus what happened around it
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
@@ -606,8 +670,9 @@ class ContextBuilder:
         pinned: Pinned,
         timings: Timings,
     ) -> None:
-        """Working memory and prefetched memories ahead of the ranked ones, and the tool
-        hints (which read the memories in hand and the profile)."""
+        """Working memory ahead of the ranked memories, the tool hints (which read the
+        memories in hand and the profile), and the learned skills' steps a standing rule of
+        the user forbids for this task, with or without hints (``ruled``)."""
         if self.working is not None and result.routed.needs_memories:
             for i, item in enumerate(await self.working.recall(ctx)):
                 result.candidates.insert(
@@ -621,11 +686,6 @@ class ContextBuilder:
                         payload={"memory_type": item.get("memory_type", "WORKING")},
                     ),
                 )
-        present = {c.record_id for c in result.candidates}
-        fresh = [c for c in pinned.prefetched if c.record_id not in present]
-        result.candidates[:0] = fresh
-        if fresh:
-            result.diagnostics["prefetched"] = [c.record_id for c in fresh]
         if tools is not None and tools.hinted and self.sections is not None:
             with timings.stage("tools"):
                 pinned.tools = await self.sections.tools(
@@ -639,6 +699,7 @@ class ContextBuilder:
                     profile=pinned.profile,
                     vectors=result.query_vectors,
                 )
+        pinned.procedures = ruled(pinned.procedures, query, pinned.profile, pinned.tools)
 
     async def _semantic_lookup(
         self, found: _Lookup, query: str
@@ -836,6 +897,49 @@ class ContextBuilder:
             if thread is None:
                 return []
             return list(await self.conversation.list_messages(uow, ctx, ctx.thread_id, limit=limit))
+
+    async def _followed_up(
+        self,
+        ctx: MemoryExecutionContext,
+        query: str,
+        document_ids: Sequence[str] | None,
+        visibility: Any,
+        result: RetrievalResult,
+        asked_before: str | None,
+        timings: Timings,
+    ) -> RetrievalResult:
+        """``result``, or - when the question's own search found nothing close (under
+        :data:`FOLLOW_UP_FLOOR`) and it follows ``asked_before`` up - the search again with
+        that question in its search text, its candidates scored the same way."""
+        if asked_before is None or _best_similarity(result) >= FOLLOW_UP_FLOOR:
+            return result
+        with timings.stage("follow_up"):
+            again = await self.engine.retrieve(
+                ctx, query, document_ids=document_ids, visibility=visibility, follow_up=asked_before
+            )
+            await self.engine.score_similarity(again)
+        return again
+
+    async def _previous_question(self, ctx: MemoryExecutionContext, query: str) -> str | None:
+        """The thread's previous question, when ``query`` is short enough to follow it up
+        (:data:`FOLLOW_UP_WORDS`): the newest user message that is not ``query`` itself (a
+        caller may append the question before it asks for its context). ``None`` outside a
+        thread, for a longer question, or when the thread has none. Read while the question's
+        own search runs."""
+        if not ctx.thread_id or len(query.split()) > FOLLOW_UP_WORDS:
+            return None
+        async with self.uow_factory() as uow:
+            if await uow.threads.get(ctx.tenant_id, ctx.thread_id) is None:
+                return None
+            newest = await self.conversation.list_messages(
+                uow, ctx, ctx.thread_id, limit=FOLLOW_UP_MESSAGES
+            )
+        asked = query.strip()
+        for message in reversed(newest):
+            text = message.content.strip()
+            if message.role is MessageRole.USER and text and text != asked:
+                return text[:FOLLOW_UP_CHARS]
+        return None
 
     def _window(
         self,
@@ -1186,6 +1290,11 @@ def render_window(
         rendered=rendered,
         token_estimate=used,
     )
+
+
+def _best_similarity(result: RetrievalResult) -> float:
+    """The closest a ranked candidate came to the question (0: none was scored)."""
+    return max((c.similarity for c in result.candidates if c.similarity is not None), default=0.0)
 
 
 async def _nothing() -> list[Message]:

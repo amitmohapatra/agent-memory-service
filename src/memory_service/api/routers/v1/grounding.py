@@ -4,7 +4,8 @@ cascade), and record the verdict on the run.
 The bundle is the evidence: ``bundle_id`` resolves only for the scope the bundle was built for
 (``modules.context.handles``), and the answer's handle citations ([m1], [d2]) resolve within
 it. This is the one judge: with a run (``run_id``, or the scope's agent run) it writes RUN
-feedback with ``source=judge``, which decides the run's outcome unless a person already has.
+feedback with ``source=judge``, which waits for a tenant admin's review and then decides the
+run's outcome unless a person already has.
 """
 
 from __future__ import annotations
@@ -137,9 +138,6 @@ async def verify(
     async with container.services["llm_assist"].reading(ctx):
         evidence, unused = record_evidence(record)
         report = await cascade.verify(body.answer, evidence, unused=unused)
-    supported = [i for c in report.claims if c.verdict == "supported" for i in c.evidence_ids]
-    # what a run's verified answer rests on is what its memory pulls were good for
-    await container.services["agent_tools"].used(ctx, supported)
     run_id = body.run_id or ctx.agent_run_id
     feedback_id = (
         await judge_run(
@@ -150,7 +148,6 @@ async def verify(
             body.bundle_id,
             body.answer,
             report,
-            supported,
         )
         if run_id
         else None

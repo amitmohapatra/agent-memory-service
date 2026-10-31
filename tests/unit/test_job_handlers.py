@@ -321,7 +321,7 @@ async def test_feedback_is_projected_when_the_service_is_wired() -> None:
     queue, _, _ = _wire({"feedback": feedback})
     task = next(n for n in queue.handlers if n.startswith("feedback"))
     await queue.handlers[task]({"tenant_id": "acme", "feedback_id": "fb_1"})
-    assert feedback.calls == [("project", ("acme", "fb_1"), {})]
+    assert feedback.calls == [("project", ("acme", "fb_1"), {"attempt": 0})]
     bare, _, _ = _wire()
     assert await bare.handlers[task]({"tenant_id": "acme", "feedback_id": "fb_1"}) is None
 
@@ -514,11 +514,9 @@ async def test_profile_jobs_refresh_answer_and_schedule() -> None:
     ]
 
 
-async def test_tool_jobs_index_learn_and_fold_prefetch() -> None:
-    tool_index, learning, agent_tools = _Service(), _Service(), _Service()
-    queue, _, _ = _wire(
-        {"tool_index": tool_index, "tool_learning": learning, "agent_tools": agent_tools}
-    )
+async def test_tool_jobs_index_and_learn() -> None:
+    tool_index, learning = _Service(), _Service()
+    queue, _, _ = _wire({"tool_index": tool_index, "tool_learning": learning})
     index_task = next(
         n for n, (q, _) in queue.options.items() if q is Queue.EMBEDDING and n.startswith("tools")
     )
@@ -528,10 +526,8 @@ async def test_tool_jobs_index_learn_and_fold_prefetch() -> None:
     await queue.handlers[index_task]({"tenant_id": "acme", "tool_ids": ["tool_1"]})
     await queue.handlers[learn_task]({"tenant_id": "acme"})
     await queue.handlers["periodic.tools_learn"]({})
-    await queue.handlers["periodic.prefetch_learn"]({})
     assert tool_index.calls == [("index", ("acme", ["tool_1"]), {})]
     assert learning.calls == [("learn", ("acme",), {}), ("learn", (None,), {})]
-    assert agent_tools.calls == [("learn_prefetch", (), {})]
 
 
 async def test_tool_records_embedded_from_older_text_are_refreshed_on_a_schedule() -> None:

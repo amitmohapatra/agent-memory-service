@@ -32,6 +32,7 @@ from trellis.memory.models import (
     MemoryType,
     Page,
     Visibility,
+    endpoint_json,
 )
 
 if TYPE_CHECKING:
@@ -276,18 +277,22 @@ class SkillsAPI:
 
 
 class ModelKeysAPI:
-    """This agent's model key: the Bifrost virtual key its memory work is paid with. The
-    service returns status, never the secret."""
+    """This agent's model endpoint: where the model its memory work calls is, and how to reach
+    it (``trellis.contracts.Endpoint``). Registered, the service calls the same model the agent
+    does. The service returns status, never the key."""
 
     def __init__(self, ctx: MemoryContext) -> None:
         self._ctx = ctx
 
-    async def set(self, virtual_key: str, *, idempotency_key: str | None = None) -> AgentKeyStatus:
-        """Register or rotate the key (idempotent with the same ``idempotency_key``)."""
+    async def set(self, endpoint: Any, *, idempotency_key: str | None = None) -> AgentKeyStatus:
+        """Register or rotate the endpoint (idempotent with the same ``idempotency_key``):
+        a ``trellis.contracts.Endpoint`` or its JSON as a dict (``base_url``, ``gateway``,
+        ``auth``, ``model``, ``api_key``, ``profile``). The service probes it first and
+        refuses one it cannot reach (``ValidationError``)."""
         data = await self._ctx._request(
             "PUT",
             "/v1/agents/model-key",
-            json={"scope": self._ctx.scope_payload(), "virtual_key": virtual_key},
+            json={"scope": self._ctx.scope_payload(), "endpoint": endpoint_json(endpoint)},
             idempotency_key=idempotency_key,
         )
         return AgentKeyStatus.model_validate(data)
@@ -298,7 +303,7 @@ class ModelKeysAPI:
         )
 
     async def revoke(self, *, idempotency_key: str | None = None) -> AgentKeyStatus:
-        """Revoke the key. The service answers 204; the status it leaves is read back."""
+        """Revoke the endpoint. The service answers 204; the status it leaves is read back."""
         await self._ctx._request("DELETE", "/v1/agents/model-key", idempotency_key=idempotency_key)
         return await self.status()
 

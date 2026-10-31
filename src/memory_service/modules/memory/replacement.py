@@ -1015,7 +1015,15 @@ class CrossConversationReplacement:
             await self._contradiction(pairs)
             best = await self._decide(pairs, self._kinds(new, units), ctx)
             outcome = await self._apply(uow, ctx, best, earlier, now=now)
-        later = await self._replaced_by_later(uow, ctx, new, now=now)
+        # what consolidation kept of this observation as history at once (said before the
+        # value it found current): its slot still relates the turn to what was said after it
+        kept = [
+            m
+            for m in written
+            if m.owner_principal == ctx.principal_id
+            and m.temporal.status is TemporalStatus.SUPERSEDED
+        ]
+        later = await self._replaced_by_later(uow, ctx, new, now=now, kept=kept)
         outcome.changed += [m for m in later.changed if m.memory_id not in outcome.decisions]
         outcome.decisions.update(later.decisions)
         return outcome
@@ -1027,13 +1035,16 @@ class CrossConversationReplacement:
         new: Sequence[CanonicalMemory],
         *,
         now: datetime,
+        kept: Sequence[CanonicalMemory] = (),
     ) -> Outcome:
         """What the user said after these statements, in a message stored before them,
         compared with them as it would have been had it come in order (ADR 0040). Messages
         are read in parallel - with a model, one can take a minute and the next a few seconds
         - so a later message can be stored first; it then found nothing to replace, and the
         older statement, stored after it, compared itself only with what was said before it.
-        Event time decides which statement is the newer one, never the order of storing."""
+        Event time decides which statement is the newer one, never the order of storing.
+        ``kept``: readings of the same message consolidation stored as history, read only for
+        the slot they hold."""
         oldest = min(m.temporal.observed_at for m in new)
         mine = set().union(*(_sources(m) for m in new))
         rows = await uow.memories.statements_of(
@@ -1050,7 +1061,7 @@ class CrossConversationReplacement:
         best: dict[str, tuple[CanonicalMemory, Decision]] = {}
         for said in list(by_message.values())[:MAX_LATER_MESSAGES]:
             units = _units(said)
-            pairs = await self._related(units, new, slots_of(said))
+            pairs = await self._related(units, new, slots_of(said), closed=kept)
             if not pairs:
                 continue
             await self._contradiction(pairs)
@@ -1159,6 +1170,10 @@ class CrossConversationReplacement:
             for old in earlier:
                 if old.temporal.observed_at > unit.temporal.observed_at:
                     continue  # a statement replaces only what was said before it
+                if old.normalized_hash == unit.normalized_hash:
+                    # the same words said again, in another conversation, replace nothing: a
+                    # request repeated in four runs marked three of its copies "since replaced"
+                    continue
                 relation = _slot_relation(
                     relate(mine, anchors(old.content, old.lang or None), unit.content, old.content),
                     unit,
@@ -1458,15 +1473,15 @@ def apply(
     form: CanonicalMemory, unit: CanonicalMemory, decision: Decision, *, now: datetime
 ) -> None:
     """Mark ``form`` as replaced by ``unit``: an earlier value (still current) or superseded
-    (closed at ``unit``'s time, kept for the temporal view). The newer memory is not touched,
-    so one statement may replace several."""
+    (closed where ``unit`` begins - when it was said, ``TemporalState.since`` - kept for the
+    temporal view). The newer memory is not touched, so one statement may replace several."""
     form.system_metadata = {**form.system_metadata, "replaced_by": marker(unit.memory_id, decision)}
     if decision.grade is Grade.SUPERSEDED:
         form.temporal = form.temporal.model_copy(
             update={
                 "status": TemporalStatus.SUPERSEDED,
                 "superseded_by": unit.memory_id,
-                "valid_to": form.temporal.valid_to or unit.temporal.valid_from or now,
+                "valid_to": form.temporal.valid_to or unit.temporal.since,
             }
         )
         form.system_metadata["supersede_reason"] = "replaced in a later statement"

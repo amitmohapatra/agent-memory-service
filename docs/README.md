@@ -31,7 +31,7 @@ Nothing in the guide claims a number that is not in one of those files.
 |---|---|
 | [README](../README.md) | start here: what it is, the quickstart, install and run |
 | [examples/](../examples/README.md) | eleven runnable programs, simple to complex, offline (`make examples`) |
-| [USAGE.md](USAGE.md) | which API for which scenario: push or pull, which write and which read, corrections, feedback, model keys |
+| [USAGE.md](USAGE.md) | which API for which scenario: push or pull, which write and which read, corrections, feedback, model endpoints |
 | [api/](api/README.md) | the API reference: every route and its SDK call, one page per area, each with a diagram |
 | [openapi.json](openapi.json) | the generated HTTP contract: every route, schema and error, with examples (`make openapi`; `/docs` on a running service) |
 | [configuration.md](configuration.md) | every setting: its default, a working example, and whether it is automatic |
@@ -45,12 +45,12 @@ The API reference, area by area:
 |---|---|
 | observations, memories, the knowledge graph, jobs | [api/memory.md](api/memory.md) |
 | context bundles, recall, verify, conversation | [api/context.md](api/context.md) |
-| what an agent pulls itself, and what that teaches the push | [api/agent-tools.md](api/agent-tools.md) |
+| what an agent pulls itself | [api/agent-tools.md](api/agent-tools.md) |
 | pinned profile blocks and the thread summary | [api/profile.md](api/profile.md) |
 | documents into retrievable knowledge | [api/documents.md](api/documents.md) |
 | tool memory and procedures | [api/tools.md](api/tools.md) |
 | feedback, the review queue, and what it changes | [api/feedback.md](api/feedback.md) |
-| workspaces, keys, model keys and policy, the read audit | [api/tenancy.md](api/tenancy.md) |
+| workspaces, keys, model endpoints and policy, the read audit | [api/tenancy.md](api/tenancy.md) |
 | onboarding a tenant; health, readiness and `/version` | [api/admin.md](api/admin.md) |
 
 ## The guide

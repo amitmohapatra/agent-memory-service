@@ -29,7 +29,7 @@ port is bound to:
 | `EmbeddingProvider` | `OnnxEmbedding` (`SentenceTransformersEmbedding` for `runtime="torch"`) | `HashEmbedding` |
 | `LateInteractionEncoder` | `OnnxColbert` | `HashLateInteraction` |
 | `NLIProvider` | `OnnxNLI` | `LexicalNLI` |
-| `LLMProvider` | `BifrostLLM` | `DisabledLLM` |
+| `LLMProvider` | `EndpointLLM` (any OpenAI-compatible endpoint, per call) | `DisabledLLM` |
 | `DocumentParser` | `DoclingParser` | `BuiltinParser` (also the fallback) |
 | repositories, `UnitOfWork` | `adapters/db/*` (SQLAlchemy, psycopg 3) | the same, against a test database |
 

@@ -64,9 +64,11 @@ duplicated into a competing procedure. Decay: a procedure unused for 60 days, or
 rate falls below 0.5, is archived rather than deleted.
 
 **Outcome labelling.** A run is successful when it is explicitly labelled through
-`POST /v1/runs/{id}/outcome`, or — as a weak positive only — when it is older than
-`weak_positive_after_hours` (24h), had no failing call and nobody corrected it. Unlabelled and
-recent means *unknown*, not *successful*.
+`POST /v1/runs/{id}/outcome`. Unlabelled means *unknown*, not *successful* — nor, however
+fresh, *failed* — unless one of its calls failed. (Amended 2026-10-26: the 24 h weak positive is
+gone; it counted every fresh unlabelled run as a failure until it was a day old. A failure the
+system reports for a run whose calls all worked — a time limit, a model error — is no evidence
+either: the run's failure, not its procedure's.)
 
 **Ranking formula**, deterministic and explainable:
 
@@ -114,6 +116,15 @@ step exists in the registry and every binding resolves against a real trajectory
 > tool-output caching ever returns, this threshold comes back with it.
 - Cold start returns empty advice and the agent behaves exactly as it would without memory.
   Nothing is guessed.
+
+> **Amendment, 2026-10 — procedure abstraction is removed.** The optional model step became
+> the `procedure_abstraction` use: the learning job had the tenant's model write a procedure's
+> title and strategy from its successes and failures (`procedures.title`, `strategy`,
+> `distilled`). Nothing read them: a learned skill is offered as its steps, track record and
+> fixes (`SkillView`), named from its task pattern, and a sentinel strategy appeared in no
+> context, hint, `tool_search` answer or admin listing. The step, the use and the four columns
+> (with `owner_principal`, whose key paid for it) are gone (migration `0030_drop_dead_learning`);
+> learning is deterministic end to end, as the decision above says it should be first.
 
 ## Status of the adapters
 The API, SDK (`client.tools.*`, `client.runs.outcome`) and gate are in place. The framework

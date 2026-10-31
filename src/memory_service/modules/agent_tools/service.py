@@ -1,9 +1,5 @@
 """The memory tools an agent calls itself (pull mode, ReAct): a fixed set, each a thin call
 into the service that owns the capability, in the caller's scope.
-
-Every call is logged as a pull (the request's pattern, the tool, its arguments, the ids it
-returned); a returned id the run later cites or acts on is marked used. The prefetch job
-learns from those which items to pre-include in the pushed context for similar requests.
 """
 
 from __future__ import annotations
@@ -11,7 +7,6 @@ from __future__ import annotations
 import functools
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,19 +16,9 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import Lifetime, MemoryType, Visibility
 from memory_service.domain.errors import NotFound, ValidationFailed
 from memory_service.domain.instants import UtcDateTime
-from memory_service.domain.pulls import (
-    PREFETCH_BATCH,
-    PREFETCH_MAX,
-    PREFETCH_MIN_PULLS,
-    PREFETCH_MIN_RATE,
-    PULL_RESULTS_MAX,
-    PULL_SETTLE,
-    AgentPull,
-)
 from memory_service.modules.context.views import hints_view
 from memory_service.modules.retrieval.engine import PointInTime
 from memory_service.modules.retrieval.search import DEFAULT_KINDS, SearchKind
-from memory_service.modules.tools.patterns import task_pattern
 from memory_service.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -168,10 +153,15 @@ TOOLS: Final = (
     ),
     AgentTool(
         "memory_update",
-        "Replace a memory with a new statement; the old one stays in its history.",
+        "Replace a memory with a new statement; the old one stays in its history. Only a "
+        "memory you wrote: what the user said is theirs (use memory_remember for your note).",
         MemoryUpdateArgs,
     ),
-    AgentTool("memory_forget", "Forget a memory: it is no longer retrieved.", MemoryForgetArgs),
+    AgentTool(
+        "memory_forget",
+        "Forget a memory you wrote: it is no longer retrieved. What the user said is theirs.",
+        MemoryForgetArgs,
+    ),
     AgentTool(
         "profile_edit",
         "Edit a pinned profile block: replace the exact old text with the new text (empty old "
@@ -186,12 +176,6 @@ TOOLS: Final = (
     ),
 )
 BY_NAME: Final = {tool.name: tool for tool in TOOLS}
-
-
-def result_ids(result: Any) -> list[str]:
-    """The ids a result names: items of a list, or the one a write returned."""
-    items = result if isinstance(result, list) else [result]
-    return [str(i["id"]) for i in items if isinstance(i, dict) and i.get("id")][:PULL_RESULTS_MAX]
 
 
 class AgentTools:
@@ -229,61 +213,9 @@ class AgentTools:
                 },
             ) from exc
         if name == TOOL_SEARCH:
-            result = await self._tool_search(ctx, ToolSearchArgs.model_validate(args), toolbox)
-        else:
-            handler: Handler = getattr(self, f"_{name}")
-            result = await handler(ctx, args)
-        await self._pull(ctx, name, args, result)
-        return result
-
-    async def _pull(self, ctx: MemoryExecutionContext, name: str, args: _Args, result: Any) -> None:
-        asked = getattr(args, "query", None) or getattr(args, "task", None) or ""
-        pull = AgentPull(
-            tenant_id=ctx.tenant_id,
-            scope_key=ctx.principal_id,
-            run_id=ctx.agent_run_id,
-            pattern=task_pattern(asked),
-            tool=name,
-            args=args.model_dump(mode="json", exclude_none=True),
-            result_ids=result_ids(result) if name.endswith("_search") else [],
-        )
-        async with self.uow_factory() as uow:
-            await uow.pulls.add(pull)
-            await uow.commit()
-
-    async def used(self, ctx: MemoryExecutionContext, ids: Sequence[str]) -> None:
-        """The run used these ids (cited them in a verified answer, or acted on them)."""
-        if ctx.agent_run_id and ids:
-            async with self.uow_factory() as uow:
-                await uow.pulls.mark_used(ctx.tenant_id, ctx.agent_run_id, ids)
-                await uow.commit()
-
-    # ------------------------------------------------------------------ prefetch learning
-    async def learn_prefetch(self, *, now: datetime | None = None) -> int:
-        """The periodic prefetch job: fold settled pulls into the per-pattern counts."""
-        before = (now or datetime.now(UTC)) - PULL_SETTLE
-        async with self.uow_factory() as uow:
-            pulls = await uow.pulls.settled(before=before, limit=PREFETCH_BATCH)
-            if pulls:
-                await uow.pulls.fold(pulls)
-                await uow.commit()
-        return len(pulls)
-
-    async def prefetched(self, ctx: MemoryExecutionContext, query: str) -> list[str]:
-        """The items this principal's pulls for requests of this pattern used most: one
-        indexed read of the precomputed counts."""
-        pattern = task_pattern(query)
-        if not pattern:
-            return []
-        async with self.uow_factory() as uow:
-            return await uow.pulls.prefetch(
-                ctx.tenant_id,
-                ctx.principal_id,
-                pattern,
-                min_pulls=PREFETCH_MIN_PULLS,
-                min_rate=PREFETCH_MIN_RATE,
-                limit=PREFETCH_MAX,
-            )
+            return await self._tool_search(ctx, ToolSearchArgs.model_validate(args), toolbox)
+        handler: Handler = getattr(self, f"_{name}")
+        return await handler(ctx, args)
 
     # ------------------------------------------------------------------ memory
     async def _memory_search(self, ctx: MemoryExecutionContext, args: MemorySearchArgs) -> Any:
@@ -319,7 +251,6 @@ class AgentTools:
                 uow, ctx, memory_id, content=args.content, reason="updated by the agent"
             )
             await uow.commit()
-        await self.used(ctx, [memory_id])
         return {"id": new.memory_id, "supersedes": memory_id}
 
     async def _memory_forget(self, ctx: MemoryExecutionContext, args: MemoryForgetArgs) -> Any:
@@ -327,7 +258,6 @@ class AgentTools:
         async with self.uow_factory() as uow:
             forgotten = await self.services["memory"].forget(uow, ctx, memory_id)
             await uow.commit()
-        await self.used(ctx, [memory_id])
         return {"id": memory_id, "forgotten": forgotten is not None}
 
     async def _profile_edit(self, ctx: MemoryExecutionContext, args: ProfileEditArgs) -> Any:
@@ -350,5 +280,6 @@ class AgentTools:
             k=TOOL_SEARCH_K,
             scope_keys=list(visibility.keys),
             profile=profile,
+            visibility=visibility,
         )
         return hints_view(hints)

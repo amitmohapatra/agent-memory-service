@@ -454,18 +454,13 @@ class StoredProcedure(BaseModel):
     tenant_id: str
     scope_key: str
     pattern: str
-    title: str = ""
-    strategy: str = ""
     steps: list[dict[str, Any]] = Field(default_factory=list)
     bindings: list[dict[str, Any]] = Field(default_factory=list)
     success_rate: float = 0.0
     support: int = 0
     status: ProcedureStatus = "candidate"
-    #: the fingerprint of the steps; the title and strategy were distilled from ``distilled``
+    #: the fingerprint of the steps
     steps_hash: str = ""
-    distilled: str = ""
-    #: whose model key distils it: the principal that recorded the calls
-    owner_principal: str | None = None
     workspace_id: str | None = None
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     #: the agent it was learned for (an agent-audience procedure), else None
@@ -508,6 +503,9 @@ class SkillView(BaseModel):
     fixes: list[str] = Field(default_factory=list)
     success_rate: float = 0.0
     support: int = 0
+    #: its steps a standing rule of the user forbids for this task, step -> the rule
+    #: (``modules.tools.hints.ruled``): what the runs did is no step to take against it
+    forbidden: dict[str, str] = Field(default_factory=dict)
 
 
 PrefillSource = Literal["procedure", "graph", "profile", "memory", "task"]
@@ -551,3 +549,8 @@ class ToolHints(BaseModel):
         default_factory=dict, description="argument values found, keyed tool.arg"
     )
     missing: list[MissingArgument] = Field(default_factory=list)
+    forbidden: dict[str, str] = Field(
+        default_factory=dict,
+        description="candidates a standing rule of the user forbids for this task, tool -> "
+        "the rule: never the next step, no argument found or asked for",
+    )

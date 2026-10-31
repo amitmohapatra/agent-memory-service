@@ -9,10 +9,18 @@ from typing import Any
 import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.errors import Conflict
+from memory_service.domain.errors import Conflict, NotFound
+from memory_service.domain.feedback import (
+    Feedback,
+    FeedbackProjection,
+    FeedbackTargetKind,
+    FeedbackVerdict,
+    ProjectionAction,
+)
 from memory_service.domain.learning import ApprovalCounts
 from memory_service.domain.tools import ToolAnnotations, ToolDescriptor
 from memory_service.modules.tools import approvals
+from trellis.memory.approval import arg_shape, evaluate
 
 SHAPE = "path:str"
 AUTO = ApprovalCounts(agent_id="bot", tool="t", arg_shape=SHAPE, approvals=20)
@@ -80,12 +88,37 @@ class _Revisions:
         return 1
 
 
+def _approval(reviewer: str, n: int, args: dict[str, Any] | None = None) -> Feedback:
+    return Feedback(
+        feedback_id=f"fb_{n}",
+        tenant_id="acme",
+        agent_id="bot",
+        target_kind=FeedbackTargetKind.TOOL_CALL,
+        target_id=f"call_{n}",
+        verdict=FeedbackVerdict.APPROVE,
+        reviewer=reviewer,
+        metadata={"tool": "t", "args": args or {"path": f"/p{n}"}},
+        projection=FeedbackProjection(action=ProjectionAction.TOOL_CALL_COUNTED),
+    )
+
+
+class _Decisions:
+    """The counted decisions on the tool: by default from two reviewers."""
+
+    def __init__(self, *reviewers: str) -> None:
+        names = reviewers or ("user:lead", "user:ops")
+        self.decisions = [_approval(name, n) for n, name in enumerate(names * 10)]
+
+    async def counted_decisions(self, *_: Any, **__: Any) -> list[Feedback]:
+        return self.decisions
+
+
 CTX = MemoryExecutionContext(tenant_id="acme", user_id="u", workspace_id="ws1", agent_id="bot")
 
 
 async def _accept(counts: ApprovalCounts | None, entry: ToolDescriptor | None) -> _Tools:
     tools = _Tools(counts, entry)
-    uow: Any = SimpleNamespace(tools=tools, revisions=_Revisions())
+    uow: Any = SimpleNamespace(tools=tools, revisions=_Revisions(), feedback=_Decisions())
     await approvals.accept(uow, CTX, approvals.suggestion_id(AUTO))
     return tools
 
@@ -113,3 +146,94 @@ async def test_a_suggestion_with_no_support_touches_no_catalog_entry() -> None:
         with pytest.raises(Conflict, match="no longer support"):
             await approvals.accept(uow, CTX, approvals.suggestion_id(AUTO))
         assert not tools.ensured and tools.upserted is None
+
+
+async def test_a_learned_rule_never_relaxes_an_administrators_approve_when() -> None:
+    """B6: an administrator's ``approve_when: "true"`` on a tool became "never ask for this
+    shape" once the learned suggestion was accepted. Approving automatically is offered only
+    while the tool has no approve_when; asking more still is."""
+    ruled = _tool("write").model_copy(update={"approve_when": "true"})
+    assert approvals.offered(AUTO, ruled) is None
+    assert approvals.offered(ASK, ruled) == "always_ask"
+    with pytest.raises(Conflict, match="approve_when"):
+        await _accept(AUTO, ruled)
+    # the rule this very suggestion wrote is still listed (as accepted)
+    own = approvals.compose(None, "write", "auto_approve", SHAPE)
+    assert approvals.offered(AUTO, _tool("write").model_copy(update={"approve_when": own}))
+
+
+async def test_approve_automatically_needs_two_different_reviewers() -> None:
+    """B6: twenty approvals by one reviewer made "approve automatically" a suggestion. It is
+    offered only once two different reviewers approved calls of that shape, as the counted
+    decisions name them; approvals of another shape are not counted."""
+    entry = _tool("write")
+
+    async def offered(decisions: _Decisions) -> str | None:
+        uow: Any = SimpleNamespace(feedback=decisions)
+        return await approvals.offer(uow, "acme", AUTO, entry)
+
+    assert await offered(_Decisions("user:lead")) is None
+    assert await offered(_Decisions("user:lead", "user:ops")) == "auto_approve"
+    other_shape = _Decisions("user:lead")
+    other_shape.decisions.append(_approval("user:ops", 99, args={"path": 3}))
+    assert await offered(other_shape) is None
+    # "always ask" only adds a question: one reviewer is enough
+    one: Any = SimpleNamespace(feedback=_Decisions("user:lead"))
+    assert await approvals.offer(one, "acme", ASK, entry) == "always_ask"
+    tools = _Tools(AUTO, entry)
+    uow: Any = SimpleNamespace(tools=tools, revisions=_Revisions(), feedback=_Decisions("u:1"))
+    with pytest.raises(Conflict, match="reviewers"):
+        await approvals.accept(uow, CTX, approvals.suggestion_id(AUTO))
+    assert tools.upserted is None
+
+
+# --------------------------------------------------------------------------- edge cases
+
+
+async def test_only_the_agent_a_suggestion_was_learned_from_may_accept_it() -> None:
+    """A spoofed agent id: another agent's credential, even naming the same tool and shape,
+    finds no such suggestion and changes no catalog entry."""
+    tools = _Tools(AUTO, _tool("write"))
+    uow: Any = SimpleNamespace(tools=tools, revisions=_Revisions(), feedback=_Decisions())
+    intruder = CTX.model_copy(update={"agent_id": "intruder"})
+    with pytest.raises(NotFound):
+        await approvals.accept(uow, intruder, approvals.suggestion_id(AUTO))
+    with pytest.raises(NotFound):
+        await approvals.accept(uow, CTX, "not-a-suggestion-id")
+    assert tools.upserted is None and not tools.ensured
+
+
+async def test_a_reviewer_who_only_rejected_or_edited_is_no_second_approver() -> None:
+    """Two reviewers means two who approved calls of that shape: a colleague's rejections or
+    edits of it are no say for asking less."""
+    decisions = _Decisions("user:lead")
+    for n, verdict in enumerate((FeedbackVerdict.REJECT, FeedbackVerdict.EDIT), start=100):
+        decisions.decisions.append(
+            _approval("user:ops", n).model_copy(
+                update={"verdict": verdict, "correction": {"path": "/x"}}
+            )
+        )
+    uow: Any = SimpleNamespace(feedback=decisions)
+    assert await approvals.reviewers(uow, "acme", AUTO) == {"user:lead"}
+    assert await approvals.offer(uow, "acme", AUTO, _tool("write")) is None
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        {"path": "/p", "amount": 50},
+        {"path": "/p", "amount": 500},
+        {"amount": 500},
+        {"path": "/p"},
+        {"path": 3},
+        {},
+    ],
+)
+def test_always_ask_only_ever_adds_questions_to_an_administrators_rule(args: dict) -> None:
+    """A learned "always ask" composed onto ``amount > 100``: every call the administrator's
+    rule asks about is still asked about, whatever its shape."""
+    admin = "amount > 100"
+    composed = approvals.compose(admin, "write", "always_ask", SHAPE)
+    if evaluate(admin, args):
+        assert evaluate(composed, args)
+    assert evaluate(composed, args) is (evaluate(admin, args) or arg_shape(args) == SHAPE)

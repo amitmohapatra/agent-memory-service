@@ -251,6 +251,9 @@ def test_a_budget_below_the_workers_floor_is_raised_with_a_warning() -> None:
 #: The job worker's slots at 1/2/4/8 CPUs, without a model and with one: the slots that
 #: compute stay about one per CPU (every pool keeps at least one); only the graph pool's, which
 #: wait on the model, come on top. Main had one pool of 1/2/4/8.
+#: No model reachable: no endpoint of the service's own, and agents' registered ones not used.
+NO_MODEL: dict[str, Any] = {"models": {"llm": {"accept_agent_endpoints": False}}}
+
 WORKER_SLOTS = {False: {1: 4, 2: 4, 4: 5, 8: 8}, True: {1: 5, 2: 5, 4: 6, 8: 12}}
 
 
@@ -273,7 +276,7 @@ def test_the_worker_is_built_as_worker_py_builds_it(
         _env_file=None,
         tasks={"worker_concurrency": cpus},
         database={"connection_budget": budget},
-        bifrost_url="http://gateway.invalid" if llm else None,
+        **({"LLM_BASE_URL": "http://gateway.invalid"} if llm else NO_MODEL),
     )
     pools = worker_pools_for(settings)
     (indexing, _), (graph, _), (chat, _), (shared, _) = pools
@@ -317,7 +320,7 @@ async def test_worker_main_runs_the_pools_its_container_was_sized_for(
 
     monkeypatch.setenv("MEMORY__TASKS__WORKER_CONCURRENCY", "8")
     monkeypatch.setenv("MEMORY__TASKS__INDEXING_CONCURRENCY", "1")
-    settings = Settings(_env_file=None, bifrost_url=None)
+    settings = Settings(_env_file=None, **NO_MODEL)
     assert (settings.tasks.worker_concurrency, settings.tasks.indexing_concurrency) == (8, 1)
     built: dict[str, Any] = {}
 
@@ -364,7 +367,7 @@ def test_a_budget_below_the_workers_floor_fails_where_deployed(environment: str)
             service={"environment": environment},
             tasks={"worker_concurrency": 4},
             database={"connection_budget": budget},
-            bifrost_url=None,
+            **NO_MODEL,
         )
         return Container(settings=settings, version="test", **process_shape(settings, "worker"))
 

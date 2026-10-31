@@ -18,14 +18,21 @@ from memory_service.domain.enums import (
     DedupDecision,
     Lifetime,
     MemoryType,
+    MessageRole,
     ObservationKind,
     ScopeLevel,
     TemporalStatus,
     Visibility,
 )
 from memory_service.domain.fiscal import FiscalCalendar
-from memory_service.domain.memory import AdmissionDecision, CanonicalMemory, Scope, TemporalState
-from memory_service.domain.observation import Observation
+from memory_service.domain.memory import (
+    LASTING_TYPES,
+    AdmissionDecision,
+    CanonicalMemory,
+    Scope,
+    TemporalState,
+)
+from memory_service.domain.observation import AGENT_ROLES, Observation
 from memory_service.modules.authz.visibility import readable_by
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.llm.assist import LLMAssist
@@ -223,19 +230,22 @@ def build_memory(
 
 
 def supersede(target: CanonicalMemory, replacement: CanonicalMemory, *, now: datetime) -> None:
-    """Bi-temporal replacement: ``replacement`` holds from its valid_from (now unless dated),
-    and ``target`` is closed at that instant and points at it. Neither row is deleted."""
+    """Bi-temporal replacement: ``replacement`` holds from when it was said (``since``: its
+    valid_from, else its observed_at), and ``target`` is closed at that instant and points at
+    it. Neither row is deleted, and a ``replacement`` that already replaced another value keeps
+    its link to that one."""
+    since = replacement.temporal.since
     replacement.temporal = replacement.temporal.model_copy(
         update={
-            "supersedes": target.memory_id,
-            "valid_from": replacement.temporal.valid_from or now,
+            "supersedes": replacement.temporal.supersedes or target.memory_id,
+            "valid_from": since,
         }
     )
     target.temporal = target.temporal.model_copy(
         update={
             "status": TemporalStatus.SUPERSEDED,
             "superseded_by": replacement.memory_id,
-            "valid_to": target.temporal.valid_to or replacement.temporal.valid_from or now,
+            "valid_to": target.temporal.valid_to or since,
         }
     )
     target.updated_at = now
@@ -251,7 +261,19 @@ async def _replace(
 ) -> set[str]:
     """Store ``memory`` as the new version of ``target`` and close ``target``, with the turn
     kept in the target's words: it is the same statement (ADR 0036), and left CURRENT it
-    keeps answering the value just replaced. The ids written."""
+    keeps answering the value just replaced. The ids written.
+
+    The newer of the two is the one said later (``TemporalState.since``), the order they are
+    read in only on a tie: "I work at ACME Corp." said 45 days ago and read after "I work at
+    Globex now." (said 5 days ago) closed Globex and stayed current. Said before ``target``,
+    ``memory`` is stored as its history instead, closed where ``target`` begins."""
+    if target.temporal.since > memory.temporal.since:
+        supersede(memory, target, now=now)
+        await uow.memories.add(
+            memory, visibility_keys=keys_for(memory.scope, memory.visibility, ctx)
+        )
+        await uow.memories.update(target)
+        return {memory.memory_id, target.memory_id}
     twins = await uow.memories.twins(ctx.tenant_id, target)
     supersede(target, memory, now=now)
     for twin in twins:
@@ -260,6 +282,53 @@ async def _replace(
     for closed in (target, *twins):
         await uow.memories.update(closed)
     return {memory.memory_id, target.memory_id, *(t.memory_id for t in twins)}
+
+
+async def _one_writer_per_user(uow: UnitOfWork, ctx: MemoryExecutionContext) -> None:
+    """Hold the user's statements while this message's are compared with them and written: a
+    user's own memories (``USER`` scope) and their statements in every conversation (ADR 0038)
+    are read across threads, and the queue runs one conversation's messages one at a time,
+    not one user's. Two conversations of a user read side by side each compared themselves
+    with a store the other had not committed to, and both values of a one-valued slot stayed
+    current. Only this unit of work waits (an advisory lock, released at commit): reading the
+    message - the model's work - still runs in parallel, and other users never wait."""
+    if ctx.user_id:
+        await uow.serialize(f"statements:{ctx.tenant_id}:{ctx.user_id}")
+
+
+def _told(observation: Observation) -> bool:
+    """Whether a message is something the service was told, which memories are formed from:
+    not a tool's result (its errors, its raw JSON) and not an agent run's own words (its
+    answer, a hedge included). Both stay in the transcript; a fact the agent wants kept goes
+    through ``memory_remember``. A person's words, an event and a document are told, and so
+    is what an agent submits as an observation of its own (``AGENT_RESULT``)."""
+    if observation.kind is not ObservationKind.MESSAGE:
+        return True
+    role = str((observation.custom_metadata or {}).get("role", "")).upper()
+    if role == MessageRole.TOOL:
+        return False
+    return not (observation.agent_run_id and role in AGENT_ROLES)
+
+
+def authored_type(memory_type: MemoryType, *, by_agent: bool) -> MemoryType:
+    """The kind a memory is kept as, given who wrote it. What a user says about themselves
+    (``USER``, ``PREFERENCE``: the kinds the pinned ``user`` profile block is kept from) is
+    theirs alone to state: written by an agent it is about the agent, and is kept as the
+    agent's memory (``AGENT``), never a profile line of the human it acts for (ADR 0013). The
+    one rule for both ways an agent writes: an observation it authored, and a memory it states
+    (``memory_remember``, ``POST /v1/memories`` with an agent on the request)."""
+    return MemoryType.AGENT if by_agent and memory_type in LASTING_TYPES else memory_type
+
+
+def said_by_a_person(memory: CanonicalMemory) -> bool:
+    """Whether ``memory`` is what a person said: written by them (a ``user:`` owner), or their
+    words kept as said (a ``said`` turn of a ``user:`` subject, which a harness may relay).
+    Only that person restates or retracts it; an agent acting for them adds a note of its own
+    (``authored_type``'s rule, for rewriting): a run's ``memory_update`` replaced "I raised
+    PO-77812 for 2,000 corrugated boxes" with "12 times 7 = 84", kept as what the user said."""
+    return memory.owner_principal.startswith("user:") or (
+        memory.predicate == "said" and (memory.subject or "").startswith("user:")
+    )
 
 
 class ObservationPipeline:
@@ -287,6 +356,21 @@ class ObservationPipeline:
         #: the spellings a candidate's subject may be stored under (candidate generation)
         self.subjects = subjects or SubjectMatcher()
 
+    async def _to_process(self, observation: Observation) -> bool:
+        """Whether memories are formed from ``observation``: not one processed already (an
+        idempotent replay), and not one that was not told (``_told``), which is marked
+        processed with none."""
+        if observation.processed_at is not None:
+            return False
+        if _told(observation):
+            return True
+        async with self.uow_factory() as uow:
+            await uow.observations.mark_processed(
+                observation.tenant_id, observation.observation_id, status="NO_MEMORY"
+            )
+            await uow.commit()
+        return False
+
     async def run(self, payload: dict[str, Any]) -> list[ConsolidationOutcome]:
         tenant_id, observation_id = payload["tenant_id"], payload["observation_id"]
         async with self.uow_factory() as uow:
@@ -294,8 +378,8 @@ class ObservationPipeline:
         if observation is None:
             log.warning("memory.observation_missing", tenant_id=tenant_id, id=observation_id)
             return []
-        if observation.processed_at is not None:
-            return []  # idempotent replay
+        if not await self._to_process(observation):
+            return []
         ctx = context_from_observation(observation)
         preceding = await self._preceding_turn(observation)
         async with self.assist.bound(identity_of(ctx)):
@@ -323,6 +407,7 @@ class ObservationPipeline:
                     or observation.hints.importance is not None
                 )
                 async with self.uow_factory() as uow:
+                    await _one_writer_per_user(uow, ctx)
                     since = datetime.now(UTC)
                     affected = await self._apply_all(
                         uow,
@@ -416,10 +501,10 @@ class ObservationPipeline:
             update["memory_type"] = h.memory_type
         if h.custom_type:
             update["custom_type"] = h.custom_type
-        elif o.agent_authored and c.memory_type in (MemoryType.USER, MemoryType.PREFERENCE):
+        elif (kept := authored_type(c.memory_type, by_agent=o.agent_authored)) != c.memory_type:
             # "my timezone is UTC" said by an agent is about the agent: it becomes the agent's
             # working memory, never a USER memory of the human it acts for (no chat pollution)
-            update["memory_type"] = MemoryType.AGENT
+            update["memory_type"] = kept
         if h.lifetime:
             update["lifetime"] = h.lifetime
         if h.visibility:

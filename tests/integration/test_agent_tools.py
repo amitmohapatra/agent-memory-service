@@ -1,5 +1,4 @@
-"""Memory agent tools against PostgreSQL: each tool in the caller's scope, every call logged
-as a pull, used ids marked, and the prefetch counts learned from them."""
+"""Memory agent tools against PostgreSQL: each tool in the caller's scope."""
 
 from __future__ import annotations
 
@@ -8,9 +7,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import MessageRole
-from memory_service.domain.errors import NotFound, ValidationFailed
-from memory_service.domain.pulls import PREFETCH_MIN_PULLS
+from memory_service.domain.enums import MessageRole, TemporalStatus
+from memory_service.domain.errors import NotFound, ScopeDenied, ValidationFailed
 
 pytestmark = pytest.mark.integration
 
@@ -27,9 +25,7 @@ async def _call(container, name: str, args: dict, run: str = "run_1"):
     return result
 
 
-async def test_an_agent_remembers_finds_updates_and_forgets_through_its_tools(
-    container, uow_factory
-) -> None:
+async def test_an_agent_remembers_finds_updates_and_forgets_through_its_tools(container) -> None:
     stored = await _call(
         container,
         "memory_remember",
@@ -56,23 +52,51 @@ async def test_an_agent_remembers_finds_updates_and_forgets_through_its_tools(
     assert updated["supersedes"] == stored["id"]
     forgotten = await _call(container, "memory_forget", {"id": updated["id"]})
     assert forgotten == {"id": updated["id"], "forgotten": True}
-    async with uow_factory() as uow:
-        pulls = await uow.pulls.settled(before=datetime.now(UTC) + timedelta(hours=1), limit=50)
-    assert [p.tool for p in pulls] == [
-        "memory_remember",
-        "memory_search",
-        "memory_search",
-        "memory_update",
-        "memory_forget",
-    ]
-    first_search = pulls[1]
-    assert first_search.result_ids[0] == stored["id"]
-    assert first_search.used_ids == [stored["id"]], "the update acted on what the search found"
 
     with pytest.raises(ValidationFailed):
         await _call(container, "memory_update", {"id": stored["id"]})
     with pytest.raises(NotFound):
         await _call(container, "no_such_tool", {})
+
+
+async def test_an_agent_run_cannot_rewrite_or_forget_what_the_user_said(
+    container, uow_factory
+) -> None:
+    """N2: a run answering "What is 12 times 7?" called memory_update on the user's "I raised
+    PO-77812 ..." and replaced it with its answer, kept as the user's own statement. The tool
+    refuses and says what to do instead; the user's words stay as they were."""
+    from memory_service.modules.jobs.registry import register_handlers
+
+    said = "I raised PO-77812 for 2,000 corrugated boxes; it's late."
+    user = _agent().model_copy(update={"agent_id": None, "agent_run_id": None})
+    register_handlers(container)
+    async with uow_factory() as uow:
+        await container.services["conversation"].append_message(
+            uow, user, role=MessageRole.USER, content=said
+        )
+        await uow.commit()
+    await container.tasks.drain()
+    await container.tasks.drain()
+    found = await _call(container, "memory_search", {"query": "PO-77812 corrugated boxes"})
+    mine = next(f for f in found if f["kind"] == "memory" and said in f.get("text", ""))
+
+    for name, args in (
+        ("memory_update", {"id": mine["id"], "content": "12 times 7 = 84"}),
+        ("memory_forget", {"id": mine["id"]}),
+    ):
+        with pytest.raises(ScopeDenied, match="memory_remember"):
+            await _call(container, name, args)
+    async with uow_factory() as uow:
+        kept = await container.services["memory"].get_memory(uow, user, mine["id"])
+    assert kept.content == said and kept.temporal.status is TemporalStatus.CURRENT
+    assert kept.owner_principal == "user:ann"
+    # the user still corrects their own words
+    async with uow_factory() as uow:
+        new = await container.services["memory"].supersede(
+            uow, user, mine["id"], content="PO-77812 arrived today.", reason="updated"
+        )
+        await uow.commit()
+    assert new.owner_principal == "user:ann"
 
 
 async def test_message_search_profile_and_tool_search_tools(container, uow_factory) -> None:
@@ -178,25 +202,3 @@ async def test_message_search_reads_this_conversation_then_the_users_earlier_one
             "acme", "ann", limit=10, threads=5, words=["4_71", "44%"]
         )
         assert literal == [], "LIKE wildcards in a word are matched literally"
-
-
-async def test_items_a_run_keeps_using_for_a_request_pattern_are_prefetched(
-    container, uow_factory
-) -> None:
-    stored = await _call(
-        container, "memory_remember", {"content": "The paper supplier is Acme", "kind": "SEMANTIC"}
-    )
-    agent_tools = container.services["agent_tools"]
-    for i in range(PREFETCH_MIN_PULLS):
-        run = f"run_{i}"
-        await _call(container, "memory_search", {"query": f"supplier for order {i}"}, run=run)
-        await agent_tools.used(_agent(run), [stored["id"]])
-    assert await agent_tools.prefetched(_agent(), "supplier for order 99") == []
-    assert await agent_tools.learn_prefetch() == 0, "pulls settle before they are learned"
-    learned = await agent_tools.learn_prefetch(now=datetime.now(UTC) + timedelta(hours=1))
-    assert learned == PREFETCH_MIN_PULLS + 1
-    assert await agent_tools.prefetched(_agent(), "supplier for order 99") == [stored["id"]]
-    other = MemoryExecutionContext(tenant_id="acme", user_id="bob", agent_id="buyer")
-    assert await agent_tools.prefetched(other, "supplier for order 99") == []
-    bundle = await container.services["context_builder"].build(_agent(), "supplier for order 99")
-    assert stored["id"] in [m.item_id for m in bundle.memories]

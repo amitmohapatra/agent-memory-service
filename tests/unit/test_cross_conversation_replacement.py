@@ -600,6 +600,41 @@ async def test_a_stated_change_is_not_put_to_the_model_without_one() -> None:
     assert out.changed == [], "without the tenant's model the head's word stands"
 
 
+@pytest.mark.parametrize(
+    "said",
+    [
+        # a status cue and a shared identifier: marked "whatever the head read" before
+        "For employee e-401: list the trips, the booked flights and the pending expense claims.",
+        "Stores S12 and S40 both carry style ST-101. Which should get stock first?",
+        OLD_HI,
+    ],
+)
+async def test_the_same_words_said_again_replace_nothing(said: str) -> None:
+    """S5: a request a user repeated in four conversations marked three of its copies "since
+    replaced", whatever the head, the encoder or the model read. The copies are not merged
+    either: each stays current in its own conversation."""
+
+    def said_in(thread: str, at: datetime, source: str) -> CanonicalMemory:
+        scope = {"level": "THREAD", "tenant_id": "acme", "thread_id": thread}
+        return _memory(said, at=at, source=source, scope=scope)
+
+    old, new = said_in("thr_a", T0, "msg_a"), said_in("thr_b", T1, "msg_b")
+    uow = _uow([old, new])
+    replacement = CrossConversationReplacement(
+        ScriptedNLI({("", ""): 0.99}),
+        FixedEncoder(0.99),
+        assist=FakeAssist("update"),  # type: ignore[arg-type]
+    )
+    assert (await replacement.run(uow, CTX, [new], now=T1)).changed == []
+    # and stored out of order, the later copy does not replace the earlier one either
+    assert (await replacement.run(uow, CTX, [old], now=T1)).changed == []
+    for memory in (old, new):
+        stored = uow.memories.rows[memory.memory_id]
+        assert stored.temporal.status is TemporalStatus.CURRENT
+        assert replaced_by(stored.system_metadata) is None
+    assert {m.scope.thread_id for m in uow.memories.rows.values()} == {"thr_a", "thr_b"}
+
+
 async def test_the_model_is_asked_about_three_pairs_at_most() -> None:
     olds = [
         _memory(

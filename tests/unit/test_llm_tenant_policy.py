@@ -12,7 +12,8 @@ import httpx
 import pytest
 import respx
 
-from memory_service.adapters.models.llm import BifrostLLM
+from memory_service.adapters.models.llm import EndpointLLM
+from memory_service.config.settings import LLMSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.modules.jobs.registry import _accounted
 from memory_service.modules.llm.assist import LLMAssist
@@ -25,7 +26,15 @@ from memory_service.modules.llm.policy import (
 )
 from memory_service.observability.metrics import llm_tokens_total
 from memory_service.ports.credentials import ModelIdentity
-from tests.support_llm import BASE, NO_BACKOFF, bound_to, chat_response, llm_settings
+from tests.support_llm import (
+    BASE,
+    CATALOG,
+    MODEL,
+    NO_BACKOFF,
+    bound_to,
+    chat_response,
+    llm_settings,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -48,15 +57,22 @@ class _Policies:
         return self.keyed
 
 
-def _assist(access: ModelAccess = DEFAULT_ACCESS, **settings: Any) -> tuple[LLMAssist, _Policies]:
-    cfg = llm_settings(**settings)
+def _assist(
+    access: ModelAccess = DEFAULT_ACCESS, *, own: bool = True, accept: bool = True
+) -> tuple[LLMAssist, _Policies]:
+    """``own``: the service has an endpoint of its own; ``accept``: registered ones count."""
+    cfg = (
+        llm_settings().model_copy(update={"accept_agent_endpoints": accept})
+        if own
+        else LLMSettings(accept_agent_endpoints=accept)
+    )
     policies = _Policies(access)
-    return LLMAssist(BifrostLLM(cfg, transport=NO_BACKOFF), cfg, policies), policies  # type: ignore[arg-type]
+    return LLMAssist(EndpointLLM(cfg, transport=NO_BACKOFF), cfg, policies), policies  # type: ignore[arg-type]
 
 
 async def test_wants_is_the_bound_policy() -> None:
     access = ModelAccess(frozenset({"summaries", "reflection"}), read_assist=True, has_key=True)
-    assist, policies = _assist(access, api_key=None)
+    assist, policies = _assist(access, own=False)
     async with assist.bound(ModelIdentity("acme", "user:u1")):
         assert assist.wants("summaries") and assist.wants("reflection")
         assert not assist.wants("query_expansion"), "the policy does not allow it"
@@ -64,15 +80,19 @@ async def test_wants_is_the_bound_policy() -> None:
     assert current_binding() is None, "the binding ends with the block"
 
 
-async def test_a_call_needs_a_key_that_can_pay() -> None:
+async def test_a_call_needs_an_endpoint_that_can_serve_it() -> None:
     keyless = ModelAccess(DEFAULT_ACCESS.uses, read_assist=True, has_key=False)
-    assist, _ = _assist(keyless, api_key=None)
-    assert not assist.wants("summaries"), "unbound and no operator key"
+    assist, _ = _assist(keyless, own=False)
+    assert not assist.wants("summaries"), "unbound and no endpoint of the service's own"
     async with assist.bound(ModelIdentity("acme", "user:u1")):
-        assert not assist.wants("summaries"), "no key at any level"
-    keyed, _ = _assist(replace(keyless, has_key=True), api_key=None)
+        assert not assist.wants("summaries"), "no endpoint registered at any level"
+    keyed, _ = _assist(replace(keyless, has_key=True), own=False)
     async with keyed.bound(ModelIdentity("acme", "user:u1")):
         assert keyed.wants("summaries")
+    # an operator who does not accept registered endpoints: a registration serves nothing
+    ignored, _ = _assist(replace(keyless, has_key=True), own=False, accept=False)
+    async with ignored.bound(ModelIdentity("acme", "user:u1")):
+        assert not ignored.wants("summaries")
 
 
 async def test_the_operator_key_pays_for_unbound_work() -> None:
@@ -101,10 +121,13 @@ async def test_a_read_follows_the_policy_read_assist(read_assist: bool) -> None:
 
 
 async def test_background_work_scans_only_tenants_something_can_pay_for() -> None:
-    cfg = llm_settings(api_key=None)
+    cfg = LLMSettings()
     policies = _Policies(DEFAULT_ACCESS, keyed=["acme", "globex"])
-    assist = LLMAssist(BifrostLLM(cfg, transport=NO_BACKOFF), cfg, policies)  # type: ignore[arg-type]
+    assist = LLMAssist(EndpointLLM(cfg, transport=NO_BACKOFF), cfg, policies)  # type: ignore[arg-type]
     assert await assist.payable_tenants("reflection") == ["acme", "globex"]
+    refused = LLMSettings(accept_agent_endpoints=False)
+    closed = LLMAssist(EndpointLLM(refused, transport=NO_BACKOFF), refused, policies)  # type: ignore[arg-type]
+    assert await closed.payable_tenants("reflection") == [], "registrations are not called"
     assert await assist.payable_tenants("reflection", "globex") == ["globex"]
     assert await assist.payable_tenants("reflection", "initech") == []
     operator, _ = _assist()
@@ -112,22 +135,23 @@ async def test_background_work_scans_only_tenants_something_can_pay_for() -> Non
 
 
 @respx.mock
-async def test_the_model_a_use_calls_is_the_one_the_policy_names() -> None:
-    respx.get(f"{BASE}/models").mock(
-        return_value=httpx.Response(
-            200, json={"data": [{"id": "gemini/gemini-3.8-pro"}, {"id": "gemini/gemini-3.8-flash"}]}
-        )
-    )
+@pytest.mark.parametrize("endpoint_model", [None, "gpt-4.1-mini"])
+async def test_the_model_a_use_calls_is_the_policy_s_then_the_endpoint_s_then_auto(
+    endpoint_model: str | None,
+) -> None:
+    respx.get(f"{BASE}/models").mock(return_value=httpx.Response(200, json=CATALOG))
     route = respx.post(f"{BASE}/chat/completions").mock(
         return_value=httpx.Response(200, json=chat_response("ok"))
     )
-    llm = BifrostLLM(llm_settings(), transport=NO_BACKOFF)
+    llm = EndpointLLM(llm_settings(model=endpoint_model), transport=NO_BACKOFF)
     with bound_to("acme", "user:u1", models={"grounding_judge": "openai/gpt-5-mini"}):
         await llm.complete([], use="grounding_judge")
         await llm.complete([], use="summaries")
         await llm.complete([], use="query_expansion")
     sent = [json.loads(call.request.content)["model"] for call in route.calls]
-    assert sent == ["openai/gpt-5-mini", "gemini/gemini-3.8-pro", "gemini/gemini-3.8-flash"]
+    # auto: the cheapest text model the listing prices, for every use
+    unnamed = endpoint_model or MODEL
+    assert sent == ["openai/gpt-5-mini", unnamed, unnamed]
     await llm.close()
 
 
@@ -159,7 +183,7 @@ async def test_every_successful_call_is_recorded_against_its_tenant() -> None:
         async def record(self, tenant_id: str, use: str, tokens: int) -> None:
             recorded.append((tenant_id, use, tokens))
 
-    llm = BifrostLLM(llm_settings(), transport=NO_BACKOFF, usage=_Usage())
+    llm = EndpointLLM(llm_settings(), transport=NO_BACKOFF, usage=_Usage())
     before = llm_tokens_total.labels("acme", "summaries", "input")._value.get()
     with bound_to("acme", "user:u1"):
         await llm.complete([], use="summaries")
@@ -182,7 +206,7 @@ async def test_a_failing_ledger_never_fails_the_call() -> None:
         async def record(self, tenant_id: str, use: str, tokens: int) -> None:
             raise RuntimeError("database down")
 
-    llm = BifrostLLM(llm_settings(), transport=NO_BACKOFF, usage=_Broken())
+    llm = EndpointLLM(llm_settings(), transport=NO_BACKOFF, usage=_Broken())
     with bound_to("acme", "user:u1"):
         assert (await llm.complete([], use="summaries")).text == "ok"
     await llm.close()

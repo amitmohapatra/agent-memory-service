@@ -499,8 +499,8 @@ are not committed.)
 | `SUMMARY_EVERY` | 20 | 290 windows of 20 LoCoMo turns: p50 637, p95 848, max 986 tokens against the 2,000-token conversation budget, whose window is also 20 messages | kept: summary + window cover the thread with no gap and the window budget never binds |
 | `PINNED_SHARE` | 0.5 | at their maxima the pinned sections are ~3.8k tokens (profile 3 × 4,000 chars, summary 2,000 chars, 3 procedures, hints) - inside half the default 8,000 budget | kept; at small budgets the priority order decides |
 | `PROCEDURE_MIN_SUPPORT` / `_MIN_SUCCESS_RATE` | 2 / 0.6 | no labelled multi-run traffic exists yet | kept, unmeasured |
-| prefetch (`PREFETCH_MIN_PULLS`, `_MIN_RATE`, `_MAX`, settle) | 3, 0.5, 5, 10 min | no agent-tool pull traffic exists yet | kept, unmeasured |
-| `APPROVAL_MIN_SUPPORT`, approve/reject rates | 5, 0.95 / 0.5 | no approval traffic | kept, unmeasured |
+| prefetch (`PREFETCH_MIN_PULLS`, `_MIN_RATE`, `_MAX`, settle) | 3, 0.5, 5, 10 min | no agent-tool pull traffic existed then; on a live stack later, 0 of 60 runs pre-included anything and no item ever reached the threshold, because pulls were keyed by the model's own query wording | **removed (2026-10)** with prefetch learning and the pull log (migration `0030_drop_dead_learning`) |
+| `APPROVAL_MIN_SUPPORT`, approve/reject rates, `APPROVAL_MIN_REVIEWERS` | 5, 0.95 / 0.5, 2 | no approval traffic | kept, unmeasured |
 | standing factor | ±15% | no feedback traffic; bounded so it only reorders near-ties | kept, unmeasured |
 
 The unmeasured ones need traffic the benchmarks do not generate (labelled runs, pulls,

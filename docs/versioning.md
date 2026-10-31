@@ -7,15 +7,15 @@ Trellis packages work together. The history itself is the [CHANGELOG](../CHANGEL
 
 | Thing | Where the version is | Now |
 |---|---|---|
-| The service, `trellis-memory-service` | `pyproject.toml`, `src/memory_service/__about__.py`, `GET /version`, the OpenAPI `info.version` | 0.3.0 |
-| The SDK, `trellis-memory` (`trellis.memory`) | `sdk/python/pyproject.toml` | 0.5.0 |
+| The service, `trellis-memory-service` | `pyproject.toml`, `src/memory_service/__about__.py`, `GET /version`, the OpenAPI `info.version` | 0.4.0 |
+| The SDK, `trellis-memory` (`trellis.memory`) | `sdk/python/pyproject.toml` | 0.6.0 |
 | The HTTP API | the path prefix | `/v1` |
-| The database schema | Alembic revisions in `migrations/versions/` | `0024_online_candidate_index` |
+| The database schema | Alembic revisions in `migrations/versions/` | `0031_endpoint_credentials` |
 | The search index | the collection name: the fingerprint of every encoder and the key layout | changes with a model |
 
 The service and the SDK are versioned separately: the SDK depends on `httpx` and `pydantic`
-only and is released when its surface changes. The service's version string has not moved
-since 0.3.0, although `/v1` responses changed in place on 2026-10-04 (lean responses,
+only and is released when its surface changes. The service's version string did not move
+from 0.3.0 until 0.4.0 (ADR 0042), although `/v1` responses changed in place on 2026-10-04 (lean responses,
 ADR 0029; the API surface, ADR 0030). SDK 0.4.0 is the client for that API; an SDK older than
 0.4.0 does not read its responses.
 
@@ -68,15 +68,16 @@ Elsewhere:
 
 | Package | Version | Needs |
 |---|---|---|
-| `trellis-memory-service` (this repository) | 0.3.0 | `bifrost-sdk>=0.3` (the gateway's deny-all MCP scope) |
-| `trellis-memory` (this repository's SDK) | 0.4.0 | a service with the 2026-10-04 `/v1` responses |
+| `trellis-memory-service` (this repository) | 0.4.0 | `bifrost-sdk>=0.4` (auth strategies, profile shaping), `trellis-contracts>=0.6.3,<0.7` (`Endpoint`) |
+| `trellis-memory` (this repository's SDK) | 0.6.0 | a 0.4.0 service (the model-key routes take an `endpoint`) |
 | `trellis-harness` ([agent-harness](https://github.com/amitmohapatra/agent-harness)) | 0.4.0 | `trellis-memory>=0.4`, `trellis-runs>=0.4.0`, `trellis-contracts>=0.6.0,<0.7`, `bifrost-sdk>=0.3` |
 | `agent-runs` and `trellis-runs` ([agent-runs](https://github.com/amitmohapatra/agent-runs)) | 0.4.0 | `trellis-contracts>=0.6.1,<0.7` |
-| `trellis-contracts` ([agent-contracts](https://github.com/amitmohapatra/agent-contracts)) | 0.6.1 | nothing of the others |
-| `bifrost-sdk` ([bifrost-sdk](https://github.com/amitmohapatra/bifrost-sdk)) | 0.3.0 | a Bifrost gateway |
+| `trellis-contracts` ([agent-contracts](https://github.com/amitmohapatra/agent-contracts)) | 0.6.3 | nothing of the others |
+| `bifrost-sdk` ([bifrost-sdk](https://github.com/amitmohapatra/bifrost-sdk)) | 0.4.0 | any OpenAI-compatible endpoint |
 
-The memory service does not import `trellis-contracts`: `POST /v1/feedback` accepts the
+The memory service imports `trellis-contracts` for one type, the `Endpoint` an agent
+registers (vendored like `bifrost-sdk`, `make vendor`); `POST /v1/feedback` accepts the
 `Feedback` record's shape, and the SDK sends a contracts record as it is
-(`ctx.feedback(record)`). The versions above are the ones in each repository's
+(`ctx.feedback(record)`, `ctx.advanced.model_keys.set(endpoint)`), without depending on it. The versions above are the ones in each repository's
 `pyproject.toml` on the date of this page; each repository's own CHANGELOG is the authority
 for its package.

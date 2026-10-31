@@ -33,8 +33,10 @@ from memory_service.modules.authz.visibility import validate_requested_visibilit
 from memory_service.modules.memory.native import default_visibility, normalized_hash
 from memory_service.modules.memory.pipeline import (
     TASK_MEMORY_INDEX,
+    authored_type,
     build_memory,
     keys_for,
+    said_by_a_person,
     supersede,
 )
 from memory_service.modules.memory.replacement import reinstate
@@ -75,6 +77,27 @@ def _stated(
     )
 
 
+def _authorship(ctx: MemoryExecutionContext, old: CanonicalMemory) -> dict[str, Any]:
+    """Whose a new version of ``old`` is, and what it is about. The user's and an admin's
+    keep the old one's. An agent's is the agent's own note: its owner, a kind an agent states
+    (``authored_type``), and no person as its subject, so it never reads as something a
+    person said, whatever the version it replaces was about."""
+    if not ctx.is_agent:
+        return {
+            "owner_principal": old.owner_principal,
+            "memory_type": old.memory_type,
+            "subject": old.subject,
+            "predicate": old.predicate,
+        }
+    about_a_person = (old.subject or "").startswith("user:")
+    return {
+        "owner_principal": ctx.principal_id,
+        "memory_type": authored_type(old.memory_type, by_agent=True),
+        "subject": None if about_a_person else old.subject,
+        "predicate": None if about_a_person else old.predicate,
+    }
+
+
 class MemoryService:
     def __init__(
         self, authz: AuthorizationService, *, fiscal: FiscalCalendar | None = None
@@ -104,6 +127,8 @@ class MemoryService:
         validate_requested_visibility(ctx, hints)
         await guard_workspace_visibility(uow, self.authz, ctx, visibility)
         content = sanitise(content)
+        # an agent states nothing of the user's profile: its USER or PREFERENCE is its own
+        memory_type = authored_type(memory_type, by_agent=ctx.is_agent)
         now = datetime.now(UTC)
         memory_id = new_id("memory")
         about_user = memory_type in (MemoryType.USER, MemoryType.PREFERENCE) and ctx.user_id
@@ -154,7 +179,9 @@ class MemoryService:
     ) -> CanonicalMemory:
         """Replace a memory's content with a new version, bi-temporally: the new memory holds
         from now, the old one is closed at now and points at it, and both stay readable in a
-        temporal view. The owner (or the user an agent acts for, or a tenant admin) only."""
+        temporal view. The owner (or the user an agent acts for, or a tenant admin) only, and
+        never an agent when the memory is what a person said (``said_by_a_person``). The new
+        version is its writer's (``_authorship``)."""
         old = await self.get_memory(uow, ctx, memory_id)
         await self._require_owner(ctx, old, "supersede")
         if old.temporal.status is not TemporalStatus.CURRENT:
@@ -170,14 +197,11 @@ class MemoryService:
             tenant_id=old.tenant_id,
             scope=old.scope,
             visibility=old.visibility,
-            owner_principal=old.owner_principal,
             lifetime=old.lifetime,
-            memory_type=old.memory_type,
             custom_type=old.custom_type,
             content=content,
             normalized_hash=normalized_hash(content),
-            subject=old.subject,
-            predicate=old.predicate,
+            **_authorship(ctx, old),
             temporal=TemporalState(observed_at=now),
             evidence=[_stated(ctx, new_memory_id, content, now)],
             confidence=STATED_CONFIDENCE,
@@ -237,6 +261,20 @@ class MemoryService:
     async def _require_owner(
         self, ctx: MemoryExecutionContext, memory: CanonicalMemory, action: str
     ) -> None:
+        if ctx.is_agent and said_by_a_person(memory):
+            # what the user said is theirs to restate or retract, admin or not: a run's
+            # memory_update overwrote the user's own statements with its answers. The memory
+            # is named (resolved from a handle): a caller that asks the person, and is
+            # approved, acts on it as them
+            raise ScopeDenied(
+                f"memory {memory.memory_id} is the user's own statement: an agent cannot "
+                f"{action} it; use memory_remember to add your note",
+                details={
+                    "principal": ctx.principal_id,
+                    "reason": "users_own_statement",
+                    "memory_id": memory.memory_id,
+                },
+            )
         if memory.owner_principal in (ctx.principal_id, f"user:{ctx.user_id}"):
             return
         if not await self.authz.is_tenant_admin(ctx):
@@ -388,8 +426,29 @@ class MemoryService:
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, memory_id: str
     ) -> CanonicalMemory | None:
         """Soft-delete. Allowed for the owner principal, the user an agent acts for, or a
-        tenant admin; the search index entry is removed by the index job. Idempotent: a
-        memory that is already forgotten returns None instead of NotFound."""
+        tenant admin - never an agent when it is what a person said (``said_by_a_person``);
+        the search index entry is removed by the index job. Idempotent: a
+        memory that is already forgotten returns None instead of NotFound, including one a
+        concurrent forget of its twin removed while this one ran.
+
+        Forgets of related memories touch the same rows (twins, and what they replaced), so
+        those rows are locked first, all at once and in id order, and everything is decided
+        on what they hold under the lock. Taking them one update at a time, each forget in
+        its own order, deadlocked two twins' forgets; and checks made on rows a concurrent
+        forget then committed over refused a just-forgotten memory as "not visible in this
+        scope" and reopened a forgotten old value as CURRENT."""
+        found = await uow.memories.get(ctx.tenant_id, memory_id)
+        if found is not None:
+            # the rows this forget may write, read unlocked only to know which to lock
+            twin_ids = [
+                t.memory_id
+                for t in await uow.memories.twins(ctx.tenant_id, found, current_only=False)
+            ]
+            replaced = await uow.memories.replaced_by_any(ctx.tenant_id, [memory_id, *twin_ids])
+            await uow.memories.lock(
+                ctx.tenant_id, [memory_id, *twin_ids, *(m.memory_id for m in replaced)]
+            )
+        # under the lock: already forgotten, or by a concurrent forget of a twin meanwhile
         if await uow.memories.is_forgotten(ctx.tenant_id, memory_id):
             return None
         memory = await self.get_memory(uow, ctx, memory_id)

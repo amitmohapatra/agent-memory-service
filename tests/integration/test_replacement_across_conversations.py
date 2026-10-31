@@ -16,14 +16,17 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from memory_service.domain.enums import MessageRole, TemporalStatus, Visibility
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.domain.feedback import FeedbackTargetKind, FeedbackVerdict, ProjectionAction
+from memory_service.domain.ids import new_id
 from memory_service.domain.memory import earlier_value, replaced_by
 from memory_service.domain.observation import ProcessingHints
+from memory_service.modules.jobs.registry import register_handlers
 from memory_service.modules.memory.replacement import CrossConversationReplacement
 from memory_service.ports.models import NLIScore
 from tests.integration.test_feedback_projection import _admin, _submit
@@ -555,3 +558,167 @@ async def test_statements_about_one_thing_that_say_different_things_all_stay_cur
     current = "\n".join(m.text for m in bundle.memories)
     assert "K41" in current and "Lena Ortiz" in current, current
     assert not any("K41" in item.text for item in bundle.history), [i.text for i in bundle.history]
+
+
+async def test_a_request_said_again_in_another_conversation_replaces_nothing(
+    container, uow_factory
+) -> None:
+    """S5: replaying a real run's transcript, a request the user made in four conversations
+    was kept in each and three copies were served as "Earlier values (since replaced)". Each
+    stays current in its own conversation; said twice in one, it is one memory."""
+    said = "For the network team: list its open high-priority tickets and its SLA breaches."
+    _scripted(container, 0.99, always=True)  # a head that reads any pair as a contradiction
+    first, again = _chat(), _chat()
+    for chat in (first, again, again):
+        await _say(container, uow_factory, chat, said)
+    copies = [
+        m
+        for chat in (first, again)
+        for m in await _old_forms(container, uow_factory, chat, said)
+        if m.scope.thread_id == chat.thread_id
+    ]
+    assert sorted(m.scope.thread_id for m in copies) == sorted(
+        [first.thread_id, again.thread_id]
+    ), "one per conversation: not merged across them, not repeated within one"
+    assert all(m.temporal.status is TemporalStatus.CURRENT for m in copies)
+    assert not any(replaced_by(m.system_metadata) for m in copies)
+    rendered = (await _context(container, _chat(), "open high-priority tickets")).render()
+    assert "Earlier values" not in rendered
+
+
+async def test_a_question_relayed_from_every_run_forms_no_memory(container, uow_factory) -> None:
+    """S5: the user's question, posted by the agent harness in each run, was kept as a
+    lasting memory; one with no question mark behind a heading was read as a statement."""
+    _scripted(container, 0.99, always=True)
+    asked = (
+        "For employee e-401: how many trips this year and which flights are booked.",
+        "Which store should I restock first?",
+    )
+    runs = [_chat(agent_id="help-desk", agent_run_id=new_id("agent_run")) for _ in range(2)]
+    for run in runs:
+        for text in asked:
+            await _say(container, uow_factory, run, text)
+        remembered = await _memories(uow_factory, run, container, include_superseded=True)
+        assert not [m.content for m in remembered if m.content in asked]
+
+
+# --------------------------------------------------------------------------- one batch
+
+
+async def _batch(container, uow_factory, ctx, said: Sequence[tuple[str, int]]) -> None:
+    """``history.add`` with several messages (``POST /v1/messages``): one transaction, each
+    message said ``days`` ago, and their memories formed after the commit."""
+    ctx = ctx.model_copy(update={"session_id": None, "turn_id": None})
+    now = datetime.now(UTC)
+    register_handlers(container)
+    async with uow_factory() as uow:
+        for content, days in said:
+            await container.services["conversation"].append_message(
+                uow,
+                ctx,
+                role=MessageRole.USER,
+                content=content,
+                occurred_at=now - timedelta(days=days),
+            )
+        await uow.commit()
+    await container.tasks.drain()  # memory.process_observation
+    await container.tasks.drain()  # memory.index
+
+
+async def _slot(container, uow_factory, ctx, predicate: str) -> dict[str, TemporalStatus]:
+    return {
+        m.object or m.content: m.temporal.status
+        for m in await _memories(uow_factory, ctx, container, include_superseded=True)
+        if m.predicate == predicate
+    }
+
+
+async def test_a_batchs_later_value_replaces_the_earlier_as_two_calls_would(
+    container, uow_factory
+) -> None:
+    """N1: "I work at ACME Corp." (45 days ago) and "I work at Globex now." (5 days ago) in one
+    batch both stayed current, so "where did I work six weeks ago?" answered Globex. Where
+    someone works holds one value: the later replaces the earlier, kept as its history."""
+    # two people: one user's conversations replace each other's statements (ADR 0038)
+    batch, split = _chat("u1"), _chat("u2")
+    said = [("I work at ACME Corp.", 45), ("I work at Globex now.", 5)]
+    await _batch(container, uow_factory, batch, said)
+    for one in said:
+        await _batch(container, uow_factory, split, [one])
+    for chat in (batch, split):
+        assert await _slot(container, uow_factory, chat, "works_at") == {
+            "acme corp": TemporalStatus.SUPERSEDED,
+            "globex": TemporalStatus.CURRENT,
+        }
+    [acme] = [
+        m
+        for m in await _memories(uow_factory, batch, container, include_superseded=True)
+        if m.object == "acme corp"
+    ]
+    [globex] = [m for m in await _memories(uow_factory, batch, container) if m.object == "globex"]
+    assert acme.temporal.superseded_by == globex.memory_id
+
+
+async def test_only_the_last_of_three_values_in_a_batch_is_current(container, uow_factory) -> None:
+    chat = _chat()
+    await _batch(
+        container,
+        uow_factory,
+        chat,
+        [("I work at ACME Corp.", 90), ("I work at Initech.", 45), ("I work at Globex now.", 5)],
+    )
+    assert await _slot(container, uow_factory, chat, "works_at") == {
+        "acme corp": TemporalStatus.SUPERSEDED,
+        "initech": TemporalStatus.SUPERSEDED,
+        "globex": TemporalStatus.CURRENT,
+    }
+
+
+async def test_a_batch_keeps_every_value_of_a_slot_that_holds_many(container, uow_factory) -> None:
+    chat = _chat()
+    await _batch(container, uow_factory, chat, [("I like tea.", 3), ("I like coffee.", 1)])
+    assert await _slot(container, uow_factory, chat, "prefers") == {
+        "tea": TemporalStatus.CURRENT,
+        "coffee": TemporalStatus.CURRENT,
+    }
+
+
+async def test_a_batch_replaces_nothing_across_subjects(container, uow_factory) -> None:
+    chat = _chat()
+    await _batch(
+        container,
+        uow_factory,
+        chat,
+        [
+            ("I work at ACME Corp.", 45),
+            ("The manager of Store 61 is Bob Smith.", 30),
+            ("The manager of Store 62 is Dan Brown.", 20),
+            ("I work at Globex now.", 5),
+        ],
+    )
+    memories = await _memories(uow_factory, chat, container, include_superseded=True)
+    stores = [m for m in memories if "manager of Store" in m.content]
+    assert {m.content for m in stores} == {
+        "The manager of Store 61 is Bob Smith.",
+        "The manager of Store 62 is Dan Brown.",
+    }
+    assert all(m.temporal.status is TemporalStatus.CURRENT for m in stores)
+    assert await _slot(container, uow_factory, chat, "works_at") == {
+        "acme corp": TemporalStatus.SUPERSEDED,
+        "globex": TemporalStatus.CURRENT,
+    }
+
+
+async def test_a_move_said_in_german_in_one_batch_replaces_the_old_home(
+    container, uow_factory
+) -> None:
+    """No rule reads either sentence; the speaker's residence relates them and the head
+    decides, as it does for two calls (ADR 0038)."""
+    _scripted(container, 0.97, values=("Leeds", "Bristol"))
+    chat = _chat()
+    old, new = "Ich wohne in Leeds, nahe am Park.", "Ich bin letzten Monat nach Bristol gezogen."
+    await _batch(container, uow_factory, chat, [(old, 60), (new, 5)])
+    forms = await _old_forms(container, uow_factory, chat, old)
+    assert forms and all(m.temporal.status is TemporalStatus.SUPERSEDED for m in forms)
+    [moved] = await _old_forms(container, uow_factory, chat, new)
+    assert moved.temporal.status is TemporalStatus.CURRENT

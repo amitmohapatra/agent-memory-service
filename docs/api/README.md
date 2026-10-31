@@ -10,7 +10,7 @@ same thing, browsable. These pages are the explanation; the contract is the auth
 | --- | --- | --- |
 | [memory.md](memory.md) | how does something get remembered, and what is held about this scope? | `/v1/messages` (events), `/v1/memories` (incl. `/supersede`, `/restore`), `/v1/graph/*`, `/v1/jobs/{id}` |
 | [context.md](context.md) | what goes into the prompt for this turn — and did the answer follow from it? | `/v1/context`, `/v1/recall`, `/v1/verify`, `/v1/threads/{id}`, `/v1/messages` |
-| [agent-tools.md](agent-tools.md) | what can an agent pull from memory itself, and what does that teach the push? | `/v1/agent-tools` |
+| [agent-tools.md](agent-tools.md) | what can an agent pull from memory itself? | `/v1/agent-tools` |
 | [profile.md](profile.md) | what does every prompt start from: pinned blocks and the thread's summary? | `/v1/profile`, `/v1/threads/{id}` (its `summary`) |
 | [documents.md](documents.md) | how does a file become retrievable knowledge with page-level provenance? | `/v1/documents` |
 | [tools.md](tools.md) | which tool, which plan, which arguments — and what may run unasked? | `/v1/tools/*` |

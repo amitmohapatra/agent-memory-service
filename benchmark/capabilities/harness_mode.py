@@ -7,8 +7,12 @@ Runs in agent-harness's environment (it imports ``trellis.harness``). The scenar
 written through the memory SDK into the eval tenant exactly as ``runner`` writes them (the
 transcript a past session would have left); then each question is one harness run of a plain
 function agent: the harness pushes the memory context (``agent.context``) and the function asks
-the gateway's model to answer from it. Runs record nothing back (``without={"records"}``), so
-one question's answer never becomes the next question's memory, and grounding sampling is off.
+the gateway's model to answer from it. Each question has a scope of its own — its own user
+(:func:`question_user`), the scenario written again for it — so what its run records (the
+transcript, the outcome) lands in that user's memory and never in another question's: the
+memory service reads a user's memories for that user only, and an agent's own notes are
+bound to the user it runs for. Grounding sampling is off (``without={"grounding"}`` on the
+wrap).
 
 The model on a CPU is slow, so this mode runs a named, deterministic sample
 (``data/_modes.json``); every run is one model call and is timed end to end.
@@ -35,7 +39,6 @@ from benchmark.capabilities.dataset import (
     select,
 )
 from benchmark.capabilities.runner import (
-    IDENTITIES,
     LoadSampler,
     Service,
     Settings,
@@ -63,6 +66,14 @@ MAX_TOKENS = 400
 RUN_TIMEOUT = 600
 #: how long to wait for the model to answer a one-token request before asking anything
 MODEL_READY_SECONDS = 900
+#: how this mode names its users: one per question (``runner`` names one per scenario-language)
+IDENTITIES = "question-language/v1"
+
+
+def question_user(case: Case) -> str:
+    """The user one question is asked as, and its scenario written as: its own, so what an
+    earlier question's run recorded is never in its memory (stable across runs, opaque)."""
+    return identity(case.key, case.language)
 
 
 async def wait_for_model(
@@ -105,14 +116,18 @@ async def run(settings: Settings, model: str) -> dict[str, Any]:
     today = run_day(settings)
     client = MemoryClient(settings.url, api_key=token, timeout=settings.timeout)
     service = Service(client, settings.worker_metrics_url)
+    # one scope per question: the scenario written for each question's own user
     work = [
-        (s, lang, identity(s.id, lang))
+        (s, lang, question_user(case), case)
         for s in scenarios
         for lang in languages_of(s, settings.selection)
+        for case in cases(s, lang)
     ]
+    if len({user for _, _, user, _ in work}) != len(work):
+        raise SystemExit("two questions share a user: their runs would read each other's records")
     sem = asyncio.Semaphore(settings.write_concurrency)
 
-    async def _write(s: Any, lang: str, user: str) -> Any:
+    async def _write(s: Any, lang: str, user: str, _case: Case) -> Any:
         async with sem:
             w = await write_scenario(service, s, lang, user, today, settings)
             written.append(w)
@@ -133,11 +148,11 @@ async def run(settings: Settings, model: str) -> dict[str, Any]:
         print(f"wrote {sum(w.turns for w in written)} turns; settled {signals}", file=sys.stderr)
 
         hs = HarnessSettings.from_env().model_copy(
-            update={"memory_url": settings.url, "api_key": token, "grounding_sample": 0.0}
+            update={"memory_url": settings.url, "api_key": token}
         )
         harness_memory = MemoryClient(settings.url, api_key=token, timeout=settings.timeout)
         async with Harness(config=hs, memory=harness_memory) as h:
-            assert h.gateway is not None, "the harness mode needs BIFROST_URL (the gateway)"
+            assert h.gateway is not None, "the harness mode needs LLM_BASE_URL (the gateway)"
             gateway = h.gateway
             model_wait = await wait_for_model(gateway, model)
             print(f"model {model} answered after {model_wait:.1f} s", file=sys.stderr)
@@ -158,23 +173,26 @@ async def run(settings: Settings, model: str) -> dict[str, Any]:
 
             def agent_for(agent_id: str | None) -> Any:
                 if agent_id not in agents:
+                    # grounding sampling off: the harness's switch for it (no setting holds it)
                     agents[agent_id] = h.wrap(
-                        answer, id=agent_id or "capeval-agent", timeout=RUN_TIMEOUT
+                        answer,
+                        id=agent_id or "capeval-agent",
+                        run_timeout=RUN_TIMEOUT,
+                        without={"grounding"},
                     )
                 return agents[agent_id]
 
             # the answer latency includes the model, which on a laptop shares the CPU: the load
             # is recorded so a run beside another heavy job can be told apart
             async with LoadSampler() as load:
-                for w in written:
-                    for case in cases(w.scenario, w.language):
-                        records.append(await _ask(agent_for(w.scenario.agent), w, case, settings))
-                        r = records[-1]
-                        print(
-                            f"{r['key']}: {'PASS' if r['passed'] else 'FAIL ' + str(r['reason'])} "
-                            f"({r['latency_ms'] / 1000:.1f}s)",
-                            file=sys.stderr,
-                        )
+                for (*_, case), w in zip(work, written, strict=True):
+                    records.append(await _ask(agent_for(w.scenario.agent), w, case, settings))
+                    r = records[-1]
+                    print(
+                        f"{r['key']}: {'PASS' if r['passed'] else 'FAIL ' + str(r['reason'])} "
+                        f"({r['latency_ms'] / 1000:.1f}s)",
+                        file=sys.stderr,
+                    )
     finally:
         # a failed run purges what it wrote and gives its key back, as a finished one does
         if should_purge(settings) and written:
@@ -228,10 +246,12 @@ async def run(settings: Settings, model: str) -> dict[str, Any]:
 async def _ask(agent: Any, w: Any, case: Case, settings: Settings) -> dict[str, Any]:
     expect = w.expects.get(case.query.id, case.query.expect)
     thread = thread_name(w.user_id, f"h-{hashlib.sha1(case.key.encode()).hexdigest()[:10]}")
+    # the run records into this thread (its transcript): the purge deletes it with the rest
+    w.threads.append(thread)
     t = time.perf_counter()
     error = None
     try:
-        result = await agent.run(case.text, user=w.user_id, thread=thread, without={"records"})
+        result = await agent.run(case.text, user=w.user_id, thread=thread)
         text = str(result.answer or "")
         if result.error:
             error = str(result.error)[:200]

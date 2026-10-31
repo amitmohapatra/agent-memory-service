@@ -117,6 +117,40 @@ async def test_a_job_that_gives_up_is_handed_to_its_give_up_handler(
     assert gave_up == [({"document_id": "d1"}, "ValueError: embedding service down")]
 
 
+async def test_a_conversations_messages_are_read_one_at_a_time_in_order(
+    queue: ProcrastinateTaskQueue,
+) -> None:
+    """ "I work at ACME Corp." and "I work at Globex now." in one batch: read side by side,
+    each compared itself with a store the other had not committed to, and both stayed
+    current. A conversation's jobs run one after another, in the order its messages were
+    stored; another conversation's run beside them."""
+    from memory_service.domain.context import MemoryExecutionContext
+    from memory_service.modules.conversation.service import (
+        TASK_PROCESS_OBSERVATION,
+        observation_job,
+    )
+
+    ran: list[tuple[str, str]] = []
+
+    async def handler(payload):
+        ran.append(("start", payload["observation_id"]))
+        await asyncio.sleep(0.5)
+        ran.append(("end", payload["observation_id"]))
+
+    queue.register(TASK_PROCESS_OBSERVATION, Queue.CHAT_FAST, handler)
+    batch = MemoryExecutionContext(tenant_id="acme", user_id="u1", thread_id="thr_batch")
+    other = batch.model_copy(update={"thread_id": "thr_other"})
+    for ctx, observation_id in ((batch, "obs_acme"), (batch, "obs_globex"), (other, "obs_leeds")):
+        await queue.enqueue(observation_job(ctx, observation_id))
+    for _ in range(10):  # a drain stops at the first fetch that finds nothing it may run
+        await queue.run_until_idle([Queue.CHAT_FAST], concurrency=3)
+        if len(ran) == 6:
+            break
+    at = ran.index
+    assert at(("end", "obs_acme")) < at(("start", "obs_globex")), ran
+    assert at(("start", "obs_leeds")) < at(("end", "obs_acme")), ran
+
+
 async def test_handler_timeout_is_enforced(queue: ProcrastinateTaskQueue) -> None:
     queue.job_timeout_seconds = 1
 

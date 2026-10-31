@@ -46,7 +46,14 @@ CATALOG = [
         "server": "crm",
     },
 ]
+
+
 #: An envelope key an operator would hold; the agent key it wraps never leaves the store.
+def endpoint(key: str) -> dict[str, str]:
+    """A model endpoint as the harness registers it (the suite does not probe it)."""
+    return {"base_url": "http://models.test/v1", "model": "m", "api_key": key}
+
+
 ENVELOPE = base64.urlsafe_b64encode(b"p9b-agent-credential-key-32bytes").decode()
 
 
@@ -72,7 +79,9 @@ async def _harness(app, tenant_id: str = "acme"):
     return admin, sdk(app, service.token)
 
 
-async def _one_successful_run(agent, quote: str = "Q-1183", *, confirmed_by=None) -> str:
+async def _one_successful_run(
+    agent, quote: str = "Q-1183", *, confirmed_by=None, task: str = TASK
+) -> str:
     """Record the two calls of a run and label the run successful, as an adapter would. The
     quote id flows from the lookup's output into the update's arguments. The run's own
     ``system`` confirm is its outcome only; ``confirmed_by`` (a tenant admin's binding)
@@ -81,14 +90,14 @@ async def _one_successful_run(agent, quote: str = "Q-1183", *, confirmed_by=None
         LOOKUP,
         {"sku": "SKU-22", "region": "EMEA"},
         output={"price": 1200, "quote": quote},
-        task=TASK,
+        task=task,
         step=0,
     )
     second = await agent.record_tool(
         UPDATE,
         {"quote": quote, "price": 1200},
         output={"ok": True},
-        task=TASK,
+        task=task,
         step=1,
         latency_ms=42.0,
     )
@@ -166,15 +175,22 @@ async def test_labelled_runs_become_a_plan_with_the_next_step_and_its_arguments(
     user = harness.bind(user_id="u1")
     await user.agent("quote-bot").advanced.tools.put_catalog(CATALOG)
 
-    cold = await user.agent("quote-bot").tool_hints(TASK, available=[LOOKUP, UPDATE])
+    # each run is about its own quote and none names the region: EMEA, the same in every run,
+    # is a constant of the procedure (a literal is learned only from runs about different
+    # things, never from a value their tasks named)
+    priced = "update quote {} with the list price for SKU-22"
+    task = priced.format("Q-1183")
+    cold = await user.agent("quote-bot").tool_hints(task, available=[LOOKUP, UPDATE])
     assert cold.plan is None, "nothing learned yet: no plan is invented"
     assert {c.name for c in cold.tools} <= {LOOKUP, UPDATE}
 
     for quote in ("Q-1183", "Q-2001"):
-        await _one_successful_run(user.agent("quote-bot"), quote, confirmed_by=admin)
+        await _one_successful_run(
+            user.agent("quote-bot"), quote, confirmed_by=admin, task=priced.format(quote)
+        )
 
     fresh = user.agent("quote-bot")
-    hints = await fresh.tool_hints(TASK, available=[LOOKUP, UPDATE])
+    hints = await fresh.tool_hints(task, available=[LOOKUP, UPDATE])
     assert hints.plan is not None and hints.plan.steps == [LOOKUP, UPDATE]
     assert hints.plan.runs == 2 and hints.plan.success_rate == 1.0
     assert hints.next is not None and hints.next.name == LOOKUP == hints.tools[0].name
@@ -188,15 +204,15 @@ async def test_labelled_runs_become_a_plan_with_the_next_step_and_its_arguments(
         LOOKUP,
         {"sku": "SKU-22", "region": "EMEA"},
         output={"price": 1200, "quote": "Q-3003"},
-        task=TASK,
+        task=task,
         step=0,
     )
-    after = await fresh.tool_hints(TASK, available=[LOOKUP, UPDATE])
+    after = await fresh.tool_hints(task, available=[LOOKUP, UPDATE])
     assert after.next is not None and after.next.name == UPDATE
     assert after.next.args["quote"] == "Q-3003", "the quote comes from the lookup's output"
 
     # a caller that cannot call the second tool is never handed a plan that needs it
-    partial = await fresh.tool_hints(TASK, available=[LOOKUP])
+    partial = await fresh.tool_hints(task, available=[LOOKUP])
     assert partial.plan is None and {c.name for c in partial.tools} == {LOOKUP}
 
 
@@ -208,11 +224,17 @@ async def test_approvals_become_a_rule_that_applies_once_accepted(app, running) 
     agent = harness.bind(user_id="u1").agent("quote-bot")
     await agent.advanced.tools.put_catalog(CATALOG)
     for i in range(5):
-        await agent.feedback(
+        # a decision counts only on an interrupt of a run that recorded the call it approved,
+        # and "approve automatically" needs two different reviewers
+        run = harness.bind(user_id="u1").agent("quote-bot", agent_run_id=f"run_approve_{i}")
+        args = {"quote": f"Q-{i}", "price": 1200 + i}
+        await run.record_tool(UPDATE, args, output={"ok": True}, task=TASK, step=0)
+        await run.feedback(
             "tool_call",
             f"call_{i}",
             "approve",
-            metadata={"tool": UPDATE, "args": {"quote": f"Q-{i}", "price": 1200 + i}},
+            reviewer=f"user:lead{i % 2}",
+            metadata={"tool": UPDATE, "args": args, "interrupt_id": f"int_{i}"},
         )
     suggestions = await agent.advanced.tools.approval_suggestions()
     assert [(s.tool, s.suggestion, s.support) for s in suggestions] == [(UPDATE, "auto_approve", 5)]
@@ -326,11 +348,11 @@ async def test_an_agent_registers_rotates_and_revokes_its_own_model_key(app, run
     fresh = await agent.advanced.model_keys.status()
     assert (fresh.registered, fresh.revoked, fresh.revision) == (False, False, 0)
 
-    registered = await agent.advanced.model_keys.set("vk-agent-first")
+    registered = await agent.advanced.model_keys.set(endpoint("vk-agent-first"))
     assert registered.registered is True and registered.revoked is False
     assert registered.revision == 1 and registered.updated_at is not None
 
-    rotated = await agent.advanced.model_keys.set("vk-agent-second")
+    rotated = await agent.advanced.model_keys.set(endpoint("vk-agent-second"))
     assert rotated.revision == 2 and rotated.registered is True
 
     status = await agent.advanced.model_keys.status()
@@ -361,7 +383,7 @@ async def test_another_tenant_reaches_no_tool_memory_and_no_agent_key(app, runni
     mine = acme.bind(user_id="u1").agent("quote-bot")
     await mine.advanced.tools.put_catalog(CATALOG)
     await _one_successful_run(mine)
-    await mine.advanced.model_keys.set("vk-acme-only")
+    await mine.advanced.model_keys.set(endpoint("vk-acme-only"))
 
     claiming = globex.bind(tenant_id="acme", user_id="u1").agent(
         "quote-bot", agent_run_id=mine.scope.agent_run_id
@@ -373,7 +395,7 @@ async def test_another_tenant_reaches_no_tool_memory_and_no_agent_key(app, runni
         claiming.advanced.tools.catalog(),
         claiming.advanced.tools.approval_suggestions(),
         claiming.advanced.tools.accept_suggestion("sug_x"),
-        claiming.advanced.model_keys.set("vk-stolen"),
+        claiming.advanced.model_keys.set(endpoint("vk-stolen")),
         claiming.advanced.model_keys.status(),
         claiming.advanced.model_keys.revoke(),
     ):
@@ -386,3 +408,38 @@ async def test_another_tenant_reaches_no_tool_memory_and_no_agent_key(app, runni
     theirs = globex.bind(user_id="u1").agent("quote-bot")
     assert (await theirs.tool_hints(TASK)).plan is None
     assert await theirs.advanced.tools.catalog() == []
+
+
+@pytest.mark.covers("tools.record_invocation", "feedback.submit_feedback")
+async def test_forged_or_one_persons_approvals_suggest_nothing(app, running) -> None:
+    """B6 through the API: five approvals naming five interrupts of one recorded call count
+    once; five runs each approved by one reviewer count five, and still suggest nothing:
+    "approve automatically" needs two different reviewers. Forged ids name no recorded call."""
+    _, harness = await _harness(app)
+    agent = harness.bind(user_id="u1").agent("quote-bot")
+    await agent.advanced.tools.put_catalog(CATALOG)
+    args = {"quote": "Q-1", "price": 1200}
+    once = harness.bind(user_id="u1").agent("quote-bot", agent_run_id="run_once")
+    await once.record_tool(UPDATE, args, output={"ok": True}, task=TASK, step=0)
+    for i in range(5):
+        await once.feedback(
+            "tool_call",
+            f"call_forged_{i}",
+            "approve",
+            reviewer=f"user:lead{i % 2}",
+            metadata={"tool": UPDATE, "args": args, "interrupt_id": f"int_forged_{i}"},
+        )
+    assert await agent.advanced.tools.approval_suggestions() == []
+
+    for i in range(5):
+        run = harness.bind(user_id="u1").agent("quote-bot", agent_run_id=f"run_solo_{i}")
+        solo = {"quote": f"Q-{i}", "price": 1300 + i}
+        await run.record_tool(UPDATE, solo, output={"ok": True}, task=TASK, step=0)
+        await run.feedback(
+            "tool_call",
+            f"call_solo_{i}",
+            "approve",
+            reviewer="user:lead0",  # the reviewer of the one call counted above
+            metadata={"tool": UPDATE, "args": solo, "interrupt_id": f"int_solo_{i}"},
+        )
+    assert await agent.advanced.tools.approval_suggestions() == []

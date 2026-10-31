@@ -1,9 +1,9 @@
 """Tool memory against PostgreSQL: the catalog, idempotent recording and its statistics, the
-learning job (stored procedures, distillation, graph edges) and the hints read back."""
+learning job (stored procedures, graph edges) and the hints read back."""
 
 from __future__ import annotations
 
-import json
+import asyncio
 
 import pytest
 
@@ -18,7 +18,6 @@ from memory_service.domain.feedback import (
 from memory_service.domain.graph import IDENTIFIED_BY, USED_ENTITY
 from memory_service.domain.tools import ToolDescriptor
 from memory_service.modules.tools.learning import ToolLearning, audience_of
-from tests.support_llm import mocked_gateway
 
 pytestmark = pytest.mark.integration
 
@@ -94,8 +93,8 @@ async def _label(
     source: FeedbackSource = FeedbackSource.JUDGE,
 ) -> None:
     """The run's verified outcome: the grounding judge's RUN feedback (what ``/v1/verify``
-    records; ``source=SYSTEM`` is the run's own word on its final status), projected right
-    away rather than by the queued job."""
+    records, approved by a tenant admin; ``source=SYSTEM`` is the run's own word on its final
+    status), projected right away rather than by the queued job."""
     feedback = container.services["feedback"]
     async with container.services["uow_factory"]() as uow:
         stored, _ = await feedback.submit(
@@ -108,11 +107,14 @@ async def _label(
                 verdict=FeedbackVerdict.CONFIRM if success else FeedbackVerdict.REJECT,
                 source=source,
             ),
-            # the judge records on the service's own authority (``grounding.judge``); the
-            # harness's key may act as the agent: its run's status is taken (ADR 0039)
-            trusted=source is FeedbackSource.JUDGE,
+            # the judge's verdict is the service's own word, never a vote; the harness's key
+            # may act as the agent: its run's status is taken (ADR 0039)
             run_vouched=True,
         )
+        if stored.pending:  # the judge's word waits for a tenant admin (``grounding.judge``)
+            await feedback.review(
+                uow, ctx.tenant_id, stored.feedback_id, approve=True, reviewed_by="admin"
+            )
         await uow.commit()
     await feedback.project(ctx.tenant_id, stored.feedback_id)
 
@@ -193,8 +195,6 @@ async def test_the_learning_job_stores_a_procedure_only_once_enough_runs_support
     [procedure] = await _procedures(container, ctx)
     assert procedure.tools == [PRICING, CRM] and procedure.support == 2
     assert procedure.status == "active" and procedure.procedure_id == candidate.procedure_id
-    # without a model the title is the pattern and the strategy the miner's rendering
-    assert procedure.title == _pattern() and PRICING in procedure.strategy
     binding = next(b for b in procedure.bindings if b["argument"] == "quote_id")
     assert binding["step"] == 1 and binding["source_step"] == 0
     assert await learning.learn() == 0, "everything was learned"
@@ -227,29 +227,6 @@ async def test_relabelling_a_run_relearns_its_pattern(container, uow_factory) ->
         await _label(container, _ctx(f"run_{i}"), run=f"run_{i}", success=False)
     assert await learning.learn() == 4
     assert await _procedures(container, ctx) == [], "no successful run: retired"
-
-
-async def test_a_procedure_is_distilled_from_its_successes_and_failures(
-    container, uow_factory
-) -> None:
-    for i in range(3):
-        await _run_once(container, run=f"run_{i}", quote=f"Q-{i}", sku=f"S-{i}")
-    await _run_once(container, run="run_bad", quote="Q-9", sku="S-9", success=False)
-    reply = {
-        "title": "Reprice a quote",
-        "strategy": "Look the price up, then write it onto the quote the lookup names.",
-        "avoid": "Do not update a locked quote.",
-    }
-    with mocked_gateway([json.dumps(reply)]) as gateway:
-        assist = gateway.assist(uses=["procedure_abstraction"])
-        learning = ToolLearning(uow_factory, assist, container.graph_store)
-        await learning.learn()
-        prompt = gateway.prompts()[0]["messages"][1]["content"]
-    [procedure] = await _procedures(container, _ctx())
-    assert procedure.title == "Reprice a quote"
-    assert procedure.strategy.endswith("Avoid: Do not update a locked quote.")
-    assert "Runs that failed:" in prompt and "QuoteLocked" in prompt
-    assert procedure.distilled == procedure.steps_hash
 
 
 async def test_another_agent_s_private_calls_teach_nothing_it_can_read(
@@ -427,9 +404,7 @@ async def test_an_agent_learns_from_all_its_users_and_shares_once_two_produced_i
     from memory_service.domain.tools import agent_audience
     from memory_service.modules.tools.skills import LearnedSkills
 
-    learning = ToolLearning(
-        container.services["uow_factory"], container.services["llm_assist"], None
-    )
+    learning = ToolLearning(container.services["uow_factory"], None)
     await _run_once(container, run="run_a1", quote="Q-1", sku="SKU-1")
     await _run_once(container, run="run_a2", quote="Q-2", sku="SKU-2")
     await learning.learn("acme")
@@ -468,3 +443,51 @@ async def test_an_agent_learns_from_all_its_users_and_shares_once_two_produced_i
     assert await _procedures(container, _ctx("run_x")) == []
     [still] = await skills.list("acme", agent_id="pricing-agent")
     assert still.status == "dismissed" and still.runs == 4
+
+
+async def test_learn_jobs_racing_over_a_burst_of_runs_store_one_procedure(
+    container, uow_factory
+) -> None:
+    """Six runs land at once and two learn jobs race over their calls: one procedure row (the
+    upsert on its pattern), its support the six runs, not twelve; nothing is left to learn."""
+    learning: ToolLearning = container.services["tool_learning"]
+    await asyncio.gather(
+        *(_run_once(container, run=f"run_{i}", quote=f"Q-{i}", sku=f"S-{i}") for i in range(6))
+    )
+    learned = await asyncio.gather(learning.learn(), learning.learn())
+    assert 12 in learned and set(learned) <= {0, 12}
+    [procedure] = await _procedures(container, _ctx())
+    assert procedure.status == "active" and procedure.support == 6
+    async with uow_factory() as uow:
+        audience, _ = audience_of((await uow.tools.invocations_for_run("acme", "run_0"))[0])
+        stored = await uow.procedures.by_pattern("acme", audience, _pattern())
+    assert stored is not None and stored.procedure_id == procedure.procedure_id
+    assert await learning.learn() == 0
+
+
+async def test_a_learn_job_that_died_before_marking_its_calls_mines_them_again_to_the_same_row(
+    container, uow_factory
+) -> None:
+    """A crash between the re-mine and ``mark_learned``: the next job finds the same calls
+    unlearned, mines the same procedure and leaves its row as it was (same id, same support)."""
+    learning: ToolLearning = container.services["tool_learning"]
+    for i in range(2):
+        await _run_once(container, run=f"run_{i}", quote=f"Q-{i}", sku=f"S-{i}")
+    async with uow_factory() as uow:
+        audience, agent = audience_of((await uow.tools.invocations_for_run("acme", "run_0"))[0])
+    await learning._mine("acme", audience, agent, _pattern())  # the job died after this
+    async with uow_factory() as uow:
+        mined = await uow.procedures.by_pattern("acme", audience, _pattern())
+    assert mined is not None and mined.status == "active" and mined.support == 2
+
+    assert await learning.learn() == 4, "nothing was marked learned"
+    async with uow_factory() as uow:
+        again = await uow.procedures.by_pattern("acme", audience, _pattern())
+    assert again is not None
+    assert (again.procedure_id, again.support, again.steps_hash, again.status) == (
+        mined.procedure_id,
+        2,
+        mined.steps_hash,
+        "active",
+    )
+    assert await learning.learn() == 0

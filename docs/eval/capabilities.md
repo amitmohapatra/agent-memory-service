@@ -50,7 +50,12 @@ samples (`_modes.json`).
 A scenario is **sessions of turns** (`USER`, `ASSISTANT`, `EVENT`), written through
 `history.add` with their `occurred_at`, one thread per session; a session may instead
 **repeat** a templated log line (`repeat`: count, interval, seeded value ranges) or **record
-tool runs** (`tool_runs`: `record_tool` + run feedback, how an agent learns a procedure). A
+tool runs** (`tool_runs`: `record_tool` as the agent, then each run labelled by a person
+through the tenant's administrator credential, how an agent learns a procedure: a run's own
+`system` report of success teaches nothing, and with only a service key the label waits for
+review, so the procedure scenarios need the administrator path; a
+query about a learned procedure asserts its steps in order with a regex, which only the learned
+skill's item meets — a small toolbox's tool hints name every tool on their own). A
 scale scenario names a **corpus** spec; its aggregate questions carry the computation
 (`aggregate`: record kind, calendar period relative to the run date, group, value, top-k) and
 the ground truth is computed from what was generated (`generate.py`).
@@ -138,8 +143,12 @@ The samples are deterministic (`_modes.json`): per capability the InventorySmart
 then the first scenario of each other domain in id-hash order. `llm`: English, three phrasing
 kinds (`direct`, `paraphrase`, `implicit`), every capability but scale (extracting a
 1,100-message tenant with a CPU model takes hours; scale is measured in the other two modes).
-`harness`: English, the `direct` phrasing, every capability. Harness runs record nothing back
-(`without={"records"}`), so no answer becomes the next question's memory.
+`harness`: English, the `direct` phrasing, every capability. Each question is asked as a user
+of its own, its scenario written again for that user (users named `question-language/v1`), so
+what its run records — the transcript, the outcome — lands in that user's memory and no answer
+becomes another question's memory: a user's memories are read for that user only, and an
+agent's own notes are bound to the user it runs for. A scenario with several questions is
+therefore written once per question. Grounding sampling is off (`without={"grounding"}`).
 
 ## Metrics
 
@@ -356,7 +365,7 @@ make eval-capabilities-validate                   # every assertion satisfiable 
 Environment: `MEMORY_URL`, `CAPEVAL_ADMIN_KEY` (a credential that may onboard a tenant - the
 platform key, or a development key on a laptop), `MEMORY_WORKER_METRICS_URL` (the worker's
 metrics port), `CAPEVAL_LLM_MODEL` / `CAPEVAL_ANSWER_MODEL`, and for harness mode the
-agent-harness environment (`BIFROST_URL`, `BIFROST_VIRTUAL_KEY`; `HARNESS_PY` is its Python).
+agent-harness environment (`LLM_BASE_URL`, `LLM_API_KEY`; `HARNESS_PY` is its Python).
 `CAPEVAL_ARGS` passes runner options: `--languages`, `--split dev`, `--capabilities`,
 `--domains`, `--kinds`, `--scenarios`, `--placements`, `--surfaces`, `--scale`.
 

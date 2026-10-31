@@ -62,8 +62,9 @@ docker compose exec memory-validate uv sync --frozen --all-extras --dev   # work
 docker compose exec -e MEMORY_TEST_PROVIDERS=env memory-validate make validate
 ```
 
-Secrets never enter the repository: the Bifrost virtual key lives in the git-ignored
-`secrets.env` (or the `BIFROST_VIRTUAL_KEY` environment variable); provider keys live only in Bifrost.
+Secrets never enter the repository: a model endpoint's key lives in the git-ignored
+`secrets.env` (or the `LLM_API_KEY` environment variable), or behind a gateway that holds the
+provider keys.
 
 ## Pre-commit
 

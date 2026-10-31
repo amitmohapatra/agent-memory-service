@@ -196,7 +196,9 @@ def register_handlers(container: Container) -> None:
         """Learn from one feedback record (idempotent; see modules.feedback)."""
         feedback = container.services.get("feedback")
         if feedback is not None:
-            await feedback.project(payload["tenant_id"], payload["feedback_id"])
+            await feedback.project(
+                payload["tenant_id"], payload["feedback_id"], attempt=int(payload.get("attempt", 0))
+            )
 
     async def memory_index(payload: dict[str, Any]) -> None:
         """Index the memories, which makes them findable, then their graph enrichment
@@ -338,10 +340,6 @@ def register_handlers(container: Container) -> None:
         """Claim the standing questions that are due."""
         await container.services["profile"].schedule_due()
 
-    async def prefetch_learn(payload: dict[str, Any]) -> None:
-        """Fold settled agent-tool pulls into what the context pre-includes."""
-        await container.services["agent_tools"].learn_prefetch()
-
     async def tools_index(payload: dict[str, Any]) -> None:
         """Embed changed catalog entries for tool search."""
         await container.services["tool_index"].index(payload["tenant_id"], payload["tool_ids"])
@@ -462,9 +460,6 @@ def register_handlers(container: Container) -> None:
     )
     queue.register(TASK_TOOLS_INDEX, Queue.EMBEDDING, tools_index, retries=5)
     _register_tools_refresh(queue, container)
-    queue.register_periodic(
-        "periodic.prefetch_learn", Queue.RECONCILE, prefetch_learn, cron="*/5 * * * *"
-    )
     queue.register(TASK_TOOLS_LEARN, Queue.RECONCILE, tools_learn, retries=0)
     queue.register_periodic(
         "periodic.tools_learn", Queue.RECONCILE, tools_learn, cron="*/5 * * * *"

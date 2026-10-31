@@ -3,6 +3,11 @@
 Date: 2026-10-04. Status: accepted. Amended by [ADR 0039](0039-thumbs-wait-once-per-voter.md):
 an owner's thumbs-down on their memory waits too (only a correction with text is an edit), a
 voter counts once per target, and the queue is grouped by target and decided in bulk.
+Amended 2026-10-26 (live learning test, B1/B2/B12): the grounding judge's verdict waits for
+review too (it was 3's first exception); it never cites the memories a supported claim rests
+on (a confirm cites none, a reject only the memories that contradict a claim, and none when the
+run recorded tool calls); and a run verdict moves the memories it cites only when it labels the
+run.
 
 ## Context
 

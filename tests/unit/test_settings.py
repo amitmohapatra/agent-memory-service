@@ -5,10 +5,15 @@ from memory_service.config.constants import CONTEXT, FROZEN_MODELS, RETRIEVAL
 from memory_service.config.settings import Settings
 
 
-def test_defaults_are_cpu_first_and_the_model_is_off_without_a_gateway() -> None:
+def test_defaults_are_cpu_first_and_the_model_follows_the_agents_endpoint() -> None:
+    """With nothing configured the service has no endpoint of its own, and calls the one an
+    agent registers ("configure the harness only, memory follows"); an operator who turns
+    that off has no model at all."""
     s = Settings(_env_file=None)
-    assert not s.llm.enabled and s.llm.api_key is None
-    assert not s.llm.wants("contextual_extraction")
+    assert s.llm.endpoint is None and not s.llm.operator_pays
+    assert s.llm.accept_agent_endpoints and s.llm.enabled
+    off = Settings(_env_file=None, models={"llm": {"accept_agent_endpoints": False}})
+    assert not off.llm.enabled and not off.llm.wants("contextual_extraction")
     assert s.otel_endpoint is None and s.authentication.mode == "api_key"
     assert FROZEN_MODELS.dense.id == "ibm-granite/granite-embedding-small-english-r2"
     assert FROZEN_MODELS.dense.dimension == 384 and FROZEN_MODELS.dense.backend == "torch"
@@ -106,7 +111,7 @@ def test_the_environment_surface_is_topology_and_credentials_only() -> None:
     # 51 -> 35 in the final overhaul: the webhooks flag went with the webhooks; the model's
     # tuning (model names, fast uses, the use allow-list, tokens, timeout, retries), the
     # Hindsight quota, the encoder threads, the service-wide rate limit and the exporter
-    # kind became constants or are derived (the model is on when BIFROST_URL is set, tracing
+    # kind became constants or are derived (the model is on when LLM_BASE_URL is set, tracing
     # when OTEL_EXPORTER_OTLP_ENDPOINT is, the authentication mode from the credentials).
     # 35 -> 36 for ``retail_calendar``: which fiscal calendar the customer reports in is a
     # fact about the customer, like ``tenant_claim``, not a tuning - two retailers on 4-5-4
@@ -122,7 +127,13 @@ def test_the_environment_surface_is_topology_and_credentials_only() -> None:
     # 41 -> 42 for ``authentication.trusted_dev_tenant``: which tenant a laptop's development
     # key acts in is a credential fact (it is what ``GET /v1/keys/self`` reports for the key),
     # and it must equal the harness's local tenant, which is configured on the other side.
-    assert len(leaves) <= 42, f"{len(leaves)} env fields: {leaves}"
+    # 42 -> 50 (ADR 0042): the service's own model endpoint is the four names the harness
+    # reads (``LLM_BASE_URL``, ``LLM_API_KEY``, ``LLM_GATEWAY``, ``LLM_AUTH``: two more than
+    # the gateway URL and key they replace), the model that endpoint serves and its profile
+    # (``models.llm.model``, ``models.llm.profile.*``: facts about the operator's endpoint,
+    # named differently on each one, which no constant can know), and the operator's choice
+    # whether an agent's registered endpoint is called (``accept_agent_endpoints``).
+    assert len(leaves) <= 50, f"{len(leaves)} env fields: {leaves}"
     for forbidden in (
         "prefetch_k",
         "final_k",
@@ -184,13 +195,20 @@ def test_the_authentication_mode_follows_from_the_credentials_configured() -> No
 
 
 def test_the_platform_names_are_read_unprefixed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The model gateway and the trace endpoint are the platform's variables, read under the
+    """The model endpoint and the trace endpoint are the platform's variables, read under the
     names the harness and agent-runs read them by."""
-    monkeypatch.setenv("BIFROST_URL", "http://bifrost:8080/v1")
-    monkeypatch.setenv("BIFROST_VIRTUAL_KEY", "sk-bf-operator")
+    monkeypatch.setenv("LLM_BASE_URL", "http://bifrost:8080/v1")
+    monkeypatch.setenv("LLM_API_KEY", "sk-bf-operator")
+    monkeypatch.setenv("LLM_GATEWAY", "bifrost")
+    monkeypatch.setenv("LLM_AUTH", "bearer")
+    monkeypatch.setenv("MEMORY__MODELS__LLM__MODEL", "openai/gpt-4.1-mini")
+    monkeypatch.setenv("MEMORY__MODELS__LLM__PROFILE__REASONING_OUTPUT", "true")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318/v1/traces")
     s = Settings(_env_file=None)
-    assert s.llm.enabled and s.llm.base_url == "http://bifrost:8080/v1"
+    own = s.llm.endpoint
+    assert s.llm.enabled and own is not None and own.base_url == "http://bifrost:8080/v1"
+    assert (own.gateway, own.auth, own.model) == ("bifrost", "bearer", "openai/gpt-4.1-mini")
+    assert own.profile.reasoning_output and own.api_key is not None
     assert s.llm.operator_pays and "sk-bf-operator" not in str(s.redacted())
     assert s.otel_endpoint == "http://collector:4318/v1/traces"
 
@@ -206,7 +224,7 @@ def test_secrets_are_masked() -> None:
         search={"qdrant_api_key": "qdrantsecret"},
         authorization={"openfga_api_token": "supersecret"},
         authentication={"trusted_dev_api_keys": ["devsecret"]},
-        bifrost_virtual_key="virtualkey",
+        llm_api_key="virtualkey",
         hindsight={"api_key": "hindsightsecret"},
     )
     dumped = str(s.redacted())
@@ -242,3 +260,16 @@ def test_a_short_bootstrap_key_is_refused_in_deployed_environments() -> None:
     assert Settings(_env_file=None, **ok).authentication.mode == "api_key"
     dev = {"authentication": {"bootstrap_admin_key": "short"}}
     assert Settings(_env_file=None, **dev).authentication.bootstrap_admin_key is not None
+
+
+def test_an_endpoint_that_is_not_http_fails_where_it_is_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_BASE_URL", "bifrost:8080/v1")
+    with pytest.raises(ValueError, match="http"):
+        Settings(_env_file=None)
+
+
+def test_an_excluded_model_is_refused_as_the_services_own() -> None:
+    with pytest.raises(ValueError, match="excluded origin"):
+        Settings(_env_file=None, models={"llm": {"model": "deepseek/deepseek-chat"}})

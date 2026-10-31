@@ -52,8 +52,8 @@ flowchart LR
   API --> C[("Dragonfly / Redis<br/>hot cache")]
   W --> B[("GCS or filesystem<br/>archive")]
   API -. optional .-> FGA["OpenFGA"]
-  API -->|virtual key| GW["Bifrost gateway"]
-  W -->|virtual key| GW
+  API -->|the resolved endpoint| GW["a model endpoint<br/>(OpenAI-compatible, Bifrost, Vertex, Bedrock ...)"]
+  W -->|the resolved endpoint| GW
   GW --> LLM["Model providers"]
   CT["trellis-contracts"] -. shared types .- H
   CT -. shared types .- RUNS
@@ -180,7 +180,7 @@ flowchart TB
   gfx --> comp["document companion expansion,<br/>request-local evidence verification"]
   comp --> sim["dense similarity of each item to the question"]
   sim --> pack["ContextBuilder: provenance + evidence groups<br/>under the token budget, relevance floor"]
-  side["profile blocks, thread summary, learned skills,<br/>prefetched memories, recent messages, tool hints<br/>(one indexed read each, in parallel)"] --> pack
+  side["profile blocks, thread summary, learned skills,<br/>recent messages, tool hints<br/>(one indexed read each, in parallel)"] --> pack
   pack --> bundle[ContextBundle]
 ```
 
@@ -216,13 +216,12 @@ flowchart LR
   fb[feedback] --> rv["review (ADR 0028):<br/>a vote waits for the tenant admin"] --> fp["feedback.project<br/>memory standing, run outcomes, tool statistics,<br/>approval patterns, procedure rejection"]
   msg["every 20 messages"] --> sr["summary.refresh<br/>the thread's rolling summary"]
   up["USER / PREFERENCE memory"] --> pr["profile.refresh<br/>the user's pinned block"]
-  pulls["agent-tool pulls"] --> pf["prefetch, every 5 min<br/>what the push pre-includes"]
   cat["catalog upsert"] --> ti["tools.index<br/>the tools search collection"]
   obs["observation (any language)"] --> mp["memory.process<br/>English rules; other languages:<br/>contextual_extraction (tenant model)"]
   md["memory / document"] --> ge["graph.enrich_memories / graph.enrich_document<br/>(once indexed: jobs of their own on the graph queue with a model, in the index job without one):<br/>native entities and edges;<br/>relation_extraction (tenant model)"]
 ```
 
-Where each model use runs, its tier and its fallback: [guide chapter 8, the twelve uses](guide/08-models.md#the-twelve-uses).
+Where each model use runs, its tier and its fallback: [guide chapter 8, the eleven uses](guide/08-models.md#the-eleven-uses).
 
 What each job learns, with the thresholds in the code:
 
@@ -238,8 +237,6 @@ What each job learns, with the thresholds in the code:
   earlier outputs ([api/skills.md](api/skills.md), ADR 0034).
 - **Approval suggestions.** Approve, reject and edit decisions per tool and argument shape
   become suggested rules after 5 decisions; the service never applies one itself.
-- **Prefetch.** A memory the agent pulled for a kind of request at least 3 times and used at
-  least half the time is included in the next push for that kind (at most 5).
 - **Thread summaries and the profile.** Every 20 messages a thread's durable summary rolls
   forward, so the summary plus the 20-message window always cover the thread; the `user`
   profile block is kept from USER and PREFERENCE memories.
@@ -261,12 +258,15 @@ MENTIONS/DEFINED_BY) is built without an LLM and is distinct from the semantic K
 
 ## Generative model access
 
-The service never talks to an LLM provider. The model is available exactly when
-`BIFROST_URL` is set (`LLMSettings.enabled`); `adapters/models/llm.py` speaks the
-OpenAI-compatible HTTP API of a [Bifrost](https://github.com/maximhq/bifrost) gateway that
-runs outside the service and holds the provider keys. The service holds only Bifrost
-*virtual keys*: the operator's (`BIFROST_VIRTUAL_KEY`, e.g. in `secrets.env`) and the
-agent- and tenant-level keys registered through the API, stored encrypted. Calls are bounded
+The service imports no LLM provider SDK. Each call resolves its endpoint in one order
+(`modules/llm/endpoints.py`): the one the acting agent registered (else its tenant's), then
+the service's own (`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_GATEWAY`, `LLM_AUTH`), then none
+(ADR 0042). Configure the harness only and memory follows: the harness registers its agent's
+endpoint (a `trellis.contracts.Endpoint`), stored encrypted, and the service calls the model
+the agent was configured with. `adapters/models/llm.py` speaks the OpenAI-compatible HTTP API
+through the shared `bifrost-sdk` client, with three strategies picked by name: the route
+(`openai-compatible`, `bifrost`), the auth (`bearer`, `google`, `aws`) and the model's profile
+(which request shape it takes). Calls are bounded
 (timeout, bounded retries, circuit breaker; the values are `constants.LLM` /
 `constants.LLM_TRANSPORT`, not environment variables), traced (`llm.chat` spans with
 model/tokens/latency), metered (`memory_llm_*`) and logged without prompt text unless the
@@ -280,7 +280,7 @@ is then consulted only when the gateway is configured, the resolved tenant polic
 (no policy row: every use except the opt-in `memory_restatement`) and a key can pay
 (contextual_extraction, relation_extraction, entity_resolution, conflict_adjudication,
 summaries, reflection, memory_connections, query_expansion, chunk_context,
-memory_restatement, grounding_judge, procedure_abstraction; see [the twelve uses](guide/08-models.md#the-twelve-uses)).
+memory_restatement, grounding_judge; see [the eleven uses](guide/08-models.md#the-eleven-uses)).
 Any failure returns
 `None`, so the module continues with its native result. Every successful call is counted in
 `llm_usage_daily` (one upsert) and `memory_llm_tokens_total{tenant,use,direction}`. Mem0/LangMem/Graphiti/Cognee provider adapters were removed; comparisons belong

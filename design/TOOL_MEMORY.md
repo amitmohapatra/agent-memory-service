@@ -4,13 +4,13 @@
 > What exists now is described in [api/tools.md](../docs/api/tools.md): a catalog (`PUT
 > /v1/tools/catalog`, `GET /v1/tools`) with side effects and argument entity types, call records
 > (`POST /v1/tools/invocations`) counted into per-tool statistics, run outcomes, a background
-> learning job that stores one procedure per task pattern and audience (distilled by the
-> tenant's model when one is available) and writes `procedural` graph edges, tool hints
-> (`POST /v1/tools/hints`, also inline in `POST /v1/context`) and approval suggestions from
-> tool-call feedback. Removed: `POST /v1/tools/plan`, `GET /v1/tools/procedures`, the tool
-> policy / replay cache and the `/v1/tools/record` alias. Sections below that describe other
-> endpoints are kept as history, not as current API. The framework-side wrappers (§30.5, §30.8)
-> live in the harness, not here.
+> learning job that stores one procedure per task pattern and audience and writes `procedural`
+> graph edges, tool hints (`POST /v1/tools/hints`, also inline in `POST /v1/context`) and
+> approval suggestions from tool-call feedback. Removed: `POST /v1/tools/plan`, `GET
+> /v1/tools/procedures`, the tool policy / replay cache, the `/v1/tools/record` alias and
+> (2026-10) the model-distilled procedure title and strategy (`procedure_abstraction`), which
+> nothing read. Sections below that describe other endpoints are kept as history, not as
+> current API. The framework-side wrappers (§30.5, §30.8) live in the harness, not here.
 
 Companion to the pre-overhaul target-stack design (since removed; ADRs 0024-0026 hold the current stack).
 
@@ -267,8 +267,8 @@ script, in order, with argument bindings.
 message was recorded with evidence status COMPLETE and no tool error was left unresolved,
 or explicitly by RUN feedback (`ctx.feedback("run", run_id, "confirm"|"reject")`: the
 harness's `system` verdict from the final status, a judge's, or a person's — human > judge >
-system). Unlabelled runs count as weak positives only
-after they are older than a configurable window with no correction.
+system). An unlabelled run is no evidence unless one of its calls failed, and a `system`
+failure of a run whose calls all worked (a time limit, a model error) is none either.
 
 **Step 4 — chains are mined, deterministically.** Per run, consecutive records form a
 trajectory. A `feeds` edge is created from step *i* to step *j>i* when a value in step *j*'s

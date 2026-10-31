@@ -21,8 +21,9 @@ Sources, highest precedence first (`src/memory_service/config/settings.py`):
 2. `.env`, then `secrets.env` in the working directory (both git-ignored; the later file wins);
 3. the defaults below.
 
-Service settings are named `MEMORY__<SECTION>__<FIELD>` (the `__` nests). Four names are the
-platform's own and carry no prefix: `WEB_CONCURRENCY`, `BIFROST_URL`, `BIFROST_VIRTUAL_KEY` and
+Service settings are named `MEMORY__<SECTION>__<FIELD>` (the `__` nests). Six names are the
+platform's own and carry no prefix: `WEB_CONCURRENCY`, `LLM_BASE_URL`, `LLM_API_KEY`,
+`LLM_GATEWAY`, `LLM_AUTH` (the harness reads the same four) and
 `OTEL_EXPORTER_OTLP_ENDPOINT`. A list or a map is written as JSON
 (`MEMORY__AUTHENTICATION__TRUSTED_DEV_API_KEYS=["dev-key"]`). Every credential is a
 `SecretStr`: `GET /version` shows a redacted snapshot of the settings, with each secret as
@@ -39,13 +40,15 @@ default is right for a laptop. `docker compose` reads the same file.
   affinity, not the host's count), clamped to 1-8: API processes and concurrent jobs.
 - **The authentication mode follows from the credentials** configured: a JWKS URL means
   `jwt`; development keys and no bootstrap key mean `trusted_dev`; otherwise `api_key`.
-- **The model is available exactly when `BIFROST_URL` is set.** Unset, no model call is ever
-  made and every path runs its deterministic form.
+- **The model follows the harness.** A call goes to the endpoint the acting agent (else its
+  tenant) registered, else the service's own (`LLM_BASE_URL`), else nowhere: no model call is
+  made and every path runs its deterministic form. With `ACCEPT_AGENT_ENDPOINTS=false` and no
+  `LLM_BASE_URL`, the service never calls a model.
 - **Tracing is on exactly when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.**
 - **The connection pools are sized from one budget** per pod (`CONNECTION_BUDGET`), split per
   process; unset, 28 connections per process.
 - **The session connection defaults to the request connection** (`DIRECT_URL` to `URL`).
-- **Model-key encryption gets a development key in `dev` and `test`** when no envelope keys
+- **Registered endpoints' encryption gets a development key in `dev` and `test`** when no envelope keys
   are set (derived, never stored, logged as a warning). It protects nothing; `staging` and
   `prod` never get one.
 
@@ -135,17 +138,28 @@ running.
 | `MEMORY__SEARCH__REPLICATION_FACTOR` | `1` | `2` | no | copies of each shard of a new collection |
 | `MEMORY__SEARCH__WRITE_CONSISTENCY_FACTOR` | `1` | `2` | no | copies that must acknowledge a write; at most `REPLICATION_FACTOR`. The three layout values apply when a collection is created; an existing one takes them only through a rebuild ([deploy/search.md](deploy/search.md)) |
 
-## The model gateway and model keys
+## The model endpoint
 
-The service never talks to a model provider; it calls a [Bifrost](https://github.com/maximhq/bifrost)
-gateway you run ([chapter 8](guide/08-models.md)). Which uses run and which model each calls is
-the tenant's policy, set through the API, not a setting.
+Configure the harness only: it registers each agent's endpoint, and the service calls the
+model that agent was configured with for its memory. The variables below are the service's own
+endpoint, for agents that registered none and for running the service on its own. Any
+OpenAI-compatible API works; [chapter 8](guide/08-models.md) has the table of providers and
+the order a call's endpoint is chosen in. Which uses run, and the model a use calls, is the
+tenant's policy, set through the API.
 
 | Variable | Default | Example | Auto | What it does |
 |---|---|---|---|---|
-| `BIFROST_URL` | unset | `http://bifrost:8080/v1` | n/a | the gateway's OpenAI-compatible endpoint. Set, the model is available; unset, no model call is ever made |
-| `BIFROST_VIRTUAL_KEY` | unset | `<operator-virtual-key>` | no | the operator's virtual key: pays for tenants and agents that registered none. Unset, only registered keys pay |
-| `MEMORY__AGENT_CREDENTIALS__ACTIVE_KEY_ID` | unset | `v1` | yes in `dev`/`test`: a development key | the envelope key that encrypts newly registered model keys |
+| `LLM_BASE_URL` | unset | `http://bifrost:8080/v1` | n/a | the service's own endpoint: an OpenAI-compatible API root. Set, it serves every tenant and agent that registered none; unset, only registered endpoints are called |
+| `LLM_API_KEY` | unset | `<bearer-key>` | no | its bearer key (`LLM_AUTH=bearer`); unset for a local server that takes none |
+| `LLM_GATEWAY` | `openai-compatible` | `bifrost` | no | the route: `openai-compatible` (any endpoint) or `bifrost` (adds Bifrost's per-call headers: no content logging, no gateway MCP tools) |
+| `LLM_AUTH` | `bearer` | `bearer` | no | the auth: `bearer` (`LLM_API_KEY`), `google` (a refreshed Google token, for Vertex AI; the `[google]` extra) or `aws` (SigV4, for Bedrock; the `[aws]` extra) |
+| `MEMORY__MODELS__LLM__MODEL` | unset | `openai/gpt-4.1-mini` | yes: the policy's, else one `/models` lists with enough to choose by | the model the service's own endpoint calls, as that endpoint names it |
+| `MEMORY__MODELS__LLM__PROFILE__REASONING_OUTPUT` | `false` | `false` | no | the model reasons before it answers: it is sent `max_completion_tokens` and no `temperature` |
+| `MEMORY__MODELS__LLM__PROFILE__TEMPERATURE` | `true` | `true` | no | the model accepts a `temperature` (`false`: the same request shape as a reasoning model; set it where `/models` does not say, as Anthropic's does not) |
+| `MEMORY__MODELS__LLM__PROFILE__MAX_OUTPUT_TOKENS` | unset | `4096` | no | the most tokens one answer may hold; a call's budget is capped at it |
+| `MEMORY__MODELS__LLM__PROFILE__TOOL_CALLING` | `true` | `true` | no | whether the model takes tools: part of the shared profile, no effect here (no memory call carries tools or a `tool_choice`) |
+| `MEMORY__MODELS__LLM__ACCEPT_AGENT_ENDPOINTS` | `true` | `true` | no | `false`: a registered endpoint is stored but never called; every call uses the service's own endpoint, or none |
+| `MEMORY__AGENT_CREDENTIALS__ACTIVE_KEY_ID` | unset | `v1` | yes in `dev`/`test`: a development key | the envelope key that encrypts newly registered model endpoints |
 | `MEMORY__AGENT_CREDENTIALS__ENCRYPTION_KEYS` | `{}` | `{"v1":"<base64 of 32 random bytes>"}` | yes in `dev`/`test`: a development key | the keyring, by version (keep old versions while rotating). Required in `staging` and `prod`, where registration is refused without it |
 | `MEMORY__HINDSIGHT__BASE_URL` | unset | `http://hindsight:8888` | no | an optional Hindsight extraction service (install the `[hindsight]` extra): non-agent contextual extraction goes through it |
 | `MEMORY__HINDSIGHT__API_KEY` | unset | `<hindsight-token>` | no | Hindsight's server authentication token |

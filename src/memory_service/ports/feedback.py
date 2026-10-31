@@ -97,6 +97,13 @@ class FeedbackRepository(Protocol):
         """One voter's votes on one target that a reviewer approved, newest first."""
         ...
 
+    async def counted_decisions(
+        self, tenant_id: str, *, agent_id: str, tool: str, limit: int
+    ) -> list[Feedback]:
+        """The decisions on calls of ``tool`` by ``agent_id`` ("" for none) that were counted
+        toward its approval patterns (projection ``tool_call_counted``), newest first."""
+        ...
+
     async def review_counts(
         self, tenant_id: str, *, user_id: str | None, agent_id: str | None
     ) -> dict[str, int]:

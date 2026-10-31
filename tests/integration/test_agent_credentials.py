@@ -1,9 +1,8 @@
-"""Real isolated SQL, mocked gateway: no provider credit is consumed."""
+"""Real isolated SQL, mocked endpoint: no provider credit is consumed."""
 
 import asyncio
 
 import pytest
-from pydantic import SecretStr
 from sqlalchemy import text
 
 from memory_service.adapters.models.credential_cipher import AesCredentialCipher
@@ -15,14 +14,15 @@ from memory_service.modules.llm.credentials import ModelCredentials, agent_ident
 from memory_service.modules.llm.policy import current_model_identity
 from memory_service.ports.credentials import ModelIdentity
 from tests.integration.test_memory import _observe
-from tests.support_llm import bound_to, chat_response, mocked_gateway
+from tests.support_llm import BASE, bound_to, chat_response, mocked_gateway
 from tests.unit.test_agent_credential_cipher import TEST_KEY
 from tests.unit.test_narrative_memory import MESSAGE
+from trellis.contracts import Endpoint
 
 pytestmark = pytest.mark.integration
 ALICE = MemoryExecutionContext(tenant_id="acme", user_id="alice", agent_id="research")
 BOB = ALICE.model_copy(update={"user_id": "bob"})
-#: another agent: an agent's key is its own, whichever user a run is for
+#: another agent: an agent's endpoint is its own, whichever user a run is for
 WRITER = ALICE.model_copy(update={"agent_id": "writer"})
 #: the binding ``mocked_gateway().assist`` gives the test's own work; a call must leave it as
 #: it found it (no request's identity leaks into the caller)
@@ -38,11 +38,20 @@ def service(uow_factory):
     )
 
 
-async def save(credentials, uow_factory, ctx, key):
+def endpoint(key: str, **fields) -> Endpoint:
+    """An endpoint at the mocked one's address, paid for with ``key``."""
+    return Endpoint(base_url=BASE, api_key=key, **fields)
+
+
+async def save(credentials, uow_factory, ctx, key, **fields):
     async with uow_factory() as uow:
-        record = await credentials.set(uow, ctx, SecretStr(key) if key else None)
+        record = await credentials.set(uow, ctx, endpoint(key, **fields) if key else None)
         await uow.commit()
     return record
+
+
+def bearer(call) -> str:
+    return call.request.headers["authorization"].removeprefix("Bearer ")
 
 
 async def test_storage_rotation_revocation_and_tenant_owner_isolation(container, uow_factory):
@@ -51,10 +60,10 @@ async def test_storage_rotation_revocation_and_tenant_owner_isolation(container,
     assert first.revision == 1
     resolved_first = await credentials.resolve(agent_identity(ALICE))
     assert resolved_first is not None
-    assert resolved_first.key.get_secret_value() == "vk-alice-test"
+    assert resolved_first.endpoint == endpoint("vk-alice-test")
     assert resolved_first.identity == ModelIdentity("acme", "agent:research")
     shared = await credentials.resolve(agent_identity(BOB))  # the same agent for another user
-    assert shared is not None and shared.key.get_secret_value() == "vk-alice-test"
+    assert shared is not None and shared.endpoint == endpoint("vk-alice-test")
     assert await credentials.resolve(agent_identity(WRITER)) is None
     assert (
         await credentials.resolve(agent_identity(ALICE.model_copy(update={"tenant_id": "rival"})))
@@ -62,7 +71,7 @@ async def test_storage_rotation_revocation_and_tenant_owner_isolation(container,
     )
     async with container.database.engine.connect() as conn:
         stored = (await conn.execute(text("select ciphertext from agent_credentials"))).scalar_one()
-    assert b"vk-alice-test" not in stored
+    assert b"vk-alice-test" not in stored and BASE.encode() not in stored
     second = await save(credentials, uow_factory, ALICE, "vk-rotated-test")
     assert second.revision == 2
     with pytest.raises(ProviderNotConfigured):  # the call ran under the rotated-away key
@@ -80,8 +89,8 @@ async def test_concurrent_agents_send_only_their_key_and_explicit_mcp_denial(
     container, uow_factory
 ):
     credentials = service(uow_factory)
-    await save(credentials, uow_factory, ALICE, "vk-alice-test")
-    await save(credentials, uow_factory, WRITER, "vk-bob-test")
+    await save(credentials, uow_factory, ALICE, "vk-alice-test", gateway="bifrost")
+    await save(credentials, uow_factory, WRITER, "vk-bob-test", gateway="bifrost")
     with mocked_gateway(["accepted"]) as gateway:
         assist = gateway.assist(["reflection"])
         assist.provider.credentials = credentials
@@ -95,21 +104,20 @@ async def test_concurrent_agents_send_only_their_key_and_explicit_mcp_denial(
         try:
             assert await asyncio.gather(call(ALICE), call(WRITER)) == ["accepted", "accepted"]
             assert current_model_identity() == AMBIENT
-            seen = {request.request.headers["x-bf-vk"] for request in gateway.route.calls}
+            seen = {bearer(request) for request in gateway.route.calls}
             assert seen == {"vk-alice-test", "vk-bob-test"}
             for call_record in gateway.route.calls:
                 headers = call_record.request.headers
-                assert headers["authorization"] == f"Bearer {headers['x-bf-vk']}"
                 assert headers["x-bf-mcp-include-clients"] == ""
                 assert headers["x-bf-mcp-include-tools"] == ""
                 assert headers["x-bf-disable-content-logging"] == "true"
             assert all(
-                prompt["tool_choice"] == "none" and "tools" not in prompt
+                "tool_choice" not in prompt and "tools" not in prompt
                 for prompt in gateway.prompts()
             )
             await save(credentials, uow_factory, ALICE, None)
             assert await call(ALICE) is None
-            assert gateway.route.call_count == 2  # no operator-key retry after revocation
+            assert gateway.route.call_count == 2  # no service-endpoint retry after revocation
         finally:
             await assist.provider.close()
 
@@ -148,7 +156,10 @@ def test_agent_key_http_does_not_return_secrets_and_is_owner_scoped(client):
         "X-Trellis-Tenant": new_id("request"),
         "X-Trellis-User": "alice",
     }
-    body = {"scope": {"agent_id": "research"}, "virtual_key": "vk-http-test"}
+    body = {
+        "scope": {"agent_id": "research"},
+        "endpoint": {"base_url": BASE, "api_key": "vk-http-test"},
+    }
     first = client.put(
         "/v1/agents/model-key", headers={**headers, "Idempotency-Key": "put-key"}, json=body
     )
@@ -161,10 +172,10 @@ def test_agent_key_http_does_not_return_secrets_and_is_owner_scoped(client):
     conflict = client.put(
         "/v1/agents/model-key",
         headers={**headers, "Idempotency-Key": "put-key"},
-        json={**body, "virtual_key": "vk-different-test"},
+        json={**body, "endpoint": {"base_url": BASE, "api_key": "vk-different-test"}},
     )
     assert conflict.status_code == 409 and "vk-different-test" not in conflict.text
-    # the agent's key serves every user it runs for; another agent has none
+    # the agent's endpoint serves every user it runs for; another agent has none
     same_agent = client.get(
         "/v1/agents/model-key?agent_id=research", headers={**headers, "X-Trellis-User": "bob"}
     )
@@ -176,7 +187,9 @@ def test_agent_key_http_does_not_return_secrets_and_is_owner_scoped(client):
     status = client.get("/v1/agents/model-key?agent_id=research", headers=headers)
     assert status.json()["revoked"]
     invalid = client.put(
-        "/v1/agents/model-key", headers=headers, json={**body, "virtual_key": "vk-secret\ninvalid"}
+        "/v1/agents/model-key",
+        headers=headers,
+        json={**body, "endpoint": {"base_url": BASE, "api_key": "vk-secret\ninvalid"}},
     )
     assert invalid.status_code == 422 and "vk-secret" not in invalid.text
     missing_agent = client.put("/v1/agents/model-key", headers=headers, json={**body, "scope": {}})
@@ -221,7 +234,7 @@ def test_http_read_policy_and_rotation_route_only_the_owners_key(client):
                     client.put(
                         "/v1/agents/model-key",
                         headers=headers,
-                        json={"scope": scope, "virtual_key": key},
+                        json={"scope": scope, "endpoint": {"base_url": BASE, "api_key": key}},
                     ).status_code
                     == 200
                 )
@@ -230,7 +243,7 @@ def test_http_read_policy_and_rotation_route_only_the_owners_key(client):
                 response = client.post("/v1/context", headers=headers, json=asked)
                 assert response.status_code == 200, response.text
                 assert gateway.route.call_count == index
-                assert gateway.route.calls.last.request.headers["x-bf-vk"] == key
+                assert bearer(gateway.route.calls.last) == key
             assert (
                 client.delete("/v1/agents/model-key?agent_id=research", headers=headers).status_code
                 == 204
@@ -299,9 +312,7 @@ async def test_document_indexing_uses_recorded_agent_owner_after_key_rotation(
                     WRITER.tenant_id, WRITER.principal_id
                 )
             assert gateway.route.call_count > 0
-            assert {call.request.headers["x-bf-vk"] for call in gateway.route.calls} == {
-                "vk-index-current-test"
-            }
+            assert {bearer(call) for call in gateway.route.calls} == {"vk-index-current-test"}
         finally:
             await assist.provider.close()
 
@@ -332,7 +343,7 @@ async def test_user_scoped_reflection_preserves_bound_agent_and_current_key(cont
         try:
             created = await ReflectionService(uow_factory, assist=assist).reflect_all()
             assert len(created) == 1
-            assert gateway.route.calls.last.request.headers["x-bf-vk"] == "vk-reflect-test"
+            assert bearer(gateway.route.calls.last) == "vk-reflect-test"
             async with uow_factory() as uow:
                 insight = await uow.memories.get(ALICE.tenant_id, created[0])
                 assert insight.owner_principal == ALICE.principal_id
@@ -350,7 +361,7 @@ async def test_revocation_after_transient_failure_prevents_the_next_http_attempt
     credentials = service(uow_factory)
     await save(credentials, uow_factory, ALICE, "vk-before-backoff-test")
     with mocked_gateway() as gateway:
-        assist = gateway.assist(["reflection"], max_retries=2)
+        assist = gateway.assist(["reflection"])
         assist.provider.credentials = credentials
 
         async def revoke_after_first_send(request):
@@ -370,7 +381,7 @@ async def test_revocation_after_transient_failure_prevents_the_next_http_attempt
 
 
 @pytest.mark.parametrize("new_key", [None, "vk-registered-during-call-test"])
-async def test_operator_fallback_stops_when_agent_policy_changes_during_backoff(
+async def test_the_service_endpoint_stops_when_a_registration_changes_during_backoff(
     container, uow_factory, new_key
 ):
     import httpx
@@ -378,7 +389,7 @@ async def test_operator_fallback_stops_when_agent_policy_changes_during_backoff(
     credentials = service(uow_factory)
     assert await credentials.resolve(agent_identity(ALICE)) is None
     with mocked_gateway() as gateway:
-        assist = gateway.assist(["reflection"], max_retries=2)
+        assist = gateway.assist(["reflection"])
         assist.provider.credentials = credentials
 
         async def change_policy(request):
@@ -397,20 +408,20 @@ async def test_operator_fallback_stops_when_agent_policy_changes_during_backoff(
             await assist.provider.close()
 
 
-async def test_auto_wiring_uses_registered_agent_key_without_model_or_use_configuration(
-    container, uow_factory
-):
+async def test_configure_the_harness_only_and_memory_follows(container, uow_factory):
+    """No model setting at all on the service: the agent's registered endpoint is what its
+    memory calls; another agent, and the agent once revoked, keep their sources model-free."""
     import respx
 
     from memory_service.adapters.wiring import _wire_llm, _wire_memory
     from tests.integration.test_memory import _memories
-    from tests.support_llm import BASE
     from tests.unit.test_narrative_memory import UNITS
 
     container.settings.agent_credentials = AgentCredentialSettings(
         active_key_id="test", encryption_keys={"test": TEST_KEY}
     )
-    container.settings.bifrost_url = BASE
+    container.settings.models.llm.accept_agent_endpoints = True
+    assert container.settings.llm.endpoint is None
     _wire_llm(container)
     _wire_memory(container)
     credentials = container.services["model_credentials"]
@@ -429,7 +440,7 @@ async def test_auto_wiring_uses_registered_agent_key_without_model_or_use_config
         assert catalog.call_count == completion.call_count == 1
         memories = await _memories(uow_factory, ALICE, container)
         assert any("She did not restart the database." in memory.content for memory in memories)
-        assert completion.calls.last.request.headers["x-bf-vk"] == "vk-auto-ingest"
+        assert bearer(completion.calls.last) == "vk-auto-ingest"
         # A different agent and then the revoked agent retain sources without a model call.
         await _observe(container, uow_factory, WRITER, MESSAGE)
         await save(credentials, uow_factory, ALICE, None)

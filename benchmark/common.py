@@ -124,11 +124,12 @@ def _llm_provenance() -> dict[str, Any]:
     from benchmark.retrieval import _settings
 
     llm = _settings().llm
+    own = llm.endpoint
     out: dict[str, Any] = {
-        "enabled": llm.enabled,
-        "provider": "bifrost" if llm.enabled else "disabled",
+        "enabled": own is not None,
+        "provider": own.gateway if own is not None else "disabled",
     }
-    if llm.enabled and llm.base_url:
+    if own is not None:
         tuning = BENCH.llm_tuning()
         out.update(
             {
@@ -140,7 +141,7 @@ def _llm_provenance() -> dict[str, Any]:
         try:
             import httpx
 
-            resp = httpx.get(f"{llm.base_url.rstrip('/').removesuffix('/v1')}/version", timeout=2)
+            resp = httpx.get(f"{own.base_url.rstrip('/').removesuffix('/v1')}/version", timeout=2)
             if resp.status_code < 400:
                 out["gateway_version"] = resp.text.strip()[:80]
         except Exception:  # noqa: BLE001 - provenance only

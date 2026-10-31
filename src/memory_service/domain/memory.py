@@ -130,6 +130,14 @@ class TemporalState(BaseModel):
     supersedes: str | None = Field(default=None, description="memory_id this one replaced")
     contradicts: list[str] = Field(default_factory=list)
 
+    @property
+    def since(self) -> datetime:
+        """When the statement starts to hold: the date it names (``valid_from``), else when it
+        was said (``observed_at``: the message's ``occurred_at``, or when it was stored). Of
+        two values of one slot the newer is the one said later, never the one read later
+        (ADR 0040); a replaced value's validity ends here."""
+        return self.valid_from or self.observed_at
+
     def is_current_at(self, when: datetime) -> bool:
         if self.status not in (TemporalStatus.CURRENT,):
             return False
