@@ -20,6 +20,7 @@ from memory_service.modules.context.sections import ContextSections, Pinned, Too
 from memory_service.modules.context.views import hints_view
 from memory_service.modules.tools import hints as hints_module
 from memory_service.modules.tools.hints import ToolHintsService
+from memory_service.modules.tools.index import ToolMatch
 from memory_service.modules.tools.patterns import task_pattern
 from memory_service.ports.search import SearchHit
 from tests.unit.test_context_datapath import _builder
@@ -51,8 +52,8 @@ class _Index:
         self.encoded += 1
         return _Vectors()
 
-    async def search(self, *_: object, **__: object) -> list[tuple[str, float]]:
-        return [("create_stock_rule", 0.9)]
+    async def search(self, *_: object, **__: object) -> list[ToolMatch]:
+        return [ToolMatch("create_stock_rule", 0.9)]
 
 
 class _Memories(_Engine):

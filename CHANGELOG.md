@@ -8,6 +8,16 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Changed
+- **A tool hint's confidence says whether the tool fits the task** (service; ADR 0018,
+  amendment 2026-10-31). The tool search's score is relative to the task's best hit, so the
+  first tool was hinted at 0.63 or more for any task, "What's the weather on Mars?" included,
+  and the harness narrowed its tools and skipped its "I don't know" note on it. A hit whose
+  description is not close to the task (cosine under the multilingual encoder's calibrated
+  `tool_cosine`, 0.28) keeps its rank but its match adds nothing to its confidence. On a
+  held-out set of 45 tasks in five languages: unrelated tasks hinted at 0.5 or more 15/15 →
+  0/15, matching tasks under 0.5 0/19 → 1/19, calibration error 0.25 → 0.04; the order of the
+  candidates is unchanged (`tests/eval/test_tool_hint_confidence_gate.py`). A context whose
+  hints no longer reach 0.5 shows memory's evidence status again (`TOOL_ANSWERS_CONFIDENCE`).
 - **A short follow-up is searched with the question before it** (service). "Who is in charge of
   it?" names nothing the search can find. A question of at most 8 words asked in a thread,
   whose own search finds nothing close (best similarity under 0.45), is searched again with

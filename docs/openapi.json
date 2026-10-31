@@ -7342,7 +7342,7 @@
             "title": "Args"
           },
           "confidence": {
-            "description": "0..1, how well the tool fits the task (1 - e^-score: the order of the score)",
+            "description": "0..1, how well the tool fits the task (1 - e^-score); the search's part counts only for a tool whose description is close to the task, so a task no tool is about gets none at 0.5 or more unless a learned plan carries it",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Confidence",
@@ -7419,7 +7419,7 @@
         "description": "A tool that fits the task, as the prompt form carries it: enough to narrow on.",
         "properties": {
           "confidence": {
-            "description": "0..1, how well the tool fits the task (1 - e^-score: the order of the score)",
+            "description": "0..1, how well the tool fits the task (1 - e^-score); the search's part counts only for a tool whose description is close to the task, so a task no tool is about gets none at 0.5 or more unless a learned plan carries it",
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Confidence",

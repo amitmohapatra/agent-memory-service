@@ -28,8 +28,10 @@
   its visibility, and the rules that apply to the task are read here, beside the search
   (``standing.standing_blocks``, on the task's own vectors): a stored profile never lists
   them.
-- confidence: each candidate's score as a number in 0..1 (``1 - e^-score``, so the order
-  is the score's).
+- confidence: each candidate's score as a number in 0..1 (``1 - e^-score``), less the
+  search's part when the tool is not close to the task (``ToolMatch.matches``): the fusion
+  ranks a first tool for any task, a greeting or the weather on Mars included, and that
+  rank is no evidence the tool answers it. The order stays the score's.
 
 Every read is indexed and bounded; the only model is the query encoder of the tool search
 (the task is encoded once, for the search, the procedures' meaning and the standing rules
@@ -66,7 +68,7 @@ from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.context.standing import forbids, listed_rules, standing_blocks
 from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
 from memory_service.modules.retrieval.engine import QueryVectors, RetrievalEngine
-from memory_service.modules.tools.index import ToolIndex
+from memory_service.modules.tools.index import ToolIndex, ToolMatch
 from memory_service.modules.tools.matching import ProcedureMatcher, TaskVectors
 from memory_service.modules.tools.patterns import task_slots
 from memory_service.modules.tools.skills import skill_view
@@ -138,7 +140,7 @@ def next_tool(plan: StoredProcedure | None, done: Sequence[ToolInvocation]) -> s
 
 
 def _candidates(
-    found: Sequence[tuple[str, float]],
+    found: Sequence[ToolMatch],
     plan: StoredProcedure | None,
     step: str | None,
     stats: dict[str, ToolStats],
@@ -146,7 +148,8 @@ def _candidates(
     k: int,
 ) -> list[ToolCandidate]:
     allowed = set(available) if available is not None else None
-    relevance = dict(found)
+    relevance = {m.name: m.relevance for m in found}
+    matched = {m.name for m in found if m.matches}
     # a callable tool search did not surface (never catalogued, or nothing like the task)
     # still competes on its record, after every tool the search did find
     for tool in [*(plan.tools if plan else ()), *(available or ())]:
@@ -156,7 +159,15 @@ def _candidates(
         return []  # nothing matched the task (no index yet): naming any tool would be a guess
     now = datetime.now(UTC)
     out = [
-        _candidate(name, relevance[name], stats.get(name), plan, now, next_step=name == step)
+        _candidate(
+            name,
+            relevance[name],
+            stats.get(name),
+            plan,
+            now,
+            next_step=name == step,
+            matches=name in matched,
+        )
         for name in names
     ]
     out.sort(key=lambda c: (-c.score, c.name))
@@ -197,7 +208,7 @@ def _may_lead(tool: str | None, task: str, entries: dict[str, ToolDescriptor]) -
 
 def _rescored(
     candidates: Sequence[ToolCandidate],
-    found: Sequence[tuple[str, float]],
+    found: Sequence[ToolMatch],
     plan: StoredProcedure | None,
     stats: dict[str, ToolStats],
     available: Sequence[str] | None,
@@ -292,10 +303,14 @@ def _candidate(
     now: datetime,
     *,
     next_step: bool,
+    matches: bool,
 ) -> ToolCandidate:
+    """``matches``: the tool's text is close to the task (``ToolMatch``); when it is not, the
+    search's part orders the tool but adds nothing to its confidence."""
     rate = stats.success_rate if stats else None
-    score = relevance * (1 + SUCCESS_WEIGHT * ((0.5 if rate is None else rate) - 0.5))
-    why = [f"matches the task ({relevance:.2f})"] if relevance else []
+    fit = relevance * (1 + SUCCESS_WEIGHT * ((0.5 if rate is None else rate) - 0.5))
+    score = fit
+    why = [f"matches the task ({relevance:.2f})"] if relevance and matches else []
     if plan is not None and name in plan.tools:
         score += PLAN_BONUS
         why.append(f"step {plan.tools.index(name) + 1} of the learned plan")
@@ -311,7 +326,7 @@ def _candidate(
     return ToolCandidate(
         name=name,
         score=round(score, 4),
-        confidence=round(1 - math.exp(-score), 2),
+        confidence=round(1 - math.exp(-(score if matches else score - fit)), 2),
         success_rate=rate,
         why="; ".join(why),
     )
@@ -426,7 +441,7 @@ class ToolHintsService:
         # every tool that may become a candidate: its catalog entry is what its arguments
         # are read from
         names = sorted(
-            {n for n, _ in found} | set(plan.tools if plan else ()) | set(available or ())
+            {m.name for m in found} | set(plan.tools if plan else ()) | set(available or ())
         )
         async with self.uow_factory() as uow:
             entries = {

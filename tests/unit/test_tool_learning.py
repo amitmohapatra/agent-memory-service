@@ -35,6 +35,7 @@ from memory_service.modules.tools.hints import (
     next_tool,
     ruled,
 )
+from memory_service.modules.tools.index import ToolMatch
 from memory_service.modules.tools.learning import merge, succeeded
 from memory_service.modules.tools.matching import rank_procedures
 from memory_service.modules.tools.patterns import task_pattern, task_slots
@@ -354,7 +355,7 @@ def test_the_next_step_is_the_first_the_run_has_not_completed() -> None:
 
 def test_candidates_stay_callable_and_the_plan_s_next_step_leads() -> None:
     plan = _procedure("p", ["lookup", "update"])
-    found = [("update", 1.0), ("search", 0.9), ("lookup", 0.4)]
+    found = [ToolMatch("update", 1.0), ToolMatch("search", 0.9), ToolMatch("lookup", 0.4)]
     ranked = _candidates(found, plan, "lookup", {}, ["lookup", "update", "extra"], 5)
     assert [c.name for c in ranked] == ["lookup", "update", "extra"]
     assert "next step" in ranked[0].why
@@ -509,7 +510,7 @@ async def test_numbers_are_cast_only_for_number_arguments() -> None:
 def test_nothing_matched_and_no_plan_is_no_candidates() -> None:
     """B13: an index not built yet scores every tool 0: no candidate (they were the toolbox's
     first names in alphabetical order), and so no next step. A learned plan still leads."""
-    found = [("billing-list", 0.0)]
+    found = [ToolMatch("billing-list", 0.0)]
     assert _candidates(found, None, None, {}, ["allocatable_stock", "app_help"], 5) == []
     plan = _procedure("p", ["store_demand"])
     ranked = _candidates([], plan, "store_demand", {}, ["store_demand", "app_help"], 5)
@@ -519,10 +520,14 @@ def test_nothing_matched_and_no_plan_is_no_candidates() -> None:
 def test_a_general_view_is_no_candidate_below_a_specific_tool() -> None:
     """S3: the dashboard ranked under the specific tools the task asks for is dropped; ranked
     first it is what the task asked for; a step of the learned plan always stays."""
-    found = [("tickets_by_priority", 1.0), ("sla_breaches", 0.8), ("desk_dashboard", 0.6)]
-    names = [n for n, _ in found]
+    found = [
+        ToolMatch("tickets_by_priority", 1.0),
+        ToolMatch("sla_breaches", 0.8),
+        ToolMatch("desk_dashboard", 0.6),
+    ]
+    names = [m.name for m in found]
     assert [c.name for c in _candidates(found, None, None, {}, names, 5)] == names[:2]
-    first = [("desk_dashboard", 1.0), ("tickets_by_priority", 0.8)]
+    first = [ToolMatch("desk_dashboard", 1.0), ToolMatch("tickets_by_priority", 0.8)]
     assert _candidates(first, None, None, {}, names, 5)[0].name == "desk_dashboard"
     plan = _procedure("p", ["tickets_by_priority", "desk_dashboard"])
     kept = _candidates(found, plan, None, {}, names, 5)
@@ -561,8 +566,8 @@ class _Index:
     async def encode(self, task: str) -> None:
         return None
 
-    async def search(self, *_: object, **__: object) -> list[tuple[str, float]]:
-        return self.found
+    async def search(self, *_: object, **__: object) -> list[ToolMatch]:
+        return [ToolMatch(name, relevance) for name, relevance in self.found]
 
 
 async def test_a_tool_that_changes_something_is_no_next_step_for_a_question() -> None:

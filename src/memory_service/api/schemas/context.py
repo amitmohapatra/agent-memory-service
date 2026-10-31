@@ -98,7 +98,11 @@ class GroundingReportBody(BaseModel):
 # --------------------------------------------------------------------------- tools
 
 _RELEVANCE = "0..1, how close the item is to the question; comparable across the bundle"
-_CONFIDENCE = "0..1, how well the tool fits the task (1 - e^-score: the order of the score)"
+_CONFIDENCE = (
+    "0..1, how well the tool fits the task (1 - e^-score); the search's part counts only for "
+    "a tool whose description is close to the task, so a task no tool is about gets none "
+    "at 0.5 or more unless a learned plan carries it"
+)
 
 
 class ToolChoiceBrief(BaseModel):

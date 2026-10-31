@@ -27,7 +27,8 @@ got `sku = 'Q-1183'`. A supplier id the user had stated earlier was never used.
    in shown text. Both forms apply it; the stored record does not, so benchmarks and the
    grounding check see the bundle as retrieved.
 3. **Every number a client reads is 0–1.** An item's `relevance` is its dense similarity
-   (comparable between items); a tool's `confidence` is `1 - e^-score`.
+   (comparable between items); a tool's `confidence` is `1 - e^-score`, the search's part
+   counted only for a tool close to the task (ADR 0018, amendment 2026-10-31).
 4. **Tool hints** (`/v1/tools/hints`, `tool_search`):
    `{tools: [{name, confidence, success_rate?, next?, args?, missing?}], plan?}` - arguments
    for every tool returned, not only the next step; `missing` is a question the model can ask.

@@ -126,6 +126,43 @@ step exists in the registry and every binding resolves against a real trajectory
 > (with `owner_principal`, whose key paid for it) are gone (migration `0030_drop_dead_learning`);
 > learning is deterministic end to end, as the decision above says it should be first.
 
+> **Amendment, 2026-10-31 — a hint's confidence counts the search only for a tool close to the
+> task.** The tool search fuses dense and BM25 ranks (RRF) and divided each hit's score by the
+> task's best, so the first tool read 1.0 for any task, and its confidence (`1 - e^-score`) was
+> at least 0.63: "What's the weather on Mars?" and "What's my sister's name?" hinted a tool at
+> 0.63-0.74. The harness takes 0.5 as "a tool answers this" (`NARROW_FLOOR`; this service's
+> `TOOL_ANSWERS_CONFIDENCE`), so it narrowed the tools and dropped the "I don't know" note
+> for questions no tool answers (harness #89). Each hit now also reads its cosine to the task
+> in the space every query is searched in (`SearchStore.similarity`, one bounded read of the
+> hits), and one under the encoder's calibrated `tool_cosine` (0.28 for the multilingual
+> encoder) keeps its rank but adds nothing to its confidence (`ToolMatch.matches`). The order,
+> the score, a learned plan's bonuses and the stand-in encoder (no calibration: every hit
+> counts) are unchanged.
+>
+> Chosen by measurement on `tests/eval/golden/tool_hint_confidence.json` (94 tasks, en/de/es/
+> hi/ar, a 30-tool catalog of the harness's benchmarks; constants fitted on the dev half,
+> reported on the held-out half; `benchmark/results/tool_hint_confidence.json`):
+>
+> | held-out half (45 tasks) | before | cosine floor (chosen) | Platt on cosine | Platt on cosine + rank |
+> |---|---|---|---|---|
+> | AUROC, any tool fits | 0.50 | 0.83 | 0.90 | 0.89 |
+> | calibration error of the first candidate | 0.25 | 0.04 | 0.15 | 0.12 |
+> | unrelated tasks under 0.5 | 0/15 | 15/15 | 15/15 | 15/15 |
+> | matching tasks under 0.5 | 0/19 | 1/19 | 11/19 | 6/19 |
+> | share of the tasks under 0.5 that no tool answers | - | 0.95 | 0.69 | 0.78 |
+>
+> The fitted curves rank a little better but put their probabilities on another scale: the
+> same abstentions needed the harness's floor moved to 0.06 or 0.26. The floor keeps 0.5
+> meaning what the harness assumed, and is one constant per encoder, as `relevance_floor` and
+> `procedure_cosine` are. Min-max scaling and isotonic regression measured no better. 0.28
+> rather than the dev half's best split (0.275): with the harness's 100 or 500 distractor
+> tools added, one unrelated dev task reads 0.277, and a confident hint for an unrelated task
+> costs more (narrowed tools, no "I don't know" note) than a missed match (every tool
+> offered); the held-out numbers are the same at every size. A near miss (an action no tool takes, such as "cancel
+> transfer TR-9") is still hinted at 0.63 in 8 of 11 held-out cases: its words are the tool's.
+> The English encoder is not calibrated: its cosines overlap (unrelated up to 0.78, matching
+> from 0.75), and a floor fitted on it left 16% of matching tasks unconfident.
+
 ## Status of the adapters
 The API, SDK (`client.tools.*`, `client.runs.outcome`) and gate are in place. The framework
 adapters that call them — the LangGraph tool wrapper and Bifrost execute node, ADK tool
