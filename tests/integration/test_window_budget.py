@@ -100,7 +100,7 @@ def _steps(body: dict[str, Any]) -> list[str]:
     rendered = body["rendered"]
     if RECORD not in rendered:
         return []
-    section = rendered.split(RECORD, 1)[1].split("\n## ", 1)[0]
+    section = rendered.split(RECORD, 1)[1].split("\n\n## ", 1)[0]  # sections: a blank line
     return section.split("\n\n")[1:]  # after the note saying who wrote it
 
 
@@ -183,7 +183,9 @@ def test_the_run_record_a_caller_writes_is_in_the_steps_list(api) -> None:
     body = _context(api, thread, "Where is that from?")
     assert _steps(body) == [
         f'For "{Q1}" (1 call):\n1. stock_quote(n=0): ok, 0.2 s, source: {SOURCE}\n'
-        "The run: status SUCCESS, 4.0 s."
+        "The run: status SUCCESS, 4.0 s.\n"
+        f"Evidence: 1 of 1 calls succeeded; 1 source: {SOURCE} (named by 1 of 1). How sure, "
+        "from this record: high."
     ]
 
 
