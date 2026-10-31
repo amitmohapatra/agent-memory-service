@@ -84,10 +84,11 @@ class MemoryCandidate(BaseModel):
         description="the statement gives an instruction it says is for every time (a standing "
         "word, a recurring trigger), whether or not the labeller could decide it is a rule",
     )
-    said_by_user: bool = Field(
+    follows_user: bool = Field(
         default=False,
         description="the text is a user's own words (their message, decision or feedback, "
-        "not an agent's): by default it then follows that user across their conversations",
+        "not an agent's) or an event recorded in their conversation: by default it then "
+        "follows that user across their conversations",
     )
     preceding_turn: dict[str, str] | None = Field(
         default=None,

@@ -29,6 +29,7 @@ from memory_service.modules.memory.native import (
     VERBATIM_MAX_PIECES,
     NativeMemoryIntelligence,
     default_visibility,
+    follows_user,
     said_by_user,
     verbatim_windows,
 )
@@ -128,6 +129,42 @@ async def test_every_memory_of_a_users_message_follows_the_user(native) -> None:
     assert said and all(c.visibility is Visibility.USER for c in said)
     reply = await _classified(native, _obs("The cage code is 8492.", role="ASSISTANT"))
     assert reply and all(c.visibility is Visibility.THREAD for c in reply), "the assistant's words"
+
+
+REBOOT = "Change scheduled: host app-07 will be rebooted for kernel patching on Saturday at 02:00."
+
+
+def _event(text: str, ctx: MemoryExecutionContext = USER) -> Observation:
+    """``role: "EVENT"`` as ``append_message`` records it: an internal message."""
+    observation = _obs(text, ctx, role="EVENT", kind=ObservationKind.EVENT)
+    observation.custom_metadata["kind"] = "INTERNAL"
+    return observation
+
+
+def test_a_users_event_follows_the_user_and_nothing_else_widens() -> None:
+    assert follows_user(_obs(CODE)), "the user's own words, as before"
+    assert follows_user(_event(REBOOT)), "an event recorded in the user's conversation"
+    assert follows_user(_event(REBOOT, HARNESS)), "recorded by an agent acting for the user"
+    service = USER.model_copy(update={"user_id": None})
+    assert not follows_user(_event(REBOOT, service)), "a system event: nobody to follow"
+    assert not follows_user(_obs(REBOOT, kind=ObservationKind.IMPORT, role=None))
+    assert not follows_user(_obs(REBOOT, kind=ObservationKind.FILE, role=None))
+    assert not follows_user(_obs(CODE, role="ASSISTANT")), "the assistant's reply"
+    assert not said_by_user(_event(REBOOT)), "an event is still not the user's words"
+
+
+@pytest.mark.parametrize("ctx", [USER, HARNESS], ids=["user", "agent-for-user"])
+async def test_every_memory_of_a_users_event_follows_the_user(native, ctx) -> None:
+    recorded = await _classified(native, _event(REBOOT, ctx), ctx)
+    assert recorded and all(c.visibility is Visibility.USER for c in recorded)
+
+
+async def test_an_event_without_a_user_keeps_its_audience(native) -> None:
+    service = USER.model_copy(update={"user_id": None})
+    recorded = await _classified(native, _event(REBOOT, service), service)
+    assert recorded and all(c.visibility is Visibility.THREAD for c in recorded)
+    imported = await _classified(native, _obs(REBOOT, kind=ObservationKind.IMPORT, role=None))
+    assert imported and all(c.visibility is Visibility.THREAD for c in imported)
 
 
 # --- the words as said -----------------------------------------------------------------------

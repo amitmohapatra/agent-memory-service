@@ -145,7 +145,9 @@ No new setting, no new memory type, no new table. Migration 0028 adds the two in
   or contradiction, so it is never asked about pairs that are not related.
 * A record carried by a request (`EVENT`) keeps ADR 0036's audience (the conversation): a new
   conversation does not see it, so its replacement is not seen there either. Changing that is
-  an audience decision, not a replacement one.
+  an audience decision, not a replacement one. **Amended (2026-10-31, ADR 0043):** a user's
+  event now follows the user, and is compared and replaced across their conversations as a
+  message is.
 * An earlier value is still served, apart and labelled: a wrong mark costs its place among
   the current evidence, not the statement. Only the stricter grade closes a statement, and
   that is undone with the newer one.

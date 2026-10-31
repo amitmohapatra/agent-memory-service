@@ -510,7 +510,7 @@ def _user_subject(ctx: MemoryExecutionContext) -> str:
 
 #: Observations whose text is what the person said: a message, a decision they recorded,
 #: feedback they gave. An EVENT, an IMPORT or a FILE is a record the request carried rather
-#: than the user's own statement, and keeps the audience it always had.
+#: than the user's own statement.
 _STATEMENT_KINDS = frozenset(
     {ObservationKind.MESSAGE, ObservationKind.DECISION, ObservationKind.FEEDBACK}
 )
@@ -526,16 +526,27 @@ def said_by_user(observation: Observation) -> bool:
     )
 
 
+def follows_user(observation: Observation) -> bool:
+    """Whether what is read from ``observation`` is its user's wherever they are: their own
+    words (``said_by_user``), or an EVENT recorded in their conversation, by them or by an
+    agent acting for them (ADR 0043). "host app-07 is rebooted on Saturday at 02:00" recorded
+    in one chat was out of reach of "will payroll be down this weekend?" in the next. An
+    IMPORT, a FILE and an event with no user keep the audience they always had."""
+    return said_by_user(observation) or (
+        bool(observation.user_id) and observation.kind is ObservationKind.EVENT
+    )
+
+
 def default_visibility(
     mt: MemoryType, ctx: MemoryExecutionContext, *, user_statement: bool = False
 ) -> Visibility:
     """Who may read a memory of this type when the writer did not say.
 
     What a user says follows that user. ``user_statement`` (the memory is the user's own
-    words, ``said_by_user``) makes it USER: readable in every conversation of theirs and by
-    every agent acting for them, never by another user, wherever it was said. It used to be
-    the conversation's (THREAD), so "the cage code is 8492" said on Monday was out of reach
-    in Tuesday's chat. Sharing wider is explicit (WORKSPACE, TENANT), and so is keeping a
+    words or an event recorded for them, ``follows_user``) makes it USER: readable in every
+    conversation of theirs and by every agent acting for them, never by another user,
+    wherever it was said. It used to be the conversation's (THREAD), so "the cage code is
+    8492" said on Monday was out of reach in Tuesday's chat. Sharing wider is explicit (WORKSPACE, TENANT), and so is keeping a
     statement to one conversation (THREAD). What an agent writes keeps the rules below: its
     working types stay with its run, its tasks and episodes with itself.
     """
@@ -597,9 +608,9 @@ class NativeMemoryIntelligence:
         self, observation: Observation, ctx: MemoryExecutionContext
     ) -> list[MemoryCandidate]:
         candidates = await self._extract(observation, ctx)
-        if not said_by_user(observation):
+        if not follows_user(observation):
             return candidates
-        return [c.model_copy(update={"said_by_user": True}) for c in candidates]
+        return [c.model_copy(update={"follows_user": True}) for c in candidates]
 
     async def _extract(
         self, observation: Observation, ctx: MemoryExecutionContext
@@ -1209,7 +1220,7 @@ class NativeMemoryIntelligence:
             # genuinely standing instruction earns its keep by being restated.
             lifetime = Lifetime.SHORT_TERM
         importance = _IMPORTANCE_BY_TYPE.get(mt, candidate.importance)
-        visibility = default_visibility(mt, ctx, user_statement=candidate.said_by_user)
+        visibility = default_visibility(mt, ctx, user_statement=candidate.follows_user)
         return candidate.model_copy(
             update={
                 "lifetime": lifetime,

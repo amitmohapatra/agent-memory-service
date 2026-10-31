@@ -232,7 +232,7 @@ When the writer does not say, the visibility follows the type and the request
 | `USER`, `PREFERENCE` | `USER` when the request names a user, else `PRIVATE` |
 | `AGENT`, `TOOL`, `WORKING` | `RUN` when the request carries an agent run, else `PRIVATE` |
 | `SHARED` | `AGENT_GROUP` with a group id, else `THREAD` with a thread, else `TENANT` |
-| anything else, from a user's own words | `USER` |
+| anything else, from a user's own words or an event recorded for them | `USER` |
 | anything else | `THREAD` with a thread, else `USER` with a user, else `TENANT` |
 
 **What a user says follows that user** (ADR 0036). A user's own words are their message, a
@@ -240,8 +240,10 @@ decision or feedback they record, or a `remember` they make themselves, includin
 agent harness relays for them (`said_by_user`). Everything made from those words is `USER`:
 read in every conversation of theirs and by every agent acting for them, never by another
 person, wherever it was said. Sharing wider is explicit (`WORKSPACE`, `TENANT`), and so is
-keeping a statement to the conversation it was said in (`THREAD`). What an agent or the
-assistant writes, and an `EVENT` or `IMPORT` record, keeps the rows below the first three.
+keeping a statement to the conversation it was said in (`THREAD`). An `EVENT` recorded for a
+user, by them or by an agent acting for them, follows that user the same way (ADR 0043,
+`follows_user`); an event with no user keeps the conversation's audience. What an agent or the
+assistant writes, and an `IMPORT` or `FILE` record, keeps the rows below the first three.
 The conversation window and the thread summary stay with their thread.
 
 An agent writing a `TASK` or `EPISODIC` memory keeps it `PRIVATE` unless it says otherwise:

@@ -8,6 +8,13 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Changed
+- **A user's events follow the user** (ADR 0043; service). A `role: "EVENT"` message (or an
+  `EVENT` observation) that names a user, recorded by them or by an agent acting for them, is
+  `USER` by default like their own words (ADR 0036): read in all their conversations and by the
+  agents acting for them, never by another person or by the same agent acting for someone else.
+  It also replaces, and is replaced by, their statements in other conversations (ADR 0038). An
+  event with no user, explicit `THREAD`, `IMPORT` and `FILE` are unchanged; stored rows keep
+  their audience. No API change.
 - **A refused agent names the user's statement it may not touch** (service). The 403 an agent
   gets for updating or forgetting what the user said (`reason: users_own_statement`) carries
   the memory's id in `details.memory_id`, resolved from the handle it was called with: a caller

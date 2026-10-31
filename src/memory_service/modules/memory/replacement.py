@@ -820,8 +820,8 @@ _RULE_CATEGORY = "rule"
 
 
 def statement_of(memory: CanonicalMemory, principal: str) -> bool:
-    """A current statement a user made in their own words, readable in all their
-    conversations: what this module compares and replaces."""
+    """A current statement a user made in their own words (or an event recorded for them,
+    ADR 0043), readable in all their conversations: what this module compares and replaces."""
     return (
         memory.deleted_at is None
         and memory.temporal.status is TemporalStatus.CURRENT
