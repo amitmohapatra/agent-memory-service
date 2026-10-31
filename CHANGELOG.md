@@ -8,6 +8,12 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Changed
+- **A search marks the messages and conversations that said a replaced value** (ADR 0038,
+  extended; service). A replaced memory already came back `superseded: true`; the message
+  that said it and an earlier conversation (episode) holding nothing else of what its speaker
+  said came back unmarked beside the new value. Both are now marked, read from the replaced
+  verbatim turns of the threads the results come from (one indexed read; a second only when
+  the first finds a replacement). The `memory_search` tool description says so.
 - **Any model provider, and memory follows the harness** (ADR 0042; service 0.4.0, SDK
   `trellis-memory` 0.6.0; breaking). A model call goes to an endpoint resolved per call, in one
   order: the endpoint the acting agent registered (else its tenant's), then the service's own,
