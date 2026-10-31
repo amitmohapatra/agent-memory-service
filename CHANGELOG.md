@@ -14,6 +14,13 @@ each entry says which one moved. Decisions behind each change are in the
   said came back unmarked beside the new value. Both are now marked, read from the replaced
   verbatim turns of the threads the results come from (one indexed read; a second only when
   the first finds a replacement). The `memory_search` tool description says so.
+- **A short follow-up is searched with the question before it** (service). "Who is in charge of
+  it?" names nothing the search can find. A question of at most 8 words asked in a thread,
+  whose own search finds nothing close (best similarity under 0.45), is searched again with
+  the thread's previous question in its search text; the route and the coverage stay the
+  question's own (`builder.FOLLOW_UP_*`, `RetrievalEngine.retrieve(follow_up=)`, the
+  bundle's `diagnostics.follow_up`). A short question on a new topic finds its own evidence
+  and is searched as asked. Measured with `benchmark/follow_ups.py`.
 - **A refused agent names the user's statement it may not touch** (service). The 403 an agent
   gets for updating or forgetting what the user said (`reason: users_own_statement`) carries
   the memory's id in `details.memory_id`, resolved from the handle it was called with: a caller
