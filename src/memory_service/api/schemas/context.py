@@ -179,8 +179,10 @@ class ToolHintsResponse(BaseModel):
 # --------------------------------------------------------------------------- context
 
 _EVIDENCE_STATUS = (
-    "COMPLETE, INCOMPLETE (evidence for part of the question, or about someone else) or "
-    "INSUFFICIENT (nothing to go on: answer that you do not know rather than guess)"
+    "What long-term memory (memories, documents, graph facts) holds for the question - not the "
+    "conversation, which the window carries: COMPLETE, INCOMPLETE (evidence for part of the "
+    "question, or about someone else) or INSUFFICIENT (memory has nothing on it: unless the "
+    "conversation answers it, say you do not know rather than guess)"
 )
 
 
@@ -282,6 +284,12 @@ class WindowMessageBody(BaseModel):
     tool_call_id: str | None = Field(
         default=None, description="A TOOL message: the call (in the window) whose result it is."
     )
+    run_record: dict[str, Any] | None = Field(
+        default=None,
+        description="What the caller's run record says of the message, as it wrote it under "
+        "custom_metadata.run_record (a tool result: status, seconds, sources, fetched, max_age; "
+        "the turn's last message: the run's status, seconds, approvals); omitted when none.",
+    )
 
 
 class ConversationBody(BaseModel):
@@ -291,6 +299,12 @@ class ConversationBody(BaseModel):
     messages: list[WindowMessageBody] = Field(
         description="The thread's most recent messages after its summary, oldest first; a "
         "tool call and its results are never parted."
+    )
+    over_budget: bool | None = Field(
+        default=None,
+        description="window_format=messages: true when the newest turn's text and steps list "
+        "alone are over the conversation budget and are given anyway: trim them to the "
+        "model's context before replaying them. Absent otherwise.",
     )
 
 

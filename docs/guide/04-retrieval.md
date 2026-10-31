@@ -317,10 +317,15 @@ evidence memory of 135 questions was still packed, while ten questions nothing i
 answers went from 30.8 packed memories each to 0.9; at 0.25 the first evidence was lost.
 
 **The budget.** The default `token_budget` is 8,000 (`ContextSettings`); the conversation
-window is the most recent messages after the thread summary, at most 20 and 2,000 tokens;
-`window=False` leaves it out for a framework that keeps its own history, and
-`window_format="messages"` gives it verbatim — tool calls with their results, never parted —
-for a framework that replays it as its own conversation (`modules/context/window.py`).
+window is the most recent messages after the thread summary, at most 20 and 2,000 tokens
+(`conversation_token_budget` on the request sets the tokens); `window=False` leaves it out for a
+framework that keeps its own history, and `window_format="messages"` gives it in layers — at
+most 20 turns, each its question and answer, with a steps list of its tool calls in the
+context's `## Run record` section, the
+newest with the calls and results too when they fit, its text and steps always, flagged
+`over_budget` when they alone are over the budget — for a framework that replays it
+as its own conversation (`modules/context/window.py`,
+[context.md](../api/context.md#the-two-forms)).
 
 **The rendering** (`ContextBundle.render`, `domain/context_bundle.py`):
 
@@ -332,8 +337,9 @@ for a framework that replays it as its own conversation (`modules/context/window
   slot ("participated in" on four days) are gathered into one dated block;
 - `## Facts`, `## Summaries`, `## Knowledge` — graph facts, summaries and document passages
   with their section paths;
-- `## Evidence status` — only when it is not `COMPLETE`, and no hinted tool answers the question
-  (a tool candidate at confidence 0.5 or more).
+- `## Evidence status (long-term memory)` — only when it is not `COMPLETE`, and no hinted tool
+  answers the question (a tool candidate at confidence 0.5 or more). It is about what memory
+  holds for the question, never the conversation.
 
 A model-extracted memory is labelled "model-extracted, unverified" on its line. The default
 response (`format="prompt"`) is the rendered text plus `bundle_id`, `evidence_status` and

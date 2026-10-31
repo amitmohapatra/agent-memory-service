@@ -921,8 +921,19 @@ class ContextSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     token_budget: int = 8000
+    #: How far back the conversation window reaches. The messages form counts whole turns (a
+    #: USER message and the calls, results and answer after it, ``modules/context/window.py``):
+    #: counted in messages, one turn with nine tool calls filled it and pushed its own question
+    #: out. The rendered form, which shows the visible chat only, counts its messages.
     conversation_max_messages: int = 20
+    #: The window's token budget when the request names none (``conversation_token_budget`` on
+    #: ``POST /v1/context``). It is also what a messages-form window may take of
+    #: ``token_budget``: the caller replays that window itself, so what it carries past this
+    #: share comes out of the caller's own conversation budget, not out of the memories.
     conversation_token_budget: int = 2000
+    #: The most messages one window read returns, whatever the turns hold: a bound on the read
+    #: of a pathological thread (one turn of hundreds of calls), not a window size.
+    conversation_read_max_messages: int = 1000
     #: Keep what the engine ranked, and let the token budget do the bounding.
     #:
     #: This was 12 against final_k = 20, so eight already-retrieved, already-ranked

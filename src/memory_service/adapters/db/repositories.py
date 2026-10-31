@@ -374,13 +374,32 @@ class SqlMessageRepository:
             stmt = stmt.where(MessageRow.sequence < before_sequence)
         return await self._oldest_first(stmt)
 
-    async def list_window(self, tenant_id: str, thread_id: str, *, limit: int) -> list[Message]:
+    async def list_window(
+        self, tenant_id: str, thread_id: str, *, turns: int, limit: int
+    ) -> list[Message]:
+        # where the newest ``turns`` turns start: the ``turns``-th newest question (NULL, so
+        # from the first message, when the thread has fewer)
+        start = (
+            select(MessageRow.sequence)
+            .where(
+                MessageRow.tenant_id == tenant_id,
+                MessageRow.thread_id == thread_id,
+                MessageRow.deleted_at.is_(None),
+                MessageRow.role == MessageRole.USER.value,
+                MessageRow.kind == MessageKind.VISIBLE.value,
+            )
+            .order_by(MessageRow.sequence.desc())
+            .offset(max(turns, 1) - 1)
+            .limit(1)
+            .scalar_subquery()
+        )
         stmt = (
             select(MessageRow)
             .where(
                 MessageRow.tenant_id == tenant_id,
                 MessageRow.thread_id == thread_id,
                 MessageRow.deleted_at.is_(None),
+                MessageRow.sequence >= func.coalesce(start, 0),
                 or_(
                     MessageRow.kind == MessageKind.VISIBLE.value,
                     and_(

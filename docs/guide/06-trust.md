@@ -73,9 +73,10 @@ Four details make it honest rather than decorative:
 
 The service never acts on the status for you: there is no `require_evidence` flag and nothing
 raises ([USAGE §7](../USAGE.md#7-evidence-the-status-and-v1verify)). Check `evidence_status`
-and answer that you do not know when it is `INSUFFICIENT`. The rendered prompt carries an
-`## Evidence status` section whenever the status is not `COMPLETE` and no hinted tool answers the
-question (a tool candidate at confidence 0.5 or more).
+and answer that you do not know when it is `INSUFFICIENT` and the conversation does not answer
+it either: the status is about long-term memory, not the conversation. The rendered prompt
+carries an `## Evidence status (long-term memory)` section whenever the status is not `COMPLETE`
+and no hinted tool answers the question (a tool candidate at confidence 0.5 or more).
 
 **What it has caught, and what it has not.** The degenerate-input benchmark
 (`docs/MEASUREMENTS.md` §4) found an empty query reported `COMPLETE` with ten memories

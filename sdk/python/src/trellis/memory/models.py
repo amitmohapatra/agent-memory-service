@@ -453,6 +453,9 @@ class WindowMessage(BaseModel):
     text: str
     tool_calls: list[ToolCall] = Field(default_factory=list)
     tool_call_id: str | None = None
+    #: what the caller's run record says of the message (``custom_metadata["run_record"]``:
+    #: a tool result's status, seconds, sources, fetch time; the turn's run), when it says any
+    run_record: dict[str, Any] | None = None
 
 
 class Conversation(BaseModel):
@@ -463,6 +466,9 @@ class Conversation(BaseModel):
 
     thread_id: str | None = None
     messages: list[WindowMessage] = Field(default_factory=list)
+    #: the newest turn alone is over the conversation budget and came whole anyway (a turn is
+    #: never cut): trim it to the model's context before replaying it
+    over_budget: bool = False
 
 
 class PinnedBlock(BaseModel):
@@ -544,7 +550,8 @@ class PromptContext(BaseModel):
     bundle_id: str
     rendered: str
     token_estimate: int
-    #: INSUFFICIENT: the memory holds nothing for this question - say you do not know
+    #: what long-term memory holds for the question, not the conversation: INSUFFICIENT -
+    #: memory has nothing on it; unless the conversation answers it, say you do not know
     evidence_status: EvidenceStatus = "COMPLETE"
     #: the ids of the memories ``rendered`` shows, in bundle order: what a verdict on the
     #: answer cites (``evidence_refs``), so it moves their confidence

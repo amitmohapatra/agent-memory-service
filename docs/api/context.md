@@ -14,7 +14,7 @@ sequenceDiagram
   participant C as POST /v1/context
   participant R as Retrievers
   participant G as Grounding
-  A->>C: {query, scope, token_budget?, window?, window_format?, tools?, format?}
+  A->>C: {query, scope, token_budget?, window?, window_format?, conversation_token_budget?, tools?, format?}
   C->>R: conversation window · memories · document chunks · graph facts · summaries
   Note over R: audience-filtered in the store#59; memories: weighted RRF of BM25, two dense spaces and ColBERT arms, then session/speaker/time/period rules (ADR 0026)
   R-->>C: candidates
@@ -29,15 +29,19 @@ sequenceDiagram
 The evidence status is the part people skip and then wish they had not. `evidence_status` is
 `COMPLETE`, `INCOMPLETE` or `INSUFFICIENT`: the service is telling you whether it found what an
 answer to *this* question needs, and `format="full"` adds `missing_evidence`, the companion
-passages that are not there. Nothing raises on `INSUFFICIENT` — there is no `require_evidence`
-flag — so check it yourself and answer that you do not know rather than answer from a context
-that cannot support it.
+passages that are not there. The status is about long-term memory — memories, documents,
+graph facts — and never about the conversation: the rendered heading says so
+(`## Evidence status (long-term memory)`), and a follow-up the conversation answers ("where did
+you get that?") is answered from the conversation whatever the status. Nothing raises on
+`INSUFFICIENT` — there is no `require_evidence` flag — so check it yourself and, unless the
+conversation answers it, say that you do not know rather than answer from a context that cannot
+support it.
 
 ## Routes
 
 | Route | Purpose | SDK |
 | --- | --- | --- |
-| `POST /v1/context` | the context for this turn: rendered for a prompt (`format="prompt"`, the default) or the same content as structured data (`format="full"`); `window_format="messages"` gives the conversation window verbatim, for the caller to replay | `ctx.context(query, token_budget=…, tools=[names], window=…, window_format=…, document_ids=…, format=…, debug=…)` |
+| `POST /v1/context` | the context for this turn: rendered for a prompt (`format="prompt"`, the default) or the same content as structured data (`format="full"`); `window_format="messages"` gives the conversation window verbatim, for the caller to replay | `ctx.context(query, token_budget=…, tools=[names], window=…, window_format=…, document_ids=…, format=…, debug=…, conversation_token_budget=…)` |
 | `POST /v1/recall` | ranked, scope-filtered items, no bundle assembly | `ctx.search(query, limit=…, kinds=[…], time_from=…, time_to=…, as_of=…, known_at=…, document_ids=…)`; kinds: `memory`, `chunk`, `summary`, `episode`, `message` (this conversation's messages, then the user's earlier ones: [past conversations](../guide/04-retrieval.md#past-conversations)) |
 | `POST /v1/verify` | verify an answer claim by claim against the context it was given; with a run, recorded as the judge's RUN feedback | `ctx.verify(answer, bundle_id=…, run_id=…)` |
 | `GET /v1/threads/{id}` | one thread, with its durable `summary` once it has one | `ctx.history.thread()` |
@@ -131,13 +135,53 @@ window verbatim instead of as a `## Recent conversation` section: `conversation.
 first, each `{id, role, text}`, an `ASSISTANT` message with the `tool_calls` it made
 (`{id, name, arguments}`) and each result as a `TOOL` message naming its call
 (`tool_call_id`), and `rendered` leaves the window out. It is the thread as written, read from
-the store: a message appended before the call is in it however far the worker is behind. It is
-cut to the conversation budget from the newest message back, never between a tool call and its
-results (a call left without its result, by a run stopped between them, comes without the call;
-a result whose call is not in the window, without the result), starts on a `USER` message when
-one is left, and always holds the newest message. Write the tool steps with the turn: the
-`ASSISTANT` message's `tool_calls` and each result as an `INTERNAL` `TOOL` message with its
-`tool_call_id` (`POST /v1/messages`).
+the store: a message appended before the call is in it however far the worker is behind.
+
+It is cut in **turns, in layers**: a turn is a `USER` message and everything after it up to the
+next one — the tool calls made to answer it, their results and the answer. A follow-up about an
+answer ("where did you get that?", "which steps did you take?") needs what was done, so every
+turn that made calls comes with a **steps list**: the turn's question (`For "…" (2 calls):`)
+and a numbered line per call — the tool, its arguments in short, and the facts the caller
+recorded on its result (below). The steps lists are not messages: they are the context's
+**run record**, a `## Run record` section of `rendered` saying they were written by the
+harness, not by the model or the user (replayed as an `ASSISTANT` message, a model read the
+list as its own claim and disowned it). A chat template that does not render tool calls still
+shows them.
+Each turn has three layers, each kept longer than the next: its steps list; its text (the
+question and what the agent said); and, for the newest turn only, the calls and their results
+themselves (an older result is never replayed: it would read as a fresh one). The budget is
+`conversation_token_budget` (100-1000000 tokens; omitted: the service's 2,000), spent from the
+newest turn back layer by layer: every turn's steps list (a turn without calls: its text) back
+to the first that does not fit, then the turns' text from the newest back, then the newest
+turn's calls and results; at most 20 turns (`conversation_max_messages`). Short of space the
+results go first and the steps lists last. The newest turn's question, answer and steps list
+are always given, even when they alone are over the budget: `conversation.over_budget` is then
+`true` (absent otherwise), and the caller trims them to its model's context with its own
+library — LangChain's `trim_messages`, for one. A caller that keeps a run record writes its
+facts with the turn, under `custom_metadata.run_record`, as plain values (custom metadata
+nests two levels at most): on a `TOOL` result its `status`, `seconds`, `sources` (text),
+`fetched` (when the call returned, ISO 8601 UTC) and `max_age` (the seconds its value stays
+current), on the turn's last message the run's `status`, `seconds` and `approvals` (text); the
+steps list says what is there and nothing else — the fetch time on the call's line, the one
+place it is said, and `from step N` on a call whose argument an earlier result returned — and
+each window message carries its own record as `run_record`. A recorded turn's steps list ends
+with its evidence for "why" and "how sure": the calls that succeeded, the sources and how many
+calls name each, the values out of date by now (past `max_age`), and a grade from those alone:
+`high` (every call succeeded, a source named, nothing out of date), `low` (no call succeeded,
+or the run failed), else `medium`. A tool call never comes
+without its result nor a result without its call (a call left without its result, by a run
+stopped between them, comes without the call; a result whose call is not in the window, without
+the result). Size the budget from the model: its context window, less the system prompt,
+`token_budget` and the reply. The window is the caller's to replay, so it takes no more of
+`token_budget` than the default conversation share (2,000): a larger one never crowds the
+memories out. Write the tool steps with the turn: the `ASSISTANT` message's `tool_calls` and
+each result as an `INTERNAL` `TOOL` message with its `tool_call_id` (`POST /v1/messages`).
+
+```python
+found = await ctx.context(question, window_format="messages", conversation_token_budget=24_000)
+if found.conversation is not None and found.conversation.over_budget:
+    ...  # the newest turn alone is over 24,000 tokens: trim it before replaying it
+```
 
 `rendered` presents memory as evidence to weigh with ids to cite — not as instructions to follow.
 That framing is deliberate: a retrieved passage is data, and an agent that treats it as a command
