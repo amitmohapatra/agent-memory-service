@@ -15,6 +15,10 @@ each entry says which one moved. Decisions behind each change are in the
   question's own (`builder.FOLLOW_UP_*`, `RetrievalEngine.retrieve(follow_up=)`, the
   bundle's `diagnostics.follow_up`). A short question on a new topic finds its own evidence
   and is searched as asked. Measured with `benchmark/follow_ups.py`.
+- **A refused agent names the user's statement it may not touch** (service). The 403 an agent
+  gets for updating or forgetting what the user said (`reason: users_own_statement`) carries
+  the memory's id in `details.memory_id`, resolved from the handle it was called with: a caller
+  that asks the person, and is approved, can act on it as them (the harness's forget by chat).
 - **Any model provider, and memory follows the harness** (ADR 0042; service 0.4.0, SDK
   `trellis-memory` 0.6.0; breaking). A model call goes to an endpoint resolved per call, in one
   order: the endpoint the acting agent registered (else its tenant's), then the service's own,
