@@ -78,4 +78,10 @@ wants earlier events to follow their user re-sends them (messages are idempotent
 * A user's events now also reach the agents acting for them in every conversation, and a
   cached bundle in another of their conversations is rebuilt on the write (the user's revision
   moves, ADR 0036 decision 2).
-* One NLI batch per user event that relates to an earlier statement, as for a message.
+* One NLI batch per user event that relates to an earlier statement, as for a message: about
+  0.2-0.6 s of CPU per such event on the private stack (four cores, mdeberta NLI), where an
+  event used to cost no model call. A stream of readings about one thing compares each with
+  the current reading only (decision 5). Behind a worker this is worker time, not request
+  latency; the single-process stack that runs jobs inside the request (`InlineTaskQueue`)
+  stranded the rest of a 25-message batch at the 15 s request deadline, so the eval's
+  forgetting cells were measured with batches of 5 on both arms.
