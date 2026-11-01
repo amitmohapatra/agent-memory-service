@@ -379,11 +379,14 @@ class Searcher:
             return set()
         threads = sorted({m.thread_id for m in replies})
         turns = await uow.memories.verbatim_turns(tenant_id, threads)
-        fixes = _said_in([t for t in turns if statement_kind_of(t.system_metadata) is StatementKind.CORRECTION])
+        kinds = [statement_kind_of(t.system_metadata) for t in turns]
+        fixes = _said_in(
+            [t for t, k in zip(turns, kinds, strict=True) if k is StatementKind.CORRECTION]
+        )
         ended = {
             e.message_id: t
-            for t in turns
-            if statement_kind_of(t.system_metadata) is StatementKind.LIFECYCLE
+            for t, k in zip(turns, kinds, strict=True)
+            if k is StatementKind.LIFECYCLE
             for e in t.evidence
             if e.message_id
         }

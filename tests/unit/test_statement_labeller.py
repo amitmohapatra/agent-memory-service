@@ -133,8 +133,8 @@ def test_other_languages(text: str, kind: StatementKind | None) -> None:
         "Not anymore — deliveries come on Wednesdays since May.",
         "No — damaged cartons go to bay 9, never back to stock.",
         "Das ist veraltet. Retouren brauchen jetzt Formular R-2.",
-        "Nicht mehr – seit Mai kommen die Lieferungen mittwochs.",
-        "Nein – beschädigte Kartons kommen in Bucht 9.",
+        "Nicht mehr – seit Mai kommen die Lieferungen mittwochs.",  # noqa: RUF001 - an en dash
+        "Nein – beschädigte Kartons kommen in Bucht 9.",  # noqa: RUF001 - an en dash
         "Eso está desfasado. Las devoluciones ahora necesitan el formulario R-2.",
         "Ya no: desde mayo las entregas llegan los miércoles.",
         "هذا قديم. المرتجعات تحتاج الآن النموذج R-2.",
