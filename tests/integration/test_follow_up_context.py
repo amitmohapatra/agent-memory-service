@@ -114,3 +114,24 @@ async def test_a_question_whose_own_search_is_close_is_searched_as_asked(
         _ctx(thread), FOLLOW_UP, window=False
     )
     assert "follow_up" not in bundle.diagnostics
+
+
+async def test_a_follow_up_about_two_answers_back_is_searched_with_both_questions(
+    container,
+) -> None:
+    """"Which of the two should I trust?" after two questions: the first one named what the
+    follow-up points at (the break-and-fix round's bf1-mixed-06: the user's note on a lead
+    time, found for the first question, was gone two questions later). The questions before
+    it, newest first, within ``FOLLOW_UP_CHARS``."""
+    second = "And the dates?"
+    thread = await _seed(
+        container,
+        (MessageRole.USER, ASKED),
+        (MessageRole.ASSISTANT, "Hotel Avenida."),
+        (MessageRole.USER, second),
+        (MessageRole.ASSISTANT, "12 to 14 May."),
+    )
+    bundle = await container.services["context_builder"].build(
+        _ctx(thread), FOLLOW_UP, window=False
+    )
+    assert bundle.diagnostics["follow_up"] == f"{second} {ASKED}"

@@ -75,6 +75,7 @@ from memory_service.modules.retrieval.periods import months_dated
 from memory_service.modules.retrieval.router import (
     QueryRouter,
     RoutedQuery,
+    continues,
     points_to_earlier_chat,
 )
 from memory_service.modules.tools.hints import asks_change, ruled
@@ -92,7 +93,7 @@ log = get_logger(__name__)
 STANDING = True
 #: A short question asked in a thread (at most this many words) whose own search finds nothing
 #: close (its best similarity under :data:`FOLLOW_UP_FLOOR`) is searched again together with
-#: the thread's previous question: "who runs that?" names nothing the search can find, the
+#: the thread's previous questions, newest first (ADR 0044): "who runs that?" names nothing the search can find, the
 #: question before it does. The concatenation baseline of conversational search (TREC CAsT),
 #: gated on a weak first retrieval as corrective retrieval does (CRAG), so a short question on
 #: a new topic, which finds its own evidence, keeps its ranking and its size. Measured on
@@ -102,7 +103,7 @@ FOLLOW_UP_WORDS: Final = 8
 #: frozen English encoder the benchmark's topic changes found their evidence at 0.49 to 0.77,
 #: and the follow-ups whose evidence ranked past third, or was missed, peaked at 0.40 or less.
 FOLLOW_UP_FLOOR: Final = 0.45
-#: The most of the previous question the search text takes.
+#: The most of the previous questions the search text takes.
 FOLLOW_UP_CHARS: Final = 500
 #: How many of the thread's newest messages are looked through for its previous question.
 FOLLOW_UP_MESSAGES: Final = 6
@@ -996,17 +997,40 @@ class ContextBuilder:
         self, ctx: MemoryExecutionContext, query: str
     ) -> list[EarlierChatLine]:
         """What the assistant answered in the user's earlier conversations, when ``query``
-        points to one (ADR 0044); nothing otherwise, at no cost. Read while retrieval runs."""
-        if self.earlier_chats is None or not ctx.user_id or not points_to_earlier_chat(query):
+        points to one (ADR 0044), or carries on from something (:func:`router.continues`) as
+        the first question of its conversation, which has nothing of its own it could carry
+        on from; nothing otherwise, at no cost. Read while retrieval runs."""
+        if self.earlier_chats is None or not ctx.user_id:
             return []
-        return await self.earlier_chats(ctx, query)
+        if points_to_earlier_chat(query) or (
+            continues(query) and not await self._asked_before(ctx, query)
+        ):
+            return await self.earlier_chats(ctx, query)
+        return []
+
+    async def _asked_before(self, ctx: MemoryExecutionContext, query: str) -> bool:
+        """Whether this conversation holds a question of the user's besides ``query``."""
+        if not ctx.thread_id:
+            return False
+        async with self.uow_factory() as uow:
+            if await uow.threads.get(ctx.tenant_id, ctx.thread_id) is None:
+                return False
+            newest = await self.conversation.list_messages(
+                uow, ctx, ctx.thread_id, limit=FOLLOW_UP_MESSAGES
+            )
+        asked = query.strip()
+        return any(
+            m.role is MessageRole.USER and m.content.strip() not in ("", asked) for m in newest
+        )
 
     async def _previous_question(self, ctx: MemoryExecutionContext, query: str) -> str | None:
-        """The thread's previous question, when ``query`` is short enough to follow it up
-        (:data:`FOLLOW_UP_WORDS`): the newest user message that is not ``query`` itself (a
-        caller may append the question before it asks for its context). ``None`` outside a
-        thread, for a longer question, or when the thread has none. Read while the question's
-        own search runs."""
+        """The thread's previous questions, when ``query`` is short enough to follow them up
+        (:data:`FOLLOW_UP_WORDS`): the user's messages among its newest
+        :data:`FOLLOW_UP_MESSAGES` that are not ``query`` itself (a caller may append the
+        question before it asks for its context), newest first, within
+        :data:`FOLLOW_UP_CHARS`. "Which of the two?" points at more than the question just
+        before it. ``None`` outside a thread, for a longer question, or when the thread has
+        none. Read while the question's own search runs."""
         if not ctx.thread_id or len(query.split()) > FOLLOW_UP_WORDS:
             return None
         async with self.uow_factory() as uow:
@@ -1016,11 +1040,14 @@ class ContextBuilder:
                 uow, ctx, ctx.thread_id, limit=FOLLOW_UP_MESSAGES
             )
         asked = query.strip()
-        for message in reversed(newest):
-            text = message.content.strip()
-            if message.role is MessageRole.USER and text and text != asked:
-                return text[:FOLLOW_UP_CHARS]
-        return None
+        before = [
+            text
+            for message in reversed(newest)
+            if message.role is MessageRole.USER
+            and (text := message.content.strip()) != asked
+            and text
+        ]
+        return " ".join(before)[:FOLLOW_UP_CHARS] or None
 
     def _window(
         self,

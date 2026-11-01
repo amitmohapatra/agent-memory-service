@@ -17,7 +17,12 @@ each entry says which one moved. Decisions behind each change are in the
   answers of the user's earlier conversations in its context, under `## Earlier
   conversations` (each dated, with its conversation, labelled as the assistant's, marked when
   the user's next message corrected it; at most three, none for any other question), and
-  `memory_search` reads messages too when such a question names no kinds. The full context
+  `memory_search` reads messages too when such a question names no kinds. A conversation's
+  first question that carries on from something ("And for the cotton one in that same
+  colour?") points to an earlier chat too.
+- **A short follow-up is searched with the conversation's previous questions** (ADR 0044;
+  service), newest first within 500 characters, not only the one just before it: "Which of
+  the two should I trust?" points at what two questions back named. The full context
   carries them as `earlier_chats` (SDK `ContextBundle.earlier_chats`, `EarlierChat`). Nothing
   new is stored.
 - **Earlier conversations are recalled in their own workspace only** (ADR 0044; service). A

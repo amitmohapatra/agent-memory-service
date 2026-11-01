@@ -130,3 +130,24 @@ def test_no_slot_no_change(other: Candidate) -> None:
     old = _fact("a", subject="our pallet supplier", obj="Uline", day="2026-10-01")
     got = latest_per_slot([old, other])
     assert not any(c.payload.get("earlier_value") for c in got)
+
+
+@pytest.mark.parametrize(
+    ("question", "carries_on"),
+    [
+        ("And for the cardigan in that same colour but in cotton, same quarter?", True),
+        ("What about the east?", True),
+        ("Compare it with what the same formula gives today.", True),
+        ("Und für die Baumwollvariante in derselben Farbe?", True),
+        ("¿Y para la de algodón en el mismo color?", True),
+        ("What was revenue for denim jeans in Q3 2026?", False),
+        ("Android sales in Q3?", False),
+    ],
+)
+def test_a_question_that_carries_on_from_something_before_it(
+    question: str, carries_on: bool
+) -> None:
+    """ADR 0044: asked first in a chat, it carries on from an earlier one."""
+    from memory_service.modules.retrieval.router import continues
+
+    assert continues(question) is carries_on

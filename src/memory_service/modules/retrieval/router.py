@@ -122,6 +122,22 @@ _EARLIER_CHAT = re.compile(
 )
 
 
+#: A question that carries on from something said before it, in its own words: it opens with
+#: "and" ("And for the cotton one?"), or names "that same" thing. Asked as a chat's first
+#: question, what it carries on from is an earlier chat (ADR 0044); inside a chat it is a
+#: follow-up, which the chat itself answers. English, German and Spanish openers.
+_CONTINUES = re.compile(
+    r"^\s*(?:and|also|what about|how about|und|was ist mit|y|¿?y qué tal|¿?qué hay de)\b"
+    r"|\b(?:that|the) same\b|\bderselben?\b|\bdasselbe\b|\b(?:ese|esa|el|la) mism[oa]\b",
+    re.IGNORECASE,
+)
+
+
+def continues(query: str) -> bool:
+    """Whether ``query`` carries on from something said before it (:data:`_CONTINUES`)."""
+    return bool(_CONTINUES.search(query))
+
+
 def points_to_earlier_chat(query: str) -> bool:
     """Whether ``query`` asks about what was said or worked out in an earlier chat."""
     return bool(_EARLIER_CHAT.search(query))

@@ -115,7 +115,8 @@ closed and served only by a temporal read. A `search` result that is an earlier 
 
 **What the assistant answered in an earlier chat comes with a question that points to one**
 (ADR 0044). "What was that number you worked out on Monday?", "last time you said...", "I told
-you..." (English, German, Spanish, Arabic and Hindi cue words): the user's memories hold their
+you..." (English, German, Spanish, Arabic and Hindi cue words), or a conversation's first question
+that carries on from something ("And for the cotton one in that same colour?"): the user's memories hold their
 own words, never the assistant's, so the best matching answers of the assistant in the user's
 earlier conversations are added under "## Earlier conversations" in `rendered` and as
 `earlier_chats` (`format="full"`: `id`, `role`, `text`, `thread_id`, `said_at`, `corrected`):

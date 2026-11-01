@@ -204,3 +204,33 @@ async def test_a_corrected_answer_comes_back_marked_corrected(container, uow_fac
 
     [item] = [i for i in await _searched(container, friday, FRIDAY_ASK) if "137" in i["text"]]
     assert item["superseded"] is True
+
+
+CARDIGAN = "Revenue for the Cashmere Cardigan Olive in Q3 2026 was £1,284.50."
+CONTINUES = "And for the cardigan in that same colour but in cotton, same quarter?"
+
+
+async def test_a_new_chat_that_continues_an_earlier_one_gets_its_answer(
+    container, uow_factory
+) -> None:
+    """A new chat opened with "And for the cardigan in that same colour, same quarter?" has
+    nothing of its own the words point at: the earlier chat has (break-and-fix bf3-mixed-05).
+    The same words inside a chat that has its own earlier question read nothing more."""
+    monday = _chat()
+    await _say(
+        container,
+        uow_factory,
+        monday,
+        "What was revenue for the Cashmere Cardigan Olive in Q3 2026?",
+    )
+    await _say(container, uow_factory, monday, CARDIGAN, role=MessageRole.ASSISTANT)
+
+    fresh = await _context(container, _chat(), CONTINUES)
+    assert [c.text for c in fresh.earlier_chats] == [CARDIGAN]
+
+    ongoing = _chat()
+    await _say(container, uow_factory, ongoing, "What was revenue for denim jeans in Q3 2026?")
+    await _say(container, uow_factory, ongoing, "£9,120.", role=MessageRole.ASSISTANT)
+    assert (await _context(container, ongoing, CONTINUES)).earlier_chats == []
+    plain = await _context(container, _chat(), "What was revenue for denim jeans in Q3 2026?")
+    assert plain.earlier_chats == []

@@ -37,6 +37,11 @@ remembered.
    of ADR 0041 is. A question about the past of the world ("sales last week") is not one: it
    needs no earlier chat. The cue words are those of the capability eval's `later` phrasings
    and their translations. The route's type is unchanged, so nothing else about the read moves.
+   A conversation's *first* question that carries on from something ("And for the cardigan in
+   that same colour, same quarter?": it opens with "and", "what about", or names "that same"
+   thing; `router.continues`) points to an earlier chat too, since its own conversation has
+   nothing it could carry on from; inside a conversation the same words are a follow-up and
+   read nothing more.
 2. **The pushed context carries the assistant's best matching earlier answers**
    (`Searcher.earlier_chats`, `ContextBuilder._earlier_chats`) for such a question, and only
    for it: under `## Earlier conversations` in `rendered` and as `earlier_chats` in the full
@@ -100,6 +105,11 @@ remembered.
   gets no lines; the model can still search, and does in the run. The other way round, a
   question with the words that does not need an earlier chat gets lines that share its words,
   which cost tokens and are labelled as what was said then.
+* A short follow-up whose own search is weak is searched again with the conversation's
+  previous questions, newest first (within 500 characters), not only the one just before it:
+  "Which of the two should I trust?" points at what two questions back named (the
+  break-and-fix round's `bf1-mixed-06`: the user's note on a lead time, in the context of the
+  first question, was gone at the third).
 * Message search ranking now weights words by their rarity among the messages read, for the
   tool and the context alike; with one word or equal counts the order is the one it was.
 * An earlier conversation of another workspace is no longer found by `memory_search` or
