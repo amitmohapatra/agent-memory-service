@@ -87,6 +87,17 @@ def test_a_statement_names_its_names_and_identifiers() -> None:
     assert any(v == "qx410" for _, v in b.ids) and "sku" not in b.names
 
 
+def test_a_possessive_names_the_same_person() -> None:
+    """"Jordan Lee's temp assignment has ended" is about the Jordan Lee of the shift logs: the
+    possessive is no part of the name, or the two share no name and the ended assignment
+    leaves every log of it current."""
+    new = "Jordan Lee's temp assignment has ended; his badge is deactivated."
+    old = "Shift log 2026-10-16: Jordan Lee (temp) worked receiving, unloaded 18 pallets."
+    assert anchors(new, "en").names == {"jordan lee"}
+    assert anchors("We asked Priya’s Team Lead.", "en").names == {"priya", "team lead"}
+    assert relate(anchors(new, "en"), anchors(old, "en"), new, old).shared_name
+
+
 def test_latin_names_inside_another_script_are_names() -> None:
     a = anchors(OLD_HI, "hi")
     assert "brightway" in a.names
