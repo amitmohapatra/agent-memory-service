@@ -24,6 +24,7 @@ from memory_service.domain.enums import (
     MemoryType,
     Representation,
     ScopeLevel,
+    StatementKind,
     TemporalStatus,
     Visibility,
 )
@@ -422,6 +423,32 @@ class SqlMemoryRepository:
                     MemoryRow.tenant_id == tenant_id,
                     MemoryRow.system_metadata.has_key("replaced_by"),
                     newer.in_(list(memory_ids)),
+                )
+            )
+        ).all()
+        return [_to_domain(r) for r in rows]
+
+    async def verbatim_turns(
+        self,
+        tenant_id: str,
+        thread_ids: Sequence[str],
+        *,
+        replaced: bool | None = None,
+        kind: StatementKind | None = None,
+    ) -> list[CanonicalMemory]:
+        if not thread_ids:
+            return []
+        marked = MemoryRow.system_metadata.has_key("replaced_by")
+        meta = MemoryRow.system_metadata
+        rows = (
+            await self.s.scalars(
+                select(MemoryRow).where(
+                    MemoryRow.tenant_id == tenant_id,
+                    MemoryRow.thread_id.in_(sorted(set(thread_ids))),
+                    MemoryRow.deleted_at.is_(None),
+                    meta["category"].astext == "verbatim_turn",
+                    *([marked if replaced else ~marked] if replaced is not None else []),
+                    *([meta["statement_kind"].astext == kind.value] if kind else []),
                 )
             )
         ).all()

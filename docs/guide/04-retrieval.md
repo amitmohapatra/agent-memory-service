@@ -78,6 +78,13 @@ written (`RetrievalSettings`). Separately, a deployment with a retail calendar s
 planning shorthand with its expansion — "WOS" with "weeks of supply" — from a fixed table
 (`domain/glossary.py`).
 
+A short follow-up asked in a thread ("who is in charge of it?", at most 8 words) names nothing
+the search can find. When its own search finds nothing close (best similarity under 0.45) it is
+searched again with the thread's previous question in its search text; the route and the
+coverage stay the question's own, and the bundle says so (`diagnostics.follow_up`). A short
+question on a new topic finds its own evidence and is searched as asked
+(`ContextBuilder._followed_up`, measured by `benchmark/follow_ups.py`).
+
 ---
 
 ## Encoding and the store-side filter
