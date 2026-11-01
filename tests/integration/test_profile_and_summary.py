@@ -40,7 +40,7 @@ async def test_every_summary_every_messages_the_summary_rolls_forward(
         first = await uow.summaries.latest("acme", "thr_sum")
     assert first is not None and first.version == 1 and first.model == "extractive"
     assert first.covers_to_sequence == SUMMARY_EVERY
-    assert first.text.splitlines()[0] == "user: Message 0."
+    assert first.text.splitlines()[0] == "user: Message 0. More."
 
     await _say(container, uow_factory, SUMMARY_EVERY, start=SUMMARY_EVERY)
     await container.tasks.drain()
