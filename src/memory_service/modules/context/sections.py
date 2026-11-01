@@ -45,7 +45,7 @@ TOOL_HINTS_MIN: Final = 5
 PINNED_SHARE: Final = 0.5
 #: the profile sections ``modules.context.standing`` writes (kept first when the whole
 #: profile does not fit)
-STANDING_BLOCKS: Final = frozenset({"standing_rules", "preferences"})
+STANDING_BLOCKS: Final = frozenset({"standing_rules", "preferences", "about_user"})
 #: A summary truncated below this many tokens says too little to keep.
 SUMMARY_MIN_TOKENS: Final = 40
 #: Characters per token when a summary is cut to fit (estimate_tokens' own ratio).

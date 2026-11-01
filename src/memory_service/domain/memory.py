@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -32,6 +32,11 @@ def statement_kind_of(metadata: Mapping[str, Any]) -> StatementKind | None:
     trigger and exception, when it has them, are ``rule_trigger`` and ``rule_exception``."""
     value = metadata.get("statement_kind")
     return StatementKind(value) if value in StatementKind.__members__ else None
+
+
+#: The workspace a self-description said outside any workspace is read in: every one of the
+#: user's (``system_metadata["self_description"]``, ``context.standing``).
+SELF_ANYWHERE: Final = "*"
 
 
 def replaced_by(metadata: Mapping[str, Any]) -> str | None:

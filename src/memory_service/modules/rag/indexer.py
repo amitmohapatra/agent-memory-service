@@ -531,6 +531,13 @@ class Indexer:
                                 if m.system_metadata.get("standing_instruction")
                                 else {}
                             ),
+                            # the user's own setup, read into every request of theirs in
+                            # this workspace (``context.standing``, the ``about_user`` section)
+                            **(
+                                {"self_description": str(m.system_metadata["self_description"])}
+                                if m.system_metadata.get("self_description")
+                                else {}
+                            ),
                             "provider": m.system_metadata.get("provider"),
                             "derived": bool(m.system_metadata.get("source_revisions")),
                             "source_observed_to": m.system_metadata.get("source_observed_to"),
