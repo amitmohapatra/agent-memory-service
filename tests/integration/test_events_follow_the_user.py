@@ -174,3 +174,31 @@ async def test_what_a_replaced_value_said_is_not_served_as_current(
     current = [i.text for i in (*bundle.memories, *bundle.knowledge, *bundle.graph_facts)]
     assert any("DC-2" in t for t in current), current
     assert not any("has shipped" in t for t in current), current
+
+
+async def test_a_stream_of_events_compares_each_with_the_current_value_only(
+    container, uow_factory
+) -> None:
+    """Fifty readings of one unit in one conversation (the capability eval's forgetting
+    scenarios): each replaced the one before, and each was compared with every earlier one
+    again, already replaced or not - quadratic NLI work on the write path. An earlier value
+    gives way to its replacement as a superseded statement does: only the current one is
+    compared."""
+    readings = [f"Unit TRU-7 reads {t}°F." for t in range(31, 39)]
+    nli = _scripted(container, 0.87, values=[r.split(" reads ")[1] for r in readings])
+    sizes: list[int] = []
+    scored = nli.entail_groups
+
+    async def counted(groups):
+        sizes.append(len(groups))
+        return await scored(groups)
+
+    nli.entail_groups = counted  # type: ignore[method-assign]
+    logs = _chat()
+    for reading in readings:
+        await _event(container, uow_factory, logs, reading)
+
+    assert sizes and max(sizes) <= 2, sizes  # one pair (two directions) per reading
+    stored = {m.content: m for m in await _memories(uow_factory, logs, container)}
+    assert all(replaced_by(stored[r].system_metadata) for r in readings[:-1])
+    assert not replaced_by(stored[readings[-1]].system_metadata)

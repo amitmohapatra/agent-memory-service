@@ -1078,13 +1078,23 @@ class CrossConversationReplacement:
     async def _earlier(
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, new: Sequence[CanonicalMemory]
     ) -> list[CanonicalMemory]:
-        """The user's statements said before these, from other messages."""
+        """The user's statements said before these, from other messages. Not an earlier value
+        another statement already replaced: as a superseded one (no longer ``CURRENT``), it
+        gave way to that newer statement, which is the one compared. Re-comparing it made a
+        stream of readings about one thing (fifty "TRU-7 reads 36°F" events in one
+        conversation) quadratic in NLI work on the write path."""
         mine = set().union(*(_sources(m) for m in new))
         newest = max(m.temporal.observed_at for m in new)
         rows = await uow.memories.statements_of(
             ctx.tenant_id, ctx.principal_id, before=newest, limit=self.max_earlier
         )
-        return [m for m in rows if statement_of(m, ctx.principal_id) and not (_sources(m) & mine)]
+        return [
+            m
+            for m in rows
+            if statement_of(m, ctx.principal_id)
+            and not replaced_by(m.system_metadata)
+            and not (_sources(m) & mine)
+        ]
 
     async def _decide(
         self,

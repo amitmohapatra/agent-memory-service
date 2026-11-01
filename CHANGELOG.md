@@ -18,6 +18,10 @@ each entry says which one moved. Decisions behind each change are in the
 - **No graph fact read from an earlier value is served as current** (ADR 0043; service). A
   replaced statement or event went to the context's history section, but the relation read
   from it ("po-88120 has shipped") was still served among the current graph facts.
+- **An earlier value is not compared again** (ADR 0043; service). Cross-conversation
+  replacement compared a new statement with earlier values already replaced by another one;
+  a stream of readings about one thing made that quadratic in NLI work. Only the user's
+  statements no other one has replaced are compared, as superseded ones already were not.
 - **A search marks the assistant's reply that the user corrected next** (ADR 0038, extended;
   service). "Torque the PX-400 flange bolts to 40 Nm." then "That's wrong - 55 Nm": the
   correction reached later conversations, but a search of what was said served the wrong

@@ -52,6 +52,15 @@ the last named search failure of the replacement work (PR #68).
    into it, is an earlier value among the candidates
    (`graph.retrieval._without_replaced_facts`, no extra read). The memory itself is still
    served in the history section.
+5. **An earlier value is not compared again.** A new statement is compared with the user's
+   current statements that no other statement has replaced yet (`replacement._earlier`), as
+   a superseded one already was not (it is no longer `CURRENT`): the newer value it gave way
+   to is the one compared. Events made this matter: the capability eval writes fifty
+   "temporary refrigeration unit TRU-7 reads 36°F" readings into one conversation, each
+   related to every earlier one by the unit's name, and each reading's NLI batch grew with
+   all of them (2, 4, ... 98 premise groups; 6.7 s rising to 12.6 s per event on the private
+   stack). Now one pair per reading. The read window (`MAX_EARLIER`) is unchanged, so this
+   compares a subset of what was compared before and marks nothing new.
 
 No new setting, no new memory type, no new table, no API change.
 
