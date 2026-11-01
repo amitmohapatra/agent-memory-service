@@ -1052,3 +1052,17 @@ def test_a_run_purges_unless_kept_or_reused() -> None:
     assert should_purge(parse(["--mode", "nollm"])[0])
     assert not should_purge(parse(["--mode", "nollm", "--keep"])[0])
     assert not should_purge(parse(["--mode", "nollm", "--reuse", "x.raw.json.gz"])[0])
+
+
+def test_the_pull_is_not_scored_on_a_learned_tool_procedure() -> None:
+    """The agent's pull searches memories, episodes and messages; a learned tool procedure is
+    none of them (it reaches the agent as the pushed context's skills), so a query naming its
+    tools is scored on the context only. Every other answerable query is pulled."""
+    from benchmark.capabilities.runner import pulled
+
+    mfa = next(c for c in DATASET.capabilities if c.name == "procedural_skill")
+    skill = next(q for s in mfa.scenarios for q in s.queries if q.tools)
+    rule = next(q for s in mfa.scenarios for q in s.queries if not q.tools)
+    assert not pulled(skill, skill.expect)
+    assert pulled(rule, rule.expect)
+    assert not pulled(rule, {"abstain": True})
