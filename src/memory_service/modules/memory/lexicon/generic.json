@@ -116,7 +116,10 @@
         "not quite",
         "i misspoke",
         "i was mistaken",
-        "(no|nope|nah)(?=[,.!:;—–،] (?!(i|we|you|they|he|she|it)('m|'re|'s|'ve|'d|'ll| am| are| is| have| had)? ?(haven't|have not|hadn't|didn't|did not|don't|do not|can't|cannot|won't|wasn't|weren't|not|never|no)\\b)(?!(not|never|no|but|thanks|thank you|problem|worries|way|idea|clue|need|rush|kidding|haven't|didn't|don't|really|yet|sorry)\\b))"
+        "(no|nope|nah)(?=[,.!:;—–،] (?!(i|we|you|they|he|she|it)('m|'re|'s|'ve|'d|'ll| am| are| is| have| had)? ?(haven't|have not|hadn't|didn't|did not|don't|do not|can't|cannot|won't|wasn't|weren't|not|never|no)\\b)(?!(not|never|no|but|thanks|thank you|problem|worries|way|idea|clue|need|rush|kidding|haven't|didn't|don't|really|yet|sorry)\\b))",
+        "(that's|that is|this is|it's|it is) (outdated|out of date)",
+        "not any\\s?more(?=\\s?[,.!:;—–])",
+        "(no|nope|nah)(?=\\s[—–]\\s)"
       ],
       "correction": [
         "i was wrong",
@@ -207,7 +210,8 @@
         "phas(e|ed|ing) out",
         "shut(ting)? down",
         "delist\\w+",
-        "sunsetted"
+        "sunsetted",
+        "(we|they|i)( have| 've| had)? (retired|scrapped|abandoned) (the|our|that|this|those|these)"
       ],
       "status": [
         "out of (service|order|action|commission)",
@@ -800,7 +804,10 @@
         "update[,.!:;—–،]",
         "es ist falsch",
         "das ist (falsch|irreführend|nicht (korrekt|richtig|wahr))",
-        "nicht ganz"
+        "nicht ganz",
+        "das ist (veraltet|nicht mehr aktuell)",
+        "nicht mehr(?=\\s?[,.!:;—–])",
+        "nein(?=\\s[—–]\\s)"
       ],
       "correction": [
         "ich habe mich geirrt",
@@ -860,7 +867,8 @@
         "dekommission\\w*",
         "eingestellt( worden)?",
         "(für immer|dauerhaft|endgültig) geschlossen",
-        "(wurde|wird|ist) (eröffnet|gegründet|gestartet|eingeführt|abgebaut|abgewickelt)"
+        "(wurde|wird|ist) (eröffnet|gegründet|gestartet|eingeführt|abgebaut|abgewickelt)",
+        "abgeschafft"
       ],
       "status": [
         "außer betrieb",
@@ -1240,7 +1248,10 @@
         "no(?=[,.!:;—–،] (?!(no|nunca|todavía|aún|gracias|lo he|he|hemos|pero|para nada)\\b))",
         "lo que (mencionaste|dijiste|comentaste)",
         "eso es (incorrecto|falso|un error)",
-        "me equivoqué"
+        "me equivoqué",
+        "eso (está|es) (desfasado|desactualizado|obsoleto)",
+        "ya no(?=\\s?[,.!:;—–])",
+        "no(?=\\s[—–]\\s)"
       ],
       "correction": [
         "me equivoqué",
@@ -1300,7 +1311,8 @@
         "cerr(ó|aron|amos) (por completo|definitivamente|para siempre|de forma permanente)",
         "(se ha|se han|fue|fueron|ha sido) (cerrad[oa]s?|clausurad[oa]s?|terminad[oa]s?|rescindid[oa]s?|cancelad[oa]s?|desmantelad[oa]s?|inaugurad[oa]s?|lanzad[oa]s?)( para siempre| definitivamente)?",
         "(se )?termin(ó|aron) el contrato",
-        "(abrió|abrimos|inauguró|inauguramos|lanzó|lanzamos) (sus puertas|una? nuev[oa])"
+        "(abrió|abrimos|inauguró|inauguramos|lanzó|lanzamos) (sus puertas|una? nuev[oa])",
+        "(retiramos|retiraron|hemos retirado|han retirado) (el|la|los|las|nuestr[oa]s?)"
       ],
       "status": [
         "fuera de servicio",
@@ -1665,7 +1677,11 @@
         "قصدت",
         "أقصد",
         "هذا (غير صحيح|خطأ|ليس صحيحا)",
-        "تحديث[,.!:;—–،]"
+        "تحديث[,.!:;—–،]",
+        "(هذا|ذلك) قديم",
+        "ليس بعد الآن",
+        "لم يعد كذلك",
+        "لا(?=\\s[—–]\\s)"
       ],
       "correction": [
         "كنت مخطئا",
@@ -2081,7 +2097,10 @@
         "अपडेट[,.!:;—–،]",
         "nahi[,.]",
         "nahin[,.]",
-        "नहीं[,.!]"
+        "नहीं[,.!]",
+        "यह पुराना है",
+        "अब नहीं(?=\\s?[,.!:;—–।])",
+        "नहीं(?=\\s[—–]\\s)"
       ],
       "correction": [
         "मुझसे गलती हुई",
