@@ -634,31 +634,23 @@ class RetrievalEngine:
             return candidates
         collection, flt = self._scope("memory", visibility, None, None, None, None)
         hits = await self.store.search_sparse(collection, vector, flt, limit=SECOND_HOP_K)
-        held = in_hand(candidates)
-        found = [
-            replace(
-                Candidate(
-                    record_id=h.record_id,
-                    kind="memory",
-                    text=str(h.payload.get("text", "")),
-                    score=bridge.score,
-                    retrievers=["second_hop"],
-                    payload=h.payload,
-                ),
-                expanded_from=bridge.record_id,
-                expansion_edge="SECOND_HOP",
-            )
+        reached = [
+            h
             for h in hits
-            if h.record_id not in held
+            if h.record_id != bridge.record_id
             and not h.payload.get("earlier_value")
-            and slots.names_any(str(h.payload.get("text", "")), way.things)
-        ][:SECOND_HOP_ADDED]
-        found = not_in_hand(found, candidates)
+            and slots.reaches(str(h.payload.get("text", "")), way)
+        ]
+        found = _hopped(reached, bridge, candidates)[:SECOND_HOP_ADDED]
         diagnostics["second_hop"] = {"query": way.query, "added": len(found)}
         if not found:
             return candidates
-        at = candidates.index(bridge) + 1
-        return [*candidates[:at], *found, *candidates[at:]]
+        # what the hop reached sits after the memory it was reached from, judged by the hop
+        # (``expanded_from``), wherever the search had already put it
+        moved = {c.record_id for c in found}
+        rest = [c for c in candidates if c.record_id not in moved or c.kind != "memory"]
+        at = rest.index(bridge) + 1
+        return [*rest[:at], *found, *rest[at:]]
 
     async def _follow_replacements(
         self,
@@ -1421,6 +1413,38 @@ def _carried_by_replaced(candidates: list[Candidate]) -> list[Candidate]:
         else c
         for c in candidates
     ]
+
+
+def _hopped(
+    hits: Sequence[SearchHit], bridge: Candidate, candidates: list[Candidate]
+) -> list[Candidate]:
+    """The second hop's ``hits`` as candidates reached from ``bridge``, in the hits' order: a
+    memory already in hand (not reached from elsewhere) is that candidate, marked as reached;
+    any other a new one, unless a twin of it is in hand."""
+    by_id = {c.record_id: c for c in candidates if c.kind == "memory"}
+    held = in_hand(candidates)
+    out: list[Candidate] = []
+    for h in hits:
+        mine = by_id.get(h.record_id)
+        if mine is not None:
+            if mine.expanded_from is None:
+                out.append(
+                    replace(mine, expanded_from=bridge.record_id, expansion_edge="SECOND_HOP")
+                )
+            continue
+        if h.record_id in held:
+            continue
+        new = Candidate(
+            record_id=h.record_id,
+            kind="memory",
+            text=str(h.payload.get("text", "")),
+            score=bridge.score,
+            retrievers=["second_hop"],
+            payload=h.payload,
+        )
+        if not_in_hand([new], [*candidates, *out]):
+            out.append(replace(new, expanded_from=bridge.record_id, expansion_edge="SECOND_HOP"))
+    return out
 
 
 #: Reads ``_follow_replacements`` makes at most per request (one per link of a chain), and the
