@@ -1388,9 +1388,14 @@ def _within(lines: list[EarlierChatLine], budget: int) -> tuple[list[EarlierChat
     fits half of ``budget``, and the tokens that section takes."""
     kept: list[EarlierChatLine] = []
     for line in lines:
-        if estimate_tokens("\n".join(earlier_chats_section([*kept, line]))) <= budget // 2:
+        if _section_tokens([*kept, line]) <= budget // 2:
             kept.append(line)
-    return kept, estimate_tokens("\n".join(earlier_chats_section(kept)))
+    return kept, _section_tokens(kept)
+
+
+def _section_tokens(lines: list[EarlierChatLine]) -> int:
+    """The tokens the earlier conversations' section takes: none without a line."""
+    return sum(estimate_tokens(part) for part in earlier_chats_section(lines))
 
 
 def _best_similarity(result: RetrievalResult) -> float:
