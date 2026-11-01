@@ -90,13 +90,6 @@ async def test_a_ttl_expires_the_value(cache) -> None:
     assert await cache.get(key) is None, "the TTL must be honoured, not just accepted"
 
 
-async def test_incr_counts_from_zero_and_accumulates(cache) -> None:
-    key = _key()
-    assert await cache.incr(key) == 1
-    assert await cache.incr(key, amount=4) == 5
-    await cache.delete(key)
-
-
 async def test_incr_window_counts_and_expires_in_one_round_trip(cache) -> None:
     """What the rate limiter runs on every request: the count comes back, and the key is not
     left behind forever when the window is over."""

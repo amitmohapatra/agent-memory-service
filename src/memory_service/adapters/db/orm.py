@@ -227,10 +227,7 @@ class AgentRunRow(Base):
         JSONB, default=dict, server_default="{}"
     )
 
-    __table_args__ = (
-        Index("ix_agent_runs_turn", "tenant_id", "turn_id"),
-        Index("ix_agent_runs_parent", "parent_agent_run_id"),
-    )
+    __table_args__ = (Index("ix_agent_runs_parent", "parent_agent_run_id"),)
 
 
 # --------------------------------------------------------------------------

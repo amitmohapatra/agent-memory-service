@@ -672,20 +672,6 @@ class SqlAgentRunRepository:
             .values(status=status, completed_at=func.now())
         )
 
-    async def list_for_turn(self, tenant_id: str, turn_id: str) -> list[AgentRun]:
-        rows = (
-            (
-                await self.s.execute(
-                    select(AgentRunRow)
-                    .where(AgentRunRow.tenant_id == tenant_id, AgentRunRow.turn_id == turn_id)
-                    .order_by(AgentRunRow.started_at)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        return [self._to_domain(r) for r in rows]
-
 
 class SqlObservationRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -804,26 +790,6 @@ class SqlObservationRepository:
             )
         ).scalar_one_or_none()
         return self._to_domain(row) if row is not None else None
-
-    async def list_unprocessed(
-        self, *, older_than: datetime, limit: int = 500
-    ) -> list[Observation]:
-        rows = (
-            (
-                await self.s.execute(
-                    select(ObservationRow)
-                    .where(
-                        ObservationRow.processed_at.is_(None),
-                        ObservationRow.created_at <= older_than,
-                    )
-                    .order_by(ObservationRow.created_at)
-                    .limit(limit)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        return [self._to_domain(r) for r in rows]
 
 
 class SqlRevisionRepository:

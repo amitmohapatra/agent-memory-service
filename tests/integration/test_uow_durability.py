@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -74,8 +73,8 @@ async def test_commit_persists_source_and_outbox_atomically(container, uow_facto
         assert outbox_id is not None
         await uow.revisions.bump(TENANT, RevisionKind.THREAD, thread.thread_id)
         await uow.commit()
-        assert uow.committed
-        assert len(uow.dispatched_job_ids) == 1
+    dispatched = [s for s in container.tasks.payloads.values() if s.task_name == "noop"]
+    assert [s.payload for s in dispatched] == [{"message_id": msg.message_id}]
 
     async with uow_factory() as uow:
         stored = await uow.messages.get(TENANT, msg.message_id)
@@ -171,7 +170,7 @@ async def test_outbox_sweep_recovers_when_dispatch_failed(container, uow_factory
             JobSpec(task_name="noop", queue=Queue.CHAT_FAST, payload={"x": 1}, tenant_id=TENANT)
         )
         await uow.commit()
-        assert uow.committed and uow.dispatched_job_ids == []  # acknowledged, not yet dispatched
+    assert container.tasks.payloads == {}  # acknowledged, not yet dispatched
     async with uow_factory() as uow:
         pending = await uow.outbox.pending()
         assert len(pending) == 1 and pending[0].attempts == 1
@@ -224,19 +223,12 @@ async def test_observation_roundtrip(container, uow_factory) -> None:
     async with uow_factory() as uow:
         got = await uow.observations.get(TENANT, obs.observation_id)
         assert got is not None and got.content == obs.content and got.kind is ObservationKind.EVENT
-        stale = await uow.observations.list_unprocessed(
-            older_than=datetime.now(UTC) + timedelta(seconds=1)
-        )
-        assert [o.observation_id for o in stale] == [obs.observation_id]
+        assert got.processed_at is None
         await uow.observations.mark_processed(TENANT, obs.observation_id, status="DONE")
         await uow.commit()
     async with uow_factory() as uow:
-        assert (
-            await uow.observations.list_unprocessed(
-                older_than=datetime.now(UTC) + timedelta(seconds=1)
-            )
-            == []
-        )
+        done = await uow.observations.get(TENANT, obs.observation_id)
+        assert done is not None and done.processed_at is not None
 
 
 async def test_readiness_reports_postgres(container) -> None:
@@ -293,7 +285,8 @@ async def test_a_backlog_does_not_stop_a_fresh_commit_from_dispatching(
             JobSpec(task_name="noop", queue=Queue.CHAT_FAST, payload={"fresh": 1}, tenant_id=TENANT)
         )
         await uow.commit()
-        assert uow.dispatched_job_ids, "the fresh row was buried behind the backlog"
+    fresh = [s for s in container.tasks.payloads.values() if s.payload == {"fresh": 1}]
+    assert fresh, "the fresh row was buried behind the backlog"
 
     async with uow_factory() as uow:
         still = await uow.outbox.pending(limit=500)

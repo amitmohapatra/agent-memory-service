@@ -34,7 +34,7 @@ async def _dispatch_for(container, uow_factory, tenant: str) -> str:
             JobSpec(task_name="noop", queue=Queue.CHAT_FAST, payload={}, tenant_id=tenant)
         )
         await uow.commit()
-        job_ids = uow.dispatched_job_ids
+    job_ids = [j for j, s in container.tasks.payloads.items() if s.tenant_id == tenant]
     assert job_ids, "the outbox did not dispatch the job, so there is no id to scope"
     return job_ids[0]
 

@@ -131,18 +131,13 @@ def test_ports_are_protocols_not_implementations() -> None:
         assert not (names & BANNED_IN_CORE), f"{path.name} imports {names & BANNED_IN_CORE}"
 
 
-#: Port methods nothing in the service calls yet, found 2026-11-01 (the validation gate's dead
-#: code pass) and left for a decision: each is removed with its adapters, or gets its caller.
-#: Shrink this set; never grow it.
+#: Port methods nothing in the service calls, kept for a reason a test cannot read: each says
+#: why. Shrink this set; never grow it.
 UNCALLED_PORT_METHODS = frozenset(
     {
-        "committed",
-        "dispatched_job_ids",
-        "incr",
-        "list_for_turn",
-        "list_unprocessed",
+        # the knowledge-graph gate ADR 0016 requires (``kg_gate.json``: fact recall, false
+        # facts, noise) reads every relation of a document through it (tests/eval/test_kg_gate.py)
         "relations_for_document",
-        "uri",
     }
 )
 

@@ -100,12 +100,12 @@
   "noise_entities": 0,
   "provenance": {
     "cpu_count": 4,
-    "git_commit": "f86a1412a1b3df637047b433c6be4d1bce9309de",
+    "git_commit": "fd547def082b1cbc013da5c135d544ce7c4c370b",
     "host_load": {
-      "load_per_core": 0.21,
-      "loadavg_15m": 5.74,
-      "loadavg_1m": 0.86,
-      "loadavg_5m": 4.21
+      "load_per_core": 0.23,
+      "loadavg_15m": 5.6,
+      "loadavg_1m": 0.92,
+      "loadavg_5m": 2.91
     },
     "llm": {
       "enabled": false,
@@ -115,20 +115,20 @@
     "memory_gb": 15.7,
     "models": {},
     "packages": {
-      "docling": "2.127.0",
+      "docling": "not-installed",
       "fastapi": "0.141.1",
-      "onnxruntime": "1.30.0",
+      "onnxruntime": "not-installed",
       "procrastinate": "3.9.0",
       "qdrant-client": "1.19.0",
-      "sentence-transformers": "6.0.1",
+      "sentence-transformers": "not-installed",
       "sqlalchemy": "2.0.53",
-      "torch": "2.14.0+cpu",
-      "transformers": "5.17.0",
+      "torch": "not-installed",
+      "transformers": "not-installed",
       "zstandard": "0.25.0"
     },
     "platform": "Linux-6.18.44-fc-v185-x86_64-with-glibc2.39",
-    "python": "3.13.14",
-    "timestamp": "2026-10-30T08:27:57.074142+00:00"
+    "python": "3.13.18",
+    "timestamp": "2026-11-01T21:42:18.599232+00:00"
   },
   "provider": "native",
   "query_hit_rate": 1.0

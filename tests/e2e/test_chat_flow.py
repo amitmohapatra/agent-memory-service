@@ -143,9 +143,11 @@ def test_internal_messages_do_not_pollute_visible_history(client, container) -> 
 
     async def _runs():
         async with container.services["uow_factory"]() as uow:
-            return await uow.agent_runs.list_for_turn("acme", scope["turn_id"])
+            ids = (agent_scope["agent_run_id"], child_scope["agent_run_id"])
+            return [await uow.agent_runs.get("acme", i) for i in ids]
 
-    runs = client.portal.call(_runs)
+    runs = [r for r in client.portal.call(_runs) if r is not None]
+    assert {r.turn_id for r in runs} == {scope["turn_id"]}
     assert {r.agent_id for r in runs} == {"planner", "flights"}
     assert {r.parent_agent_run_id for r in runs} == {None, agent_scope["agent_run_id"]}
     # visible AGENT role is rejected

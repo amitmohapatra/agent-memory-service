@@ -31,8 +31,6 @@ class CacheProvider(Protocol):
 
     async def delete(self, *keys: str) -> int: ...
 
-    async def incr(self, key: str, *, amount: int = 1) -> int: ...
-
     async def incr_window(self, key: str, *, ttl_seconds: int) -> int:
         """Increment a counter and (re)set its expiry in one round trip.
 

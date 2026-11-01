@@ -56,10 +56,9 @@ class OutboxRelay:
         self.session_factory = session_factory
         self.task_queue = task_queue
 
-    async def dispatch_ids(self, outbox_ids: list[int]) -> list[str]:
+    async def dispatch_ids(self, outbox_ids: list[int]) -> None:
         if not outbox_ids or self.task_queue is None:
-            return []
-        job_ids: list[str] = []
+            return
         async with self.session_factory() as session, session.begin():
             repo = SqlOutboxRepository(session)
             # by_ids, not pending(): asking for a window of the OLDEST rows and filtering it
@@ -67,10 +66,7 @@ class OutboxRelay:
             # window and SKIP LOCKED hides our rows from us, or a backlog longer than the
             # window means our just-committed row is never in it. See by_ids for the detail.
             for entry in await repo.by_ids(outbox_ids):
-                job_id = await self._dispatch(repo, entry)
-                if job_id:
-                    job_ids.append(job_id)
-        return job_ids
+                await self._dispatch(repo, entry)
 
     async def sweep(self, *, older_than_seconds: int = 30, limit: int = 200) -> int:
         if self.task_queue is None:
@@ -106,7 +102,6 @@ class SqlUnitOfWork:
         self._session: AsyncSession | None = None
         self._pending_outbox: list[int] = []
         self._committed = False
-        self._dispatched: list[str] = []
 
     async def __aenter__(self) -> Self:
         self._session = self._session_factory()
@@ -198,23 +193,14 @@ class SqlUnitOfWork:
         pending, self._pending_outbox = self._pending_outbox, []
         if pending and self._relay is not None:
             try:
-                self._dispatched = await self._relay.dispatch_ids(pending)
+                await self._relay.dispatch_ids(pending)
             except Exception as exc:
                 log.warning("outbox.post_commit_dispatch_failed", error=str(exc))
-                self._dispatched = []
 
     async def rollback(self) -> None:
         if self._session is not None and self._session.in_transaction():
             await self._session.rollback()
         self._pending_outbox = []
-
-    @property
-    def committed(self) -> bool:
-        return self._committed
-
-    @property
-    def dispatched_job_ids(self) -> list[str]:
-        return list(self._dispatched)
 
 
 class SqlUnitOfWorkFactory:
