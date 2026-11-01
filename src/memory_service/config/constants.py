@@ -92,6 +92,12 @@ class DenseModel(BaseModel):
     #: match: only the pattern's own words count. Like the floor, it belongs to the encoder
     #: that measured it and is not part of the fingerprint.
     procedure_cosine: float = Field(default=0.0, ge=0.0, le=1.0)
+    #: The least cosine between a task and a catalog tool's indexed text, in this encoder's
+    #: space when it is the one every query is searched in, for the tool search's match to
+    #: count toward the tool hint's confidence (``modules/tools/index.py``). The fusion score
+    #: only orders: the first hit reads 1.0 whatever the task. 0 is no such check: every hit
+    #: counts. Like the floor, it belongs to the encoder that measured it.
+    tool_cosine: float = Field(default=0.0, ge=0.0, le=1.0)
     #: Bound each non-preemptible indexing turn on the shared model runner. A full
     #: 32-passage forward pass blocked interactive queries for seconds on CPU.
     document_batch_size: int = Field(default=1, ge=1)
@@ -222,6 +228,20 @@ class FrozenModels(BaseModel):
         # reach of any floor that keeps the unrelated tasks out
         # (tests/eval/test_procedure_match_gate.py).
         procedure_cosine=0.45,
+        # A tool search's match. Measured on tests/eval/golden/tool_hint_confidence.json (94
+        # tasks in en/de/es/hi/ar over a 30-tool catalog the harness benchmarks use), on its
+        # dev half: the closest tool to an unrelated task (small talk, general knowledge, a
+        # question about the user) reads at most 0.273, 0.277 with the harness's 100 or 500
+        # distractor tools added ("what is my sister's name?" in Hindi); greetings and the
+        # weather on Mars 0.09-0.17; a matching task's closest tool 0.28-0.69. 0.28 keeps every
+        # unrelated task out at each size for one matching task lost (Hindi, 0.2799): a
+        # confident hint for an unrelated task narrows the model's tools and drops its "I don't
+        # know" note, a missed match only leaves every tool offered. On the held-out half every
+        # unrelated task falls below it, 1 of 19 matching ones does ("What was revenue in
+        # Q2?", 0.27), and 95% of the tasks it leaves unconfident are ones no tool answers. A
+        # fitted Platt curve ranked a little better (AUROC 0.89 against 0.83) but needed the
+        # harness's 0.5 floor moved for the same abstentions (ADR 0018, amendment 2026-10-31).
+        tool_cosine=0.28,
     )
     sparse: SparseModel = SparseModel()
     nli: NLIModel = NLIModel()

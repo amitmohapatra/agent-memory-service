@@ -1,0 +1,1315 @@
+{
+ "name": "tool_hint_confidence",
+ "description": "Tasks labelled with the catalog tools that answer them (empty: none does). The catalog is two the agent-harness benchmarks use: its tool-choice sets (examples/06_scenarios/tool_choice.py: store operations; tests/live/heldout.py: IT help desk, travel) and the memory service's context-latency catalog (benchmark/context_latency.py). kind: match (a tool answers it), near_miss (the catalog's domain, but no tool does it: an action no tool takes, a figure no tool returns), unrelated (small talk, general knowledge, a question about the user). split halves the set by a hash of the task: constants are fitted on dev and reported on test.",
+ "catalog": [
+  {
+   "name": "store_overview",
+   "description": "A store's dashboard at a glance: the week's sales, stock on hand, sell-through and service level, as store totals. Use for a general picture of how a store is doing. It has no figures by style: for excess stock, lost sales or allocations by style, use the tools made for those.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "store": {
+      "type": "string",
+      "description": "The store's id, such as S12."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "excess_stock",
+   "description": "The styles holding more stock than they will sell at a store (overstock), with the units over target, largest first.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "store": {
+      "type": "string",
+      "description": "The store's id, such as S12."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "lost_sales",
+   "description": "The sales a store lost to stock-outs, by style, largest first.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "store": {
+      "type": "string",
+      "description": "The store's id, such as S12."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "allocatable_stock",
+   "description": "The units available to allocate (ATA) in the warehouse, by style, largest first.",
+   "input_schema": {
+    "type": "object",
+    "properties": {}
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "allocation_history",
+   "description": "The allocations made to a store in the past, newest first.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "store": {
+      "type": "string",
+      "description": "The store's id, such as S12."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "app_help",
+   "description": "Where in the app to do something: the menu path and the steps. Use when the user asks how or where to do something in the app, not for data.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "task": {
+      "type": "string",
+      "description": "What the user wants to do, such as \"create an allocation\"."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "store_demand",
+   "description": "A style's weekly demand and stock on hand at a store, and the weeks of cover they give (fewer weeks: the store runs out sooner).",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "store": {
+      "type": "string",
+      "description": "The store's id, such as S12."
+     },
+     "style": {
+      "type": "string",
+      "description": "The style's id, such as ST-101."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "create_stock_rule",
+   "description": "Create a stock rule for a style at a store: the minimum and maximum units it keeps. A change: a person approves it before it is made.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "store": {
+      "type": "string",
+      "description": "The store's id, such as S12."
+     },
+     "style": {
+      "type": "string",
+      "description": "The style's id, such as ST-101."
+     },
+     "min_units": {
+      "type": "string",
+      "description": "The fewest units to keep."
+     },
+     "max_units": {
+      "type": "string",
+      "description": "The most units to keep."
+     }
+    }
+   },
+   "side_effects": "irreversible"
+  },
+  {
+   "name": "supplier_eta",
+   "description": "When the supplier's next delivery of a style arrives at the warehouse.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "style": {
+      "type": "string",
+      "description": "The style's id, such as ST-101."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "style_stock",
+   "description": "The units of one style held across every store and the warehouse.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "style": {
+      "type": "string",
+      "description": "The style's id, such as ST-101."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "transfer_status",
+   "description": "Where a stock transfer between stores is: packed, in transit or received.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "transfer": {
+      "type": "string",
+      "description": "The transfer's id, such as TR-9."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "desk_dashboard",
+   "description": "The help desk's dashboard for a team: open, closed and waiting ticket counts this week. A general picture only: no ticket lists, no priorities, no SLA detail.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "team": {
+      "type": "string",
+      "description": "The team's name, such as network or desktop."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "tickets_by_priority",
+   "description": "A team's open tickets of one priority, oldest first.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "team": {
+      "type": "string",
+      "description": "The team's name, such as network or desktop."
+     },
+     "priority": {
+      "type": "string",
+      "description": "high, medium or low."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "sla_breaches",
+   "description": "The tickets of a team that breached their service-level target, worst first.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "team": {
+      "type": "string",
+      "description": "The team's name, such as network or desktop."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "knowledge_base",
+   "description": "How-to articles: how to set something up or where to find it, step by step.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "question": {
+      "type": "string",
+      "description": "What the user wants to do, such as \"set up the VPN\"."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "asset_owner",
+   "description": "Who a hardware asset is assigned to, by its asset tag.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "asset_tag": {
+      "type": "string",
+      "description": "The tag on the device, such as LT-2231."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "reset_password",
+   "description": "Reset a user's password and send them a one-time link. Needs approval.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "user_id": {
+      "type": "string",
+      "description": "The user's id, such as u-77."
+     }
+    }
+   },
+   "side_effects": "irreversible"
+  },
+  {
+   "name": "trip_summary",
+   "description": "An employee's travel at a glance: trips this year, total spend, and the next trip's city. No bookings, claims or policy detail.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "employee": {
+      "type": "string",
+      "description": "The employee's id, such as e-401."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "flight_bookings",
+   "description": "An employee's booked flights, next first: date, route and booking reference.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "employee": {
+      "type": "string",
+      "description": "The employee's id, such as e-401."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "expense_claims",
+   "description": "An employee's expense claims of one status, newest first.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "employee": {
+      "type": "string",
+      "description": "The employee's id, such as e-401."
+     },
+     "status": {
+      "type": "string",
+      "description": "pending, approved or rejected."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "travel_policy",
+   "description": "What the travel policy says about a topic: allowances, classes of travel, limits.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "topic": {
+      "type": "string",
+      "description": "The topic, such as \"meal allowance\"."
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "submit_expense",
+   "description": "Submit an expense claim for an employee. Needs approval.",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "employee": {
+      "type": "string",
+      "description": "The employee's id, such as e-401."
+     },
+     "amount": {
+      "type": "string",
+      "description": "The amount in euros."
+     },
+     "category": {
+      "type": "string",
+      "description": "hotel, meals, transport or other."
+     }
+    }
+   },
+   "side_effects": "irreversible"
+  },
+  {
+   "name": "calendar-create_event",
+   "description": "Create a calendar event",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "title": {
+      "type": "string"
+     },
+     "date": {
+      "type": "string"
+     }
+    }
+   },
+   "side_effects": "write"
+  },
+  {
+   "name": "calendar-list_events",
+   "description": "List events in a date range",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "start": {
+      "type": "string"
+     },
+     "end": {
+      "type": "string"
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "mail-send",
+   "description": "Send an email",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "to": {
+      "type": "string"
+     },
+     "subject": {
+      "type": "string"
+     },
+     "body": {
+      "type": "string"
+     }
+    }
+   },
+   "side_effects": "irreversible"
+  },
+  {
+   "name": "mail-search",
+   "description": "Search the mailbox",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string"
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "crm-update_contact",
+   "description": "Update a contact's details",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "contact": {
+      "type": "string"
+     },
+     "field": {
+      "type": "string"
+     }
+    }
+   },
+   "side_effects": "write"
+  },
+  {
+   "name": "crm-find_contact",
+   "description": "Find a contact by name",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "docs-search",
+   "description": "Search company documents",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string"
+     }
+    }
+   },
+   "side_effects": "read"
+  },
+  {
+   "name": "finance-report",
+   "description": "Fetch a financial report line",
+   "input_schema": {
+    "type": "object",
+    "properties": {
+     "metric": {
+      "type": "string"
+     },
+     "period": {
+      "type": "string"
+     }
+    }
+   },
+   "side_effects": "read"
+  }
+ ],
+ "tasks": [
+  {
+   "id": "match-en-000",
+   "lang": "en",
+   "kind": "match",
+   "task": "How is store S12 doing this week overall?",
+   "tools": [
+    "store_overview"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-en-001",
+   "lang": "en",
+   "kind": "match",
+   "task": "Which styles are overstocked at S40?",
+   "tools": [
+    "excess_stock"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-002",
+   "lang": "en",
+   "kind": "match",
+   "task": "What sales did S12 lose to stock-outs?",
+   "tools": [
+    "lost_sales"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-003",
+   "lang": "en",
+   "kind": "match",
+   "task": "How many units of each style can we still allocate from the warehouse?",
+   "tools": [
+    "allocatable_stock"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-en-004",
+   "lang": "en",
+   "kind": "match",
+   "task": "Show me the past allocations sent to S40",
+   "tools": [
+    "allocation_history"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-en-005",
+   "lang": "en",
+   "kind": "match",
+   "task": "Where in the app do I create a new allocation?",
+   "tools": [
+    "app_help"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-006",
+   "lang": "en",
+   "kind": "match",
+   "task": "How many weeks of cover does S40 have for ST-101?",
+   "tools": [
+    "store_demand"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-en-007",
+   "lang": "en",
+   "kind": "match",
+   "task": "Create a stock rule for ST-205 at S12 with min 4 and max 10",
+   "tools": [
+    "create_stock_rule"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-en-008",
+   "lang": "en",
+   "kind": "match",
+   "task": "When does the supplier deliver ST-330 next?",
+   "tools": [
+    "supplier_eta"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-009",
+   "lang": "en",
+   "kind": "match",
+   "task": "How many units of ST-101 do we hold across all stores?",
+   "tools": [
+    "style_stock"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-010",
+   "lang": "en",
+   "kind": "match",
+   "task": "Has transfer TR-9 arrived yet?",
+   "tools": [
+    "transfer_status"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-011",
+   "lang": "en",
+   "kind": "match",
+   "task": "Which store will run out of ST-101 first, S12 or S40?",
+   "tools": [
+    "store_demand"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-012",
+   "lang": "en",
+   "kind": "match",
+   "task": "Give me the network team's ticket counts for this week",
+   "tools": [
+    "desk_dashboard"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-en-013",
+   "lang": "en",
+   "kind": "match",
+   "task": "List the open P1 tickets for the database team",
+   "tools": [
+    "tickets_by_priority"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-014",
+   "lang": "en",
+   "kind": "match",
+   "task": "Which of the service desk team's tickets missed their SLA?",
+   "tools": [
+    "sla_breaches"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-015",
+   "lang": "en",
+   "kind": "match",
+   "task": "How do I set up the VPN on a new laptop?",
+   "tools": [
+    "knowledge_base"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-en-016",
+   "lang": "en",
+   "kind": "match",
+   "task": "Who has laptop asset tag LT-4471?",
+   "tools": [
+    "asset_owner"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-en-017",
+   "lang": "en",
+   "kind": "match",
+   "task": "Reset the password for user jdoe",
+   "tools": [
+    "reset_password"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-018",
+   "lang": "en",
+   "kind": "match",
+   "task": "I'm locked out, can you send me a new password link? My id is u-221",
+   "tools": [
+    "reset_password"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-019",
+   "lang": "en",
+   "kind": "match",
+   "task": "How much has Anna spent on travel this year?",
+   "tools": [
+    "trip_summary"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-en-020",
+   "lang": "en",
+   "kind": "match",
+   "task": "What flights does Raj have booked?",
+   "tools": [
+    "flight_bookings"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-021",
+   "lang": "en",
+   "kind": "match",
+   "task": "Show Priya's rejected expense claims",
+   "tools": [
+    "expense_claims"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-022",
+   "lang": "en",
+   "kind": "match",
+   "task": "Can I fly business class on a six-hour flight under our policy?",
+   "tools": [
+    "travel_policy"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-en-023",
+   "lang": "en",
+   "kind": "match",
+   "task": "Submit a 42 euro taxi expense for Anna",
+   "tools": [
+    "submit_expense"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-024",
+   "lang": "en",
+   "kind": "match",
+   "task": "What is the daily meal allowance when travelling?",
+   "tools": [
+    "travel_policy"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-en-025",
+   "lang": "en",
+   "kind": "match",
+   "task": "Schedule a meeting called budget review on Friday",
+   "tools": [
+    "calendar-create_event"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-026",
+   "lang": "en",
+   "kind": "match",
+   "task": "What's on my calendar next week?",
+   "tools": [
+    "calendar-list_events"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-027",
+   "lang": "en",
+   "kind": "match",
+   "task": "Email Sam the Q3 numbers",
+   "tools": [
+    "mail-send"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-028",
+   "lang": "en",
+   "kind": "match",
+   "task": "Find the email from the auditor about invoices",
+   "tools": [
+    "mail-search"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-029",
+   "lang": "en",
+   "kind": "match",
+   "task": "Update Maria Lopez's phone number in the CRM",
+   "tools": [
+    "crm-update_contact"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-030",
+   "lang": "en",
+   "kind": "match",
+   "task": "Look up the contact details for John Park",
+   "tools": [
+    "crm-find_contact"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-031",
+   "lang": "en",
+   "kind": "match",
+   "task": "Find the company's parental leave policy document",
+   "tools": [
+    "docs-search"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-032",
+   "lang": "en",
+   "kind": "match",
+   "task": "What was revenue in Q2?",
+   "tools": [
+    "finance-report"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-en-033",
+   "lang": "en",
+   "kind": "match",
+   "task": "Pull the operating margin for last quarter",
+   "tools": [
+    "finance-report"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-en-034",
+   "lang": "en",
+   "kind": "match",
+   "task": "Which styles is S12 losing sales on, and which are overstocked?",
+   "tools": [
+    "lost_sales",
+    "excess_stock"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-en-035",
+   "lang": "en",
+   "kind": "match",
+   "task": "Is ST-205 overstocked at S40 and how much can I allocate from the warehouse?",
+   "tools": [
+    "excess_stock",
+    "allocatable_stock"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "near_miss-en-036",
+   "lang": "en",
+   "kind": "near_miss",
+   "task": "Book a flight to Berlin for Anna next Tuesday",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "near_miss-en-037",
+   "lang": "en",
+   "kind": "near_miss",
+   "task": "Approve Priya's pending expense claim",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "near_miss-en-038",
+   "lang": "en",
+   "kind": "near_miss",
+   "task": "Delete stock rule R-1 at store S12",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "near_miss-en-039",
+   "lang": "en",
+   "kind": "near_miss",
+   "task": "Cancel transfer TR-9",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "near_miss-en-040",
+   "lang": "en",
+   "kind": "near_miss",
+   "task": "Change the retail price of ST-101 to 49 euros",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "near_miss-en-041",
+   "lang": "en",
+   "kind": "near_miss",
+   "task": "Assign ticket HD-221 to Priya",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "near_miss-en-042",
+   "lang": "en",
+   "kind": "near_miss",
+   "task": "Order a replacement laptop for Raj",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "near_miss-en-043",
+   "lang": "en",
+   "kind": "near_miss",
+   "task": "How many staff are rostered at S40 on Saturday?",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "near_miss-en-044",
+   "lang": "en",
+   "kind": "near_miss",
+   "task": "What's the footfall at S12 today?",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "near_miss-en-045",
+   "lang": "en",
+   "kind": "near_miss",
+   "task": "Raise a purchase order for 200 units of ST-330 from the supplier",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "near_miss-en-046",
+   "lang": "en",
+   "kind": "near_miss",
+   "task": "Rebook Raj's cancelled flight to Lisbon",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "near_miss-en-047",
+   "lang": "en",
+   "kind": "near_miss",
+   "task": "What is Anna's hotel booking in Madrid?",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "near_miss-en-048",
+   "lang": "en",
+   "kind": "near_miss",
+   "task": "Open a new help desk ticket for the broken printer on floor 3",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "near_miss-en-049",
+   "lang": "en",
+   "kind": "near_miss",
+   "task": "Give Raj admin rights on the finance share",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "unrelated-en-050",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "What's the weather on Mars?",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "unrelated-en-051",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "Hi there!",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "unrelated-en-052",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "Thanks, that's all for today",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "unrelated-en-053",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "What's my sister's name?",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "unrelated-en-054",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "Tell me a joke",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "unrelated-en-055",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "What is the capital of Mongolia?",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "unrelated-en-056",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "What is a good recipe for sourdough bread?",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "unrelated-en-057",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "How many moons does Neptune have?",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "unrelated-en-058",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "Who won the 1998 football world cup final?",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "unrelated-en-059",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "Explain the difference between TCP and UDP.",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "unrelated-en-060",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "Write a haiku about autumn",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "unrelated-en-061",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "What's 17 times 23?",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "unrelated-en-062",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "Good morning, how are you?",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "unrelated-en-063",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "Who wrote Pride and Prejudice?",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "unrelated-en-064",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "What is my favourite colour?",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "unrelated-en-065",
+   "lang": "en",
+   "kind": "unrelated",
+   "task": "Can you recommend a good sci-fi novel?",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "match-de-066",
+   "lang": "de",
+   "kind": "match",
+   "task": "Welche Styles sind in S40 überbestückt?",
+   "tools": [
+    "excess_stock"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-de-067",
+   "lang": "de",
+   "kind": "match",
+   "task": "Setze das Passwort für den Benutzer jdoe zurück",
+   "tools": [
+    "reset_password"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-de-068",
+   "lang": "de",
+   "kind": "match",
+   "task": "Welche Flüge hat Raj gebucht?",
+   "tools": [
+    "flight_bookings"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "near_miss-de-069",
+   "lang": "de",
+   "kind": "near_miss",
+   "task": "Buche einen Flug nach Berlin für Anna",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "unrelated-de-070",
+   "lang": "de",
+   "kind": "unrelated",
+   "task": "Wie ist das Wetter auf dem Mars?",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "unrelated-de-071",
+   "lang": "de",
+   "kind": "unrelated",
+   "task": "Hallo, wie geht's?",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "unrelated-de-072",
+   "lang": "de",
+   "kind": "unrelated",
+   "task": "Wie heißt meine Schwester?",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "match-es-073",
+   "lang": "es",
+   "kind": "match",
+   "task": "¿Cuántas unidades de ST-101 tenemos en todas las tiendas?",
+   "tools": [
+    "style_stock"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-es-074",
+   "lang": "es",
+   "kind": "match",
+   "task": "¿Cómo configuro la VPN en un portátil nuevo?",
+   "tools": [
+    "knowledge_base"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-es-075",
+   "lang": "es",
+   "kind": "match",
+   "task": "Envía un correo a Sam con los números del tercer trimestre",
+   "tools": [
+    "mail-send"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "near_miss-es-076",
+   "lang": "es",
+   "kind": "near_miss",
+   "task": "Aprueba la nota de gastos pendiente de Priya",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "unrelated-es-077",
+   "lang": "es",
+   "kind": "unrelated",
+   "task": "¿Cuál es la montaña más alta de África?",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "unrelated-es-078",
+   "lang": "es",
+   "kind": "unrelated",
+   "task": "Cuéntame un chiste",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "unrelated-es-079",
+   "lang": "es",
+   "kind": "unrelated",
+   "task": "¿Qué tiempo hace en Marte?",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "match-hi-080",
+   "lang": "hi",
+   "kind": "match",
+   "task": "S12 ने स्टॉक खत्म होने से कितनी बिक्री खोई?",
+   "tools": [
+    "lost_sales"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-hi-081",
+   "lang": "hi",
+   "kind": "match",
+   "task": "लैपटॉप एसेट टैग LT-4471 किसके पास है?",
+   "tools": [
+    "asset_owner"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-hi-082",
+   "lang": "hi",
+   "kind": "match",
+   "task": "अन्ना ने इस साल यात्रा पर कितना खर्च किया?",
+   "tools": [
+    "trip_summary"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "near_miss-hi-083",
+   "lang": "hi",
+   "kind": "near_miss",
+   "task": "S12 पर स्टॉक नियम R-1 हटाओ",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "unrelated-hi-084",
+   "lang": "hi",
+   "kind": "unrelated",
+   "task": "मंगल ग्रह पर मौसम कैसा है?",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "unrelated-hi-085",
+   "lang": "hi",
+   "kind": "unrelated",
+   "task": "नमस्ते!",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "unrelated-hi-086",
+   "lang": "hi",
+   "kind": "unrelated",
+   "task": "मेरी बहन का नाम क्या है?",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "match-ar-087",
+   "lang": "ar",
+   "kind": "match",
+   "task": "متى يصل التوريد التالي من المورد للطراز ST-330؟",
+   "tools": [
+    "supplier_eta"
+   ],
+   "split": "test"
+  },
+  {
+   "id": "match-ar-088",
+   "lang": "ar",
+   "kind": "match",
+   "task": "ابحث عن بريد المدقق بخصوص الفواتير",
+   "tools": [
+    "mail-search"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "match-ar-089",
+   "lang": "ar",
+   "kind": "match",
+   "task": "ما هي سياسة السفر بشأن درجة رجال الأعمال؟",
+   "tools": [
+    "travel_policy"
+   ],
+   "split": "dev"
+  },
+  {
+   "id": "near_miss-ar-090",
+   "lang": "ar",
+   "kind": "near_miss",
+   "task": "ألغِ التحويل TR-9",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "unrelated-ar-091",
+   "lang": "ar",
+   "kind": "unrelated",
+   "task": "كيف الطقس على المريخ؟",
+   "tools": [],
+   "split": "dev"
+  },
+  {
+   "id": "unrelated-ar-092",
+   "lang": "ar",
+   "kind": "unrelated",
+   "task": "مرحبا!",
+   "tools": [],
+   "split": "test"
+  },
+  {
+   "id": "unrelated-ar-093",
+   "lang": "ar",
+   "kind": "unrelated",
+   "task": "من فاز بكأس العالم 1998؟",
+   "tools": [],
+   "split": "dev"
+  }
+ ]
+}
