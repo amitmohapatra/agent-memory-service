@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Final
 
 from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.context import MemoryExecutionContext
@@ -29,6 +29,7 @@ from memory_service.domain.enums import (
     Lifetime,
     MemoryType,
     ObservationKind,
+    StatementKind,
     Visibility,
 )
 from memory_service.domain.evidence import EvidenceRef, EvidenceSource
@@ -577,6 +578,44 @@ def standing_instruction(label: Any) -> bool:
     return bool(getattr(label, "standing", False) and getattr(label, "instruction", None))
 
 
+#: What the user says of their own lasting setup, in the five pack languages: a possessive
+#: subject ("Our whole team", "My crew", "Unser Team", "Nuestras cuentas", "فريقنا", "हमारी
+#: टीम") with a verb of state or habit, or "we"/"I" with one ("We are a bakery", "I'm a field
+#: engineer"). An event ("Our supplier shipped late"), a question, a request or a rule is not.
+_SELF_DESCRIPTION = re.compile(
+    r"^(?:our|my)\s+(?:[\w-]+\s+){0,4}?(?:is|are|'s|'re|runs?|uses?|works?|keeps?|has|have|"
+    r"closes?|books?|banks?|sells?|operates?|serves?|covers?|lives?)\b"
+    r"|^(?:we|i)(?:\s+(?:just|now|only|all|mostly|mainly))?\s*(?:are|'re|am|'m|run|use|work|"
+    r"keep|have|'ve|close|book|bank|sell|operate|serve|cover|live)\b"
+    r"|^(?:unser|unsere|unseren|unserem|mein|meine)\s+(?:[\w-]+\s+){0,4}?(?:ist|sind|arbeitet|"
+    r"arbeiten|nutzt|nutzen|hat|haben|läuft|laufen|führt|führen)\b"
+    r"|^(?:wir|ich)\s+(?:sind|bin|arbeiten|arbeite|nutzen|nutze|haben|habe|führen|betreiben)\b"
+    r"|^(?:nuestro|nuestra|nuestros|nuestras|mi|mis)\s+(?:[\w-]+\s+){0,4}?(?:es|son|está|están|"
+    r"usa|usan|trabaja|trabajan|tiene|tienen|lleva|llevan)\b"
+    r"|^(?:somos|soy|usamos|trabajamos|trabajo|tenemos|llevamos)\b"
+    r"|^\S+نا\s+(?:\S+\s+){0,3}?(?:ي|ت|ن)\S+"
+    r"|^(?:نحن|أنا|لدينا|نستخدم|نعمل)\s"
+    r"|^(?:हमारी|हमारा|हमारे|मेरी|मेरा|मेरे)\s.*(?:है|हैं|करती|करता|करते)[।.!]?$"
+    r"|^(?:हम|मैं)\s.*(?:हैं|हूँ|हूं)[।.!]?$",
+    re.IGNORECASE,
+)
+#: kinds a self-description never is
+_NOT_SELF: Final = frozenset(
+    {StatementKind.RULE, StatementKind.CONDITIONAL_RULE, StatementKind.CORRECTION}
+)
+
+
+def self_description(sentence: str, label: Any) -> bool:
+    """The user describes their own lasting setup (``_SELF_DESCRIPTION``): not a question, a
+    rule, a correction or an instruction."""
+    text = sentence.strip()
+    if not text or is_question(text) or getattr(label, "kind", None) in _NOT_SELF:
+        return False
+    if getattr(label, "instruction", None) or standing_instruction(label):
+        return False
+    return bool(_SELF_DESCRIPTION.search(text))
+
+
 class NativeMemoryIntelligence:
     """Rule-based provider. ``embedding`` (optional) adds a dense-similarity dedup signal."""
 
@@ -717,8 +756,17 @@ class NativeMemoryIntelligence:
         # updated. We now use /shrinkage." is a correction as a whole)
         turn_kind = most_salient(label.kind for label in labels)
         standing = any(standing_instruction(label) for label in labels)
+        described = any(
+            self_description(s, label) for s, label in zip(sentences, labels, strict=True)
+        )
         out.extend(
-            turn.model_copy(update={"statement_kind": turn_kind, "standing_instruction": standing})
+            turn.model_copy(
+                update={
+                    "statement_kind": turn_kind,
+                    "standing_instruction": standing,
+                    "self_description": described,
+                }
+            )
             for turn in self._verbatim(text, observation, ctx, evidence)
             if normalized_hash(turn.content) not in held
         )
@@ -943,6 +991,7 @@ class NativeMemoryIntelligence:
             update={
                 "statement_kind": label.kind,
                 "standing_instruction": standing_instruction(label),
+                "self_description": self_description(s, label),
             }
         )
 

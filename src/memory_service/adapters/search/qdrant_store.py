@@ -157,6 +157,8 @@ _PAYLOAD_INDEXES: dict[str, Any] = {
     "category": models.PayloadSchemaType.KEYWORD,
     "statement_kind": models.PayloadSchemaType.KEYWORD,
     "standing_instruction": models.PayloadSchemaType.KEYWORD,
+    # the user's own setup, by the workspace it was said in (the ``about_user`` section)
+    "self_description": models.PayloadSchemaType.KEYWORD,
 }
 
 

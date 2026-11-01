@@ -84,6 +84,11 @@ class MemoryCandidate(BaseModel):
         description="the statement gives an instruction it says is for every time (a standing "
         "word, a recurring trigger), whether or not the labeller could decide it is a rule",
     )
+    self_description: bool = Field(
+        default=False,
+        description="the user describes their own lasting setup: their team, their books, "
+        "their business ('Our whole team is on MacBooks', 'Our books are in EUR')",
+    )
     follows_user: bool = Field(
         default=False,
         description="the text is a user's own words (their message, decision or feedback, "

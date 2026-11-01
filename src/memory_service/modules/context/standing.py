@@ -29,14 +29,25 @@ from typing import Any, Final
 
 from memory_service.domain.context_bundle import ProfileBlockView
 from memory_service.domain.language import detect_language
+from memory_service.domain.memory import SELF_ANYWHERE
 from memory_service.modules.context.evidence import content_terms, stemmed_terms
 from memory_service.modules.memory.replacement import _function_words
 from memory_service.ports.search import SearchHit
 
 RULES_BLOCK: Final = "standing_rules"
 PREFERENCES_BLOCK: Final = "preferences"
+#: What the user said of their own lasting setup ("Our whole team is on MacBooks", "Our books
+#: are in EUR"): in every request of theirs, whatever it asks, as an assistant's saved memories
+#: are - a request that shares no word with it ("How do I install the VPN client?") is still
+#: answered for that setup. Their own, in the workspace it was said in, current only (an
+#: earlier value or a superseded statement never comes back), the nearest ``ABOUT_MAX``.
+ABOUT_BLOCK: Final = "about_user"
 #: the sections this module writes (``sections.within_budget`` keeps them before the rest)
-BLOCKS: Final = frozenset({RULES_BLOCK, PREFERENCES_BLOCK})
+BLOCKS: Final = frozenset({RULES_BLOCK, PREFERENCES_BLOCK, ABOUT_BLOCK})
+ABOUT_MAX: Final = 4
+#: the section's size in characters, and one line's
+ABOUT_CHARS: Final = 600
+ABOUT_LINE_CHARS: Final = 200
 RULE_CATEGORIES: Final = ("rule", "instruction")
 #: a statement the labeller read as a rule (ADR 0037) is one whatever rule extracted it; a
 #: correction of a fact ("Update: B replaced A as the buyer") is not, and reaches the bundle as
@@ -212,16 +223,21 @@ def _superseded(chosen: Sequence[tuple[SearchHit, set[str]]]) -> set[str]:
 
 
 async def standing_blocks(
-    engine: Any, query: str, visibility: Any, vectors: Any
+    engine: Any,
+    query: str,
+    visibility: Any,
+    vectors: Any,
+    workspace_id: str | None = None,
 ) -> list[ProfileBlockView]:
-    """The ``standing_rules`` and ``preferences`` sections for ``query`` (see the module
-    doc). A rule the ``user`` block also lists is still listed here: this section is what
-    applies to the request, the block everything the user keeps."""
+    """The ``standing_rules``, ``preferences`` and ``about_user`` sections for ``query`` (see
+    the module doc). A rule the ``user`` block also lists is still listed here: this section
+    is what applies to the request, the block everything the user keeps."""
     if vectors is None:
         return []
     lang = detect_language(query)
     query_stems = _stems(query, lang)
-    rules, preferences = await asyncio.gather(
+    places = sorted({workspace_id or SELF_ANYWHERE, SELF_ANYWHERE})
+    rules, preferences, setup = await asyncio.gather(
         _search(
             engine,
             visibility,
@@ -233,6 +249,7 @@ async def standing_blocks(
             },
         ),
         _search(engine, visibility, vectors, must_any={"category": list(PREFERENCE_CATEGORIES)}),
+        _search(engine, visibility, vectors, must_any={"self_description": places}),
     )
     out: list[ProfileBlockView] = []
     shown: set[tuple] = set()
@@ -245,7 +262,32 @@ async def standing_blocks(
         shown |= {_said(hit) for hit, _, _ in chosen}
         if lines:
             out.append(ProfileBlockView(block=block, text="\n".join(lines), version=0))
+    about = _about(setup, shown, lang)
+    if about:
+        out.append(ProfileBlockView(block=ABOUT_BLOCK, text=about, version=0))
     return out
+
+
+def _about(found: Sequence[tuple[SearchHit, float]], shown: set[tuple], lang: str) -> str:
+    """The ``about_user`` section: the user's current self-descriptions nearest the request,
+    whatever their similarity, one line each, without what another section already lists or
+    a later one on the same subject supersedes, at most ``ABOUT_MAX`` lines and
+    ``ABOUT_CHARS``."""
+    current = [
+        (hit, _stems(_text(hit), lang), similarity)
+        for hit, similarity in found
+        if not hit.payload.get("earlier_value") and _text(hit) and _said(hit) not in shown
+    ]
+    gone = _superseded([(hit, _frame(_text(hit), lang)) for hit, _, _ in current])
+    lines: list[str] = []
+    size = 0
+    for full in _lines([c for c in current if c[0].record_id not in gone]):
+        line = full[:ABOUT_LINE_CHARS]
+        if len(lines) == ABOUT_MAX or size + len(line) > ABOUT_CHARS:
+            break
+        lines.append(line)
+        size += len(line) + 1
+    return "\n".join(lines)
 
 
 def _choose(

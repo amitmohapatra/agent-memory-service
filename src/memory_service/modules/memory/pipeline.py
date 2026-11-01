@@ -27,6 +27,7 @@ from memory_service.domain.enums import (
 from memory_service.domain.fiscal import FiscalCalendar
 from memory_service.domain.memory import (
     LASTING_TYPES,
+    SELF_ANYWHERE,
     AdmissionDecision,
     CanonicalMemory,
     Scope,
@@ -222,6 +223,12 @@ def build_memory(
             "expires_at": expires.isoformat() if expires else None,
             "dated_mentions": dated,
             **statement_metadata(candidate),
+            # the user's own setup, and the workspace it was said in (``context.standing``)
+            **(
+                {"self_description": ctx.workspace_id or SELF_ANYWHERE}
+                if candidate.self_description
+                else {}
+            ),
             **({"preceding_turn": candidate.preceding_turn} if candidate.preceding_turn else {}),
             **({"restatement": candidate.restatement} if candidate.restatement else {}),
             **(

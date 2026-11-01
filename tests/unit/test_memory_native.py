@@ -500,3 +500,41 @@ async def test_managing_preferring_and_a_question_are_no_lasting_preference(nati
     assert not [c for c in found if c.category == "preference" and c.predicate == "cares_about"]
     if "?" not in text:
         assert [c for c in found if c.category == "verbatim_turn"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Our whole team runs Linux laptops now.",
+        "Our accounts are kept in GBP.",
+        "We are a three-person bakery in Leeds.",
+        "I'm a field engineer for hospital imaging equipment.",
+        "My crew works weekends only.",
+        "Unser ganzes Team arbeitet mit Linux-Laptops.",
+        "Wir sind eine kleine Bäckerei in Leeds.",
+        "Nuestras cuentas están en libras.",
+        "Somos una panadería de tres personas.",
+        "فريقنا كله يستخدم حواسيب لينكس.",
+        "نحن مخبز صغير في ليدز.",
+        "हमारी पूरी टीम लिनक्स लैपटॉप इस्तेमाल करती है।",
+        "हम लीड्स में एक छोटी बेकरी हैं।",
+    ],
+)
+async def test_what_the_user_says_of_their_own_setup_is_a_self_description(native, text) -> None:
+    cands = await _extract(native, text)
+    assert any(c.self_description for c in cands), [(c.category, c.predicate) for c in cands]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Can you check whether our accounts are in GBP?",  # a question
+        "Never send me PDFs.",  # a rule
+        "Log that the night crew finished the freezer reset.",  # a request
+        "The supplier shipped the order late.",  # not about the user
+        "Our supplier shipped the order late again.",  # an event, not a setup
+        "اتصلنا بالمورد وتأخرت الشحنة مرة أخرى.",  # an event: "we called the supplier"
+    ],
+)
+async def test_questions_rules_requests_and_events_are_no_self_description(native, text) -> None:
+    assert not any(c.self_description for c in await _extract(native, text))

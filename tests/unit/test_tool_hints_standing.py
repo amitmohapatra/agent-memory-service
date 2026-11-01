@@ -175,7 +175,7 @@ async def test_the_rules_are_read_on_the_task_s_one_encoding() -> None:
         CTX, STOCK_RULE_TASK, available=None, k=5, scope_keys=["k"], visibility=VISIBILITY
     )
     assert service.index.encoded == 1  # type: ignore[attr-defined]
-    assert len(engine.store.filters) == 2, "rules and preferences, one dense search each"
+    assert len(engine.store.filters) == 3, "rules, preferences, the setup: one dense search each"
 
 
 async def test_without_a_visibility_the_hints_read_no_rule() -> None:
@@ -231,7 +231,9 @@ async def test_a_context_build_reads_the_standing_rules_once(monkeypatch) -> Non
     """The builder reads them for the profile; the hints read that profile, not the store."""
     reads: list[str] = []
 
-    async def standing_blocks(engine: Any, query: str, visibility: Any, vectors: Any) -> list:
+    async def standing_blocks(
+        engine: Any, query: str, visibility: Any, vectors: Any, *_: Any
+    ) -> list:
         reads.append(query)
         return _rules(NEVER_AT_S40)
 
