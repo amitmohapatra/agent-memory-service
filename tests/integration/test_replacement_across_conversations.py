@@ -197,6 +197,78 @@ async def test_a_weaker_contradiction_is_served_apart_as_an_earlier_value(
     assert heading and old in earlier and old not in current
 
 
+async def _searched(container, ctx, query: str) -> list:
+    found = await container.services["search"].search(
+        ctx, query, kinds=["memory", "episode", "message"], limit=20
+    )
+    return found.items
+
+
+@pytest.mark.parametrize("score", [0.87, 0.97])  # an earlier value; a superseded statement
+async def test_a_search_marks_the_message_and_conversation_that_said_the_replaced_value(
+    container, uow_factory, score
+) -> None:
+    """A search returns what was said (messages) and earlier conversations (episodes) beside
+    memories. The replaced statement's memory was marked, but the message that said it and the
+    conversation that holds nothing else of the user's came back unmarked beside the new value:
+    the capability eval's update/contradiction search surface was 0.00, every failure an old
+    message or episode served as current."""
+    old, new, ask = STATEMENTS["en"]
+    _scripted(container, score)
+    march, may = _chat(), _chat()
+    await _say(container, uow_factory, march, old)
+    await _say(container, uow_factory, may, new)
+
+    items = await _searched(container, _chat(), ask)
+    said = {i.text: i for i in items if i.kind == "message"}
+    assert said[f"USER: {old}"].superseded is True, "the message that said the old value"
+    assert said[f"USER: {new}"].superseded is None, "the message that replaced it is current"
+    assert all(i.observed_on for i in items), "every result says when it was observed"
+    episodes = {i.thread_id: i for i in items if i.kind == "episode"}
+    assert episodes[march.thread_id].superseded is True, "a conversation of only the old value"
+    assert episodes[may.thread_id].superseded is None
+
+
+async def test_a_message_that_says_more_than_the_replaced_value_is_not_marked(
+    container, uow_factory
+) -> None:
+    """Only the user's words as said are compared: a conversation that also said something
+    still current, or a message whose verbatim turn was not replaced, stays unmarked."""
+    old, new, ask = STATEMENTS["en"]
+    _scripted(container, 0.97)
+    march, may = _chat(), _chat()
+    await _say(container, uow_factory, march, old)
+    await _say(container, uow_factory, march, "Our forklift fleet is serviced by Liftwell.")
+    await _say(container, uow_factory, may, new)
+
+    items = await _searched(container, _chat(), ask)
+    said = {i.text: i for i in items if i.kind == "message"}
+    assert said[f"USER: {old}"].superseded is True
+    assert all(i.superseded is None for i in items if i.kind == "message" and "Liftwell" in i.text)
+    episodes = {i.thread_id: i for i in items if i.kind == "episode"}
+    assert episodes[march.thread_id].superseded is None, "it still holds a current statement"
+
+
+async def test_a_reinstated_value_is_no_longer_marked_in_search(container, uow_factory) -> None:
+    old, new, ask = STATEMENTS["en"]
+    _scripted(container, 0.97)
+    march, may = _chat(), _chat()
+    await _say(container, uow_factory, march, old)
+    await _say(container, uow_factory, may, new)
+    [turn] = [
+        m
+        for m in await _memories(uow_factory, may, container)
+        if m.content == new and m.system_metadata.get("category") == "verbatim_turn"
+    ]
+    async with uow_factory() as uow:
+        await container.services["memory"].forget(uow, may, turn.memory_id)
+        await uow.commit()
+    await container.tasks.drain()
+
+    items = await _searched(container, _chat(), ask)
+    assert all(i.superseded is None for i in items if old in i.text)
+
+
 async def test_forgetting_the_new_statement_reinstates_the_old_one(container, uow_factory) -> None:
     old, new, ask = STATEMENTS["en"]
     _scripted(container, 0.97)

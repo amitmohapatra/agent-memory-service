@@ -18,6 +18,12 @@ each entry says which one moved. Decisions behind each change are in the
   0/15, matching tasks under 0.5 0/19 → 1/19, calibration error 0.25 → 0.04; the order of the
   candidates is unchanged (`tests/eval/test_tool_hint_confidence_gate.py`). A context whose
   hints no longer reach 0.5 shows memory's evidence status again (`TOOL_ANSWERS_CONFIDENCE`).
+- **A search marks the messages and conversations that said a replaced value** (ADR 0038,
+  extended; service). A replaced memory already came back `superseded: true`; the message
+  that said it and an earlier conversation (episode) holding nothing else of what its speaker
+  said came back unmarked beside the new value. Both are now marked, read from the replaced
+  verbatim turns of the threads the results come from (one indexed read; a second only when
+  the first finds a replacement). The `memory_search` tool description says so.
 - **A short follow-up is searched with the question before it** (service). "Who is in charge of
   it?" names nothing the search can find. A question of at most 8 words asked in a thread,
   whose own search finds nothing close (best similarity under 0.45), is searched again with

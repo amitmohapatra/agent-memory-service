@@ -6762,7 +6762,7 @@
                 "type": "null"
               }
             ],
-            "description": "true when a later memory replaced this one (only a search with as_of or known_at returns those)",
+            "description": "true when a later statement replaced what this says: a memory, the message that said it, or an earlier conversation that holds nothing else of what its speaker said. Use the newer value; observed_on says when each was said.",
             "title": "Superseded"
           },
           "text": {
