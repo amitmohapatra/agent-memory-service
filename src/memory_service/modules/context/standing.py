@@ -45,6 +45,8 @@ ABOUT_BLOCK: Final = "about_user"
 #: the sections this module writes (``sections.within_budget`` keeps them before the rest)
 BLOCKS: Final = frozenset({RULES_BLOCK, PREFERENCES_BLOCK, ABOUT_BLOCK})
 ABOUT_MAX: Final = 4
+#: how many the about_user search returns (one dense search): enough to drop superseded ones
+ABOUT_SEARCH_K: Final = 12
 #: the section's size in characters, and one line's
 ABOUT_CHARS: Final = 600
 ABOUT_LINE_CHARS: Final = 200
@@ -249,7 +251,15 @@ async def standing_blocks(
             },
         ),
         _search(engine, visibility, vectors, must_any={"category": list(PREFERENCE_CATEGORIES)}),
-        _search(engine, visibility, vectors, must_any={"self_description": places}),
+        # nearest only: no word rule reads it, so no keyword search, and a few more than shown
+        _search(
+            engine,
+            visibility,
+            vectors,
+            must_any={"self_description": places},
+            keyword=False,
+            limit=ABOUT_SEARCH_K,
+        ),
     )
     out: list[ProfileBlockView] = []
     shown: set[tuple] = set()
@@ -346,6 +356,8 @@ async def _search(
     *,
     must_any: dict[str, list[str]] | None = None,
     should_any: dict[str, list[str]] | None = None,
+    keyword: bool = True,
+    limit: int = SEARCH_K,
 ) -> list[tuple[SearchHit, float]]:
     """The user's current memories the filter admits, each with its dense similarity to the
     query (0 for one only the keyword search found), best first."""
@@ -361,11 +373,9 @@ async def _search(
     )
     searches = []
     if dense is not None:
-        searches.append(
-            engine.store.search_dense(collection, dense[0], dense[1], flt, limit=SEARCH_K)
-        )
-    if vectors.sparse is not None and vectors.sparse.indices:
-        searches.append(engine.store.search_sparse(collection, vectors.sparse, flt, limit=SEARCH_K))
+        searches.append(engine.store.search_dense(collection, dense[0], dense[1], flt, limit=limit))
+    if keyword and vectors.sparse is not None and vectors.sparse.indices:
+        searches.append(engine.store.search_sparse(collection, vectors.sparse, flt, limit=limit))
     results = await asyncio.gather(*searches)
     scored: dict[str, tuple[SearchHit, float]] = {}
     for n, hits in enumerate(results):

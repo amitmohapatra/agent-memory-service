@@ -202,6 +202,6 @@ async def test_every_field_the_standing_searches_filter_on_is_indexed():
     )
     await standing.standing_blocks(engine, "Always send reports as a table", None, vectors)
     fields = {key for flt in filters for key in (*flt.must_any, *flt.should_any)}
-    # rules, preferences and the user's own setup: a dense and a keyword search each
-    assert len(filters) == 6 and fields
+    # rules and preferences: a dense and a keyword search each; the user's own setup: dense
+    assert len(filters) == 5 and fields
     assert fields <= set(_PAYLOAD_INDEXES)
