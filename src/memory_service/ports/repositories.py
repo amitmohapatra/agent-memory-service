@@ -458,9 +458,15 @@ class MemoryRepository(Protocol):
         ...
 
     async def about_user(
-        self, tenant_id: str, user_id: str, *, memory_types: Sequence[str], limit: int
+        self,
+        tenant_id: str,
+        user_id: str,
+        *,
+        memory_types: Sequence[str],
+        limit: int,
+        status: TemporalStatus = TemporalStatus.CURRENT,
     ) -> list[CanonicalMemory]:
-        """The user's own current memories of these types (readable by the user, not an
+        """The user's own memories of these types in ``status`` (readable by the user, not an
         agent's private notes about them), newest first."""
         ...
 

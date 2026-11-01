@@ -524,7 +524,13 @@ class SqlMemoryRepository:
         return [_to_domain(r) for r in seen.values()]
 
     async def about_user(
-        self, tenant_id: str, user_id: str, *, memory_types: Sequence[str], limit: int
+        self,
+        tenant_id: str,
+        user_id: str,
+        *,
+        memory_types: Sequence[str],
+        limit: int,
+        status: TemporalStatus = TemporalStatus.CURRENT,
     ) -> list[CanonicalMemory]:
         audience = [f"user:{tenant_id}/{user_id}", f"principal:{tenant_id}/user:{user_id}"]
         rows = (
@@ -535,7 +541,7 @@ class SqlMemoryRepository:
                     MemoryRow.user_id == user_id,
                     MemoryRow.memory_type.in_(list(memory_types)),
                     MemoryRow.deleted_at.is_(None),
-                    MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
+                    MemoryRow.temporal_status == status.value,
                     MemoryRow.visibility_keys.op("?|")(array(audience, type_=Text)),
                 )
                 .order_by(MemoryRow.created_at.desc(), MemoryRow.memory_id.desc())

@@ -197,6 +197,25 @@ async def test_a_weaker_contradiction_is_served_apart_as_an_earlier_value(
     assert heading and old in earlier and old not in current
 
 
+async def test_a_profile_value_the_user_moved_on_from_is_marked_in_search(
+    container, uow_factory
+) -> None:
+    """ "I live in Seattle" is read as the user's residence (a USER attribute, kept for the user,
+    not the conversation) and is superseded by "I moved to Austin" in another conversation. No
+    turn of it is kept verbatim, so a later search served the message and the conversation that
+    said it unmarked beside the new city (capability eval, update-personal-moved)."""
+    april, october = _chat(), _chat()
+    await _say(container, uow_factory, april, "I live in Seattle, in the Fremont neighbourhood.")
+    await _say(container, uow_factory, october, "Big news: I moved to Austin last month.")
+
+    items = await _searched(container, _chat(), "Find me a dentist near where I live.")
+    seattle = [i for i in items if "Seattle" in i.text and i.kind in ("message", "episode")]
+    assert seattle, "what was said is still found"
+    assert all(i.superseded is True for i in seattle), [(i.kind, i.superseded) for i in seattle]
+    austin = [i for i in items if "Austin" in i.text and i.kind in ("message", "episode")]
+    assert austin and all(i.superseded is None for i in austin)
+
+
 async def _searched(container, ctx, query: str) -> list:
     found = await container.services["search"].search(
         ctx, query, kinds=["memory", "episode", "message"], limit=20
