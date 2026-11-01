@@ -23,6 +23,7 @@ from benchmark.capabilities.dataset import (
     DOMAINS,
     LANGUAGES,
     PHRASING_KINDS,
+    SPLITS,
     Selection,
     load_dataset,
     load_json,
@@ -94,8 +95,32 @@ def test_the_split_is_deterministic_and_balanced() -> None:
         q.split for s in again.scenarios for q in s.queries
     ]
     for cap in DATASET.capabilities:
-        halves = Counter(q.split for s in cap.scenarios for q in s.queries)
+        # the alternation balances what it assigns; a pinned query's half is the data's
+        halves = Counter(q.split for s in cap.scenarios for q in s.queries if q.pin is None)
         assert abs(halves["dev"] - halves["heldout"]) <= 1, (cap.name, halves)
+
+
+def test_a_query_pinned_to_a_split_keeps_it_and_moves_no_other() -> None:
+    """The abstention items the coverage rules were written on (ADR 0040's follow-up) are
+    pinned to dev, and fresh ones that no rule was written on are pinned held-out: the
+    abstention half stays an honest check. A pinned query is out of the alternation, so no
+    other query changes half."""
+    from benchmark.capabilities.dataset import _rank
+
+    abstention = next(c for c in DATASET.capabilities if c.name == "abstention")
+    split = {s.id: q.split for s in abstention.scenarios for q in s.queries}
+    assert {k for k, v in split.items() if v == "heldout"} == {
+        s.id for s in abstention.scenarios if s.id.startswith("abstain-fresh-")
+    }
+    assert len([k for k, v in split.items() if v == "heldout"]) >= 5
+    for cap in DATASET.capabilities:
+        free = sorted(
+            (_rank(f"{s.id}/{q.id}"), q.split)
+            for s in cap.scenarios
+            for q in s.queries
+            if q.pin is None
+        )
+        assert [sp for _, sp in free] == [SPLITS[i % 2] for i in range(len(free))], cap.name
 
 
 def test_selection_is_stable_and_samples_put_the_origin_cases_first() -> None:

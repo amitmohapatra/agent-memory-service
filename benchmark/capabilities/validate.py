@@ -17,6 +17,7 @@ from benchmark.capabilities.dataset import (
     LANGUAGES,
     PHRASING_KINDS,
     ROLES,
+    SPLITS,
     Dataset,
     Scenario,
     load_dataset,
@@ -106,6 +107,8 @@ def problems(dataset: Dataset) -> list[str]:
             if not s.sessions and not s.corpus:
                 out.append(f"{where}: nothing is written")
             for q in s.queries:
+                if q.pin is not None and q.pin not in SPLITS:
+                    out.append(f"{where}/{q.id}: split {q.pin!r} is not one of {SPLITS}")
                 kinds = [p.kind for p in q.phrasings]
                 if sorted(kinds) != sorted(PHRASING_KINDS):
                     out.append(f"{where}/{q.id}: phrasing kinds {kinds}")

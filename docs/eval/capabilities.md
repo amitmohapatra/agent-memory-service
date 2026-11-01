@@ -45,7 +45,7 @@ samples (`_modes.json`).
 | Languages | English, German, Spanish, Arabic and Hindi: every setup turn and every phrasing translated (identifiers, codes and numbers unchanged); plus 44 code-switched phrasings (`mixed`: Hinglish, Spanish-English, German-English, Arabic-English) on one scenario per capability |
 | Time | sessions days to months apart (`day` relative to the run date); generated logs `every_hours` apart; the scale tenant three years of weekly records (`--scale large`: four years daily, ~1.05M tokens per language, opt-in) |
 | Distractors | near-duplicates next to every target (the Warehouse 2 code next to Warehouse 3's, `CC-4400` next to `CC-4471`, Forklift #3 next to #4, a different lot, another store) |
-| Split | dev / held-out by query, deterministic: within a capability, queries ordered by the hash of their id alternate between the halves (5/5, 6/5 for capability 11). **The held-out half is never used to tune anything**: a change is developed against `--split dev`, and the held-out number is read only when the change is final |
+| Split | dev / held-out by query, deterministic: within a capability, queries ordered by the hash of their id alternate between the halves (5/5, 6/5 for capability 11). **The held-out half is never used to tune anything**: a change is developed against `--split dev`, and the held-out number is read only when the change is final. A query the data pins (`"split"`) keeps that half and is out of the alternation: the ten abstention items the coverage rule was written on are pinned dev, five fresh ones held-out (ADR 0040, follow-up) |
 
 A scenario is **sessions of turns** (`USER`, `ASSISTANT`, `EVENT`), written through
 `history.add` with their `occurred_at`, one thread per session; a session may instead
