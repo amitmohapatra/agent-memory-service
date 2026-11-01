@@ -107,7 +107,9 @@ async def test_a_question_whose_own_search_is_close_is_searched_as_asked(
 ) -> None:
     """Gated on a weak first search: a short question on a new topic keeps its ranking."""
     thread = await _seed(container, (MessageRole.USER, ASKED))
-    monkeypatch.setattr(builder, "FOLLOW_UP_FLOOR", 0.0)  # every search counts as close
+    # every search counts as close: the floor sits under any similarity, a cosine being
+    # negative for a candidate pointing away from the question (0.0 left those weak)
+    monkeypatch.setattr(builder, "FOLLOW_UP_FLOOR", -1.0)
     bundle = await container.services["context_builder"].build(
         _ctx(thread), FOLLOW_UP, window=False
     )
