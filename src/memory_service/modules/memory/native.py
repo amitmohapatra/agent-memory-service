@@ -295,9 +295,11 @@ _MOVED_TO = re.compile(
     re.IGNORECASE,
 )
 _PREFERENCE = re.compile(
-    r"\b(?:i|we)\s+(?:really\s+|strongly\s+|always\s+|usually\s+)?"
+    r"\b(?:i|we)(?:\s+(?:really\s+|strongly\s+|always\s+|usually\s+)?"
     r"(prefer|like|love|hate|dislike|avoid|want|need|don't like|do not like|don't want|"
-    r"can't stand|never use|always use|only use)\s+(.+)",
+    r"can't stand|never use|always use|only use)"
+    # "I'd rather source eggs locally": a preference, read as one
+    r"|(?:'d|\u2019d|\s+would)\s+(?:much\s+)?(rather)(?!\s+not\b))\s+(.+)",
     re.IGNORECASE,
 )
 #: What a user says they care about or focus on, in the five pack languages ("I care about
@@ -1048,7 +1050,7 @@ class NativeMemoryIntelligence:
                 **common,
             )
         if m := _PREFERENCE.search(s):
-            verb = m.group(1).lower()
+            verb = (m.group(1) or m.group(2)).lower()
             predicate = (
                 "dislikes"
                 if verb in ("hate", "dislike", "avoid", "don't like", "do not like", "can't stand")
@@ -1062,7 +1064,7 @@ class NativeMemoryIntelligence:
                 lifetime=Lifetime.LONG_TERM,
                 subject=user,
                 predicate=predicate,
-                object=_clean_object(m.group(2))[:300],
+                object=_clean_object(m.group(3))[:300],
                 importance=0.7,
                 confidence=0.8,
                 category="preference",
