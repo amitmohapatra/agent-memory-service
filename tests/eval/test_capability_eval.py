@@ -43,6 +43,31 @@ def test_every_assertion_is_satisfiable_in_every_language() -> None:
     assert problems(DATASET) == []
 
 
+def test_a_repeated_log_ends_before_the_next_session_of_its_scenario() -> None:
+    """Sessions are written in time order: a log still running when a later session starts
+    would be read as said after it ("legacy-db-02 disk at 95%" a day after "legacy-db-02 has
+    been decommissioned"), which no answer can square with the question."""
+    from benchmark.capabilities.dataset import _scenario
+    from benchmark.capabilities.validate import overlapping
+
+    text = {lang: "x {n}" for lang in LANGUAGES}
+    raw = {
+        "id": "s",
+        "domain": "retail",
+        "sessions": [
+            {"id": "logs", "day": -30, "at": "06:00", "turns": [],
+             "repeat": {"count": 30, "every_hours": 24, "role": "EVENT", "text": text}},
+            {"id": "close", "day": -2, "turns": [{"role": "USER", "text": text}]},
+        ],
+        "queries": [],
+    }
+    assert overlapping(_scenario(raw, "forgetting_decay")) == [
+        "logs runs to day -1 06:00, past the start of close (day -2 09:00)"
+    ]
+    raw["sessions"][0]["repeat"]["count"] = 28
+    assert overlapping(_scenario(raw, "forgetting_decay")) == []
+
+
 def test_the_dataset_covers_eleven_capabilities_five_domains_and_five_languages() -> None:
     assert [c.number for c in DATASET.capabilities] == list(range(1, 12))
     for cap in DATASET.capabilities:
