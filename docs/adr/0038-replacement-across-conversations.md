@@ -125,6 +125,10 @@ inside one conversation and only for a turn whose reading has the same words.
    as a replaced memory does. A conversation that also said something still current is not
    marked. Before, the capability eval's update/contradiction search surface was 0.00: the
    replaced memory was marked, the message and the episode that said the same words were not.
+   An assistant's reply that the user's next message corrects ("No, it's 55 Nm": a verbatim
+   turn the statement labeller read as a `CORRECTION`, ADR 0037) is marked the same way
+   (`Searcher._corrected`); the correction itself already reaches later conversations as the
+   user's statement.
 9. **A failing model never costs the message.** A head that refuses (its queue full) or fails,
    or a model call that fails, leaves the statement stored and nothing replaced
    (`memory_replacement_skipped_total`); what was decided is counted by grade
