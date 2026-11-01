@@ -54,6 +54,7 @@ from memory_service.domain.feedback import (
     ReviewState,
     outcome_teaches,
 )
+from memory_service.domain.ids import content_hash
 from memory_service.domain.learning import (
     APPROVAL_DECISIONS_READ,
     CITED_CONFIDENCE_STEP,
@@ -1087,7 +1088,9 @@ class FeedbackService:
                 task_name=TASK_MEMORY_INDEX,
                 queue=Queue.EMBEDDING,
                 payload={"tenant_id": memories[0].tenant_id, "memory_ids": ids},
-                idempotency_key="memidx:feedback:" + ",".join(ids),
+                # the ids' digest: a verdict may cite any number of memories, and the key
+                # must fit the outbox's column (300 characters: nine ids did not)
+                idempotency_key=f"memidx:feedback:{content_hash('|'.join(ids))}",
                 tenant_id=memories[0].tenant_id,
             )
         )
