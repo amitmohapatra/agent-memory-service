@@ -352,3 +352,21 @@ async def test_the_object_hop_adds_only_a_record_of_the_object_that_names_someon
     diagnostics: dict = {}
     got = await engine._second_hop(routed, [po], _Visibility(), diagnostics)
     assert [c.record_id for c in got] == ["m1", "m3"], diagnostics
+
+
+@pytest.mark.asyncio
+async def test_a_record_the_hop_reaches_that_was_already_found_is_kept_as_reached() -> None:
+    """The supplier's record was found by the search too, far from the question, and the
+    context dropped it under the relevance floor: the hop skipped it as in hand. What the hop
+    reaches is judged by the hop, wherever it already was."""
+    engine = RetrievalEngine.__new__(RetrievalEngine)
+    supplier = "Our new supplier for corrugated boxes is PackRight; the rep is Mia Chen."
+    engine.store = _Store([_hit("m3", supplier)])
+    engine.indexer = _Indexer()
+    routed = type("R", (), {"query": "Who should I chase about PO-77812?"})()
+    po = _mem("m1", PO, "2026-10-20")
+    other = _mem("m2", "PO-77790 for shrink wrap arrived complete.", "2026-10-20")
+    found = _mem("m3", supplier, "2026-09-27")
+    got = await engine._second_hop(routed, [po, other, found], _Visibility(), {})
+    assert [c.record_id for c in got] == ["m1", "m3", "m2"]
+    assert got[1].expanded_from == "m1" and got[1].expansion_edge == "SECOND_HOP"
