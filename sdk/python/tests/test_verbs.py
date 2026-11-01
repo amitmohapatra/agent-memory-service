@@ -135,6 +135,32 @@ async def test_the_window_comes_as_messages_when_asked(ctx) -> None:
     assert result.tool_call_id == "c1"
     await ctx.context("and b?")
     assert "window_format" not in _body(route)  # the service's default, rendered
+    assert pushed.conversation.over_budget is False  # absent on the wire: within the budget
+
+
+@respx.mock
+async def test_the_caller_sizes_the_window_and_hears_when_a_turn_is_over_it(ctx) -> None:
+    route = respx.post(f"{BASE}/v1/context").respond(
+        200,
+        json={
+            "rendered": "",
+            "bundle_id": "b1",
+            "token_estimate": 3,
+            "evidence_status": "INSUFFICIENT",
+            "conversation": {
+                "thread_id": "thr_1",
+                "messages": [{"id": "msg_1", "role": "USER", "text": "Quote ACME."}],
+                "over_budget": True,
+            },
+        },
+    )
+    pushed = await ctx.context(
+        "Where did you get that?", window_format="messages", conversation_token_budget=24_000
+    )
+    assert _body(route)["conversation_token_budget"] == 24_000
+    assert pushed.conversation is not None and pushed.conversation.over_budget is True
+    await ctx.context("Where did you get that?", window_format="messages")
+    assert "conversation_token_budget" not in _body(route)  # the service's default
 
 
 @respx.mock

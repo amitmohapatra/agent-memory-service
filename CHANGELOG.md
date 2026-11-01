@@ -22,6 +22,30 @@ each entry says which one moved. Decisions behind each change are in the
   replacement compared a new statement with earlier values already replaced by another one;
   a stream of readings about one thing made that quadratic in NLI work. Only the user's
   statements no other one has replaced are compared, as superseded ones already were not.
+- **The steps list says when each value was fetched, and grades its evidence.** A tool
+  result's `custom_metadata.run_record` may also carry `fetched` (when the call returned, ISO
+  8601 UTC) and `max_age` (the seconds its value stays current); the steps list shows the
+  fetch time on the call's line (the one place it is said), marks a step whose argument an
+  earlier step's result returned (`from step 1`), and ends each turn with an evidence line for
+  "why" and "how sure": the calls that succeeded, the sources and how many calls name each,
+  the values out of date by now, and a grade from those alone (`high`, `medium`, `low`), never
+  from what the answer claimed. A turn the caller recorded nothing of has no evidence line.
+  Each `conversation.messages` item carries the caller's record of it as `run_record` (absent
+  when none; SDK `trellis-memory` 0.6.2 `WindowMessage.run_record`).
+- **The messages window gives each turn a steps list, in layers.** `window_format="messages"`
+  now gives every turn that made tool calls a steps list in the context's `## Run record`
+  section of `rendered` (written by the harness, it says, not by the model or the user: never
+  a replayed `ASSISTANT` message, which a model disowned as its own claim): the turn's
+  question and a numbered line per call with the
+  tool, its arguments in short and the facts the caller wrote on its result under
+  `custom_metadata.run_record` (`status`, `seconds`, `sources`), and the run's own (`status`,
+  `seconds`, `approvals`, from the turn's last message). The budget is spent newest first in
+  layers - every turn's steps list, then the turns' text, then the newest turn's calls and
+  results - so the results go first and the steps lists last; an older turn's results are no
+  longer replayed (they read as fresh results to a small model), and a template that drops
+  tool calls (Granite 3.3's) still shows what was done. The newest turn's question, answer and
+  steps list are always given (`over_budget` when they alone are over it). No new field: the
+  messages are the turns' own, the record is in `rendered`.
 - **A search marks the assistant's reply that the user corrected next** (ADR 0038, extended;
   service). "Torque the PX-400 flange bolts to 40 Nm." then "That's wrong - 55 Nm": the
   correction reached later conversations, but a search of what was said served the wrong
@@ -92,6 +116,17 @@ each entry says which one moved. Decisions behind each change are in the
   - The live-endpoint test marker is `live_llm` (was `bifrost`).
 
 ### Added
+- The caller sizes the conversation window: `POST /v1/context` takes an optional
+  `conversation_token_budget` (100-1000000 tokens; omitted: the service's 2000, as before), SDK
+  `trellis-memory` 0.6.1 `ctx.context(..., conversation_token_budget=...)`. A window that holds
+  its newest turn whole although that turn alone is over the budget says so in
+  `conversation.over_budget` (absent otherwise; SDK `Conversation.over_budget`), for the
+  caller to trim it to its model with its own library (LangChain's `trim_messages`): the
+  service never shortens what was said. In the messages form the window is the caller's to
+  replay, so it takes no more of `token_budget` than the default conversation share (2000)
+  and a larger window never crowds the memories out. Additive: a request without the field
+  is cut with the service's budget, and an SDK 0.5 client reads `over_budget` as an extra
+  field.
 - The prompt form of the context names the memories it shows: `POST /v1/context`
   (`format="prompt"`) returns `memory_ids`, the ids of the memories `rendered` shows, in bundle
   order (absent when none). A person's verdict on the answer cites them (`evidence_refs`), so it
@@ -116,6 +151,26 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- A follow-up about the previous answer ("where did you get that?", "which steps did you
+  take?") has the turn behind it: the messages form of the window (`window_format="messages"`)
+  gives whole turns - a USER message with every tool call, result and answer after it - or
+  none, from the newest back. It was cut per call-and-result unit and stopped at the first
+  that did not fit, so one tool result over about 8k characters (or more than nine calls in
+  a turn) dropped the turn's question, its calls and their results, and the next turn
+  replayed the bare answer. The newest turn is now always given from its question on (over
+  the budget: whole, with `conversation.over_budget`), a call is never given without its
+  result nor a result without its call, and `conversation_max_messages` (20) counts turns:
+  the store read reaches back 20 questions (`MessageRepository.list_window(turns=...)`,
+  bounded at `conversation_read_max_messages`, 1000), where 20 messages cut a turn of ten
+  calls in half. For an older client the window is the one it got whenever its newest turn
+  fits the budget; a thread of more than 20 short messages now gives up to 20 turns within
+  the same 2000 tokens. The rendered form of the window is cut per message as before
+  (within the caller's budget when it names one). SDK 0.6.1.
+- The evidence status is labelled as what it is: the rendered heading is
+  `## Evidence status (long-term memory)` (was `## Evidence status`), and `evidence_status` is
+  described as what long-term memory holds for the question, not the conversation. An
+  INSUFFICIENT under the bare heading read as "nothing to answer from" to a model whose own
+  conversation held the answer. The status is computed as before.
 - `POST /v1/tools/hints` and the `tool_search` memory tool no longer hand over a call the
   user's standing rule forbids. They read the stored profile, which never lists the
   `standing_rules` section (the context computes it per request), so with "Never create a stock

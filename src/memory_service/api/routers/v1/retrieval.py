@@ -199,6 +199,19 @@ class ContextRequest(BaseModel):
         "tool call never parted from its results) for the caller to replay as its own "
         "conversation, and rendered leaves it out",
     )
+    conversation_token_budget: int | None = Field(
+        default=None,
+        ge=100,
+        le=1_000_000,
+        examples=[None],
+        description="The most tokens the conversation window may take (100-1000000); omitted: "
+        "the service's default (2000). Spent from the newest turn back in layers, at most 20 "
+        "turns: each turn's steps list (its tool calls as text), then the turns' question and "
+        "answer, then the newest turn's calls and results; the newest turn's text and steps "
+        "are given even past it, and conversation.over_budget then says so. "
+        "With window_format=messages the window is the caller's to replay and takes no more "
+        "of token_budget than the default; ignored with window=false",
+    )
     format: Literal["prompt", "full"] = Field(
         default="prompt",
         description="prompt: what to put in front of the model (rendered, bundle_id, "
@@ -269,6 +282,7 @@ async def context(
             window_format=body.window_format,
             output=body.format,
             debug=body.debug,
+            conversation_token_budget=body.conversation_token_budget,
         )
     # The bundle is opaque bytes here on purpose (see above), so the audit records who asked
     # what under which scope; the records served are in the bundle itself.
