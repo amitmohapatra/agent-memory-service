@@ -177,6 +177,7 @@ def _asks(kind: Asked) -> re.Pattern[str]:
 
 _ASKS: dict[Asked, re.Pattern[str]] = {kind: _asks(kind) for kind in Asked}
 
+_ISO_DATE = re.compile(r"(?<!\d)\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?)?(?!\d)")
 _PHONE_NUMBER = re.compile(r"\+?\d(?:[\s().-]*\d){6,}")
 _EXTENSION = re.compile(
     r"(?<![^\W\d_])(?:ext\.?|extension|durchwahl|nebenstelle|extensi[oó]n|anexo)\s*:?\s*\d{2,}"
@@ -251,7 +252,8 @@ _DATE = re.compile(r"\b\d{1,4}[./-]\d{1,2}(?:[./-]\d{1,4})?\b|\b(?:19|20)\d{2}\b
 def _holds(kind: Asked, text: str) -> bool:
     """``text`` states a value of ``kind``."""
     if kind is Asked.PHONE:
-        return bool(_PHONE_NUMBER.search(text) or _EXTENSION.search(text))
+        undated = _ISO_DATE.sub(" ", text)  # a fact's date is printed beside it
+        return bool(_PHONE_NUMBER.search(undated) or _EXTENSION.search(undated))
     if kind is Asked.EMAIL:
         return bool(_EMAIL_ADDRESS.search(text))
     if kind is Asked.AMOUNT:

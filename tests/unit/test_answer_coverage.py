@@ -414,3 +414,16 @@ def test_a_value_held_for_another_thing_or_not_at_all_does_not_answer(question, 
 )
 def test_a_value_held_for_the_thing_asked_about_answers(question, evidence):
     assert unanswered(question, evidence) is None
+
+
+def test_a_date_is_no_phone_number() -> None:
+    """A graph fact is printed with its date ("2026-10-22 ... mentions OSHA"): the date's
+    eight digits read as a phone number held for what the fact names."""
+    evidence = [
+        "Our own safety manager is Rita Gomez, extension 300.",
+        "2026-10-22 ce54c605af427e mentions OSHA",
+    ]
+    assert unanswered("Did I ever give you the OSHA inspector's mobile number?", evidence)
+    assert (
+        unanswered("OSHA inspector phone?", ["2026-10-22 OSHA inspector +1 555 010 0199"]) is None
+    )
