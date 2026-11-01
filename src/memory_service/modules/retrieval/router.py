@@ -104,7 +104,7 @@ _HISTORY = re.compile(
 #: question's language, as ``_HISTORY`` is: the cue words of the capability eval's ``later``
 #: phrasings and their translations.
 _EARLIER_CHAT = re.compile(
-    r"\b(?:last time|the other day|(?:earlier|previous|past|other|older|last) "
+    r"\b(?:last time|the other day|(?:earlier|previous|past|other|older|last) (?:\w+ )?"
     r"(?:chat|conversation|session)s?|(?:you|we) (?:\w+ )?(?:worked out|calculated|computed|"
     r"came up with|figured out|estimated|quoted|gave me|told me|showed me|sent me|suggested|"
     r"recommended|said|mentioned|discussed|talked about|agreed on)|(?:i|we) (?:\w+ )?"
