@@ -223,7 +223,7 @@
            "hi": "हटा दिया"
           },
           {
-           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
           }
          ]
         }
@@ -436,7 +436,7 @@
            "hi": "बंद कर दिया"
           },
           {
-           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
           }
          ]
         }
@@ -648,7 +648,7 @@
            "hi": "ख़त्म"
           },
           {
-           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
           }
          ]
         }
@@ -861,7 +861,7 @@
            "hi": "ख़त्म"
           },
           {
-           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
           }
          ]
         }
@@ -1079,7 +1079,7 @@
            "hi": "बंद हो गया"
           },
           {
-           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
           }
          ]
         }
@@ -1291,7 +1291,7 @@
            "hi": "बंद है"
           },
           {
-           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
           }
          ]
         }
@@ -1706,7 +1706,7 @@
            "hi": "सेवा से हटा"
           },
           {
-           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
           }
          ]
         }
@@ -1908,7 +1908,7 @@
            "re": "\\b(ended|closed|no longer|former|old)\\b"
           },
           {
-           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
           }
          ]
         }
@@ -2124,7 +2124,7 @@
            "hi": "हटा दिया"
           },
           {
-           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
           }
          ]
         }
