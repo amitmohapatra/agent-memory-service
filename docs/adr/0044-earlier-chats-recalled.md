@@ -109,7 +109,16 @@ remembered.
   previous questions, newest first (within 500 characters), not only the one just before it:
   "Which of the two should I trust?" points at what two questions back named (the
   break-and-fix round's `bf1-mixed-06`: the user's note on a lead time, in the context of the
-  first question, was gone at the third).
+  first question, was gone at the third). A follow-up is now a question of up to twelve
+  words (`FOLLOW_UP_WORDS`, eight before): "Which of the two should I trust, and why?" is
+  nine. Measured: `benchmark/follow_ups.py` unchanged (follow-ups top-3 14/15, topic changes
+  15/15, MRR 0.728 and 1.0, its questions are all eight words or fewer); the break-and-fix
+  turn with Haiku 1/3 → 3/3 (the note in the context every time, no search needed), and the
+  30 cross-chat and held-out cases 52/52 → 50/52 strict, held-out 9/9 both, the two misses
+  run-to-run noise outside the change (a 35-word question, and a 7-word one under the old
+  limit too, which the guidance arm missed the same way). The other option, a line in
+  `memory_search`'s description telling the model to search before saying it cannot verify
+  something, measured 2/3 on that turn and was not kept.
 * Message search ranking now weights words by their rarity among the messages read, for the
   tool and the context alike; with one word or equal counts the order is the one it was.
 * An earlier conversation of another workspace is no longer found by `memory_search` or

@@ -22,7 +22,8 @@ each entry says which one moved. Decisions behind each change are in the
   colour?") points to an earlier chat too.
 - **A short follow-up is searched with the conversation's previous questions** (ADR 0044;
   service), newest first within 500 characters, not only the one just before it: "Which of
-  the two should I trust?" points at what two questions back named. The full context
+  the two should I trust?" points at what two questions back named. A follow-up of up to
+  twelve words (eight before) is one: "Which of the two should I trust, and why?" is nine. The full context
   carries them as `earlier_chats` (SDK `ContextBundle.earlier_chats`, `EarlierChat`). Nothing
   new is stored.
 - **Earlier conversations are recalled in their own workspace only** (ADR 0044; service). A
