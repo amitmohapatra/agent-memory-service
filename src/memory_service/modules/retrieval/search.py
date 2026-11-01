@@ -35,9 +35,10 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import EarlierChatLine
 from memory_service.domain.conversation import Message
 from memory_service.domain.enums import MessageKind, MessageRole, QueryType, StatementKind
-from memory_service.domain.memory import CanonicalMemory
+from memory_service.domain.memory import CanonicalMemory, statement_kind_of
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.memory.replacement import anchors, relate
 from memory_service.modules.rag.indexer import episode_id
 from memory_service.modules.retrieval.engine import (
     Candidate,
@@ -210,6 +211,12 @@ def _scored(wanted: set[str], read: Sequence[Message]) -> list[tuple[float, Mess
     ]
 
 
+def _names_what(reply: str, change: CanonicalMemory) -> bool:
+    """The change is of a thing the reply names: a name or an identifier both carry."""
+    relation = relate(anchors(change.content, change.lang or None), anchors(reply))
+    return (relation.shared_name or relation.shared_id) and not relation.apart
+
+
 def _said_in(turns: Sequence[CanonicalMemory]) -> set[str]:
     """The messages ``turns`` were taken from."""
     return {e.message_id for m in turns for e in m.evidence if e.message_id}
@@ -363,23 +370,34 @@ class Searcher:
     @staticmethod
     async def _corrected(uow: UnitOfWork, tenant_id: str, replies: list[Message]) -> set[str]:
         """The ``replies`` the next message of their conversation corrects: a turn of the
-        user the statement labeller read as a CORRECTION (ADR 0037). The corrections of the
-        replies' threads are one indexed read; each reply's next message one more, only
-        when its thread holds a correction."""
+        user the statement labeller read as a CORRECTION (ADR 0037: "No, it's 55 Nm", "That's
+        out of date ..."), or as a LIFECYCLE change of a thing the reply names ("We retired
+        the Helpdesk Tool" after "Unlock it in the Helpdesk Tool"). The changes of the
+        replies' threads are one indexed read; each reply's next message one more, only when
+        its thread holds a change."""
         if not replies:
             return set()
         threads = sorted({m.thread_id for m in replies})
-        fixes = _said_in(
-            await uow.memories.verbatim_turns(tenant_id, threads, kind=StatementKind.CORRECTION)
-        )
+        turns = await uow.memories.verbatim_turns(tenant_id, threads)
+        fixes = _said_in([t for t in turns if statement_kind_of(t.system_metadata) is StatementKind.CORRECTION])
+        ended = {
+            e.message_id: t
+            for t in turns
+            if statement_kind_of(t.system_metadata) is StatementKind.LIFECYCLE
+            for e in t.evidence
+            if e.message_id
+        }
         out: set[str] = set()
         for reply in replies:
-            if not fixes:
+            if not fixes and not ended:
                 break
             after = await uow.messages.list_after(
                 tenant_id, reply.thread_id, after_sequence=reply.sequence, limit=1
             )
-            if after and after[0].role is MessageRole.USER and after[0].message_id in fixes:
+            if not after or after[0].role is not MessageRole.USER:
+                continue
+            nxt = after[0].message_id
+            if nxt in fixes or (nxt in ended and _names_what(reply.content, ended[nxt])):
                 out.add(reply.message_id)
         return out
 

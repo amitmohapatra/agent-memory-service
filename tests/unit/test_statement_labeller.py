@@ -125,6 +125,44 @@ def test_other_languages(text: str, kind: StatementKind | None) -> None:
 
 
 @pytest.mark.parametrize(
+    "text",
+    [
+        # what was said is out of date: the reply before it no longer holds
+        "That's out of date. Returns now need form R-2.",
+        "That is outdated — the dock closes at 16:00 now.",
+        "Not anymore — deliveries come on Wednesdays since May.",
+        "No — damaged cartons go to bay 9, never back to stock.",
+        "Das ist veraltet. Retouren brauchen jetzt Formular R-2.",
+        "Nicht mehr – seit Mai kommen die Lieferungen mittwochs.",
+        "Nein – beschädigte Kartons kommen in Bucht 9.",
+        "Eso está desfasado. Las devoluciones ahora necesitan el formulario R-2.",
+        "Ya no: desde mayo las entregas llegan los miércoles.",
+        "هذا قديم. المرتجعات تحتاج الآن النموذج R-2.",
+        "ليس بعد الآن — التوريدات تصل أيام الأربعاء منذ مايو.",
+        "لا — الكراتين التالفة تذهب إلى الرصيف 9.",
+        "यह पुराना है। अब रिटर्न के लिए फ़ॉर्म R-2 चाहिए।",
+        "अब नहीं — मई से डिलीवरी बुधवार को आती है।",
+        "नहीं — टूटे कार्टन बे 9 में जाते हैं।",
+    ],
+)
+def test_out_of_date_and_a_dashed_no_open_a_correction(text: str) -> None:
+    assert _kind(text) is K.CORRECTION, text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "No more than 5 pallets fit in the back.",
+        "Not anymore than usual, thanks.",
+        "Ya no tenemos palés en el almacén.",
+        "The old dock is out of date for the new trucks? Ask Tom.",
+    ],
+)
+def test_out_of_date_words_inside_a_statement_are_no_correction(text: str) -> None:
+    assert _kind(text) is not K.CORRECTION, text
+
+
+@pytest.mark.parametrize(
     ("text", "maybe"),
     [
         # a team habit or a policy? "We always look forward to our camping trip" is not one

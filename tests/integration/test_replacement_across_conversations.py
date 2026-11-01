@@ -305,6 +305,61 @@ async def test_a_reply_the_user_corrected_next_is_marked_in_search(
     assert said[f"USER: {asked}"].superseded is None
 
 
+@pytest.mark.parametrize(
+    ("asked", "wrong", "fix", "ask"),
+    [
+        # what the reply said is out of date
+        (
+            "Where do damaged returns go?",
+            "Damaged returns go to bay 4.",
+            "That's out of date. Damaged returns go to bay 9 now.",
+            "Where do damaged returns go?",
+        ),
+        (
+            "What is the courier cut-off?",
+            "The courier cut-off is 15:00.",
+            "Not anymore — the courier cut-off has been 13:00 since May.",
+            "Courier cut-off?",
+        ),
+        # the thing the reply relies on has ended: a change of what it names
+        (
+            "How do I reset a badge?",
+            "Reset it in the old Badgewise Console under Users.",
+            "We decommissioned the Badgewise Console; badges are reset in the Okta portal now.",
+            "How do I reset a badge?",
+        ),
+    ],
+)
+async def test_a_reply_the_next_turn_says_is_out_of_date_is_marked_in_search(
+    container, uow_factory, asked, wrong, fix, ask
+) -> None:
+    chat = _chat()
+    await _say(container, uow_factory, chat, asked)
+    await _say(container, uow_factory, chat, wrong, role=MessageRole.ASSISTANT)
+    await _say(container, uow_factory, chat, fix)
+
+    said = {i.text: i for i in await _searched(container, _chat(), ask) if i.kind == "message"}
+    assert said[f"ASSISTANT: {wrong}"].superseded is True, "the out-of-date reply"
+    assert said[f"USER: {fix}"].superseded is None, "what replaced it is current"
+
+
+async def test_an_ended_thing_the_reply_does_not_name_leaves_it_current(
+    container, uow_factory
+) -> None:
+    chat = _chat()
+    await _say(container, uow_factory, chat, "How do I reset a badge?")
+    wrong = "Reset it in the Okta portal under Users."
+    await _say(container, uow_factory, chat, wrong, role=MessageRole.ASSISTANT)
+    await _say(container, uow_factory, chat, "Thanks. We decommissioned the Badgewise Console.")
+
+    said = {
+        i.text: i
+        for i in await _searched(container, _chat(), "How do I reset a badge?")
+        if i.kind == "message"
+    }
+    assert said[f"ASSISTANT: {wrong}"].superseded is None
+
+
 async def test_a_reply_followed_by_anything_but_a_correction_is_not_marked(
     container, uow_factory
 ) -> None:
