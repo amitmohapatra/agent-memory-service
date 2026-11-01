@@ -31,7 +31,13 @@ from memory_service.domain.context_bundle import (
     WindowMessage,
 )
 from memory_service.domain.conversation import Message
-from memory_service.domain.enums import EvidenceStatus, MessageKind, QueryType, WindowFormat
+from memory_service.domain.enums import (
+    EvidenceStatus,
+    MessageKind,
+    MessageRole,
+    QueryType,
+    WindowFormat,
+)
 from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.ids import stable_key
 from memory_service.domain.memory import unverified_representation
@@ -78,6 +84,22 @@ log = get_logger(__name__)
 
 #: Standing rules and preferences that apply to the request, as profile sections (ADR 0041).
 STANDING = True
+#: A short question asked in a thread (at most this many words) whose own search finds nothing
+#: close (its best similarity under :data:`FOLLOW_UP_FLOOR`) is searched again together with
+#: the thread's previous question: "who runs that?" names nothing the search can find, the
+#: question before it does. The concatenation baseline of conversational search (TREC CAsT),
+#: gated on a weak first retrieval as corrective retrieval does (CRAG), so a short question on
+#: a new topic, which finds its own evidence, keeps its ranking and its size. Measured on
+#: pronoun follow-ups and topic changes (``benchmark/follow_ups.py``).
+FOLLOW_UP_WORDS: Final = 8
+#: The best dense similarity under which a short question's own search counts as weak. On the
+#: frozen English encoder the benchmark's topic changes found their evidence at 0.49 to 0.77,
+#: and the follow-ups whose evidence ranked past third, or was missed, peaked at 0.40 or less.
+FOLLOW_UP_FLOOR: Final = 0.45
+#: The most of the previous question the search text takes.
+FOLLOW_UP_CHARS: Final = 500
+#: How many of the thread's newest messages are looked through for its previous question.
+FOLLOW_UP_MESSAGES: Final = 6
 
 
 def _cacheable(bundle: ContextBundle) -> bool:
@@ -606,6 +628,7 @@ class ContextBuilder:
         recent = asyncio.ensure_future(
             self._recent_messages(ctx, window) if window is not None else _nothing()
         )
+        previous = asyncio.ensure_future(self._previous_question(ctx, query))
         try:
             with timings.stage("retrieve"):
                 result = await self.engine.retrieve(
@@ -626,13 +649,17 @@ class ContextBuilder:
                     form=window or WindowFormat.RENDERED,
                     token_budget=conversation_budget,
                 )
+                asked_before = await previous
         except BaseException:
-            for side in (sections, recent, standing.task):
+            for side in (sections, recent, previous, standing.task):
                 if side is not None:
                     side.cancel()
             raise
         with timings.stage("similarity"):
             await self._similarity_and_standing(query, visibility, result, pinned, standing.task)
+        result = await self._followed_up(
+            ctx, query, document_ids, visibility, result, asked_before, timings
+        )
         await self._add_extras(ctx, query, tools, visibility, result, pinned, timings)
         # the engine's own stage split, plus what happened around it
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
@@ -927,6 +954,49 @@ class ContextBuilder:
             if thread is None:
                 return []
             return list(await self.conversation.list_messages(uow, ctx, ctx.thread_id, limit=limit))
+
+    async def _followed_up(
+        self,
+        ctx: MemoryExecutionContext,
+        query: str,
+        document_ids: Sequence[str] | None,
+        visibility: Any,
+        result: RetrievalResult,
+        asked_before: str | None,
+        timings: Timings,
+    ) -> RetrievalResult:
+        """``result``, or - when the question's own search found nothing close (under
+        :data:`FOLLOW_UP_FLOOR`) and it follows ``asked_before`` up - the search again with
+        that question in its search text, its candidates scored the same way."""
+        if asked_before is None or _best_similarity(result) >= FOLLOW_UP_FLOOR:
+            return result
+        with timings.stage("follow_up"):
+            again = await self.engine.retrieve(
+                ctx, query, document_ids=document_ids, visibility=visibility, follow_up=asked_before
+            )
+            await self.engine.score_similarity(again)
+        return again
+
+    async def _previous_question(self, ctx: MemoryExecutionContext, query: str) -> str | None:
+        """The thread's previous question, when ``query`` is short enough to follow it up
+        (:data:`FOLLOW_UP_WORDS`): the newest user message that is not ``query`` itself (a
+        caller may append the question before it asks for its context). ``None`` outside a
+        thread, for a longer question, or when the thread has none. Read while the question's
+        own search runs."""
+        if not ctx.thread_id or len(query.split()) > FOLLOW_UP_WORDS:
+            return None
+        async with self.uow_factory() as uow:
+            if await uow.threads.get(ctx.tenant_id, ctx.thread_id) is None:
+                return None
+            newest = await self.conversation.list_messages(
+                uow, ctx, ctx.thread_id, limit=FOLLOW_UP_MESSAGES
+            )
+        asked = query.strip()
+        for message in reversed(newest):
+            text = message.content.strip()
+            if message.role is MessageRole.USER and text and text != asked:
+                return text[:FOLLOW_UP_CHARS]
+        return None
 
     def _window(
         self,
@@ -1287,6 +1357,11 @@ def render_window(
         rendered=rendered,
         token_estimate=used,
     )
+
+
+def _best_similarity(result: RetrievalResult) -> float:
+    """The closest a ranked candidate came to the question (0: none was scored)."""
+    return max((c.similarity for c in result.candidates if c.similarity is not None), default=0.0)
 
 
 async def _nothing() -> list[Message]:
