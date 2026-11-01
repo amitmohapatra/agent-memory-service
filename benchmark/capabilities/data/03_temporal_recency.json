@@ -1241,7 +1241,32 @@
          }
         ]
        }
-      ]
+      ],
+      "answer": {
+       "absent": [
+        {
+         "text": {
+          "en": "a third of the way",
+          "de": "ein Drittel",
+          "es": "un tercio",
+          "ar": "ثلثها",
+          "hi": "एक तिहाई"
+         },
+         "unless": [
+          {
+           "en": "finished",
+           "de": "zu Ende",
+           "es": "terminé",
+           "ar": "أنهيت",
+           "hi": "ख़त्म"
+          },
+          {
+           "re": "\\b(not|never|don't|do not|confuse\\w*|earlier|previous\\w*|replaced|superseded|instead|former)\\b|n't"
+          }
+         ]
+        }
+       ]
+      }
      }
     }
    ]

@@ -1686,6 +1686,18 @@
       "answer": {
        "contains": [
         "Peter Brandt"
+       ],
+       "absent": [
+        {
+         "text": "Ana Silva",
+         "unless": [
+          "Peter Brandt",
+          "van #9",
+          {
+           "re": "\\b(not|never|don't|do not|confuse\\w*|earlier|previous\\w*|replaced|superseded|instead|former)\\b|n't"
+          }
+         ]
+        }
        ]
       }
      }
