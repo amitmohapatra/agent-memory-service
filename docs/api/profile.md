@@ -37,6 +37,6 @@ hints fill an argument of the same name from.
 Every 20 messages (`SUMMARY_EVERY`) the `summary.refresh` job folds the messages after the last
 summary into it and stores a new version with `covers_to_sequence`: abstractive with the
 tenant's model (use `summaries`, paid by whoever wrote the message that crossed the mark),
-extractive otherwise (a line per message: role and first sentence, the oldest lines dropped
-past 2,000 characters). `/v1/context` carries the latest summary and only the messages after
+extractive otherwise (a line per message: role, first sentence and the whole sentences after
+it that fit in 160 characters, the oldest lines dropped past 2,000 characters). `/v1/context` carries the latest summary and only the messages after
 it.

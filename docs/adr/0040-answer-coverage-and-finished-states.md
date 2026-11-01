@@ -110,3 +110,24 @@ ADR 0038 left a state change the head reads as no contradiction unreplaced witho
 * A question that asks for a value no evidence states is now INSUFFICIENT even in a
   conversation where the user said related things; the answerer says so instead of offering
   the neighbouring value (Store 31's code for Store 33).
+
+## Follow-up: amounts, serial numbers, expiry dates and relatives (2026-11-01)
+
+The coverage rule now also reads amounts, serial numbers, expiry dates, a relative asked about
+by relation, and a contact detail asked of a role. Those are the kinds this ADR left out
+because the held-out split asks for them. The rule was written on all ten abstention items, so
+those ten are no longer an honest check of it. Each of them is now pinned to dev in the data
+(`"split": "dev"`, `dataset.assign_splits`). A pinned query is out of the hash alternation, so
+no query of another capability changes half.
+
+The abstention held-out half is now five fresh scenarios (`abstain-fresh-*`, one per domain,
+five languages, every phrasing kind), pinned held-out. They were written before any rule ran
+against them, cover kinds the rule reads (an amount for a named firm, a relative, a password)
+and kinds it does not (a licence plate, a tracking number), and were measured once, with nothing
+changed after.
+
+Offline, with the scenario's whole setup as the evidence (an upper bound of what a bundle
+shows), every phrasing in five languages counts as judged unanswerable 21 of 250 times on main
+7d8202a and 22 of 250 with this rule. On the ten dev items the same count goes from 184 to 335
+of 504. The gain is on the items the rule was written on and barely carries over to fresh
+ones. The held-out number is the one to read for this rule.

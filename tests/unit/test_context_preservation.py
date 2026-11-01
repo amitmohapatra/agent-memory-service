@@ -157,7 +157,7 @@ def test_the_extractive_summary_digests_visible_turns() -> None:
         _msg("internal reasoning", kind=MessageKind.INTERNAL),
     ]
     assert digest(older) == [
-        "user: Let's review the FY26 numbers.",
+        "user: Let's review the FY26 numbers. There is a lot to cover.",
         "assistant: Sure, starting with revenue.",
     ]
     assert all(len(line) <= 170 for line in digest([_msg("x" * 200)] * 3))

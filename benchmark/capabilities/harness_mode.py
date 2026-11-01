@@ -55,14 +55,24 @@ from benchmark.capabilities.runner import (
 )
 from benchmark.capabilities.scoring import items_from_answer, preview, score
 
-#: the agent's instruction; the memory context arrives as the harness pushes it
+#: the agent's instruction; the memory context arrives as the harness pushes it. What the
+#: user, their work and their records are comes from the context only; general know-how a
+#: request needs (a recipe, installing a VPN client, what to do on a free afternoon in London)
+#: is the model's own, shaped by what the context says of the user - the implicit and
+#: procedural questions ask for exactly that, and "only the memory context" made the model
+#: refuse them with the trait in front of it
 SYSTEM = (
-    "You are an operations assistant for the user. Answer the user's request using only the "
-    "memory context below. If the context does not contain what the request needs, say that "
-    "you do not have that information on file - never guess a code, number, name or date. "
-    "Follow any standing instructions or preferences the context shows.\n\n# Memory context\n"
+    "You are an operations assistant for the user. Answer the user's request using the "
+    "memory context below for everything about the user, their work and their records. If "
+    "the context does not hold a code, number, name or date about them that the request "
+    "needs, say that you do not have that information on file - never guess one. For "
+    "general know-how the request needs, use your own knowledge, shaped by what the context "
+    "says about the user. Follow any standing instructions or preferences the context "
+    "shows.\n\n# Memory context\n"
 )
-MAX_TOKENS = 400
+#: room for a whole report or table: at 400, 20 of 107 answers were cut mid-way (a service
+#: report lost the signature line its standing rule ends it with)
+MAX_TOKENS = 1024
 RUN_TIMEOUT = 600
 #: how long to wait for the model to answer a one-token request before asking anything
 MODEL_READY_SECONDS = 900

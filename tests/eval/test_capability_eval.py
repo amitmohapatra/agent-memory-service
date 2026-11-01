@@ -23,6 +23,7 @@ from benchmark.capabilities.dataset import (
     DOMAINS,
     LANGUAGES,
     PHRASING_KINDS,
+    SPLITS,
     Selection,
     load_dataset,
     load_json,
@@ -41,6 +42,36 @@ DATASET = load_dataset()
 
 def test_every_assertion_is_satisfiable_in_every_language() -> None:
     assert problems(DATASET) == []
+
+
+def test_a_repeated_log_ends_before_the_next_session_of_its_scenario() -> None:
+    """Sessions are written in time order: a log still running when a later session starts
+    would be read as said after it ("legacy-db-02 disk at 95%" a day after "legacy-db-02 has
+    been decommissioned"), which no answer can square with the question."""
+    from benchmark.capabilities.dataset import _scenario
+    from benchmark.capabilities.validate import overlapping
+
+    text = dict.fromkeys(LANGUAGES, "x {n}")
+    raw = {
+        "id": "s",
+        "domain": "retail",
+        "sessions": [
+            {
+                "id": "logs",
+                "day": -30,
+                "at": "06:00",
+                "turns": [],
+                "repeat": {"count": 30, "every_hours": 24, "role": "EVENT", "text": text},
+            },
+            {"id": "close", "day": -2, "turns": [{"role": "USER", "text": text}]},
+        ],
+        "queries": [],
+    }
+    assert overlapping(_scenario(raw, "forgetting_decay")) == [
+        "logs runs to day -1 06:00, past the start of close (day -2 09:00)"
+    ]
+    raw["sessions"][0]["repeat"]["count"] = 28
+    assert overlapping(_scenario(raw, "forgetting_decay")) == []
 
 
 def test_the_dataset_covers_eleven_capabilities_five_domains_and_five_languages() -> None:
@@ -64,8 +95,32 @@ def test_the_split_is_deterministic_and_balanced() -> None:
         q.split for s in again.scenarios for q in s.queries
     ]
     for cap in DATASET.capabilities:
-        halves = Counter(q.split for s in cap.scenarios for q in s.queries)
+        # the alternation balances what it assigns; a pinned query's half is the data's
+        halves = Counter(q.split for s in cap.scenarios for q in s.queries if q.pin is None)
         assert abs(halves["dev"] - halves["heldout"]) <= 1, (cap.name, halves)
+
+
+def test_a_query_pinned_to_a_split_keeps_it_and_moves_no_other() -> None:
+    """The abstention items the coverage rules were written on (ADR 0040's follow-up) are
+    pinned to dev, and fresh ones that no rule was written on are pinned held-out: the
+    abstention half stays an honest check. A pinned query is out of the alternation, so no
+    other query changes half."""
+    from benchmark.capabilities.dataset import _rank
+
+    abstention = next(c for c in DATASET.capabilities if c.name == "abstention")
+    split = {s.id: q.split for s in abstention.scenarios for q in s.queries}
+    assert {k for k, v in split.items() if v == "heldout"} == {
+        s.id for s in abstention.scenarios if s.id.startswith("abstain-fresh-")
+    }
+    assert len([k for k, v in split.items() if v == "heldout"]) >= 5
+    for cap in DATASET.capabilities:
+        free = sorted(
+            (_rank(f"{s.id}/{q.id}"), q.split)
+            for s in cap.scenarios
+            for q in s.queries
+            if q.pin is None
+        )
+        assert [sp for _, sp in free] == [SPLITS[i % 2] for i in range(len(free))], cap.name
 
 
 def test_selection_is_stable_and_samples_put_the_origin_cases_first() -> None:
@@ -142,6 +197,40 @@ def test_abstention_on_each_surface() -> None:
     assert not scoring.scorable(expect, "search") and scoring.scorable(
         {"contains": ["x"]}, "search"
     )
+
+
+def test_an_answer_that_says_a_value_is_gone_does_not_serve_it() -> None:
+    """An answer is prose: "The OfficeHub contract ended" names the old vendor to say it is
+    gone. The answer's sentences are judged one by one, so an ``unless`` anchor in the same
+    sentence clears the mention, as it does for an item of the context; a sentence that serves
+    the old value as current still leaks, wherever else the answer says it ended."""
+    expect = {
+        "answer": {
+            "contains": ["PaperPoint"],
+            "absent": [{"text": "OfficeHub", "unless": [{"re": r"\b(ended|closed)\b"}]}],
+        }
+    }
+    gone = scoring.items_from_answer(
+        "You are paying **PaperPoint**. The OfficeHub contract ended and the account is closed."
+    )
+    assert scoring.score(expect, gone, "en", surface="answer").passed
+    served = scoring.items_from_answer(
+        "You pay PaperPoint and OfficeHub.\n\nAn older contract ended in May."
+    )
+    v = scoring.score(expect, served, "en", surface="answer")
+    assert v.reason == "stale_leak" and v.leaks == ["OfficeHub"]
+    # a list item is read under the heading that introduces it
+    listed = scoring.items_from_answer(
+        "You pay **PaperPoint**.\n\nClosed accounts:\n- OfficeHub\n- Staples"
+    )
+    assert scoring.score(expect, listed, "en", surface="answer").passed
+    headed = scoring.items_from_answer("PaperPoint.\n\nEnded:\n- Staples\n\nCurrent:\n- OfficeHub")
+    assert scoring.score(expect, headed, "en", surface="answer").reason == "stale_leak"
+    # a table row is a sentence of its own
+    row = scoring.items_from_answer(
+        "| Vendor |\n|---|\n| OfficeHub |\n| PaperPoint (OfficeHub ended) |"
+    )
+    assert scoring.score(expect, row, "en", surface="answer").reason == "stale_leak"
 
 
 def test_table_columns_on_an_answer() -> None:
@@ -995,3 +1084,17 @@ def test_a_run_purges_unless_kept_or_reused() -> None:
     assert should_purge(parse(["--mode", "nollm"])[0])
     assert not should_purge(parse(["--mode", "nollm", "--keep"])[0])
     assert not should_purge(parse(["--mode", "nollm", "--reuse", "x.raw.json.gz"])[0])
+
+
+def test_the_pull_is_not_scored_on_a_learned_tool_procedure() -> None:
+    """The agent's pull searches memories, episodes and messages; a learned tool procedure is
+    none of them (it reaches the agent as the pushed context's skills), so a query naming its
+    tools is scored on the context only. Every other answerable query is pulled."""
+    from benchmark.capabilities.runner import pulled
+
+    mfa = next(c for c in DATASET.capabilities if c.name == "procedural_skill")
+    skill = next(q for s in mfa.scenarios for q in s.queries if q.tools)
+    rule = next(q for s in mfa.scenarios for q in s.queries if not q.tools)
+    assert not pulled(skill, skill.expect)
+    assert pulled(rule, rule.expect)
+    assert not pulled(rule, {"abstain": True})

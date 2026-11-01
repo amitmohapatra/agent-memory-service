@@ -340,7 +340,10 @@ class _NameReader:
     def names(self) -> set[str]:
         previous_end = 0
         for match in _WORD.finditer(self.text):
-            word = match.group(0).rstrip(".'\u2019-/")
+            # the possessive is no part of the name ("Jordan Lee's assignment" names Jordan
+            # Lee), and it ends the run: "Priya's Store" is no name
+            possessive = _POSSESSIVE.search(match.group(0))
+            word = match.group(0)[: possessive.start() if possessive else None].rstrip(".'\u2019-/")
             if not word:
                 continue
             gap = self.text[previous_end : match.start()]
@@ -354,6 +357,8 @@ class _NameReader:
                     )
                     self.run.append(word)
             previous_end = match.start() + len(word)
+            if possessive:
+                self._close(previous_end)
         self._close(previous_end)
         return self.found
 
@@ -385,6 +390,7 @@ class _NameReader:
 
 
 _RUN_BREAK = re.compile(r"[,;:()\"“”.!?।؟]")
+_POSSESSIVE = re.compile(r"['\u2019]s$")
 
 
 def _identifiers(text: str) -> set[tuple[str, str]]:

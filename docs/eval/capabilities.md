@@ -45,7 +45,7 @@ samples (`_modes.json`).
 | Languages | English, German, Spanish, Arabic and Hindi: every setup turn and every phrasing translated (identifiers, codes and numbers unchanged); plus 44 code-switched phrasings (`mixed`: Hinglish, Spanish-English, German-English, Arabic-English) on one scenario per capability |
 | Time | sessions days to months apart (`day` relative to the run date); generated logs `every_hours` apart; the scale tenant three years of weekly records (`--scale large`: four years daily, ~1.05M tokens per language, opt-in) |
 | Distractors | near-duplicates next to every target (the Warehouse 2 code next to Warehouse 3's, `CC-4400` next to `CC-4471`, Forklift #3 next to #4, a different lot, another store) |
-| Split | dev / held-out by query, deterministic: within a capability, queries ordered by the hash of their id alternate between the halves (5/5, 6/5 for capability 11). **The held-out half is never used to tune anything**: a change is developed against `--split dev`, and the held-out number is read only when the change is final |
+| Split | dev / held-out by query, deterministic: within a capability, queries ordered by the hash of their id alternate between the halves (5/5, 6/5 for capability 11). **The held-out half is never used to tune anything**: a change is developed against `--split dev`, and the held-out number is read only when the change is final. A query the data pins (`"split"`) keeps that half and is out of the alternation: the ten abstention items the coverage rule was written on are pinned dev, five fresh ones held-out (ADR 0040, follow-up) |
 
 A scenario is **sessions of turns** (`USER`, `ASSISTANT`, `EVENT`), written through
 `history.add` with their `occurred_at`, one thread per session; a session may instead
@@ -595,6 +595,26 @@ user id, which is usually opaque. It costs a few hundredths of cosine at random 
 whether a memory near the floor is packed depends on how the user's id happens to tokenise,
 and the graph's facts carry it too ("user:ce952f851b8651 mentions ..."). It is worth a
 follow-up: index the subject only when it is a name.
+
+## Corrections to the instrument (2026-11-01)
+
+Each failing English item of the `direct` and `later` phrasings was traced to its cause on
+main 7d8202a. These were the instrument's, not the service's, and are corrected here; the
+gate's dataset hash changes with them, so the baselines are re-recorded on the measuring host.
+
+| Item | What was wrong | Correction |
+|---|---|---|
+| `forget-it-decommissioned-db` | 30 daily readings from day -30 ran to the day after "legacy-db-02 has been decommissioned": a reading dated after the decommission was served as current on every surface | 28 readings; the validator now refuses a repeated log that runs past the start of a later session (`validate.overlapping`) |
+| every answer `absent` anchor | an answer is prose, judged as one item: "The OfficeHub contract ended" named the old vendor to say it is gone and was scored as serving it | the answer's sentences and table rows are judged one by one (`scoring.sentences`), so an `unless` anchor in the same sentence clears a mention, as it does for an item of the context |
+| forgetting (all ten), `recall-finance-cost-centre`, `recall-retail-hazmat-code`, `temporal-personal-reading`, `update-field-van-assignment`, `abstain-personal-sister`, `abstain-field-hilltop-serial`, `explicit-retail-zero-stock` (q1), `explicit-it-trading-window`, `explicit-personal-no-cilantro`, `explicit-field-no-north-fridays` | the answer's `absent` anchors had no `unless`: "J-11 and J-13 are north of the river, so you can't take them", "your brother Tom ... nothing about a sister", "R-1182 and R-1183 belong to the Riverside pumps", "Don't confuse it with Warehouse 2's 3317", "an earlier note said a third of the way, since replaced", "Ana Silva drives van #9 from now on" failed - and judged per sentence, a sentence naming the old value had to carry its own `unless` | the context's own `unless` and an exclusion ("Excluded: TRU-7 ... is no longer active") for the forgetting items; a negation or an earlier-value word, the brother, Riverside, Warehouse 2, van #9 or the regular cost centre for the others |
+| `explicit-personal-no-cilantro` | the answer inherited the context's `contains: cilantro` beside its own `absent: cilantro`, so no answer could pass: a recipe that leaves cilantro out never names it | the answer has no `contains` |
+| `explicit-field-no-north-fridays`, `explicit-it-trading-window`, `correction-it-account-unlock` | "J-11 and J-13 are north of the river, which conflicts with your standing rule", "The Helpdesk Tool has been retired, so don't use it" failed per sentence | the rule, a conflict, off-limits, retired or a negation clear the mention in its sentence |
+| `multihop-field-seal-kit`, `update-retail-pallet-supplier`, `update-it-ticketing` | "I've left SK-12 out", "PackagingCorp, since we ended the Uline contract" (the answer's anchor had no `unless` at all), "moved there from Zendesk, and the old Zendesk queue is now read-only" failed | an ended, moved, old, read-only, left-out or negated mention clears it in its sentence |
+| `temporal-finance-leave` | the answer had to say "is back"; "Maria Lopez returned from parental leave" failed | the answer may say is back or returned |
+| `temporal-it-vpn-incident` | the answer had to say "resolved"; "VPN access was restored" (the event's own word) failed | the answer may say resolved or restored |
+| `procedure-it-mfa-skill` on the search surface | the agent's pull searches memories, episodes and messages; a learned tool procedure is none of them, so its step regex could never be met there | a query that names its tools is scored on the pushed context (its skills section) and the answer, not on the pull (`runner.pulled`) |
+| harness mode's prompt | "using only the memory context" told the model not to bring general know-how, so a pancake recipe in grams, a VPN install on a Mac team or ideas for an afternoon in London were refused with the user's trait in front of it | the context for everything about the user; the model's own knowledge for general know-how, shaped by the context |
+| harness mode's `MAX_TOKENS` | 400: 20 of 107 answers were cut mid-way (a service report lost the signature line its standing rule ends it with) | 1,024 |
 
 ## What it does not measure
 

@@ -191,7 +191,15 @@
         "8492"
        ],
        "absent": [
-        "3317"
+        {
+         "text": "3317",
+         "unless": [
+          "Warehouse 2",
+          {
+           "re": "\\b(not|never|don't|do not|confuse\\w*|earlier|previous\\w*|replaced|superseded|instead|former)\\b|n't"
+          }
+         ]
+        }
        ]
       }
      }
@@ -1497,7 +1505,14 @@
         "CC-4471"
        ],
        "absent": [
-        "CC-4400"
+        {
+         "text": "CC-4400",
+         "unless": [
+          {
+           "re": "\\b(not|regular|separate|other|instead)\\b|n't"
+          }
+         ]
+        }
        ]
       }
      }

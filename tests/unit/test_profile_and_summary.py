@@ -12,7 +12,12 @@ from memory_service.domain.enums import MemoryType, MessageKind, MessageRole
 from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.profile import PROFILE_BLOCK_MAX_CHARS, block_scope, profile_scopes
-from memory_service.modules.conversation.summary import SUMMARY_MAX_CHARS, digest, rolled
+from memory_service.modules.conversation.summary import (
+    LINE_CHARS,
+    SUMMARY_MAX_CHARS,
+    digest,
+    rolled,
+)
 from memory_service.modules.profile.service import appended, template
 
 AGENT = MemoryExecutionContext(tenant_id="acme", user_id="u1", agent_id="buyer", workspace_id="ops")
@@ -79,12 +84,30 @@ def _message(sequence: int, content: str, role: MessageRole = MessageRole.USER) 
 
 def test_the_extractive_summary_rolls_forward_and_drops_the_oldest_lines() -> None:
     first = [_message(1, "Order paper. Quickly."), _message(2, "Done.", MessageRole.ASSISTANT)]
-    assert digest(first) == ["user: Order paper.", "assistant: Done."]
+    assert digest(first) == ["user: Order paper. Quickly.", "assistant: Done."]
     summary = rolled("", first)
     later = rolled(summary, [_message(3, "And pens?")])
-    assert later.splitlines() == ["user: Order paper.", "assistant: Done.", "user: And pens?"]
+    assert later.splitlines() == [
+        "user: Order paper. Quickly.",
+        "assistant: Done.",
+        "user: And pens?",
+    ]
     long = rolled(later, [_message(i, f"line {i} " + "x" * 150) for i in range(4, 40)])
     assert len(long) <= SUMMARY_MAX_CHARS and "user: Order paper." not in long
+
+
+def test_a_digest_line_keeps_the_sentences_that_fit_not_only_the_opener() -> None:
+    """A correction's opener says nothing on its own ("Correction: the Elm Street depot has
+    closed."): the episode a later conversation finds must carry the new value too, or it
+    reads as the old one served as current. Whole sentences only, within a line."""
+    said = (
+        "Correction: the Elm Street depot has closed. Returns now go to the new depot at "
+        "45 Harbor Road."
+    )
+    assert digest([_message(1, said)]) == [f"user: {said}"]
+    long = "First sentence. " + "y" * 200 + ". Third."
+    assert digest([_message(1, long)]) == ["user: First sentence."]
+    assert digest([_message(1, "z" * 300 + ". Short.")]) == ["user: " + "z" * LINE_CHARS]
 
 
 def _rule(content: str, day: int, category: str = "rule") -> CanonicalMemory:

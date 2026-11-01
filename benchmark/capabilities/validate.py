@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Iterable, Mapping
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from benchmark.capabilities.dataset import (
@@ -16,6 +17,7 @@ from benchmark.capabilities.dataset import (
     LANGUAGES,
     PHRASING_KINDS,
     ROLES,
+    SPLITS,
     Dataset,
     Scenario,
     load_dataset,
@@ -43,6 +45,32 @@ def _anchors(expect: Mapping[str, Any], key: str) -> Iterable[Any]:
             yield spec["text"]
         else:
             yield from group(raw)
+
+
+#: any date: sessions are placed relative to the run's date, so their order is the same on all
+_SOME_DAY = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def _when(at: datetime) -> str:
+    return f"day {(at.date() - _SOME_DAY.date()).days} {at:%H:%M}"
+
+
+def overlapping(s: Scenario) -> list[str]:
+    """A repeated log still running when a later session of its scenario starts. Sessions
+    are written in time order, so its later lines would be read as said after that session:
+    "legacy-db-02 disk at 95%" a day after "legacy-db-02 has been decommissioned"."""
+    out = []
+    starts = sorted((x.start(_SOME_DAY), x.id) for x in s.sessions)
+    for session in s.sessions:
+        if not session.repeat:
+            continue
+        first = session.start(_SOME_DAY)
+        last = first + timedelta(hours=session.repeat.every_hours * (session.repeat.count - 1))
+        later = [(at, sid) for at, sid in starts if first < at <= last]
+        if later:
+            at, sid = later[0]
+            out.append(f"{session.id} runs to {_when(last)}, past the start of {sid} ({_when(at)})")
+    return out
 
 
 def problems(dataset: Dataset) -> list[str]:
@@ -75,9 +103,12 @@ def problems(dataset: Dataset) -> list[str]:
                         out.append(
                             f"{where}/{session.id}: turn missing {set(LANGUAGES) - set(t.text)}"
                         )
+            out += [f"{where}/{p}" for p in overlapping(s)]
             if not s.sessions and not s.corpus:
                 out.append(f"{where}: nothing is written")
             for q in s.queries:
+                if q.pin is not None and q.pin not in SPLITS:
+                    out.append(f"{where}/{q.id}: split {q.pin!r} is not one of {SPLITS}")
                 kinds = [p.kind for p in q.phrasings]
                 if sorted(kinds) != sorted(PHRASING_KINDS):
                     out.append(f"{where}/{q.id}: phrasing kinds {kinds}")

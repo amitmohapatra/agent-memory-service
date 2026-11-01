@@ -4,7 +4,8 @@ A thread's summary rolls forward: every ``SUMMARY_EVERY`` messages a job folds t
 after the last summary into it (new = f(previous summary, new messages)) and stores a new
 version covering them. With the tenant's model (use ``summaries``, paid by the principal whose
 message triggered it) the fold is abstractive; without one the stored summary is the
-extractive digest (a line per message, role and first sentence), so every thread has one.
+extractive digest (a line per message: role, first sentence and the sentences that fit after
+it), so every thread has one.
 
 The pushed context carries the latest summary and only the messages after it.
 """
@@ -58,15 +59,26 @@ _SYSTEM = (
 )
 
 
+def _line(content: str) -> str:
+    """The message's first sentence, and the whole sentences after it that fit in
+    :data:`LINE_CHARS`: an opener alone ("Correction: the Elm Street depot has closed.",
+    "That's outdated.") would leave out the value it brings."""
+    first, *rest = re.split(r"(?<=[.!?])\s+", content.strip())
+    line = first[:LINE_CHARS]
+    for sentence in rest:
+        if len(line) + 1 + len(sentence) > LINE_CHARS:
+            break
+        line = f"{line} {sentence}"
+    return line
+
+
 def digest(messages: Sequence[Message]) -> list[str]:
-    """A line per visible message: role and first sentence."""
-    lines = []
-    for m in messages:
-        if m.kind is not MessageKind.VISIBLE or not m.content.strip():
-            continue
-        first = re.split(r"(?<=[.!?])\s+", m.content.strip(), maxsplit=1)[0][:LINE_CHARS]
-        lines.append(f"{m.role.value.lower()}: {first}")
-    return lines
+    """A line per visible message: role, first sentence and the sentences that fit after it."""
+    return [
+        f"{m.role.value.lower()}: {_line(m.content)}"
+        for m in messages
+        if m.kind is MessageKind.VISIBLE and m.content.strip()
+    ]
 
 
 def rolled(previous: str, messages: Sequence[Message]) -> str:
