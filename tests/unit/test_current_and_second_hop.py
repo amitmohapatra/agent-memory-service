@@ -294,3 +294,61 @@ def test_facts_restated_are_left_to_the_slot_rules():
         _mem("b", "Our hero style this month is SL641114.", "2026-10-17", statement_kind="FACT"),
     ]
     assert not any(c.payload.get("earlier_value") for c in restated_rules_first(held))
+
+
+PO = "I raised PO-77812 for 2,000 corrugated boxes; it's late."
+
+
+@pytest.mark.parametrize(
+    ("question", "evidence", "words"),
+    [
+        ("Who should I chase about PO-77812?", PO, {"corrugated", "boxes"}),
+        (
+            "Wen soll ich wegen PO-77812 anmahnen?",
+            "Ich habe PO-77812 über 2.000 Wellpappkartons bestellt; sie ist überfällig.",
+            {"wellpappkartons"},
+        ),
+        (
+            "¿A quién reclamo por la PO-77812?",
+            "Hice la PO-77812 de 2.000 cajas de cartón ondulado; va con retraso.",
+            {"cajas", "cartón", "ondulado"},
+        ),
+    ],
+)
+def test_who_to_ask_about_a_record_that_names_only_its_object_hops_on_the_object(
+    question, evidence, words
+) -> None:
+    """A record that names nothing but its number and its object ("PO-77812 for corrugated
+    boxes") leads to whoever the object's own record names (capability eval,
+    multihop-retail-po-supplier: the supplier was never reached)."""
+    got = bridge_query(question, evidence)
+    assert got and words <= set(got.lower().split()), got
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "When is PO-77812 due?",  # asks for no one
+        "Who raised PO-77812?",  # the record says what is asked
+    ],
+)
+def test_no_object_hop_unless_someone_is_asked_for_and_not_answered(question) -> None:
+    assert bridge_query(question, PO) is None
+
+
+@pytest.mark.asyncio
+async def test_the_object_hop_adds_only_a_record_of_the_object_that_names_someone() -> None:
+    engine = RetrievalEngine.__new__(RetrievalEngine)
+    engine.store = _Store(
+        [
+            _hit("m2", "PO-77790 for shrink wrap arrived complete."),  # another thing
+            _hit("m4", "Corrugated boxes were raised late again."),  # the object, no one named
+            _hit("m3", "Our new supplier for corrugated boxes is PackRight; the rep is Mia Chen."),
+        ]
+    )
+    engine.indexer = _Indexer()
+    routed = type("R", (), {"query": "Who should I chase about PO-77812?"})()
+    po = _mem("m1", PO, "2026-10-20")
+    diagnostics: dict = {}
+    got = await engine._second_hop(routed, [po], _Visibility(), diagnostics)
+    assert [c.record_id for c in got] == ["m1", "m3"], diagnostics

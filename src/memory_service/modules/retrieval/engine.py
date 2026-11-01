@@ -651,7 +651,7 @@ class RetrievalEngine:
             for h in hits
             if h.record_id not in held
             and not h.payload.get("earlier_value")
-            and slots.names_any(str(h.payload.get("text", "")), way.things)
+            and slots.reaches(str(h.payload.get("text", "")), way)
         ][:SECOND_HOP_ADDED]
         found = not_in_hand(found, candidates)
         diagnostics["second_hop"] = {"query": way.query, "added": len(found)}

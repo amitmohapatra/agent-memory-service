@@ -527,11 +527,15 @@ def _qualified(question: str, text: str) -> int | None:
 
 @dataclass(frozen=True)
 class Bridge:
-    """A memory that leads one hop further: how strongly, what to ask, and what it names."""
+    """A memory that leads one hop further: how strongly, what to ask, and what it names. An
+    object hop (``topic``) names no thing: what it reaches shares two of the object's words
+    (stemmed, in ``lang``) and names someone."""
 
     strength: int
     query: str
     things: frozenset[str]
+    topic: frozenset[str] = frozenset()
+    lang: str = "en"
 
 
 def bridge(question: str, text: str) -> Bridge | None:
@@ -552,8 +556,10 @@ def bridge(question: str, text: str) -> Bridge | None:
     reading = read(slot, text)
     words = sorted(_asked_words(question, slot.lang, slot.names))
     if slot.anchored:
-        if not reading.names_all or reading.asks or not reading.others:
+        if not reading.names_all or reading.asks:
             return None
+        if not reading.others:
+            return _object_hop(question, text, slot.lang, words)
         things = reading.other_ids or reading.others
         rest = words
         strength = 1
@@ -571,6 +577,44 @@ def bridge(question: str, text: str) -> Bridge | None:
     said = " ".join(_surfaces(text, things)).split()
     query = " ".join(dict.fromkeys([*said, *rest])).strip()
     return Bridge(strength=strength, query=query, things=frozenset(things))
+
+
+#: A question asking for someone to turn to, in the five pack languages.
+_ASKS_WHOM = re.compile(
+    r"(?<![^\W\d_])(?:who|whom|contact|chase|wer|wen|wem|kontakt\w*|anmahnen|qui[eé]n|"
+    r"contact\w*|reclam\w*)(?![^\W\d_])|(?:^|\s)من(?:\s|$)|بمن|कौन|किस(?:से|को|े)",
+    re.IGNORECASE,
+)
+#: The least an object hop's record shares with the object's words.
+_OBJECT_SHARED = 2
+
+
+def _object_hop(question: str, text: str, lang: str, asked: list[str]) -> Bridge | None:
+    """A record that names nothing but the question's identifier and its object ("I raised
+    PO-77812 for 2,000 corrugated boxes"), asked who to turn to: the hop is the object's words
+    ("corrugated boxes"), and what it reaches names someone."""
+    if not _ASKS_WHOM.search(question):
+        return None
+    asked_stems = stemmed_terms(content_terms(question), lang)
+    words = [
+        w
+        for w in content_terms(text)
+        if not any(ch.isdigit() for ch in w) and not stemmed_terms({w}, lang) & asked_stems
+    ]
+    topic = frozenset(stemmed_terms(set(words), lang))
+    if len(words) < _OBJECT_SHARED:
+        return None
+    query = " ".join(dict.fromkeys([*sorted(words), *asked]))
+    return Bridge(strength=0, query=query, things=frozenset(), topic=topic, lang=lang)
+
+
+def reaches(text: str, way: Bridge) -> bool:
+    """Whether ``text`` is what ``way`` leads to: it names the bridged thing, or for an object
+    hop shares two of the object's words and names someone."""
+    if not way.topic:
+        return names_any(text, way.things)
+    shared = way.topic & stemmed_terms(content_terms(text), way.lang)
+    return len(shared) >= _OBJECT_SHARED and bool(_anchors(text, way.lang).names)
 
 
 def bridge_query(question: str, text: str) -> str | None:
