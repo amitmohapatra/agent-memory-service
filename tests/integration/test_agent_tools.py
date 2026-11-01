@@ -147,12 +147,12 @@ async def test_message_search_reads_this_conversation_then_the_users_earlier_one
         (at("ann", "thr_now"), "Which order was that?", None),
         (at(None, "thr_anon"), "An order with no user.", None),
     ]
-    async with uow_factory() as uow:
-        for ctx, text, when in said:
+    for ctx, text, when in said:  # one write each: each thread active after the one before
+        async with uow_factory() as uow:
             await conversation.append_message(
                 uow, ctx, role=MessageRole.USER, content=text, occurred_at=when
             )
-        await uow.commit()
+            await uow.commit()
     async with uow_factory() as uow:
         await conversation.delete_thread(uow, at("ann", "thr_gone"), "thr_gone")
         await uow.commit()

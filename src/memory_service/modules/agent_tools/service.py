@@ -59,9 +59,8 @@ class MemorySearchArgs(_Args):
     kinds: list[SearchKind] | None = Field(
         default=None,
         description="memory, chunk (document passages), summary, episode (earlier "
-        "conversations), message (what was said, here and in earlier conversations, your own "
-        "earlier answers included); default memory and chunk, and message too when the query "
-        "asks about an earlier chat",
+        "conversations), message (what was said, here and in earlier conversations, your "
+        "answers too); default memory and chunk",
     )
     time_from: UtcDateTime | None = Field(default=None, description="observed since")
     time_to: UtcDateTime | None = Field(default=None, description="observed until")

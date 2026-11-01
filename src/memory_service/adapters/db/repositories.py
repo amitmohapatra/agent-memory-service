@@ -506,7 +506,7 @@ class SqlMessageRepository:
                         _in_workspace(workspace_id),
                         ThreadRow.deleted_at.is_(None),
                     )
-                    .order_by(ThreadRow.updated_at.desc())
+                    .order_by(ThreadRow.updated_at.desc(), ThreadRow.thread_id)
                     .limit(threads)
                 )
             ).scalars()
