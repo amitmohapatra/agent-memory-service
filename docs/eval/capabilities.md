@@ -596,6 +596,21 @@ whether a memory near the floor is packed depends on how the user's id happens t
 and the graph's facts carry it too ("user:ce952f851b8651 mentions ..."). It is worth a
 follow-up: index the subject only when it is a name.
 
+## Corrections to the instrument (2026-11-01)
+
+Each failing English item of the `direct` and `later` phrasings was traced to its cause on
+main 7d8202a. These were the instrument's, not the service's, and are corrected here; the
+gate's dataset hash changes with them, so the baselines are re-recorded on the measuring host.
+
+| Item | What was wrong | Correction |
+|---|---|---|
+| `forget-it-decommissioned-db` | 30 daily readings from day -30 ran to the day after "legacy-db-02 has been decommissioned": a reading dated after the decommission was served as current on every surface | 28 readings; the validator now refuses a repeated log that runs past the start of a later session (`validate.overlapping`) |
+| every answer `absent` anchor | an answer is prose, judged as one item: "The OfficeHub contract ended" named the old vendor to say it is gone and was scored as serving it | the answer's sentences and table rows are judged one by one (`scoring.sentences`), so an `unless` anchor in the same sentence clears a mention, as it does for an item of the context |
+| forgetting (all ten), `recall-finance-cost-centre`, `abstain-personal-sister`, `abstain-field-hilltop-serial`, `explicit-retail-zero-stock` (q1), `explicit-it-trading-window`, `explicit-personal-no-cilantro`, `explicit-field-no-north-fridays` | the answer's `absent` anchors had no `unless`: "J-11 and J-13 are north of the river, so you can't take them", "your brother Tom ... nothing about a sister", "R-1182 and R-1183 belong to the Riverside pumps" failed | the context's own `unless` for the forgetting items; a negation, the brother, Riverside or the regular cost centre for the others |
+| `temporal-it-vpn-incident` | the answer had to say "resolved"; "VPN access was restored" (the event's own word) failed | the answer may say resolved or restored |
+| harness mode's prompt | "using only the memory context" told the model not to bring general know-how, so a pancake recipe in grams, a VPN install on a Mac team or ideas for an afternoon in London were refused with the user's trait in front of it | the context for everything about the user; the model's own knowledge for general know-how, shaped by the context |
+| harness mode's `MAX_TOKENS` | 400: 20 of 107 answers were cut mid-way (a service report lost the signature line its standing rule ends it with) | 1,024 |
+
 ## What it does not measure
 
 - Answer quality beyond the assertions: an answer that names the right value in a wrong

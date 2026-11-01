@@ -1419,7 +1419,47 @@
          }
         ]
        }
-      ]
+      ],
+      "answer": {
+       "contains": [
+        [
+         {
+          "en": "resolved",
+          "de": "gelöst",
+          "es": "resuelta",
+          "ar": "حُلّت",
+          "hi": "INC-5521 हल"
+         },
+         {
+          "en": "restored",
+          "de": "wiederhergestellt",
+          "es": "restablecid",
+          "ar": "استُعيد",
+          "hi": "बहाल"
+         }
+        ]
+       ],
+       "absent": [
+        {
+         "text": {
+          "en": "engineers investigating",
+          "de": "Techniker untersuchen",
+          "es": "los técnicos investigan",
+          "ar": "المهندسون يحققون",
+          "hi": "इंजीनियर जाँच कर रहे हैं"
+         },
+         "unless": [
+          {
+           "en": "resolved",
+           "de": "gelöst",
+           "es": "resuelta",
+           "ar": "حُلّت",
+           "hi": "INC-5521 हल"
+          }
+         ]
+        }
+       ]
+      }
      }
     }
    ]

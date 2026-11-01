@@ -212,7 +212,18 @@
         "FZ-2"
        ],
        "absent": [
-        "TRU-7"
+        {
+         "text": "TRU-7",
+         "unless": [
+          {
+           "en": "dismantled",
+           "de": "abgebaut",
+           "es": "desmontado",
+           "ar": "تفكيك",
+           "hi": "हटा दिया"
+          }
+         ]
+        }
        ]
       }
      }
@@ -411,7 +422,18 @@
         "NEW-21"
        ],
        "absent": [
-        "OLD-55"
+        {
+         "text": "OLD-55",
+         "unless": [
+          {
+           "en": "discontinued",
+           "de": "eingestellt",
+           "es": "descatalogado",
+           "ar": "متوقف",
+           "hi": "बंद कर दिया"
+          }
+         ]
+        }
        ]
       }
      }
@@ -609,7 +631,18 @@
         "Back to School Saver"
        ],
        "absent": [
-        "Summer BBQ Bonanza"
+        {
+         "text": "Summer BBQ Bonanza",
+         "unless": [
+          {
+           "en": "ended",
+           "de": "beendet",
+           "es": "terminado",
+           "ar": "انتهى",
+           "hi": "ख़त्म"
+          }
+         ]
+        }
        ]
       }
      }
@@ -808,7 +841,18 @@
         "Mei Tanaka"
        ],
        "absent": [
-        "Jordan Lee"
+        {
+         "text": "Jordan Lee",
+         "unless": [
+          {
+           "en": "ended",
+           "de": "beendet",
+           "es": "terminado",
+           "ar": "انتهت",
+           "hi": "ख़त्म"
+          }
+         ]
+        }
        ]
       }
      }
@@ -1012,7 +1056,18 @@
         "112"
        ],
        "absent": [
-        "140"
+        {
+         "text": "140",
+         "unless": [
+          {
+           "en": "closed",
+           "de": "geschlossen",
+           "es": "cerrado",
+           "ar": "أُغلق",
+           "hi": "बंद हो गया"
+          }
+         ]
+        }
        ]
       }
      }
@@ -1210,7 +1265,18 @@
         "L-3307"
        ],
        "absent": [
-        "L-2291"
+        {
+         "text": "L-2291",
+         "unless": [
+          {
+           "en": "closed",
+           "de": "abgeschlossen",
+           "es": "cerrada",
+           "ar": "أُغلق",
+           "hi": "बंद है"
+          }
+         ]
+        }
        ]
       }
      }
@@ -1407,7 +1473,8 @@
          "ar": "سباحة",
          "hi": "तैराकी"
         }
-       ]
+       ],
+       "absent": []
       }
      }
     }
@@ -1610,7 +1677,18 @@
         "db-03"
        ],
        "absent": [
-        "legacy-db-02"
+        {
+         "text": "legacy-db-02",
+         "unless": [
+          {
+           "en": "decommissioned",
+           "de": "außer Dienst",
+           "es": "dado de baja",
+           "ar": "أُخرج",
+           "hi": "सेवा से हटा"
+          }
+         ]
+        }
        ]
       }
      }
@@ -1802,7 +1880,14 @@
         "PaperPoint"
        ],
        "absent": [
-        "OfficeHub"
+        {
+         "text": "OfficeHub",
+         "unless": [
+          {
+           "re": "\\b(ended|closed|no longer|former|old)\\b"
+          }
+         ]
+        }
        ]
       }
      }
@@ -2004,7 +2089,18 @@
         "UPS-4"
        ],
        "absent": [
-        "GEN-T1"
+        {
+         "text": "GEN-T1",
+         "unless": [
+          {
+           "en": "removed",
+           "de": "abgebaut",
+           "es": "retirado",
+           "ar": "أُزيل",
+           "hi": "हटा दिया"
+          }
+         ]
+        }
        ]
       }
      }

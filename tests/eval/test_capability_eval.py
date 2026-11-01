@@ -50,13 +50,18 @@ def test_a_repeated_log_ends_before_the_next_session_of_its_scenario() -> None:
     from benchmark.capabilities.dataset import _scenario
     from benchmark.capabilities.validate import overlapping
 
-    text = {lang: "x {n}" for lang in LANGUAGES}
+    text = dict.fromkeys(LANGUAGES, "x {n}")
     raw = {
         "id": "s",
         "domain": "retail",
         "sessions": [
-            {"id": "logs", "day": -30, "at": "06:00", "turns": [],
-             "repeat": {"count": 30, "every_hours": 24, "role": "EVENT", "text": text}},
+            {
+                "id": "logs",
+                "day": -30,
+                "at": "06:00",
+                "turns": [],
+                "repeat": {"count": 30, "every_hours": 24, "role": "EVENT", "text": text},
+            },
             {"id": "close", "day": -2, "turns": [{"role": "USER", "text": text}]},
         ],
         "queries": [],
@@ -167,6 +172,33 @@ def test_abstention_on_each_surface() -> None:
     assert not scoring.scorable(expect, "search") and scoring.scorable(
         {"contains": ["x"]}, "search"
     )
+
+
+def test_an_answer_that_says_a_value_is_gone_does_not_serve_it() -> None:
+    """An answer is prose: "The OfficeHub contract ended" names the old vendor to say it is
+    gone. The answer's sentences are judged one by one, so an ``unless`` anchor in the same
+    sentence clears the mention, as it does for an item of the context; a sentence that serves
+    the old value as current still leaks, wherever else the answer says it ended."""
+    expect = {
+        "answer": {
+            "contains": ["PaperPoint"],
+            "absent": [{"text": "OfficeHub", "unless": [{"re": r"\b(ended|closed)\b"}]}],
+        }
+    }
+    gone = scoring.items_from_answer(
+        "You are paying **PaperPoint**. The OfficeHub contract ended and the account is closed."
+    )
+    assert scoring.score(expect, gone, "en", surface="answer").passed
+    served = scoring.items_from_answer(
+        "You pay PaperPoint and OfficeHub.\n\nAn older contract ended in May."
+    )
+    v = scoring.score(expect, served, "en", surface="answer")
+    assert v.reason == "stale_leak" and v.leaks == ["OfficeHub"]
+    # a table row is a sentence of its own
+    row = scoring.items_from_answer(
+        "| Vendor |\n|---|\n| OfficeHub |\n| PaperPoint (OfficeHub ended) |"
+    )
+    assert scoring.score(expect, row, "en", surface="answer").reason == "stale_leak"
 
 
 def test_table_columns_on_an_answer() -> None:

@@ -187,6 +187,21 @@ def items_from_answer(answer: str) -> list[Item]:
     return [Item("answer", answer, 0)] if answer else []
 
 
+_SENTENCE = re.compile(r"\n+|(?<=[.!?。।؟])\s+")
+
+
+def sentences(items: Sequence[Item]) -> list[Item]:
+    """An answer's sentences and lines (a table row is one), each an item of its own: what an
+    ``absent`` anchor is judged on, so "The OfficeHub contract ended" says the old value is
+    gone while "You pay OfficeHub" serves it."""
+    return [
+        Item(i.kind, part, i.rank, i.historical)
+        for i in items
+        for part in _SENTENCE.split(i.text)
+        if part.strip()
+    ]
+
+
 # --------------------------------------------------------------------------- verdicts
 
 #: Failure reasons, most specific first; a verdict carries the first that applies.
@@ -293,7 +308,7 @@ def score(
             met += 1
         else:
             missing.append(" | ".join(p.label for p in patterns))
-    leaks = _leaks(e.get("absent", ()), items, lang)
+    leaks = _leaks(e.get("absent", ()), sentences(items) if surface == "answer" else items, lang)
 
     abstained: bool | None = None
     if surface == "context":

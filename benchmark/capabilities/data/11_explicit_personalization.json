@@ -170,8 +170,22 @@
         "AA-05"
        ],
        "absent": [
-        "AA-02",
-        "AA-04"
+        {
+         "text": "AA-02",
+         "unless": [
+          {
+           "re": "\\b(left out|exclud\\w*|omit\\w*|zero|out of stock|not (listed|included|shown))\\b"
+          }
+         ]
+        },
+        {
+         "text": "AA-04",
+         "unless": [
+          {
+           "re": "\\b(left out|exclud\\w*|omit\\w*|zero|out of stock|not (listed|included|shown))\\b"
+          }
+         ]
+        }
        ]
       }
      }
@@ -1266,13 +1280,27 @@
       "answer": {
        "absent": [
         {
-         "en": "cilantro",
-         "de": "Koriander",
-         "es": "cilantro",
-         "ar": "كزبرة",
-         "hi": "धनिया"
+         "text": {
+          "en": "cilantro",
+          "de": "Koriander",
+          "es": "cilantro",
+          "ar": "كزبرة",
+          "hi": "धनिया"
+         },
+         "unless": [
+          {
+           "re": "\\b(not|never|cannot|avoid|outside|except|exclud\\w*|skip\\w*|omit\\w*|without|no)\\b|n't"
+          }
+         ]
         },
-        "coriander"
+        {
+         "text": "coriander",
+         "unless": [
+          {
+           "re": "\\b(not|never|cannot|avoid|outside|except|exclud\\w*|skip\\w*|omit\\w*|without|no)\\b|n't"
+          }
+         ]
+        }
        ]
       }
      }
@@ -1434,7 +1462,14 @@
        ],
        "absent": [
         {
-         "re": "\\b(09|9|10):[0-5]\\d\\b"
+         "text": {
+          "re": "\\b(09|9|10):[0-5]\\d\\b"
+         },
+         "unless": [
+          {
+           "re": "\\b(not|never|cannot|avoid|outside|except|exclud\\w*|skip\\w*|omit\\w*|without|no)\\b|n't"
+          }
+         ]
         }
        ]
       }
@@ -1774,8 +1809,22 @@
         "J-12"
        ],
        "absent": [
-        "J-11",
-        "J-13"
+        {
+         "text": "J-11",
+         "unless": [
+          {
+           "re": "\\b(not|never|cannot|avoid|outside|except|exclud\\w*|skip\\w*|omit\\w*|without|no)\\b|n't"
+          }
+         ]
+        },
+        {
+         "text": "J-13",
+         "unless": [
+          {
+           "re": "\\b(not|never|cannot|avoid|outside|except|exclud\\w*|skip\\w*|omit\\w*|without|no)\\b|n't"
+          }
+         ]
+        }
        ]
       }
      }
