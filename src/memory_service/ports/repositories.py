@@ -70,6 +70,16 @@ class ThreadRepository(Protocol):
         ...
 
     async def soft_delete(self, tenant_id: str, thread_id: str) -> bool: ...
+    async def owned_in(
+        self,
+        tenant_id: str,
+        owner_user_id: str,
+        workspace_id: str | None,
+        thread_ids: Sequence[str],
+    ) -> set[str]:
+        """The ``thread_ids`` that ``owner_user_id`` owns in ``workspace_id`` (``None``: no
+        workspace), none deleted: one indexed read."""
+        ...
 
 
 @runtime_checkable
@@ -125,6 +135,7 @@ class MessageRepository(Protocol):
         tenant_id: str,
         owner_user_id: str,
         *,
+        workspace_id: str | None,
         limit: int,
         threads: int,
         words: Sequence[str],
@@ -132,9 +143,9 @@ class MessageRepository(Protocol):
         until: datetime | None = None,
     ) -> list[Message]:
         """Visible messages of the ``threads`` most recently active threads ``owner_user_id``
-        owns (none deleted) that contain one of ``words`` (case-insensitive; none: no
-        message), newest first, at most ``limit``, observed within ``since``..``until`` when
-        given."""
+        owns in ``workspace_id`` (``None``: the threads of no workspace; none deleted) that
+        contain one of ``words`` (case-insensitive; none: no message), newest first, at most
+        ``limit``, observed within ``since``..``until`` when given."""
         ...
 
     async def find_by_source(

@@ -296,6 +296,21 @@ class WindowMessageBody(BaseModel):
     )
 
 
+class EarlierChatBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(description="The message's id (msg_...).")
+    role: MessageRole = Field(description="Who said it: ASSISTANT (the agent's own answer).")
+    text: str = Field(description="What was said, as said (a long answer: its start and its end).")
+    thread_id: str = Field(description="The earlier conversation it was said in.")
+    said_at: str = Field(description="When it was said (ISO 8601, UTC).")
+    corrected: bool | None = Field(
+        default=None,
+        description="true when the user's next message in that conversation corrected it: "
+        "use the correction.",
+    )
+
+
 class ConversationBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -409,5 +424,12 @@ class ContextResponse(BaseModel):
         default=None,
         description="Earlier values: what a later statement of the same user replaced, oldest "
         "first, each marked superseded. Never current; kept apart from memories.",
+    )
+    earlier_chats: list[EarlierChatBody] | None = Field(
+        default=None,
+        description="When the question points to an earlier chat ('what was that number you "
+        "worked out on Monday?'): what the assistant answered in this user's earlier "
+        "conversations of this workspace that best matches it, best first, quoted as said "
+        "then. Never another user's, never a deleted conversation's.",
     )
     diagnostics: dict[str, Any] | None = Field(default=None, description="only with debug")

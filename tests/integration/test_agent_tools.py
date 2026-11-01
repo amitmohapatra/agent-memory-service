@@ -190,15 +190,22 @@ async def test_message_search_reads_this_conversation_then_the_users_earlier_one
     # bounded by the user's most recently active threads, filtered in the database
     async with uow_factory() as uow:
         newest = await uow.messages.owned_recent(
-            "acme", "ann", limit=10, threads=1, words=["order"]
+            "acme", "ann", workspace_id=None, limit=10, threads=1, words=["order"]
         )
         assert {m.thread_id for m in newest} == {"thr_now"}
-        assert await uow.messages.owned_recent("acme", "ann", limit=10, threads=5, words=[]) == []
         assert (
-            await uow.messages.owned_recent("acme", "nobody", limit=10, threads=5, words=["x"])
+            await uow.messages.owned_recent(
+                "acme", "ann", workspace_id=None, limit=10, threads=5, words=[]
+            )
+            == []
+        )
+        assert (
+            await uow.messages.owned_recent(
+                "acme", "nobody", workspace_id=None, limit=10, threads=5, words=["x"]
+            )
             == []
         )
         literal = await uow.messages.owned_recent(
-            "acme", "ann", limit=10, threads=5, words=["4_71", "44%"]
+            "acme", "ann", workspace_id=None, limit=10, threads=5, words=["4_71", "44%"]
         )
         assert literal == [], "LIKE wildcards in a word are matched literally"

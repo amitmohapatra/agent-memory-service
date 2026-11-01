@@ -196,6 +196,7 @@
     "bundle_id": "str (required)",
     "conversation": "Conversation | None = None",
     "diagnostics": "dict[str, Any] | None = None",
+    "earlier_chats": "list[EarlierChat] = ...",
     "evidence_status": "Literal['COMPLETE', 'INCOMPLETE', 'INSUFFICIENT'] (required)",
     "graph_facts": "list[ContextFact] = ...",
     "history": "list[ContextMemory] = ...",
@@ -343,6 +344,21 @@
     "document": "(self, document_id: 'str') -> 'DocumentInfo'",
     "wait_ready": "(self, document_id: 'str', *, max_wait: 'float' = 60.0, interval: 'float' = 0.5) -> 'DocumentInfo'"
    }
+  },
+  "EarlierChat": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "corrected": "bool = False",
+    "id": "str (required)",
+    "role": "Literal['USER', 'ASSISTANT', 'SYSTEM', 'TOOL', 'AGENT', 'EVENT'] (required)",
+    "said_at": "datetime (required)",
+    "text": "str (required)",
+    "thread_id": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
   },
   "EndpointInfo": {
    "bases": [
@@ -1446,5 +1462,5 @@
    "signature": "() -> 'MemoryContext | None'"
   }
  },
- "version": "0.6.2"
+ "version": "0.6.3"
 }

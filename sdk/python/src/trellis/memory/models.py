@@ -570,6 +570,22 @@ class PromptContext(BaseModel):
         return [t.name for t in self.tools or ()]
 
 
+class EarlierChat(BaseModel):
+    """What the assistant answered in one of the user's earlier conversations, quoted as said
+    then: given for a question that points to an earlier chat ("what was that number you
+    worked out on Monday?")."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    id: str
+    role: MessageRole
+    text: str
+    thread_id: str
+    said_at: datetime
+    #: the user's next message in that conversation corrected it: use the correction
+    corrected: bool = False
+
+
 class ContextBundle(BaseModel):
     """The context as structured data (``context(..., format="full")``), for a caller that
     builds its own prompt: the same content the prompt form renders, without the rendering.
@@ -595,6 +611,9 @@ class ContextBundle(BaseModel):
     summaries: list[ContextSummary] = Field(default_factory=list)
     #: earlier values: what a later statement of the same user replaced (never current)
     history: list[ContextMemory] = Field(default_factory=list)
+    #: what the assistant answered in this user's earlier conversations, for a question that
+    #: points to one, best first (never another user's, never a deleted conversation's)
+    earlier_chats: list[EarlierChat] = Field(default_factory=list)
     diagnostics: dict[str, Any] | None = None
 
     @property

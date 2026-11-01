@@ -97,6 +97,36 @@ _HISTORY = re.compile(
     re.IGNORECASE,
 )
 
+#: A question that points to an earlier chat (ADR 0044): what was said or worked out there,
+#: the assistant's own answers included ("what was that number you worked out on Monday?",
+#: "last time", "I told you ..."), as opposed to a question about the past of the world ("sales
+#: last week"), which needs no earlier chat. Each language in its own words, read whatever the
+#: question's language, as ``_HISTORY`` is: the cue words of the capability eval's ``later``
+#: phrasings and their translations.
+_EARLIER_CHAT = re.compile(
+    r"\b(?:last time|the other day|(?:earlier|previous|past|other|older|last) "
+    r"(?:chat|conversation|session)s?|(?:you|we) (?:\w+ )?(?:worked out|calculated|computed|"
+    r"came up with|figured out|estimated|quoted|gave me|told me|showed me|sent me|suggested|"
+    r"recommended|said|mentioned|discussed|talked about|agreed on)|(?:i|we) (?:\w+ )?"
+    r"(?:told|asked|gave|showed|sent|explained to) you|what did (?:i|you|we) (?:say|ask|tell|"
+    r"mention|work out|calculate)|remind me what|do you remember)\b"
+    r"|\b(?:habe ich dir|hast du mir|du hattest|hattest du|wir (?:\w+ )?gesprochen|"
+    r"letzte[nms]? (?:Mal|Gespräch|Chat|Unterhaltung)|neulich|erinnerst du|was hatte ich gesagt|"
+    r"du hast (?:mir )?(?:\w+ )?(?:gesagt|ausgerechnet|berechnet|erwähnt|genannt))\b"
+    r"|\b(?:te (?:di|dije)|me dijiste|mencionaste|calculaste|(?:hablamos|comentamos)|"
+    r"la última vez|el otro día|me (?:lo )?recuerdas|qué dije)\b"
+    r"|أخبرتك|أعطيتك|ذكرت|حسبت|تحدثنا|آخر حديث|قبل أيام|تذكّرني|تذكرني"
+    r"|तुम्हें.{0,60}(?:बताया|दिया) था|मैंने.{0,60}बताया था|बात (?:की|हुई) थी|पिछली बार|उस दिन|"
+    r"याद दिला|तुमने.{0,60}(?:कहा|बताया|बात कही|निकाला)",
+    re.IGNORECASE,
+)
+
+
+def points_to_earlier_chat(query: str) -> bool:
+    """Whether ``query`` asks about what was said or worked out in an earlier chat."""
+    return bool(_EARLIER_CHAT.search(query))
+
+
 _CUES = {
     "conversation": (_CONVERSATION,),
     "user_memory": (_USER_MEMORY,),
@@ -144,6 +174,7 @@ class QueryRouter:
             "identifier": bool(ids),
             **_cue_signals(q, english=is_english(lang)),
             "history": bool(_HISTORY.search(q)),
+            "earlier_chat": points_to_earlier_chat(q),
         }
         if signals["identifier"]:
             qt = QueryType.EXACT_IDENTIFIER

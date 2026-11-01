@@ -15,7 +15,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.domain.conversation import MessageToolCall
-from memory_service.domain.enums import EvidenceStatus, QueryType, Representation, WindowFormat
+from memory_service.domain.enums import (
+    EvidenceStatus,
+    MessageRole,
+    QueryType,
+    Representation,
+    WindowFormat,
+)
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.grounding import GroundingReport
 from memory_service.domain.memory import aggregate_statement, unverified_representation
@@ -103,6 +109,44 @@ class WindowMessage(BaseModel):
     #: what the caller's run record says of the message (``window.RUN_RECORD``), when it
     #: says anything (``WindowFormat.MESSAGES``)
     run_record: dict[str, Any] | None = None
+
+
+class EarlierChatLine(BaseModel):
+    """What the assistant answered in one of the user's earlier conversations, quoted as said
+    (ADR 0044): given for a question that points to an earlier chat."""
+
+    model_config = ConfigDict(frozen=True)
+
+    message_id: str
+    role: MessageRole
+    text: str
+    thread_id: str
+    said_at: datetime
+    #: the user's next message in that conversation corrected it (ADR 0037)
+    corrected: bool = False
+
+
+#: The heading the rendered context gives the earlier conversations' lines, and what it says
+#: of them: an answer worked out then is what was said then, not a value read now.
+EARLIER_CHATS_HEADING = "Earlier conversations"
+EARLIER_CHATS_NOTE = (
+    "What you answered in this user's earlier conversations, as said then (worked out from "
+    "that day's data):"
+)
+
+
+def earlier_chats_section(lines: Sequence[EarlierChatLine]) -> list[str]:
+    """The earlier conversations' lines as the context's section, oldest first, each dated
+    with its weekday, its conversation and who said it: one line each."""
+    if not lines:
+        return []
+    shown = [
+        f"- {c.said_at.date().isoformat()} {c.said_at.strftime('%A')}, conversation "
+        f"{c.thread_id}, the {c.role.value.lower()} said: {' '.join(c.text.split())}"
+        + (" (corrected by the user's next message: use the correction)" if c.corrected else "")
+        for c in sorted(lines, key=lambda c: c.said_at)
+    ]
+    return [f"## {EARLIER_CHATS_HEADING}\n{EARLIER_CHATS_NOTE}\n" + "\n".join(shown)]
 
 
 #: The heading the rendered context gives the window's run record, and what it says of it.
@@ -471,6 +515,9 @@ class ContextBundle(BaseModel):
     #: earlier values (ADR 0038): what a later statement of the same user replaced, kept apart
     #: from the current evidence and rendered under its own heading, never as current
     history: list[ContextItem] = Field(default_factory=list)
+    #: what the assistant answered in the user's earlier conversations, for a question that
+    #: points to one (ADR 0044): quoted as said, never evidence for a current claim
+    earlier_chats: list[EarlierChatLine] = Field(default_factory=list)
     evidence: EvidenceReport
     token_budget: int
     token_estimate: int
@@ -532,6 +579,7 @@ class ContextBundle(BaseModel):
         if self.conversation.shown:
             parts.append(f"## Recent conversation\n{self.conversation.rendered}")
         parts += record_section(self.conversation)
+        parts += earlier_chats_section(self.earlier_chats)
         repeated = self.redundant()
         memories = [m for m in self.memories if m.item_id not in repeated]
         facts = [f for f in self.graph_facts if f.item_id not in repeated]

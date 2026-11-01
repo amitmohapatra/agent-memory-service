@@ -9,7 +9,8 @@ Two forms, each holding only what its reader uses and nothing twice:
   fit, with a confidence the caller can narrow on;
 - **full** (for a caller that builds its own prompt): the same content as structured data -
   the conversation window, the pinned sections, the memories, document passages, graph facts
-  and summaries, the earlier values a later statement replaced (``history``), the procedures
+  and summaries, the earlier values a later statement replaced (``history``), what the
+  assistant answered in the user's earlier conversations (``earlier_chats``), the procedures
   and the tool choices - and no ``rendered`` copy of it.
 
 Every number a caller sees is in 0..1: ``relevance`` for an item (its similarity to the
@@ -23,7 +24,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from memory_service.domain.context_bundle import ContextBundle, ContextItem, ConversationWindow
+from memory_service.domain.context_bundle import (
+    ContextBundle,
+    ContextItem,
+    ConversationWindow,
+    EarlierChatLine,
+)
 from memory_service.domain.enums import Representation, WindowFormat
 from memory_service.domain.tools import SkillView, ToolHints
 
@@ -72,6 +78,20 @@ def full_view(bundle: ContextBundle) -> dict[str, Any]:
     _put(body, "graph_facts", [_fact(f) for f in bundle.graph_facts if f.item_id not in repeated])
     _put(body, "summaries", [_summary(s) for s in bundle.summaries])
     _put(body, "history", [_memory(m) for m in bundle.history])
+    _put(body, "earlier_chats", [_earlier(c) for c in bundle.earlier_chats])
+    return body
+
+
+def _earlier(line: EarlierChatLine) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "id": line.message_id,
+        "role": line.role.value,
+        "text": line.text,
+        "thread_id": line.thread_id,
+        "said_at": line.said_at.isoformat(),
+    }
+    if line.corrected:
+        body["corrected"] = True
     return body
 
 

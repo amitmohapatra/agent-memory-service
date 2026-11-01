@@ -59,6 +59,37 @@ def _fact(rid: str, *, subject: str, obj: str, day: str, owner: str = "user:u1",
     )
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What was that reorder number you worked out on Monday for the Merino Hoodie?",
+        "Last time you worked out a north reorder for the Merino Hoodie. Redo it.",
+        "A couple of weeks back I gave you the master lock code. What was it again?",
+        "Given the region changes we talked about, does Store 58 get the cereal BOGO?",
+        "Vor ein paar Wochen habe ich dir den Generalcode gegeben. Wie lautete er?",
+        "Mencionaste hace un tiempo un cambio de depósito; ¿a dónde van ahora?",
+        "الشهر الماضي أخبرتك برقم حسابنا. هل تذكّرني؟",
+        "पिछले महीने मैंने तुम्हें हमारा अकाउंट नंबर बताया था। याद दिलाओगे?",
+    ],
+)
+def test_a_question_about_an_earlier_chat_points_to_one(question: str) -> None:
+    """ADR 0044: what was said or worked out in an earlier chat, in each language's words."""
+    assert QueryRouter().route(question).signals["earlier_chat"] is True
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What were total sales last week?",
+        "What is the reorder quantity for the Merino Hoodie in the north?",
+        "Who was our pallet supplier before we switched?",
+        "Wie hoch war der Umsatz im letzten Monat?",
+    ],
+)
+def test_a_question_about_the_past_of_the_world_does_not(question: str) -> None:
+    assert QueryRouter().route(question).signals["earlier_chat"] is False
+
+
 def test_the_newest_value_of_a_slot_wins_and_the_older_becomes_an_earlier_value() -> None:
     old = _fact("old", subject="our pallet supplier", obj="Uline", day="2026-10-01")
     new = _fact("new", subject="our pallet supplier", obj="PackagingCorp", day="2026-10-09")

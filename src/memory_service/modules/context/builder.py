@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Coroutine, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Final, Literal
@@ -24,11 +24,13 @@ from memory_service.domain.context_bundle import (
     ContextBundle,
     ContextItem,
     ConversationWindow,
+    EarlierChatLine,
     EvidenceReport,
     ProfileBlockView,
     ScoreKind,
     UnusedEvidence,
     WindowMessage,
+    earlier_chats_section,
 )
 from memory_service.domain.conversation import Message
 from memory_service.domain.enums import (
@@ -70,7 +72,11 @@ from memory_service.modules.retrieval.engine import (
     RetrievalResult,
 )
 from memory_service.modules.retrieval.periods import months_dated
-from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
+from memory_service.modules.retrieval.router import (
+    QueryRouter,
+    RoutedQuery,
+    points_to_earlier_chat,
+)
 from memory_service.modules.tools.hints import asks_change, ruled
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import evidence_status_total, stage_seconds
@@ -100,6 +106,9 @@ FOLLOW_UP_FLOOR: Final = 0.45
 FOLLOW_UP_CHARS: Final = 500
 #: How many of the thread's newest messages are looked through for its previous question.
 FOLLOW_UP_MESSAGES: Final = 6
+#: What the assistant answered in the user's earlier conversations, for a question
+#: (``Searcher.earlier_chats``, ADR 0044).
+EarlierChats = Callable[[MemoryExecutionContext, str], Awaitable[list[EarlierChatLine]]]
 
 
 def _cacheable(bundle: ContextBundle) -> bool:
@@ -307,8 +316,10 @@ class ContextBuilder:
         assist: LLMAssist | None = None,
         sections: ContextSections | None = None,
         records: BundleRecords | None = None,
+        earlier_chats: EarlierChats | None = None,
     ) -> None:
         self.uow_factory = uow_factory
+        self.earlier_chats = earlier_chats
         self.sections = sections
         self.engine = engine
         self.conversation = conversation
@@ -629,6 +640,7 @@ class ContextBuilder:
             self._recent_messages(ctx, window) if window is not None else _nothing()
         )
         previous = asyncio.ensure_future(self._previous_question(ctx, query))
+        earlier = asyncio.ensure_future(self._earlier_chats(ctx, query))
         try:
             with timings.stage("retrieve"):
                 result = await self.engine.retrieve(
@@ -650,8 +662,9 @@ class ContextBuilder:
                     token_budget=conversation_budget,
                 )
                 asked_before = await previous
+                said_before = await earlier
         except BaseException:
-            for side in (sections, recent, previous, standing.task):
+            for side in (sections, recent, previous, earlier, standing.task):
                 if side is not None:
                     side.cancel()
             raise
@@ -664,8 +677,9 @@ class ContextBuilder:
         # the engine's own stage split, plus what happened around it
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
         pinned, pinned_tokens = within_budget(pinned, budget)
+        said_before, said_tokens = _within(said_before, budget - pinned_tokens)
         bundle = self._assemble(
-            query, result, conversation, budget - pinned_tokens, found.revision_fp
+            query, result, conversation, budget - pinned_tokens - said_tokens, found.revision_fp
         )
         self._remember_semantic(found, result, bundle)
         spent = self.assist.tokens_used() - tokens_before
@@ -674,7 +688,8 @@ class ContextBuilder:
                 "bundle_id": found.bundle_id,
                 "evidence": bundle.evidence.model_copy(update={"llm_tokens": spent}),
                 "token_budget": budget,
-                "token_estimate": bundle.token_estimate + pinned_tokens,
+                "token_estimate": bundle.token_estimate + pinned_tokens + said_tokens,
+                "earlier_chats": said_before,
                 "profile": pinned.profile,
                 "thread_summary": pinned.thread_summary,
                 "procedures": pinned.procedures,
@@ -976,6 +991,15 @@ class ContextBuilder:
             )
             await self.engine.score_similarity(again)
         return again
+
+    async def _earlier_chats(
+        self, ctx: MemoryExecutionContext, query: str
+    ) -> list[EarlierChatLine]:
+        """What the assistant answered in the user's earlier conversations, when ``query``
+        points to one (ADR 0044); nothing otherwise, at no cost. Read while retrieval runs."""
+        if self.earlier_chats is None or not ctx.user_id or not points_to_earlier_chat(query):
+            return []
+        return await self.earlier_chats(ctx, query)
 
     async def _previous_question(self, ctx: MemoryExecutionContext, query: str) -> str | None:
         """The thread's previous question, when ``query`` is short enough to follow it up
@@ -1357,6 +1381,16 @@ def render_window(
         rendered=rendered,
         token_estimate=used,
     )
+
+
+def _within(lines: list[EarlierChatLine], budget: int) -> tuple[list[EarlierChatLine], int]:
+    """The best of the earlier conversations' lines (``lines`` is best first) whose section
+    fits half of ``budget``, and the tokens that section takes."""
+    kept: list[EarlierChatLine] = []
+    for line in lines:
+        if estimate_tokens("\n".join(earlier_chats_section([*kept, line]))) <= budget // 2:
+            kept.append(line)
+    return kept, estimate_tokens("\n".join(earlier_chats_section(kept)))
 
 
 def _best_similarity(result: RetrievalResult) -> float:

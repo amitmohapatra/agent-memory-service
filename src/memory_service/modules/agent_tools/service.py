@@ -18,7 +18,7 @@ from memory_service.domain.errors import NotFound, ValidationFailed
 from memory_service.domain.instants import UtcDateTime
 from memory_service.modules.context.views import hints_view
 from memory_service.modules.retrieval.engine import PointInTime
-from memory_service.modules.retrieval.search import DEFAULT_KINDS, SearchKind
+from memory_service.modules.retrieval.search import SearchKind, default_kinds
 from memory_service.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -59,8 +59,9 @@ class MemorySearchArgs(_Args):
     kinds: list[SearchKind] | None = Field(
         default=None,
         description="memory, chunk (document passages), summary, episode (earlier "
-        "conversations), message (what was said, here and in earlier conversations); default "
-        "memory and chunk",
+        "conversations), message (what was said, here and in earlier conversations, your own "
+        "earlier answers included); default memory and chunk, and message too when the query "
+        "asks about an earlier chat",
     )
     time_from: UtcDateTime | None = Field(default=None, description="observed since")
     time_to: UtcDateTime | None = Field(default=None, description="observed until")
@@ -224,7 +225,7 @@ class AgentTools:
         found = await self.services["search"].search(
             ctx,
             args.query,
-            kinds=args.kinds or DEFAULT_KINDS,
+            kinds=args.kinds or default_kinds(args.query),
             limit=args.k,
             observed=observed,
             at=PointInTime(as_of=args.as_of, known_at=args.known_at),

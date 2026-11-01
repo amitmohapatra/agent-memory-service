@@ -7,17 +7,22 @@ attributes) is attached only when asked for (``debug``).
 
 Kinds: ``memory`` (what was learned or stated), ``chunk`` (document passages), ``summary``
 (document summaries), ``episode`` (earlier conversations, one per thread: its summary and a
-digest of what followed, across every thread the caller's user owns) and ``message`` (this
-messages of this conversation and of the user's earlier ones, this conversation's first;
-another user's are never read). A time range keeps only what was
-observed within it, and it filters before anything is ranked: the store applies it to
-memories, and a message outside it is never scored.
+digest of what followed, across every thread the caller's user owns in the request's
+workspace) and ``message`` (the messages of this conversation and of the user's earlier ones
+in the request's workspace, this conversation's first; another user's are never read, nor a
+deleted conversation's). A time range keeps only what was observed within it, and it filters
+before anything is ranked: the store applies it to memories, and a message outside it is never
+scored.
+
+``earlier_chats`` is the pushed context's read of the same messages (ADR 0044): what the
+assistant answered in the user's earlier conversations, for a question that points to one.
 """
 
 from __future__ import annotations
 
 import asyncio
 import itertools
+import math
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -27,6 +32,7 @@ from typing import Any, Final, Literal, cast
 from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.domain.context import MemoryExecutionContext
+from memory_service.domain.context_bundle import EarlierChatLine
 from memory_service.domain.conversation import Message
 from memory_service.domain.enums import MessageKind, MessageRole, QueryType, StatementKind
 from memory_service.domain.memory import CanonicalMemory
@@ -40,6 +46,7 @@ from memory_service.modules.retrieval.engine import (
     RetrievalEngine,
     RetrievalResult,
 )
+from memory_service.modules.retrieval.router import points_to_earlier_chat
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 
 SearchKind = Literal["memory", "chunk", "summary", "episode", "message"]
@@ -58,6 +65,14 @@ OWNED_WORDS: Final = 16
 _WORD: Final = re.compile(r"\w+")
 #: The kinds that carry what was said as said: marked when a later statement replaced it.
 _SAID: Final = frozenset({"message", "episode"})
+#: The most of the assistant's earlier answers a pushed context carries for a question that
+#: points to an earlier chat, and the share of the best answer's score one needs to be kept: a
+#: line that shares only the question's commonest words with it is not what was asked about.
+EARLIER_CHAT_LINES: Final = 3
+EARLIER_CHAT_SHARE: Final = 0.5
+#: Characters of one such answer: a longer one keeps its start and its end (a worked-out
+#: answer states what it computes first and its result last).
+EARLIER_CHAT_CHARS: Final = 1000
 
 
 class SearchItem(BaseModel):
@@ -115,6 +130,28 @@ def _words(text: str) -> set[str]:
     return {w for w in _WORD.findall(text.casefold()) if len(w) > 1}
 
 
+def default_kinds(query: str) -> tuple[SearchKind, ...]:
+    """What a search reads when its caller (the model) names no kinds: what was said, too,
+    when the question points to an earlier chat (ADR 0044) - the assistant's own answers are
+    nowhere else."""
+    return (*DEFAULT_KINDS, "message") if points_to_earlier_chat(query) else DEFAULT_KINDS
+
+
+def _weights(wanted: set[str], said: Sequence[set[str]]) -> dict[str, float]:
+    """Each query word's inverse document frequency over the messages read: a word most of
+    them share ("the", "what") says little about which one was meant."""
+    n = len(said)
+    return {w: math.log(1 + (n + 1) / (1 + sum(w in words for words in said))) for w in wanted}
+
+
+def _ends(text: str, chars: int) -> str:
+    """``text``, or its start and its end within ``chars``."""
+    if len(text) <= chars:
+        return text
+    half = (chars - 3) // 2
+    return f"{text[:half].rstrip()} … {text[-half:].lstrip()}"
+
+
 def _day(raw: Any) -> str | None:
     return str(raw)[:10] if raw else None
 
@@ -153,15 +190,24 @@ def candidate_item(c: Candidate, *, debug: bool, text_chars: int | None = None) 
     )
 
 
-def _message_item(m: Message, overlap: int, *, debug: bool, text_chars: int | None) -> SearchItem:
+def _message_item(m: Message, overlap: float, *, debug: bool, text_chars: int | None) -> SearchItem:
     return SearchItem(
         id=m.message_id,
         kind="message",
         text=_clip(f"{m.role.value}: {m.content}", text_chars),
         observed_on=m.occurred_at.date().isoformat(),
         thread_id=m.thread_id,
-        debug={"overlap": overlap, "sequence": m.sequence} if debug else None,
+        debug={"overlap": round(overlap, 3), "sequence": m.sequence} if debug else None,
     )
+
+
+def _scored(wanted: set[str], read: Sequence[Message]) -> list[tuple[float, Message]]:
+    """Each message with the weight of the query words it shares (:func:`_weights`)."""
+    said = [_words(m.content) for m in read]
+    weight = _weights(wanted, said)
+    return [
+        (sum(weight[w] for w in wanted & words), m) for words, m in zip(said, read, strict=True)
+    ]
 
 
 def _said_in(turns: Sequence[CanonicalMemory]) -> set[str]:
@@ -243,11 +289,14 @@ class Searcher:
         messages = [item for item, _ in said]
         replies = {m.message_id: m for _, m in said if m.role is MessageRole.ASSISTANT}
         if retrieved is not None:
-            items = [
-                candidate_item(c, debug=debug, text_chars=text_chars)
-                for c in retrieved.candidates
-                if c.kind in wanted
-            ]
+            items = await self._in_workspace(
+                ctx,
+                [
+                    candidate_item(c, debug=debug, text_chars=text_chars)
+                    for c in retrieved.candidates
+                    if c.kind in wanted
+                ],
+            )
         merged = [
             item
             for pair in itertools.zip_longest(items, messages)
@@ -260,6 +309,26 @@ class Searcher:
             diagnostics=retrieved.diagnostics if retrieved else {},
             retrieval=retrieved,
         )
+
+    async def _in_workspace(
+        self, ctx: MemoryExecutionContext, items: list[SearchItem]
+    ) -> list[SearchItem]:
+        """``items`` less the earlier conversations (episodes) of another workspace of the
+        user: an episode is the user's in every workspace by its key, as their words are
+        (ADR 0036), but an earlier chat is recalled in its own workspace only (ADR 0044). One
+        indexed read, only when an episode of another thread is among them."""
+        other = sorted(
+            {t for i in items if i.kind == "episode" and (t := i.thread_id) and t != ctx.thread_id}
+        )
+        if not other or not ctx.user_id:
+            return items
+        async with self.uow_factory() as uow:
+            kept = await uow.threads.owned_in(ctx.tenant_id, ctx.user_id, ctx.workspace_id, other)
+        return [
+            i
+            for i in items
+            if i.kind != "episode" or i.thread_id in kept or i.thread_id == ctx.thread_id
+        ]
 
     async def _mark_replaced(
         self, ctx: MemoryExecutionContext, items: list[SearchItem], replies: dict[str, Message]
@@ -332,14 +401,15 @@ class Searcher:
         # independent reads: this thread and the user's earlier ones
         here, owned = await asyncio.gather(self._thread(ctx), self._owned(ctx, wanted, observed))
         earlier = [m for m in owned if m.thread_id != ctx.thread_id]
-        scored = [
-            (len(wanted & _words(m.content)), m)
+        read = [
+            m
             for m in (*here, *earlier)
             if m.kind is MessageKind.VISIBLE and _within(m.occurred_at, observed)
         ]
+        scored = _scored(wanted, read)
         hits = [(n, m) for n, m in scored if n] or scored
 
-        def order(nm: tuple[int, Message]) -> tuple[int, bool, float]:
+        def order(nm: tuple[float, Message]) -> tuple[float, bool, float]:
             shared, m = nm
             other = m.thread_id != ctx.thread_id
             # a thread's own order is its sequence; across threads, when it was said
@@ -347,6 +417,41 @@ class Searcher:
 
         hits.sort(key=order)
         return [(_message_item(m, n, debug=debug, text_chars=text_chars), m) for n, m in hits]
+
+    async def earlier_chats(self, ctx: MemoryExecutionContext, query: str) -> list[EarlierChatLine]:
+        """What the assistant answered in the user's earlier conversations of this workspace
+        that best matches ``query`` (ADR 0044): at most :data:`EARLIER_CHAT_LINES`, each
+        within :data:`EARLIER_CHAT_SHARE` of the best, best first, each with when and in
+        which conversation it was said and whether the user's next message corrected it. The
+        user's own words there are memories already (ADR 0036): they are not repeated. Without
+        a user, none."""
+        wanted = _words(query)
+        owned = [
+            m
+            for m in await self._owned(ctx, wanted, None)
+            if m.thread_id != ctx.thread_id and m.kind is MessageKind.VISIBLE
+        ]
+        answers = [
+            (n, m) for n, m in _scored(wanted, owned) if n and m.role is MessageRole.ASSISTANT
+        ]
+        if not answers:
+            return []
+        best = max(n for n, _ in answers)
+        answers.sort(key=lambda nm: (-nm[0], -nm[1].occurred_at.timestamp()))
+        kept = [m for n, m in answers if n >= EARLIER_CHAT_SHARE * best][:EARLIER_CHAT_LINES]
+        async with self.uow_factory() as uow:
+            corrected = await self._corrected(uow, ctx.tenant_id, kept)
+        return [
+            EarlierChatLine(
+                message_id=m.message_id,
+                role=m.role,
+                text=_ends(m.content, EARLIER_CHAT_CHARS),
+                thread_id=m.thread_id,
+                said_at=m.occurred_at,
+                corrected=m.message_id in corrected,
+            )
+            for m in kept
+        ]
 
     async def _thread(self, ctx: MemoryExecutionContext) -> list[Message]:
         if not ctx.thread_id:
@@ -361,9 +466,9 @@ class Searcher:
     async def _owned(
         self, ctx: MemoryExecutionContext, wanted: set[str], observed: ObservedRange | None
     ) -> list[Message]:
-        """The newest messages of the threads the caller's user owns: the user's own
-        conversations, which only that user (and the agents acting for them) reads. No user,
-        none."""
+        """The newest messages of the threads the caller's user owns in the request's
+        workspace: the user's own conversations there, which only that user (and the agents
+        acting for them) reads. No user, none."""
         if not ctx.user_id:
             return []
         since, until = observed or (None, None)
@@ -371,6 +476,7 @@ class Searcher:
             return await uow.messages.owned_recent(
                 ctx.tenant_id,
                 ctx.user_id,
+                workspace_id=ctx.workspace_id,
                 limit=OWNED_SCAN,
                 threads=OWNED_THREADS,
                 words=sorted(wanted, key=lambda w: (-len(w), w))[:OWNED_WORDS],

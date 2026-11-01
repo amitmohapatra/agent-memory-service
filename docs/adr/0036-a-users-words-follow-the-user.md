@@ -1,11 +1,16 @@
 # ADR 0036: What a user says follows that user, in the words they said it
 
-Date: 2026-10-08. Status: accepted; amended by ADR 0043. Amends ADR 0005 (default audiences) and
+Date: 2026-10-08. Status: accepted; amended by ADR 0043 and ADR 0044. Amends ADR 0005 (default audiences) and
 ADR 0013 (an agent's working notes).
 
 > **Amended (2026-10-31, ADR 0043):** an `EVENT` that names a user is no longer among the
 > observations that "keep their defaults" in decision 1: it follows that user as their own
 > words do. `IMPORT` and `FILE` keep theirs, and so does an event with no user.
+>
+> **Amended (2026-11-01, ADR 0044):** the assistant's replies still keep their defaults (they are
+> never the user's memories), and a later chat of the user now reads them back as what was said
+> in an earlier conversation: in the context of a question that points to one, and through
+> `memory_search`, within the request's workspace.
 
 ## Context
 

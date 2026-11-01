@@ -1600,6 +1600,21 @@
             "description": "only with debug",
             "title": "Diagnostics"
           },
+          "earlier_chats": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/EarlierChatBody"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the question points to an earlier chat ('what was that number you worked out on Monday?'): what the assistant answered in this user's earlier conversations of this workspace that best matches it, best first, quoted as said then. Never another user's, never a deleted conversation's.",
+            "title": "Earlier Chats"
+          },
           "evidence_status": {
             "$ref": "#/components/schemas/EvidenceStatus",
             "description": "What long-term memory (memories, documents, graph facts) holds for the question - not the conversation, which the window carries: COMPLETE, INCOMPLETE (evidence for part of the question, or about someone else) or INSUFFICIENT (memory has nothing on it: unless the conversation answers it, say you do not know rather than guess)"
@@ -2240,6 +2255,56 @@
         ],
         "title": "DocumentStatus",
         "type": "string"
+      },
+      "EarlierChatBody": {
+        "additionalProperties": false,
+        "properties": {
+          "corrected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "true when the user's next message in that conversation corrected it: use the correction.",
+            "title": "Corrected"
+          },
+          "id": {
+            "description": "The message's id (msg_...).",
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/MessageRole",
+            "description": "Who said it: ASSISTANT (the agent's own answer)."
+          },
+          "said_at": {
+            "description": "When it was said (ISO 8601, UTC).",
+            "title": "Said At",
+            "type": "string"
+          },
+          "text": {
+            "description": "What was said, as said (a long answer: its start and its end).",
+            "title": "Text",
+            "type": "string"
+          },
+          "thread_id": {
+            "description": "The earlier conversation it was said in.",
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "text",
+          "thread_id",
+          "said_at"
+        ],
+        "title": "EarlierChatBody",
+        "type": "object"
       },
       "EditBlockRequest": {
         "additionalProperties": false,
