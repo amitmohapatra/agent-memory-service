@@ -221,6 +221,9 @@
            "es": "desmontado",
            "ar": "تفكيك",
            "hi": "हटा दिया"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
           }
          ]
         }
@@ -431,6 +434,9 @@
            "es": "descatalogado",
            "ar": "متوقف",
            "hi": "बंद कर दिया"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
           }
          ]
         }
@@ -640,6 +646,9 @@
            "es": "terminado",
            "ar": "انتهى",
            "hi": "ख़त्म"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
           }
          ]
         }
@@ -850,6 +859,9 @@
            "es": "terminado",
            "ar": "انتهت",
            "hi": "ख़त्म"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
           }
          ]
         }
@@ -1065,6 +1077,9 @@
            "es": "cerrado",
            "ar": "أُغلق",
            "hi": "बंद हो गया"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
           }
          ]
         }
@@ -1274,6 +1289,9 @@
            "es": "cerrada",
            "ar": "أُغلق",
            "hi": "बंद है"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
           }
          ]
         }
@@ -1686,6 +1704,9 @@
            "es": "dado de baja",
            "ar": "أُخرج",
            "hi": "सेवा से हटा"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
           }
          ]
         }
@@ -1885,6 +1906,9 @@
          "unless": [
           {
            "re": "\\b(ended|closed|no longer|former|old)\\b"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
           }
          ]
         }
@@ -2098,6 +2122,9 @@
            "es": "retirado",
            "ar": "أُزيل",
            "hi": "हटा दिया"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|no longer|inactive|left out)\\b"
           }
          ]
         }
