@@ -190,16 +190,30 @@ def items_from_answer(answer: str) -> list[Item]:
 _SENTENCE = re.compile(r"\n+|(?<=[.!?。।؟])\s+")
 
 
+_LIST_ITEM = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s")
+
+
+def _parts(text: str) -> list[str]:
+    """The sentences and lines of ``text``; a list item is read with the heading line that
+    introduces it ("Not eligible:" above "- J-11 boiler check")."""
+    out: list[str] = []
+    heading = ""
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        if _LIST_ITEM.match(line):
+            out.append(f"{heading} {line}".strip())
+            continue
+        heading = line.strip() if line.rstrip().endswith(":") else ""
+        out += [part for part in _SENTENCE.split(line) if part.strip()]
+    return out
+
+
 def sentences(items: Sequence[Item]) -> list[Item]:
     """An answer's sentences and lines (a table row is one), each an item of its own: what an
     ``absent`` anchor is judged on, so "The OfficeHub contract ended" says the old value is
     gone while "You pay OfficeHub" serves it."""
-    return [
-        Item(i.kind, part, i.rank, i.historical)
-        for i in items
-        for part in _SENTENCE.split(i.text)
-        if part.strip()
-    ]
+    return [Item(i.kind, part, i.rank, i.historical) for i in items for part in _parts(i.text)]
 
 
 # --------------------------------------------------------------------------- verdicts

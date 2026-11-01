@@ -194,6 +194,13 @@ def test_an_answer_that_says_a_value_is_gone_does_not_serve_it() -> None:
     )
     v = scoring.score(expect, served, "en", surface="answer")
     assert v.reason == "stale_leak" and v.leaks == ["OfficeHub"]
+    # a list item is read under the heading that introduces it
+    listed = scoring.items_from_answer(
+        "You pay **PaperPoint**.\n\nClosed accounts:\n- OfficeHub\n- Staples"
+    )
+    assert scoring.score(expect, listed, "en", surface="answer").passed
+    headed = scoring.items_from_answer("PaperPoint.\n\nEnded:\n- Staples\n\nCurrent:\n- OfficeHub")
+    assert scoring.score(expect, headed, "en", surface="answer").reason == "stale_leak"
     # a table row is a sentence of its own
     row = scoring.items_from_answer(
         "| Vendor |\n|---|\n| OfficeHub |\n| PaperPoint (OfficeHub ended) |"
