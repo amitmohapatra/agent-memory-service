@@ -1702,7 +1702,14 @@
         "SK-19"
        ],
        "absent": [
-        "SK-12"
+        {
+         "text": "SK-12",
+         "unless": [
+          {
+           "re": "\\b(ended|moved|from|old|former|retired|read-only|no longer|instead|not|never|left (it )?out|no record)\\b|n't"
+          }
+         ]
+        }
        ]
       }
      }

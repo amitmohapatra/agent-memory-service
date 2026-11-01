@@ -169,7 +169,15 @@
         "PackagingCorp"
        ],
        "absent": [
-        "Uline"
+        {
+         "text": "Uline",
+         "unless": [
+          "PackagingCorp",
+          {
+           "re": "\\b(ended|moved|from|old|former|retired|read-only|no longer|instead|not|never|left (it )?out|no record)\\b|n't"
+          }
+         ]
+        }
        ]
       }
      }
@@ -1356,6 +1364,17 @@
       "answer": {
        "contains": [
         "Freshservice"
+       ],
+       "absent": [
+        {
+         "text": "Zendesk",
+         "unless": [
+          "Freshservice",
+          {
+           "re": "\\b(ended|moved|from|old|former|retired|read-only|no longer|instead|not|never|left (it )?out|no record)\\b|n't"
+          }
+         ]
+        }
        ]
       }
      }
