@@ -51,3 +51,27 @@ async def test_the_section_is_small(container, uow_factory) -> None:
         await _say(container, uow_factory, chat, f"Our depot has {n + 3} {what}.")
     about = await _about(container, _chat(), "Plan next week's rota.")
     assert 0 < len(about.splitlines()) <= 4 and len(about) <= 600
+
+
+async def test_what_the_user_block_holds_is_not_listed_again(container, uow_factory) -> None:
+    """A self-description kept as a USER memory is in the pinned ``user`` block already
+    (``profile.refresh``): ``about_user`` does not repeat it, and its line goes to a setup
+    statement only this section carries."""
+    chat = _chat()
+    for said in (
+        "I'm a field engineer based in Leeds.",
+        "I am vegetarian.",
+        "We are a bakery with three shops.",
+        "Our accounts are kept in GBP.",
+        "Our whole team runs Linux laptops now.",
+    ):
+        await _say(container, uow_factory, chat, said)
+    await container.services["profile"].refresh_user("acme", "u1")
+
+    body = await container.services["context_builder"].build_api(
+        _chat(), "Plan next week's rota.", output="full"
+    )
+    blocks = {b["block"]: b["text"] for b in json.loads(body).get("profile") or []}
+    assert "field engineer" in blocks["user"]
+    assert "field engineer" not in blocks["about_user"]
+    assert "Linux" in blocks["about_user"] and "GBP" in blocks["about_user"]

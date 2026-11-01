@@ -25,11 +25,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import Lifetime, MemoryType
+from memory_service.domain.enums import Lifetime
 from memory_service.domain.errors import Conflict, NotFound, ValidationFailed
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.profile import (
     PROFILE_BLOCK_MAX_CHARS,
+    PROFILE_MEMORY_TYPES,
     USER_BLOCK,
     ProfileBlock,
     block_scope,
@@ -61,8 +62,6 @@ QUERY_BATCH: Final = 100
 QUERY_TOKEN_BUDGET: Final = 3000
 #: Evidence lines an answer written without a model keeps.
 QUERY_LINES: Final = 12
-#: The memory kinds the ``user`` block is kept from.
-PROFILE_MEMORY_TYPES: Final = (MemoryType.USER, MemoryType.PREFERENCE)
 #: The user's newest memories of those kinds one refresh reads.
 PROFILE_MEMORIES_MAX: Final = 50
 

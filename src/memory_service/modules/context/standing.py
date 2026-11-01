@@ -30,6 +30,7 @@ from typing import Any, Final
 from memory_service.domain.context_bundle import ProfileBlockView
 from memory_service.domain.language import detect_language
 from memory_service.domain.memory import SELF_ANYWHERE
+from memory_service.domain.profile import PROFILE_MEMORY_TYPES
 from memory_service.modules.context.evidence import content_terms, stemmed_terms
 from memory_service.modules.memory.replacement import _function_words
 from memory_service.ports.search import SearchHit
@@ -47,6 +48,8 @@ BLOCKS: Final = frozenset({RULES_BLOCK, PREFERENCES_BLOCK, ABOUT_BLOCK})
 ABOUT_MAX: Final = 4
 #: how many the about_user search returns (one dense search): enough to drop superseded ones
 ABOUT_SEARCH_K: Final = 12
+#: what the pinned ``user`` block is kept from (``profile.refresh``): never listed here again
+_IN_USER_BLOCK: Final = frozenset(t.value for t in PROFILE_MEMORY_TYPES)
 #: the section's size in characters, and one line's
 ABOUT_CHARS: Final = 600
 ABOUT_LINE_CHARS: Final = 200
@@ -280,13 +283,16 @@ async def standing_blocks(
 
 def _about(found: Sequence[tuple[SearchHit, float]], shown: set[tuple], lang: str) -> str:
     """The ``about_user`` section: the user's current self-descriptions nearest the request,
-    whatever their similarity, one line each, without what another section already lists or
-    a later one on the same subject supersedes, at most ``ABOUT_MAX`` lines and
-    ``ABOUT_CHARS``."""
+    whatever their similarity, one line each, without what another section already lists,
+    what the pinned ``user`` block holds (a USER or PREFERENCE memory) or a later one on the
+    same subject supersedes, at most ``ABOUT_MAX`` lines and ``ABOUT_CHARS``."""
     current = [
         (hit, _stems(_text(hit), lang), similarity)
         for hit, similarity in found
-        if not hit.payload.get("earlier_value") and _text(hit) and _said(hit) not in shown
+        if not hit.payload.get("earlier_value")
+        and hit.payload.get("memory_type") not in _IN_USER_BLOCK
+        and _text(hit)
+        and _said(hit) not in shown
     ]
     gone = _superseded([(hit, _frame(_text(hit), lang)) for hit, _, _ in current])
     lines: list[str] = []

@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from memory_service.config.constants import TASKS
+from memory_service.domain.profile import PROFILE_MEMORY_TYPES
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.conversation.summary import TASK_EPISODE_INDEX, TASK_SUMMARY_REFRESH
 from memory_service.modules.feedback.service import TASK_FEEDBACK_PROJECT
@@ -20,7 +21,6 @@ from memory_service.modules.llm.cost import llm_accounting
 from memory_service.modules.memory.connections import TASK_MEMORY_CONNECT
 from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.modules.profile.service import (
-    PROFILE_MEMORY_TYPES,
     TASK_PROFILE_QUERY,
     TASK_PROFILE_REFRESH,
     ProfileService,
