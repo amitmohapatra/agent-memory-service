@@ -546,9 +546,10 @@ def default_visibility(
     words or an event recorded for them, ``follows_user``) makes it USER: readable in every
     conversation of theirs and by every agent acting for them, never by another user,
     wherever it was said. It used to be the conversation's (THREAD), so "the cage code is
-    8492" said on Monday was out of reach in Tuesday's chat. Sharing wider is explicit (WORKSPACE, TENANT), and so is keeping a
-    statement to one conversation (THREAD). What an agent writes keeps the rules below: its
-    working types stay with its run, its tasks and episodes with itself.
+    8492" said on Monday was out of reach in Tuesday's chat. Sharing wider is explicit
+    (WORKSPACE, TENANT), and so is keeping a statement to one conversation (THREAD). What an
+    agent writes keeps the rules below: its working types stay with its run, its tasks and
+    episodes with itself.
     """
     if mt in (MemoryType.USER, MemoryType.PREFERENCE):
         return Visibility.USER if ctx.user_id else Visibility.PRIVATE

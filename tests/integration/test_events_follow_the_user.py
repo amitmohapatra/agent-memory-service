@@ -149,3 +149,28 @@ async def test_another_persons_event_is_never_replaced(container, uow_factory) -
     old = await _recorded(container, uow_factory, theirs, OLD)
     assert old and all(m.temporal.status is TemporalStatus.CURRENT for m in old)
     assert not any(replaced_by(m.system_metadata) for m in old)
+
+
+@pytest.mark.parametrize("role", [MessageRole.EVENT, MessageRole.USER])
+async def test_what_a_replaced_value_said_is_not_served_as_current(
+    container, uow_factory, role
+) -> None:
+    """Three states of one order in three conversations: the earlier ones go to the history
+    (an earlier value, ADR 0038), and no graph fact read from them is served beside the
+    current one."""
+    _scripted(container, 0.87, values=("has shipped", "was delivered"))
+    chats = [_chat() for _ in range(3)]
+    for chat, said in zip(
+        chats,
+        (
+            "PO-88120 for 600 cases of canned tomatoes was confirmed by the supplier.",
+            "PO-88120 has shipped from the supplier's warehouse.",
+            "PO-88120 was delivered and received in full at DC-2.",
+        ),
+        strict=True,
+    ):
+        await _say(container, uow_factory, chat, said, role=role)
+    bundle = await _context(container, chats[-1], "What's the status of PO-88120?")
+    current = [i.text for i in (*bundle.memories, *bundle.knowledge, *bundle.graph_facts)]
+    assert any("DC-2" in t for t in current), current
+    assert not any("has shipped" in t for t in current), current

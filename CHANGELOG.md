@@ -15,6 +15,9 @@ each entry says which one moved. Decisions behind each change are in the
   It also replaces, and is replaced by, their statements in other conversations (ADR 0038). An
   event with no user, explicit `THREAD`, `IMPORT` and `FILE` are unchanged; stored rows keep
   their audience. No API change.
+- **No graph fact read from an earlier value is served as current** (ADR 0043; service). A
+  replaced statement or event went to the context's history section, but the relation read
+  from it ("po-88120 has shipped") was still served among the current graph facts.
 - **A search marks the assistant's reply that the user corrected next** (ADR 0038, extended;
   service). "Torque the PX-400 flange bolts to 40 Nm." then "That's wrong - 55 Nm": the
   correction reached later conversations, but a search of what was said served the wrong

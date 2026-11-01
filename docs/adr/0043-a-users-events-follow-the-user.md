@@ -43,6 +43,15 @@ the last named search failure of the replacement work (PR #68).
    agent records for the user is compared with that agent's records for the user, as a
    harness-relayed turn already is. An event is kept sentence by sentence (no turn as said,
    `_verbatim` is for messages), so each of its sentences is a unit.
+4. **No graph fact read from an earlier value is served as current** (ADR 0038 decision 8).
+   "PO-88120 has shipped" replaced by "PO-88120 was delivered ... at DC-2" went to the
+   history, but the relation read from it (`po-88120 has shipped`) was still among the graph
+   facts beside the current value. Once events follow the user this leaked in every
+   conversation (the capability eval's `temporal-retail-po-status`); the same held for a
+   user's statements. The graph stage drops a fact whose source memory, or a twin collapsed
+   into it, is an earlier value among the candidates
+   (`graph.retrieval._without_replaced_facts`, no extra read). The memory itself is still
+   served in the history section.
 
 No new setting, no new memory type, no new table, no API change.
 
