@@ -131,6 +131,47 @@ def test_ports_are_protocols_not_implementations() -> None:
         assert not (names & BANNED_IN_CORE), f"{path.name} imports {names & BANNED_IN_CORE}"
 
 
+#: Port methods nothing in the service calls yet, found 2026-11-01 (the validation gate's dead
+#: code pass) and left for a decision: each is removed with its adapters, or gets its caller.
+#: Shrink this set; never grow it.
+UNCALLED_PORT_METHODS = frozenset(
+    {
+        "committed",
+        "dispatched_job_ids",
+        "incr",
+        "list_for_turn",
+        "list_unprocessed",
+        "relations_for_document",
+        "uri",
+    }
+)
+
+
+def test_every_port_method_has_a_caller() -> None:
+    """A port method nothing in the service calls is dead code its adapters keep alive, with
+    whatever serves it: ``WorkspaceRepository.memberships_of`` kept an index of its own on
+    ``workspace_members`` (a write on every membership change) for no reader."""
+    declared: dict[str, str] = {}
+    for path in (SRC / "ports").rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ClassDef):
+                for item in node.body:
+                    named = isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef)
+                    if named and not item.name.startswith("_"):
+                        declared.setdefault(item.name, f"{path.name}:{node.name}")
+    called: set[str] = set()
+    for path in SRC.rglob("*.py"):
+        if "ports" in path.relative_to(SRC).parts:
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Attribute):
+                called.add(node.attr)
+    uncalled = {name: where for name, where in declared.items() if name not in called}
+    assert set(uncalled) <= UNCALLED_PORT_METHODS, {
+        name: where for name, where in uncalled.items() if name not in UNCALLED_PORT_METHODS
+    }
+
+
 def test_sdk_does_not_depend_on_service_internals() -> None:
     sdk = Path(__file__).resolve().parents[2] / "sdk" / "python" / "src" / "trellis" / "memory"
     for path in sdk.rglob("*.py"):
