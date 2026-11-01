@@ -65,7 +65,11 @@ async def _publish(container, uow_factory) -> None:
 
 
 async def _search(container) -> list[tuple[str, float]]:
-    return await container.services["tool_index"].search("acme", "ws1", TASK)
+    """``(name, relevance)`` of each tool found: the stand-in encoder has no calibrated
+    ``tool_cosine``, so every hit matches."""
+    found = await container.services["tool_index"].search("acme", "ws1", TASK)
+    assert all(m.matches for m in found)
+    return [(m.name, m.relevance) for m in found]
 
 
 def _old_index_text(self: ToolDescriptor) -> str:

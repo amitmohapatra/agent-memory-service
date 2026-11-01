@@ -1,0 +1,69 @@
+{
+  "dev": {
+    "before": {
+      "auroc_any_tool_fits": 0.5,
+      "ece_first_candidate": 0.12,
+      "abstain_precision": null,
+      "abstained_unrelated": 0.0,
+      "abstained_near_miss": 0.0,
+      "abstained_match": 0.0
+    },
+    "after": {
+      "auroc_any_tool_fits": 0.905,
+      "ece_first_candidate": 0.124,
+      "abstain_precision": 0.944,
+      "abstained_unrelated": 1.0,
+      "abstained_near_miss": 0.571,
+      "abstained_match": 0.034
+    }
+  },
+  "test": {
+    "before": {
+      "auroc_any_tool_fits": 0.5,
+      "ece_first_candidate": 0.252,
+      "abstain_precision": null,
+      "abstained_unrelated": 0.0,
+      "abstained_near_miss": 0.0,
+      "abstained_match": 0.0
+    },
+    "after": {
+      "auroc_any_tool_fits": 0.829,
+      "ece_first_candidate": 0.042,
+      "abstain_precision": 0.947,
+      "abstained_unrelated": 1.0,
+      "abstained_near_miss": 0.273,
+      "abstained_match": 0.053
+    }
+  },
+  "tool_cosine": 0.28,
+  "unrelated_best_after": {
+    "What's the weather on Mars?": 0.0,
+    "Hi there!": 0.0,
+    "Thanks, that's all for today": 0.0,
+    "What's my sister's name?": 0.0,
+    "Tell me a joke": 0.0,
+    "What is the capital of Mongolia?": 0.0,
+    "What is a good recipe for sourdough bread?": 0.0,
+    "How many moons does Neptune have?": 0.0,
+    "Who won the 1998 football world cup final?": 0.0,
+    "Explain the difference between TCP and UDP.": 0.0,
+    "Write a haiku about autumn": 0.0,
+    "What's 17 times 23?": 0.0,
+    "Good morning, how are you?": 0.0,
+    "Who wrote Pride and Prejudice?": 0.0,
+    "What is my favourite colour?": 0.0,
+    "Can you recommend a good sci-fi novel?": 0.0,
+    "Wie ist das Wetter auf dem Mars?": 0.0,
+    "Hallo, wie geht's?": 0.0,
+    "Wie heißt meine Schwester?": 0.0,
+    "¿Cuál es la montaña más alta de África?": 0.0,
+    "Cuéntame un chiste": 0.0,
+    "¿Qué tiempo hace en Marte?": 0.0,
+    "मंगल ग्रह पर मौसम कैसा है?": 0.0,
+    "नमस्ते!": 0.0,
+    "मेरी बहन का नाम क्या है?": 0.0,
+    "كيف الطقس على المريخ؟": 0.0,
+    "مرحبا!": 0.0,
+    "من فاز بكأس العالم 1998؟": 0.0
+  }
+}

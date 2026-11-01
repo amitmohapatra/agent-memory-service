@@ -57,9 +57,10 @@ class HashEmbedding:
     )
 
     #: Hashed token features have no calibrated similarity to put a floor under, nor a
-    #: procedure match: their cosine only restates the shared words a pattern match counts.
+    #: procedure or tool match: their cosine only restates the shared words.
     relevance_floor = 0.0
     procedure_cosine = 0.0
+    tool_cosine = 0.0
 
     def __init__(self, dimension: int = 256) -> None:
         self.dimension = dimension
@@ -125,6 +126,7 @@ class SentenceTransformersEmbedding:
         self._fingerprint = dense_fingerprint(spec, self.dimension)
         self.relevance_floor = spec.relevance_floor
         self.procedure_cosine = spec.procedure_cosine
+        self.tool_cosine = spec.tool_cosine
         # The checkpoint's own limit governs truncation, as it always has (granite-small
         # declares 8192). ``spec.max_seq_length`` is the value the ONNX export will be pinned
         # to once it is measured (Phase 2); pinning it here now would change what today's
@@ -260,6 +262,7 @@ class OnnxEmbedding:
         self._fingerprint = onnx_fingerprint(spec, self.dimension)
         self.relevance_floor = spec.relevance_floor
         self.procedure_cosine = spec.procedure_cosine
+        self.tool_cosine = spec.tool_cosine
         self.max_tokens = spec.max_seq_length
         self.info = ProviderInfo(
             name=spec.id,

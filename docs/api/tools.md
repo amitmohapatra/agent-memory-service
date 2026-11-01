@@ -136,7 +136,11 @@ hints.plan  # the learned procedure: .steps (tool names), .success_rate, .runs |
 - **tools** — hybrid search (dense + BM25) over the catalog, narrowed to `available` (a
   callable tool the search missed still competes on its record), scored by relevance × how
   well the tool has worked, with a bonus for the plan's tools, its next step, and recent use.
-  `confidence` is that score as 0..1 (`1 - e^-score`, same order); `success_rate` is the share
+  `confidence` is that score as 0..1 (`1 - e^-score`), less the search's part for a tool whose
+  description is not close to the task (its cosine under the encoder's calibrated
+  `tool_cosine`): the search ranks a first tool for any task, so a greeting or "what's the
+  weather on Mars?" gets candidates in the same order, but none at 0.5 or more unless a learned
+  plan or the tool's record carries it; `success_rate` is the share
   of the tool's recorded calls that succeeded (absent: never called). When nothing matched the
   task (the catalog is not indexed yet) and no plan is learned, there are no candidates and no
   `next`: a ranking of zeros is the toolbox in alphabetical order, no hint. A general view —

@@ -12,13 +12,19 @@ every entry.
 A tool record's audience is its catalog scope: ``tenant:<t>`` for a tenant-wide entry,
 ``workspace:<t>/<w>`` for a workspace's own; a search reads both, and a workspace's entry
 shadows the tenant's of the same name.
+
+A search's fusion score only orders: divided by the task's best, the first hit reads 1.0
+whether or not any tool is about the task. So each hit also says whether it ``matches``: its
+cosine to the task, in the space every query is searched in, is at least that encoder's
+calibrated ``tool_cosine`` (one bounded read of the hits, as the memories' similarity is
+read). An encoder with none (the stand-in) leaves every hit a match.
 """
 
 from __future__ import annotations
 
 import time
 from collections.abc import Sequence
-from typing import Final
+from typing import Final, NamedTuple
 
 from memory_service.domain.ids import content_hash
 from memory_service.domain.script import detect_script
@@ -41,6 +47,16 @@ REFRESH_BATCH: Final = 256
 #: the first tick after a deploy compares every record; later ticks only catch a record an
 #: older process wrote during a rolling deploy.
 REFRESH_EVERY_SECONDS: Final = 6 * 3600
+
+
+class ToolMatch(NamedTuple):
+    """One tool a search found."""
+
+    name: str
+    #: the fusion score over the task's best hit, 0..1: what orders the tools
+    relevance: float
+    #: whether the tool's indexed text is close to the task at all (``tool_cosine``)
+    matches: bool = True
 
 
 def _hash(entry: ToolDescriptor) -> str:
@@ -202,9 +218,9 @@ class ToolIndex:
         *,
         vectors: QueryVectors | None = None,
         limit: int = SEARCH_LIMIT,
-    ) -> list[tuple[str, float]]:
-        """``(tool name, relevance 0..1)``, best first, one per name. ``vectors`` are the
-        task's, when a retrieval already encoded it (the pushed context): no second encode."""
+    ) -> list[ToolMatch]:
+        """The tools found, best first, one per name. ``vectors`` are the task's, when a
+        retrieval already encoded it (the pushed context): no second encode."""
         await self.ensure()
         if vectors is None or not vectors.dense:
             vectors = await self.encode(task)
@@ -223,9 +239,25 @@ class ToolIndex:
             rrf_k=_RRF_K,
         )
         best = max((h.score for h in hits), default=0.0) or 1.0
-        out: dict[str, float] = {}
+        close = await self._close(task, vectors, [h.record_id for h in hits])
+        out: dict[str, ToolMatch] = {}
         for hit in hits:
             name = str(hit.payload.get("text", ""))
             if name and name not in out:
-                out[name] = hit.score / best
-        return list(out.items())
+                matches = close is None or hit.record_id in close
+                out[name] = ToolMatch(name, hit.score / best, matches)
+        return list(out.values())
+
+    async def _close(
+        self, task: str, vectors: QueryVectors, record_ids: Sequence[str]
+    ) -> set[str] | None:
+        """The records whose cosine to the task is at least the encoder's ``tool_cosine``;
+        ``None`` when the encoder has none (every record counts)."""
+        spaces = self.indexer.spaces
+        floor = spaces.primary.tool_cosine
+        if floor <= 0 or not record_ids:
+            return None
+        space = spaces.primary_space.name
+        dense = vectors.dense.get(space) or await spaces.embed_primary_query(task)
+        cosines = await self.store.similarity(self.collection, space, dense, record_ids)
+        return {rid for rid, cosine in cosines.items() if cosine >= floor}

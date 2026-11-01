@@ -48,6 +48,9 @@ class EmbeddingProvider(Protocol):
     #: the least cosine a learned procedure's pattern needs to a task that words it
     #: differently (``DenseModel.procedure_cosine``; 0: no such match)
     procedure_cosine: float
+    #: the least cosine a catalog tool's text needs to a task for the tool search's match to
+    #: count toward a hint's confidence (``DenseModel.tool_cosine``; 0: every hit counts)
+    tool_cosine: float
 
     async def embed_documents(self, texts: Sequence[str]) -> list[list[float]]: ...
 

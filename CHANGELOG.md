@@ -32,6 +32,16 @@ each entry says which one moved. Decisions behind each change are in the
   tool calls (Granite 3.3's) still shows what was done. The newest turn's question, answer and
   steps list are always given (`over_budget` when they alone are over it). No new field: the
   messages are the turns' own, the record is in `rendered`.
+- **A tool hint's confidence says whether the tool fits the task** (service; ADR 0018,
+  amendment 2026-10-31). The tool search's score is relative to the task's best hit, so the
+  first tool was hinted at 0.63 or more for any task, "What's the weather on Mars?" included,
+  and the harness narrowed its tools and skipped its "I don't know" note on it. A hit whose
+  description is not close to the task (cosine under the multilingual encoder's calibrated
+  `tool_cosine`, 0.28) keeps its rank but its match adds nothing to its confidence. On a
+  held-out set of 45 tasks in five languages: unrelated tasks hinted at 0.5 or more 15/15 →
+  0/15, matching tasks under 0.5 0/19 → 1/19, calibration error 0.25 → 0.04; the order of the
+  candidates is unchanged (`tests/eval/test_tool_hint_confidence_gate.py`). A context whose
+  hints no longer reach 0.5 shows memory's evidence status again (`TOOL_ANSWERS_CONFIDENCE`).
 - **A search marks the assistant's reply that the user corrected next** (ADR 0038, extended;
   service). "Torque the PX-400 flange bolts to 40 Nm." then "That's wrong - 55 Nm": the
   correction reached later conversations, but a search of what was said served the wrong
