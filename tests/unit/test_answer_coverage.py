@@ -314,3 +314,103 @@ def test_a_code_found_but_not_shown_is_a_miss_not_an_unknown_thing():
     assert unanswered(question, shown) == "no evidence names site7786"
     found = ["Site SITE-7786 is in zone ZN-V59."]
     assert unanswered(question, shown, retrieved=found) is None
+
+
+@pytest.mark.parametrize(
+    ("question", "evidence"),
+    [
+        # a price at another seller than the one held
+        (
+            "What is MegaMart charging for Sunny Crunch?",
+            ["Our shelf price for Sunny Crunch is $3.99."],
+        ),
+        (
+            "Did anyone log MegaMart's Sunny Crunch price?",
+            ["Our shelf price for Sunny Crunch is $3.99."],
+        ),
+        (
+            "Was verlangt MegaMart für Sunny Crunch?",
+            ["Unser Regalpreis für Sunny Crunch ist $3.99."],
+        ),
+        ("¿Cuánto cobra MegaMart por Sunny Crunch?", ["Nuestro precio de Sunny Crunch es $3.99."]),
+        # a salary no evidence states
+        ("What is Helen Park's salary?", ["Our CFO is Helen Park; she joined in January."]),
+        ("Did I ever mention what the CFO is paid?", ["Our CFO is Helen Park."]),
+        ("Wie hoch ist das Gehalt von Helen Park?", ["Unsere Finanzchefin ist Helen Park."]),
+        ("ما راتب Helen Park؟", ["المديرة المالية هي Helen Park."]),
+        ("Helen Park की तनख़्वाह कितनी है?", ["हमारी CFO Helen Park हैं।"]),
+        # a serial number held for another thing
+        (
+            "What's the serial number of the pump at Hilltop?",
+            [
+                "Riverside runs two PX-400 pumps, serial numbers R-1182 and R-1183.",
+                "Hilltop has one PX-250 pump.",
+            ],
+        ),
+        # an expiry date held for another lot
+        (
+            "When does lot L-7781 expire?",
+            ["Lot L-7702 expires in March next year.", "Received lot L-7781, 48 cans."],
+        ),
+        (
+            "¿Cuándo caduca el lote L-7781?",
+            ["El lote L-7702 caduca en marzo.", "Recibido el lote L-7781."],
+        ),
+        # a relative no evidence mentions by that relation
+        (
+            "What's my sister's name?",
+            ["My brother Tom lives in Denver.", "My mum's birthday is in June."],
+        ),
+        ("Wie heißt meine Schwester?", ["Mein Bruder Tom wohnt in Denver."]),
+        ("ما اسم أختي؟", ["أخي توم يعيش في دنفر."]),
+        ("मेरी बहन का नाम क्या है?", ["मेरा भाई टॉम डेनवर में रहता है।"]),
+        # a contact detail of a role the evidence holds none for
+        (
+            "Did I ever give you the OSHA inspector's mobile number?",
+            [
+                "The OSHA inspection is on the 24th.",
+                "Our safety manager is Rita Gomez, extension 300.",
+            ],
+        ),
+    ],
+)
+def test_a_value_held_for_another_thing_or_not_at_all_does_not_answer(question, evidence):
+    assert unanswered(question, evidence)
+
+
+@pytest.mark.parametrize(
+    ("question", "evidence"),
+    [
+        ("What is MegaMart charging for Sunny Crunch?", ["MegaMart sells Sunny Crunch at $3.49."]),
+        (
+            "What's the shelf price for Sunny Crunch?",
+            ["Our shelf price for Sunny Crunch is $3.99."],
+        ),
+        ("What is Helen Park's salary?", ["Helen Park's salary is €140,000."]),
+        (
+            "What's the serial number of the Riverside pump?",
+            ["Riverside pump serial number R-1182."],
+        ),
+        ("When does lot L-7702 expire?", ["Lot L-7702 expires in March next year."]),
+        ("What's my brother's name?", ["My brother Tom lives in Denver."]),
+        (
+            "What's the safety manager's extension?",
+            ["Our safety manager is Rita Gomez, extension 300."],
+        ),
+        # how to do something with a price asks how, not how much
+        ("How do I override a price at the register?", ["Price overrides need code PO-9."]),
+        (
+            "A shelf tag is wrong and the customer wants the lower price.",
+            ["Price overrides need code PO-9."],
+        ),
+        # "Ablauf" is a procedure, "vence" a contract's term, "सीरियल" cereal
+        (
+            "Wie ist der Ablauf, wenn eine Lieferung unvollständig ist?",
+            ["Melde es im OS&D-Formular."],
+        ),
+        ("Nuestro contrato de bolsas vence el mes que viene.", ["Prefiero proveedores locales."]),
+        ("मैं सीरियल वाले गलियारे के लिए नए शेल्फ़ टैग छाप रहा हूँ।", ["सीरियल की क़ीमत अब $3.99 है।"]),
+    ],
+)
+def test_a_value_held_for_the_thing_asked_about_answers(question, evidence):
+    assert unanswered(question, evidence) is None

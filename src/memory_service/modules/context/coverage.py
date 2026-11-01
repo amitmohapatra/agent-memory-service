@@ -35,8 +35,10 @@ import unicodedata
 from collections.abc import Sequence
 from enum import StrEnum
 from functools import lru_cache
+from typing import Final
 
 from memory_service.domain.language import detect_language
+from memory_service.modules.context.evidence import content_terms, stemmed_terms
 from memory_service.modules.memory.replacement import (
     _NOUN_CAPITALISING,
     _function_words,
@@ -50,6 +52,9 @@ class Asked(StrEnum):
     PHONE = "phone number"
     EMAIL = "e-mail address"
     SECRET = "code or password"  # noqa: S105 - the kind of value, not a password
+    SERIAL = "serial number"
+    AMOUNT = "amount of money"
+    EXPIRY = "expiry date"
 
 
 #: The words that ask for each kind of value, in every pack language. Latin words match as
@@ -93,16 +98,66 @@ _LATIN_ASKS: dict[Asked, tuple[str, ...]] = {
         r"acceso",
         r"iniciar\s+sesi[oó]n",
     ),
+    Asked.SERIAL: (r"serial", r"seriennummer\w*", r"n[uú]mero\s+de\s+serie"),
+    # the value asked about, not the word: "How do I override a price?" asks how, "What is
+    # MegaMart charging?" asks how much
+    Asked.AMOUNT: (
+        r"salar(?:y|ies)",
+        r"wages?",
+        r"charg(?:es|ing)",
+        r"(?:is|are|gets?|was|were)\s+paid",
+        r"earns?",
+        r"price\s+(?:of|for)",
+        r"(?:what|what's|whats)\s+(?:is\s+)?(?:the\s+)?price",
+        r"[^\W\d_][\w-]*['\u2019]s(?:\s+[\w-]+){0,3}\s+price",
+        r"how\s+much\s+(?:does|do|did|is|are|was)\b.{0,40}?\b(?:cost|charg\w*|pa(?:y|id)|earn\w*)",
+        r"gehalt\w*",
+        r"verlangt",
+        r"verdient",
+        r"was\s+kostet",
+        r"wie\s?viel\s+kostet",
+        r"[^\W\d_]*preis\s+(?:von|f[uü]r)",
+        r"salario",
+        r"sueldo",
+        r"cobra(?:n|ndo)?",
+        r"cu[aá]nto\s+(?:cuesta|gana|vale)",
+        r"precio\s+de",
+    ),
+    Asked.EXPIRY: (
+        r"expir(?:e|es|ed|y|ation|ing)",
+        r"best\s+before",
+        r"use[\s-]+by",
+        r"l[aä]uft\b.{0,40}?\bab",
+        r"ablaufdatum",
+        r"mindesthaltbarkeit\w*",
+        r"caduc(?:a|an|ar[aá]|idad)",
+    ),
 }
 _ARABIC_ASKS: dict[Asked, tuple[str, ...]] = {
     Asked.PHONE: ("هاتف", "جوال", "موبايل", "محمول"),
     Asked.EMAIL: ("بريد إلكتروني", "بريد الإلكتروني", "بريده", "بريدها", "إيميل", "ايميل"),
     Asked.SECRET: ("رمز", "كلمة المرور", "كلمة مرور", "كلمة السر", "كود", "إنذار", "تسجيل الدخول"),
+    Asked.SERIAL: ("الرقم التسلسلي", "رقم تسلسلي", "الرقم التسلسلى"),
+    Asked.AMOUNT: ("راتب", "يتقاضى", "تتقاضى", "ما سعر", "كم سعر"),
+    Asked.EXPIRY: ("انتهاء الصلاحية", "تنتهي صلاحية", "تاريخ انتهاء", "صلاحية"),
 }
 _DEVANAGARI_ASKS: dict[Asked, tuple[str, ...]] = {
     Asked.PHONE: ("फ़ोन", "फोन", "मोबाइल"),
     Asked.EMAIL: ("ईमेल", "ई-मेल"),
     Asked.SECRET: ("पासवर्ड", "कोड", "पिन", "अलार्म", "लॉग इन", "लॉगिन"),
+    Asked.SERIAL: ("सीरियल नंबर",),
+    Asked.AMOUNT: (
+        "वेतन",
+        "सैलरी",
+        "तनख़्वाह",
+        "तनख्वाह",
+        "कितना मिलता",
+        "कितने ले",
+        "दाम क्या",
+        "कीमत क्या",
+        "क़ीमत क्या",
+    ),
+    Asked.EXPIRY: ("एक्सपायर", "एक्सपायरी", "समाप्ति"),
 }
 #: A Devanagari ask word used as a verb ("फ़ोन करूँ", "ईमेल किया", "फ़ोन आया")
 _DEVANAGARI_VERB = r"(?!\s*(?:कर|किय|किए|की\b|आय|आई))"
@@ -183,14 +238,29 @@ def asked(question: str) -> frozenset[Asked]:
     return frozenset(kind for kind in Asked if _asks_for(kind, text))
 
 
+#: an amount of money: a currency sign or name beside a number
+_MONEY = re.compile(
+    r"[$€£¥₹]\s?\d|\d[\d.,]*\s?(?:[$€£¥₹]|(?:usd|eur|gbp|inr|dollars?|euros?|pounds?|"
+    r"rupees?|d[oó]lares|dólar|دولار|يورو|रुपये|डॉलर|यूरो)(?![^\W\d_]))",
+    re.IGNORECASE,
+)
+#: a date: a month named, a day-month or year-month-day number, or a year
+_DATE = re.compile(r"\b\d{1,4}[./-]\d{1,2}(?:[./-]\d{1,4})?\b|\b(?:19|20)\d{2}\b")
+
+
 def _holds(kind: Asked, text: str) -> bool:
     """``text`` states a value of ``kind``."""
     if kind is Asked.PHONE:
         return bool(_PHONE_NUMBER.search(text) or _EXTENSION.search(text))
     if kind is Asked.EMAIL:
         return bool(_EMAIL_ADDRESS.search(text))
-    # a code: the item says what it is ("the alarm code ... is 4471")
-    return bool(_ASKS[Asked.SECRET].search(text) and _CODE_VALUE.search(text))
+    if kind is Asked.AMOUNT:
+        return bool(_MONEY.search(text))
+    if kind is Asked.EXPIRY:
+        # the item says what the date is ("expires in March next year")
+        return bool(_ASKS[kind].search(text) and (months_named(text) or _DATE.search(text)))
+    # a code or a serial number: the item says what it is ("the alarm code ... is 4471")
+    return bool(_ASKS[kind].search(text) and _CODE_VALUE.search(text))
 
 
 def _unstop(text: str) -> str:
@@ -275,11 +345,88 @@ def question_anchors(question: str, lang: str) -> tuple[frozenset[str], frozense
     return names, ids
 
 
-def _about(names: frozenset[str], ids: frozenset[str], lang: str, text: str) -> bool:
-    """``text`` names what the question names: every identifier, and one of its names."""
+def _about(
+    names: frozenset[str],
+    ids: frozenset[str],
+    lang: str,
+    text: str,
+    *,
+    every: bool = False,
+    topic: frozenset[str] = frozenset(),
+) -> bool:
+    """``text`` names what the question names: every identifier, and one of its names
+    (``every``: all of them - a price is the price of a thing at a seller, and "MegaMart's
+    price for Sunny Crunch" is not our own). A question that names nothing asks about the
+    thing its other words name (``topic``: "the OSHA inspector's mobile number"): an item
+    sharing none of them is about something else ("our safety manager, extension 300")."""
     if ids and not ids <= {value for _, value in anchors(_unstop(text), lang).ids}:
         return False
-    return not names or any(name in _flat(text) for name in names)
+    if names:
+        found = [name in _flat(text) for name in names]
+        return all(found) if every else any(found)
+    return not topic or bool(topic & stemmed_terms(content_terms(text), lang))
+
+
+def _topic(question: str, lang: str) -> frozenset[str]:
+    """The question's content words but those that ask for a value or ask at all."""
+    words = {
+        w
+        for w in content_terms(question)
+        if not _asked_word(w) and w not in _INTERROGATIVES and w not in _function_words()
+    }
+    return frozenset(stemmed_terms(words, lang) - _ASK_FILLERS)
+
+
+#: words a question asks with, in the five pack languages, that name no topic
+_ASK_FILLERS: Final = frozenset(
+    {
+        "number",
+        "numbers",
+        "nummer",
+        "número",
+        "numero",
+        "ever",
+        "record",
+        "recorded",
+        "give",
+        "gave",
+        "mention",
+        "mentioned",
+        "told",
+        "tell",
+        "log",
+        "logged",
+        "write",
+        "written",
+        "note",
+        "noted",
+        "share",
+        "shared",
+        "remember",
+        "did",
+        "does",
+        "recent",
+        "recently",
+        "last",
+        "week",
+        "month",
+        "earlier",
+        "time",
+        "point",
+        "sure",
+        "think",
+        "thought",
+    }
+)
+
+
+#: A question in the form of how to do something asks how, not for an amount ("How do I
+#: override a price at the register?").
+_HOW_TO = re.compile(
+    r"^\W*(?:how\s+(?:do|can|should|would|to)|wie\s+(?:kann|soll|mache|geht)|c[oó]mo|كيف|"
+    r"[^?]*\bकैसे)",
+    re.IGNORECASE | re.UNICODE,
+)
 
 
 def _known(names: frozenset[str], question: str, evidence: Sequence[str]) -> frozenset[str]:
@@ -304,8 +451,17 @@ def _value_gap(question: str, evidence: Sequence[str], lang: str) -> str | None:
     names, ids = question_anchors(question, lang)
     if lang in _NOUN_CAPITALISING:
         names = _known(names, question, evidence)
+    if _HOW_TO.search(question):
+        kinds = kinds - {Asked.AMOUNT}
+    # a contact detail is someone's: asked of a role ("the inspector"), it is held for it
+    topic = _topic(question, lang) if not names and not ids else frozenset()
     for kind in sorted(kinds):
-        if not any(_holds(kind, t) and _about(names, ids, lang, t) for t in evidence):
+        every = kind is Asked.AMOUNT
+        about = topic if kind in (Asked.PHONE, Asked.EMAIL) else frozenset()
+        if not any(
+            _holds(kind, t) and _about(names, ids, lang, t, every=every, topic=about)
+            for t in evidence
+        ):
             return f"no evidence states the {kind.value} asked for"
     return None
 
@@ -327,6 +483,40 @@ def _month_gap(
     return None
 
 
+#: A relative the question asks about by relation, in the five pack languages; with a word
+#: that asks who they are or what they are called.
+_RELATIVES = re.compile(
+    r"(?<![^\W\d_])(?:sister|brother|mother|mum|mom|father|dad|wife|husband|son|daughter|"
+    r"aunt|uncle|cousin|niece|nephew|grandmother|grandfather|grandma|grandpa|"
+    r"schwester|bruder|mutter|mama|vater|papa|sohn|tochter|tante|onkel|cousine|nichte|neffe|"
+    r"oma|opa|hermana|hermano|madre|mam[aá]|padre|pap[aá]|esposa|esposo|hija|hijo|t[ií]a|"
+    r"t[ií]o|prima|primo|sobrina|sobrino|abuela|abuelo)(?![^\W\d_])"
+    r"|(?:أخت|أخ|أم|أب|زوجة|زوج|ابنة|ابن|بنت|عمة|خالة|عم|خال|جدة|جد)(?:ي|ك|ه|ها)?(?![ء-ي])"  # noqa: RUF001
+    r"|(?<![ऀ-ॿ])(?:बहन|भाई|माँ|मां|माता|पिता|पापा|पत्नी|पति|बेटा|बेटी|चाची|मौसी|चाचा|मामा|"
+    r"दादी|दादा|नानी|नाना)(?![ऀ-ॿ])",
+    re.IGNORECASE | re.UNICODE,
+)
+_WHO = re.compile(
+    r"(?<![^\W\d_])(?:name|named|called|who|heißt|hei[sß]t|name[n]?|wer|llama|nombre|qui[eé]n)"
+    r"(?![^\W\d_])|اسم|من هو|من هي|नाम|कौन",
+    re.IGNORECASE | re.UNICODE,
+)
+
+
+def _relative_gap(question: str, evidence: Sequence[str]) -> str | None:
+    """A relative asked about by relation ("What's my sister's name?") whom no evidence
+    mentions by that relation: "my brother Tom" does not answer it."""
+    if not _WHO.search(question):
+        return None
+    asked_for = {m.group(0).lower() for m in _RELATIVES.finditer(question)}
+    if not asked_for:
+        return None
+    said = {m.group(0).lower() for t in evidence for m in _RELATIVES.finditer(t)}
+    if asked_for & said:
+        return None
+    return "no evidence mentions the relative asked about"
+
+
 def unanswered(
     question: str,
     evidence: Sequence[str],
@@ -342,6 +532,7 @@ def unanswered(
     return (
         _unknown_code(question, [*evidence, *retrieved])
         or _value_gap(question, evidence, detect_language(question))
+        or _relative_gap(question, evidence)
         or _month_gap(question, evidence, dated)
     )
 
