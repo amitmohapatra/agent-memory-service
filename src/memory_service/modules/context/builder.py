@@ -93,11 +93,12 @@ log = get_logger(__name__)
 STANDING = True
 #: A short question asked in a thread (at most this many words) whose own search finds nothing
 #: close (its best similarity under :data:`FOLLOW_UP_FLOOR`) is searched again together with
-#: the thread's previous questions, newest first (ADR 0044): "who runs that?" names nothing the search can find, the
-#: question before it does. The concatenation baseline of conversational search (TREC CAsT),
-#: gated on a weak first retrieval as corrective retrieval does (CRAG), so a short question on
-#: a new topic, which finds its own evidence, keeps its ranking and its size. Measured on
-#: pronoun follow-ups and topic changes (``benchmark/follow_ups.py``).
+#: the thread's previous questions, newest first (ADR 0044): "who runs that?" names nothing
+#: the search can find, the question before it does. The concatenation baseline of
+#: conversational search (TREC CAsT), gated on a weak first retrieval as corrective retrieval
+#: does (CRAG), so a short question on a new topic, which finds its own evidence, keeps its
+#: ranking and its size. Measured on pronoun follow-ups and topic changes
+#: (``benchmark/follow_ups.py``).
 FOLLOW_UP_WORDS: Final = 8
 #: The best dense similarity under which a short question's own search counts as weak. On the
 #: frozen English encoder the benchmark's topic changes found their evidence at 0.49 to 0.77,

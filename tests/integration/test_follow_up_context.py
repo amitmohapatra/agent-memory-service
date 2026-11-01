@@ -119,7 +119,7 @@ async def test_a_question_whose_own_search_is_close_is_searched_as_asked(
 async def test_a_follow_up_about_two_answers_back_is_searched_with_both_questions(
     container,
 ) -> None:
-    """"Which of the two should I trust?" after two questions: the first one named what the
+    """ "Which of the two should I trust?" after two questions: the first one named what the
     follow-up points at (the break-and-fix round's bf1-mixed-06: the user's note on a lead
     time, found for the first question, was gone two questions later). The questions before
     it, newest first, within ``FOLLOW_UP_CHARS``."""
