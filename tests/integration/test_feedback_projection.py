@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import TemporalStatus
+from memory_service.domain.enums import Lifetime, MemoryType, TemporalStatus, Visibility
 from memory_service.domain.errors import Conflict, ScopeDenied, ValidationFailed
 from memory_service.domain.feedback import (
     Feedback,
@@ -566,3 +566,50 @@ async def test_what_is_applied_as_it_arrives(container, uow_factory) -> None:
             run_vouched=True,
         )
     assert stored.pending
+
+
+async def test_a_run_verdict_citing_many_memories_labels_the_run_and_moves_them_all(
+    container, uow_factory
+) -> None:
+    """A run whose answer cited many memories (the harness cites what its context showed):
+    the verdict is projected — every cited memory moves and the run is labelled, so its
+    calls teach the learning job. Its reindex job's idempotency key holds every id's digest,
+    not the ids themselves, so it fits the outbox's column however many were cited (it did
+    not past nine: the projection failed and the run taught nothing)."""
+    for n in range(12):
+        async with uow_factory() as uow:
+            await container.services["memory"].remember(
+                uow,
+                ALICE,
+                content=f"Store S{n} reorders its denim on day {n} of the month.",
+                memory_type=MemoryType.SEMANTIC,
+                lifetime=Lifetime.LONG_TERM,
+                visibility=Visibility.USER,
+            )
+            await uow.commit()
+    await container.tasks.drain()
+    memories = await _memories(uow_factory, ALICE, container)
+    assert len(memories) == 12
+    agent = ALICE.model_copy(update={"agent_id": "helper", "agent_run_id": "run_many_1"})
+    cited = [{"source_type": "memory", "source_id": m.memory_id} for m in memories]
+    confirmed = await _submit(
+        container,
+        uow_factory,
+        agent,
+        target_kind=FeedbackTargetKind.RUN,
+        target_id="run_many_1",
+        verdict=FeedbackVerdict.CONFIRM,
+        source=FeedbackSource.JUDGE,
+        evidence_refs=cited,
+    )
+    assert confirmed.projection is not None
+    assert confirmed.projection.action is ProjectionAction.RUN_LABELLED
+    assert sorted(confirmed.projection.memory_ids) == sorted(m.memory_id for m in memories)
+    async with uow_factory() as uow:
+        outcome = await uow.tools.outcome("acme", "run_many_1")
+        moved = [await uow.memories.get("acme", m.memory_id) for m in memories]
+    assert outcome is not None and outcome.success and outcome.teaches
+    assert all(
+        m is not None and m.reinforcement_count == before.reinforcement_count + 1
+        for m, before in zip(moved, memories, strict=True)
+    )

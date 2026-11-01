@@ -1448,6 +1448,23 @@
           }
         ],
         "properties": {
+          "conversation_token_budget": {
+            "anyOf": [
+              {
+                "maximum": 1000000.0,
+                "minimum": 100.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The most tokens the conversation window may take (100-1000000); omitted: the service's default (2000). Spent from the newest turn back in layers, at most 20 turns: each turn's steps list (its tool calls as text), then the turns' question and answer, then the newest turn's calls and results; the newest turn's text and steps are given even past it, and conversation.over_budget then says so. With window_format=messages the window is the caller's to replay and takes no more of token_budget than the default; ignored with window=false",
+            "examples": [
+              null
+            ],
+            "title": "Conversation Token Budget"
+          },
           "debug": {
             "default": false,
             "description": "add the build diagnostics",
@@ -1585,7 +1602,7 @@
           },
           "evidence_status": {
             "$ref": "#/components/schemas/EvidenceStatus",
-            "description": "COMPLETE, INCOMPLETE (evidence for part of the question, or about someone else) or INSUFFICIENT (nothing to go on: answer that you do not know rather than guess)"
+            "description": "What long-term memory (memories, documents, graph facts) holds for the question - not the conversation, which the window carries: COMPLETE, INCOMPLETE (evidence for part of the question, or about someone else) or INSUFFICIENT (memory has nothing on it: unless the conversation answers it, say you do not know rather than guess)"
           },
           "graph_facts": {
             "anyOf": [
@@ -1787,6 +1804,18 @@
             },
             "title": "Messages",
             "type": "array"
+          },
+          "over_budget": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "window_format=messages: true when the newest turn's text and steps list alone are over the conversation budget and are given anyway: trim them to the model's context before replaying them. Absent otherwise.",
+            "title": "Over Budget"
           },
           "thread_id": {
             "anyOf": [
@@ -5765,7 +5794,7 @@
           },
           "evidence_status": {
             "$ref": "#/components/schemas/EvidenceStatus",
-            "description": "COMPLETE, INCOMPLETE (evidence for part of the question, or about someone else) or INSUFFICIENT (nothing to go on: answer that you do not know rather than guess)"
+            "description": "What long-term memory (memories, documents, graph facts) holds for the question - not the conversation, which the window carries: COMPLETE, INCOMPLETE (evidence for part of the question, or about someone else) or INSUFFICIENT (memory has nothing on it: unless the conversation answers it, say you do not know rather than guess)"
           },
           "memory_ids": {
             "anyOf": [
@@ -8070,6 +8099,19 @@
           "role": {
             "$ref": "#/components/schemas/MessageRole",
             "description": "Who said it: USER, ASSISTANT, SYSTEM, TOOL, AGENT or EVENT (something that happened, told to the service)."
+          },
+          "run_record": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the caller's run record says of the message, as it wrote it under custom_metadata.run_record (a tool result: status, seconds, sources, fetched, max_age; the turn's last message: the run's status, seconds, approvals); omitted when none.",
+            "title": "Run Record"
           },
           "text": {
             "description": "What was said.",
