@@ -26,10 +26,6 @@ class BlobRef(BaseModel):
     )
     storage_class: str | None = None
 
-    @property
-    def uri(self) -> str:
-        return f"{self.bucket}/{self.key}"
-
 
 class BlobNotFound(Exception):
     pass

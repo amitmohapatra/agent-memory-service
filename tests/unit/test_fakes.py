@@ -13,7 +13,6 @@ async def test_memory_cache_basic_ops_and_outage() -> None:
     assert await c.get("a") == b"1"
     assert await c.set_if_absent("a", b"2") is False
     assert await c.set_if_absent("b", b"2") is True
-    assert await c.incr("n") == 1 and await c.incr("n", amount=5) == 6
     assert await c.list_push("l", b"x", b"y", b"z", max_len=2) == 2
     assert await c.list_range("l") == [b"y", b"z"]
     assert await c.mget(["a", "missing"]) == [b"1", None]

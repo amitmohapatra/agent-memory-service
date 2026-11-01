@@ -66,9 +66,6 @@ class RedisCache:
             return 0
         return int(await self._guard("delete", self._client.delete(*keys)))
 
-    async def incr(self, key: str, *, amount: int = 1) -> int:
-        return int(await self._guard("incr", self._client.incrby(key, amount)))
-
     async def incr_window(self, key: str, *, ttl_seconds: int) -> int:
         pipe = self._client.pipeline(transaction=False)
         pipe.incrby(key, 1)

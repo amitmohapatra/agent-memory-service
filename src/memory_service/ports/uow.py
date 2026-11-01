@@ -88,14 +88,6 @@ class UnitOfWork(Protocol):
 
     async def rollback(self) -> None: ...
 
-    @property
-    def committed(self) -> bool: ...
-
-    @property
-    def dispatched_job_ids(self) -> list[str]:
-        """Task-queue job ids dispatched after the last commit (may be empty if relay lagged)."""
-        ...
-
 
 @runtime_checkable
 class UnitOfWorkFactory(Protocol):

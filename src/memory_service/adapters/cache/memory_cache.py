@@ -64,14 +64,6 @@ class MemoryCache:
                 n += 1
         return n
 
-    async def incr(self, key: str, *, amount: int = 1) -> int:
-        self._check()
-        current = int((self._live(key) or b"0").decode())
-        current += amount
-        expires = self._data.get(key, (b"", None))[1]
-        self._data[key] = (str(current).encode(), expires)
-        return current
-
     async def incr_window(self, key: str, *, ttl_seconds: int) -> int:
         self._check()
         current = int((self._live(key) or b"0").decode()) + 1

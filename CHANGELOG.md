@@ -185,6 +185,13 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **Dead code: six more port methods nothing called are gone** (service; migration
+  `0033_drop_agent_runs_turn_index`): `UnitOfWork.committed` and `dispatched_job_ids`, the
+  cache's `incr`, `AgentRunRepository.list_for_turn` (with `ix_agent_runs_turn`, its only use),
+  `ObservationRepository.list_unprocessed` and `BlobRef.uri`, with their adapters. Only tests
+  read them; they now check the same through the recording queue and by id.
+  `GraphStore.relations_for_document` stays: the knowledge-graph gate ADR 0016 requires reads
+  through it.
 - **Dead code: `WorkspaceRepository.memberships_of` and its index are gone** (service;
   migration `0032_drop_memberships_index`). Nothing called it: every membership read names its
   workspace, which the primary key serves. `ix_workspace_members_principal` was its only use,
