@@ -283,6 +283,7 @@
    ],
    "fields": {
     "messages": "list[WindowMessage] = ...",
+    "over_budget": "bool = False",
     "thread_id": "str | None = None"
    },
    "kind": "model",
@@ -776,7 +777,7 @@
     "agent_tools": "(self) -> 'list[AgentTool]'",
     "call_agent_tool": "(self, name: 'str', args: 'Mapping[str, Any]', *, toolbox: 'Sequence[str] | None' = None) -> 'Any'",
     "client": "property",
-    "context": "(self, query: 'str', *, token_budget: 'int | None' = None, tools: 'Sequence[str] | None' = None, hints: 'bool' = True, window: 'bool' = True, window_format: 'WindowFormat' = 'rendered', document_ids: 'Sequence[str] | None' = None, format: \"Literal['prompt', 'full']\" = 'prompt', debug: 'bool' = False, timeout: 'float | None' = None) -> 'PromptContext | ContextBundle'",
+    "context": "(self, query: 'str', *, token_budget: 'int | None' = None, tools: 'Sequence[str] | None' = None, hints: 'bool' = True, window: 'bool' = True, window_format: 'WindowFormat' = 'rendered', document_ids: 'Sequence[str] | None' = None, format: \"Literal['prompt', 'full']\" = 'prompt', debug: 'bool' = False, timeout: 'float | None' = None, conversation_token_budget: 'int | None' = None) -> 'PromptContext | ContextBundle'",
     "forget": "(self, memory: 'str', *, bundle_id: 'str | None' = None) -> 'None'",
     "record_tool": "(self, tool: 'str', args: 'dict[str, Any]', *, output: 'Any' = None, status: 'ToolStatus' = 'ok', error_class: 'str | None' = None, latency_ms: 'float | None' = None, cost: 'float | None' = None, task: 'str | None' = '', step: 'int | None' = None, visibility: 'Visibility' = 'PRIVATE') -> 'ToolResult'",
     "remember": "(self, content: 'str', *, memory_type: 'MemoryType' = 'SEMANTIC', lifetime: 'Lifetime' = 'LONG_TERM', visibility: 'Visibility | None' = None, subject: 'str | None' = None, entities: 'Sequence[str]' = (), valid_from: 'datetime | None' = None, valid_to: 'datetime | None' = None, idempotency_key: 'str | None' = None, **metadata: 'Any') -> 'RememberAck'",
@@ -1405,6 +1406,7 @@
    "fields": {
     "id": "str (required)",
     "role": "Literal['USER', 'ASSISTANT', 'SYSTEM', 'TOOL', 'AGENT', 'EVENT'] (required)",
+    "run_record": "dict[str, Any] | None = None",
     "text": "str (required)",
     "tool_call_id": "str | None = None",
     "tool_calls": "list[ToolCall] = ..."
@@ -1444,5 +1446,5 @@
    "signature": "() -> 'MemoryContext | None'"
   }
  },
- "version": "0.6.0"
+ "version": "0.6.2"
 }

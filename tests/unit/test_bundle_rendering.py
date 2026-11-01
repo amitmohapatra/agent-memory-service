@@ -272,7 +272,7 @@ def test_memorys_insufficiency_is_not_shown_when_a_hinted_tool_answers() -> None
     empty = _bundle([]).model_copy(
         update={"evidence": EvidenceReport(status=EvidenceStatus.INSUFFICIENT)}
     )
-    assert "## Evidence status\nINSUFFICIENT" in empty.render()
+    assert "## Evidence status (long-term memory)\nINSUFFICIENT" in empty.render()
     fits = ToolHints(candidates=[ToolCandidate(name="travel_policy", score=1.0, confidence=0.63)])
     assert "## Evidence status" not in empty.model_copy(update={"tools": fits}).render()
     weak = ToolHints(candidates=[ToolCandidate(name="app_help", score=0.1, confidence=0.1)])
