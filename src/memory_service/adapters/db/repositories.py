@@ -157,6 +157,24 @@ class SqlThreadRepository:
         )
         return _rowcount(result) > 0
 
+    async def owned_in(
+        self,
+        tenant_id: str,
+        owner_user_id: str,
+        workspace_id: str | None,
+        thread_ids: Sequence[str],
+    ) -> set[str]:
+        if not thread_ids:
+            return set()
+        stmt = select(ThreadRow.thread_id).where(
+            ThreadRow.tenant_id == tenant_id,
+            ThreadRow.thread_id.in_(list(thread_ids)),
+            ThreadRow.owner_user_id == owner_user_id,
+            _in_workspace(workspace_id),
+            ThreadRow.deleted_at.is_(None),
+        )
+        return set((await self.s.scalars(stmt)).all())
+
 
 class SqlSessionRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -275,6 +293,13 @@ def _row_to_message(r: MessageRow, attachments: Sequence[MessageAttachmentRow] =
         tool_call_id=r.tool_call_id,
         deleted_at=r.deleted_at,
     )
+
+
+def _in_workspace(workspace_id: str | None) -> Any:
+    """A thread of exactly ``workspace_id``; ``None``: of no workspace."""
+    if workspace_id is None:
+        return ThreadRow.workspace_id.is_(None)
+    return ThreadRow.workspace_id == workspace_id
 
 
 def _like(word: str) -> str:
@@ -458,6 +483,7 @@ class SqlMessageRepository:
         tenant_id: str,
         owner_user_id: str,
         *,
+        workspace_id: str | None,
         limit: int,
         threads: int,
         words: Sequence[str],
@@ -477,9 +503,10 @@ class SqlMessageRepository:
                     .where(
                         ThreadRow.tenant_id == tenant_id,
                         ThreadRow.owner_user_id == owner_user_id,
+                        _in_workspace(workspace_id),
                         ThreadRow.deleted_at.is_(None),
                     )
-                    .order_by(ThreadRow.updated_at.desc())
+                    .order_by(ThreadRow.updated_at.desc(), ThreadRow.thread_id)
                     .limit(threads)
                 )
             ).scalars()

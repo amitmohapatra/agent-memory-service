@@ -59,6 +59,38 @@ def _fact(rid: str, *, subject: str, obj: str, day: str, owner: str = "user:u1",
     )
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What was that reorder number you worked out on Monday for the Merino Hoodie?",
+        "Last time you worked out a north reorder for the Merino Hoodie. Redo it.",
+        "A couple of weeks back I gave you the master lock code. What was it again?",
+        "Given the region changes we talked about, does Store 58 get the cereal BOGO?",
+        "In my last two chats I asked about August revenue for two regions. Which were they?",
+        "Vor ein paar Wochen habe ich dir den Generalcode gegeben. Wie lautete er?",
+        "Mencionaste hace un tiempo un cambio de depósito; ¿a dónde van ahora?",
+        "الشهر الماضي أخبرتك برقم حسابنا. هل تذكّرني؟",
+        "पिछले महीने मैंने तुम्हें हमारा अकाउंट नंबर बताया था। याद दिलाओगे?",
+    ],
+)
+def test_a_question_about_an_earlier_chat_points_to_one(question: str) -> None:
+    """ADR 0044: what was said or worked out in an earlier chat, in each language's words."""
+    assert QueryRouter().route(question).signals["earlier_chat"] is True
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What were total sales last week?",
+        "What is the reorder quantity for the Merino Hoodie in the north?",
+        "Who was our pallet supplier before we switched?",
+        "Wie hoch war der Umsatz im letzten Monat?",
+    ],
+)
+def test_a_question_about_the_past_of_the_world_does_not(question: str) -> None:
+    assert QueryRouter().route(question).signals["earlier_chat"] is False
+
+
 def test_the_newest_value_of_a_slot_wins_and_the_older_becomes_an_earlier_value() -> None:
     old = _fact("old", subject="our pallet supplier", obj="Uline", day="2026-10-01")
     new = _fact("new", subject="our pallet supplier", obj="PackagingCorp", day="2026-10-09")
@@ -98,3 +130,24 @@ def test_no_slot_no_change(other: Candidate) -> None:
     old = _fact("a", subject="our pallet supplier", obj="Uline", day="2026-10-01")
     got = latest_per_slot([old, other])
     assert not any(c.payload.get("earlier_value") for c in got)
+
+
+@pytest.mark.parametrize(
+    ("question", "carries_on"),
+    [
+        ("And for the cardigan in that same colour but in cotton, same quarter?", True),
+        ("What about the east?", True),
+        ("Compare it with what the same formula gives today.", True),
+        ("Und für die Baumwollvariante in derselben Farbe?", True),
+        ("¿Y para la de algodón en el mismo color?", True),
+        ("What was revenue for denim jeans in Q3 2026?", False),
+        ("Android sales in Q3?", False),
+    ],
+)
+def test_a_question_that_carries_on_from_something_before_it(
+    question: str, carries_on: bool
+) -> None:
+    """ADR 0044: asked first in a chat, it carries on from an earlier one."""
+    from memory_service.modules.retrieval.router import continues
+
+    assert continues(question) is carries_on

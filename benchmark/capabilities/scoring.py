@@ -170,6 +170,9 @@ def items_from_bundle(bundle: Mapping[str, Any]) -> list[Item]:
         )
     for s in bundle.get("summaries") or ():
         add("summary", s.get("text"))
+    # what the assistant answered in earlier chats (ADR 0044): a corrected one is not current
+    for c in bundle.get("earlier_chats") or ():
+        add("earlier_chat", c.get("text"), bool(c.get("corrected")))
     return out
 
 

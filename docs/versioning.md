@@ -8,7 +8,7 @@ Trellis packages work together. The history itself is the [CHANGELOG](../CHANGEL
 | Thing | Where the version is | Now |
 |---|---|---|
 | The service, `trellis-memory-service` | `pyproject.toml`, `src/memory_service/__about__.py`, `GET /version`, the OpenAPI `info.version` | 0.4.0 |
-| The SDK, `trellis-memory` (`trellis.memory`) | `sdk/python/pyproject.toml` | 0.6.2 |
+| The SDK, `trellis-memory` (`trellis.memory`) | `sdk/python/pyproject.toml` | 0.6.3 |
 | The HTTP API | the path prefix | `/v1` |
 | The database schema | Alembic revisions in `migrations/versions/` | `0031_endpoint_credentials` |
 | The search index | the collection name: the fingerprint of every encoder and the key layout | changes with a model |
@@ -69,7 +69,7 @@ Elsewhere:
 | Package | Version | Needs |
 |---|---|---|
 | `trellis-memory-service` (this repository) | 0.4.0 | `bifrost-sdk>=0.4` (auth strategies, profile shaping), `trellis-contracts>=0.6.3,<0.7` (`Endpoint`) |
-| `trellis-memory` (this repository's SDK) | 0.6.2 | a 0.4.0 service (the model-key routes take an `endpoint`) |
+| `trellis-memory` (this repository's SDK) | 0.6.3 | a 0.4.0 service (the model-key routes take an `endpoint`) |
 | `trellis-harness` ([agent-harness](https://github.com/amitmohapatra/agent-harness)) | 0.4.0 | `trellis-memory>=0.4`, `trellis-runs>=0.4.0`, `trellis-contracts>=0.6.0,<0.7`, `bifrost-sdk>=0.3` |
 | `agent-runs` and `trellis-runs` ([agent-runs](https://github.com/amitmohapatra/agent-runs)) | 0.4.0 | `trellis-contracts>=0.6.1,<0.7` |
 | `trellis-contracts` ([agent-contracts](https://github.com/amitmohapatra/agent-contracts)) | 0.6.3 | nothing of the others |

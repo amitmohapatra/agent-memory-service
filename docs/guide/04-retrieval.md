@@ -78,9 +78,9 @@ written (`RetrievalSettings`). Separately, a deployment with a retail calendar s
 planning shorthand with its expansion — "WOS" with "weeks of supply" — from a fixed table
 (`domain/glossary.py`).
 
-A short follow-up asked in a thread ("who is in charge of it?", at most 8 words) names nothing
+A short follow-up asked in a thread ("who is in charge of it?", at most 12 words; 8 before ADR 0044) names nothing
 the search can find. When its own search finds nothing close (best similarity under 0.45) it is
-searched again with the thread's previous question in its search text; the route and the
+searched again with the thread's previous questions (newest first, within 500 characters) in its search text; the route and the
 coverage stay the question's own, and the bundle says so (`diagnostics.follow_up`). A short
 question on a new topic finds its own evidence and is searched as asked
 (`ContextBuilder._followed_up`, measured by `benchmark/follow_ups.py`).
@@ -200,13 +200,24 @@ Two kinds reach earlier chats, and both stay inside the user's own:
 | `kinds=["message"]` | the exact messages that share words with the query, each with its `thread_id`: this conversation's first, then the user's earlier ones | this thread's newest 200 (`HISTORY_SCAN`); in parallel, the newest 200 visible messages (`OWNED_SCAN`) that contain one of the query's words, from the user's 100 most recently active threads (`OWNED_THREADS`), filtered in the database; a time range moves the window |
 
 There is no option to set: a message search always reads this conversation and the user's
-earlier ones. Among messages sharing as many words with the query, this conversation's come
-first (in its own order), then the earlier conversations', newest first. "Earlier ones" are the
-threads whose owner is the caller's user (the user who started them): another user's threads
-are never read, a deleted thread is not read, and a call without a user reads this thread only.
-An earlier conversation contributes only messages that share a word with the query (this
+earlier ones. Messages are ranked by the query words they share, each word weighted by how
+rare it is among the messages read (its inverse document frequency: "the" and "what" say
+little); among equals, this conversation's come first (in its own order), then the earlier
+conversations', newest first. "Earlier ones" are the threads whose owner is the caller's user
+(the user who started them) in the request's workspace (a request with no workspace: the
+threads with none), as a project's chats are (ADR 0044): another user's threads are never read,
+nor another workspace's, a deleted thread is not read, and a call without a user reads this
+thread only. An `episode` of another workspace's conversation is left out the same way. An
+earlier conversation contributes only messages that share a word with the query (this
 conversation's newest still come back when nothing matches). An agent asks the same through
-`memory_search` (`kinds: ["message"]`).
+`memory_search` (`kinds: ["message"]`); with no kinds named, a query that points to an earlier
+chat ("what did you work out last time?") reads messages too.
+
+**In the pushed context** (ADR 0044), a question that points to an earlier chat gets the
+assistant's best matching answers from the user's earlier conversations, under
+`## Earlier conversations` ([context.md](../api/context.md)): the same read, the assistant's
+messages only (the user's own words are memories already, ADR 0036), at most three. Any other
+question does not read them.
 
 **Cost.** Measured in-process on PostgreSQL 16, 4 vCPU (`benchmark/bench_message_search.py`), a
 query whose words appear in every message (the worst case), p50 / p95:

@@ -201,11 +201,16 @@ class ConversationService:
     async def delete_thread(
         self, uow: UnitOfWork, ctx: MemoryExecutionContext, thread_id: str
     ) -> None:
-        if await uow.threads.get(ctx.tenant_id, thread_id) is None:
+        thread = await uow.threads.get(ctx.tenant_id, thread_id)
+        if thread is None:
             raise NotFound("Thread not found")
         await self.authz.require(ctx, "can_write", "thread", thread_id)
         await uow.threads.soft_delete(ctx.tenant_id, thread_id)
         await uow.revisions.bump(ctx.tenant_id, RevisionKind.THREAD, thread_id)
+        if thread.owner_user_id:
+            # a context its owner built in another conversation may quote this one (ADR
+            # 0044): the owner's revision moves, so a cached bundle is rebuilt without it
+            await uow.revisions.bump(ctx.tenant_id, RevisionKind.USER, thread.owner_user_id)
         # durably, in this transaction: the job finds the thread gone and removes its
         # searchable episode, so a deleted conversation cannot be recalled from another.
         # Its own key, so a pending window job for the thread cannot absorb it.

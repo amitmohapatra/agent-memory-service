@@ -113,6 +113,22 @@ It is no evidence for `/v1/verify`. It never comes alone: the statement that rep
 closed and served only by a temporal read. A `search` result that is an earlier value carries
 `"superseded": true`.
 
+**What the assistant answered in an earlier chat comes with a question that points to one**
+(ADR 0044). "What was that number you worked out on Monday?", "last time you said...", "I told
+you..." (English, German, Spanish, Arabic and Hindi cue words), or a conversation's first question
+that carries on from something ("And for the cotton one in that same colour?"): the user's memories hold their
+own words, never the assistant's, so the best matching answers of the assistant in the user's
+earlier conversations are added under "## Earlier conversations" in `rendered` and as
+`earlier_chats` (`format="full"`: `id`, `role`, `text`, `thread_id`, `said_at`, `corrected`):
+at most three, each within half the best match's score, oldest first in `rendered`, each with
+its date and weekday, its conversation and "the assistant said", and "corrected by the user's
+next message" when it was. A long answer keeps its start and its end (1,000 characters). They
+take at most half of what is left of `token_budget` after the pinned sections, are no evidence
+for `/v1/verify` (an earlier answer is not proof), and only the user's own conversations of the
+request's workspace are read, never a deleted one. Any other question reads nothing more. A
+conversation the harness ran without memory (`without=["memory"]`, a temporary chat) was never
+sent here, so it is never read.
+
 **Nothing is shown twice.** A memory whose every source is a message the recent conversation
 already shows, a sentence read out of a turn that is shown whole, and a `mentions` fact whose
 object the shown text (the history included) already names, are left out of both forms. They stay in the bundle the service keeps under `bundle_id`, so `/v1/verify` and

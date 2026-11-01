@@ -168,10 +168,15 @@ def test_bundle_items_keep_render_order_and_mark_ended_facts() -> None:
                 "valid_to": "2026-01-01",
             }
         ],
+        "earlier_chats": [
+            {"id": "c1", "role": "ASSISTANT", "text": "40 Nm", "corrected": True},
+            {"id": "c2", "role": "ASSISTANT", "text": "Lane 4"},
+        ],
     }
     items = scoring.items_from_bundle(bundle)
-    assert [i.kind for i in items] == ["profile", "memory", "fact"]
+    assert [i.kind for i in items] == ["profile", "memory", "fact", "earlier_chat", "earlier_chat"]
     assert items[2].historical and not items[1].historical
+    assert items[3].historical and not items[4].historical, "a corrected answer is not current"
 
 
 # --------------------------------------------------------------------------- generation

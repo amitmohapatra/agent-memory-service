@@ -8,6 +8,30 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Changed
+- **A later chat recalls what the assistant answered in an earlier one** (ADR 0044; service,
+  SDK `trellis-memory` 0.6.3). "What was that reorder number you worked out on Monday?": the
+  user's memories hold their own words, never the assistant's, so a figure the assistant
+  computed in an earlier chat was reachable only by a message search the model had to ask for
+  by kind. Now a question that points to an earlier chat ("last time", "you worked out",
+  "I told you", in English, German, Spanish, Arabic and Hindi words) gets the best matching
+  answers of the user's earlier conversations in its context, under `## Earlier
+  conversations` (each dated, with its conversation, labelled as the assistant's, marked when
+  the user's next message corrected it; at most three, none for any other question), and
+  `memory_search` reads messages too when such a question names no kinds. A conversation's
+  first question that carries on from something ("And for the cotton one in that same
+  colour?") points to an earlier chat too.
+- **A short follow-up is searched with the conversation's previous questions** (ADR 0044;
+  service), newest first within 500 characters, not only the one just before it: "Which of
+  the two should I trust?" points at what two questions back named. A follow-up of up to
+  twelve words (eight before) is one: "Which of the two should I trust, and why?" is nine. The full context
+  carries them as `earlier_chats` (SDK `ContextBundle.earlier_chats`, `EarlierChat`). Nothing
+  new is stored.
+- **Earlier conversations are recalled in their own workspace only** (ADR 0044; service). A
+  message search and an earlier conversation (`episode`) now read only the user's
+  conversations of the request's workspace (a request with none: those with none), as a
+  project's chats are; the user's memories still follow them everywhere (ADR 0036).
+- **Deleting a conversation moves its owner's revision** (ADR 0044; service), so a context
+  cached in another of their conversations that quoted it is rebuilt without it.
 - **A user's events follow the user** (ADR 0043; service). A `role: "EVENT"` message (or an
   `EVENT` observation) that names a user, recorded by them or by an agent acting for them, is
   `USER` by default like their own words (ADR 0036): read in all their conversations and by the

@@ -114,3 +114,44 @@ async def test_a_question_whose_own_search_is_close_is_searched_as_asked(
         _ctx(thread), FOLLOW_UP, window=False
     )
     assert "follow_up" not in bundle.diagnostics
+
+
+async def test_a_follow_up_about_two_answers_back_is_searched_with_both_questions(
+    container,
+) -> None:
+    """ "Which of the two should I trust?" after two questions: the first one named what the
+    follow-up points at (the break-and-fix round's bf1-mixed-06: the user's note on a lead
+    time, found for the first question, was gone two questions later). The questions before
+    it, newest first, within ``FOLLOW_UP_CHARS``. A harness records an empty assistant
+    message for each step that called tools: three steps a turn do not push the first
+    question out (they did, six messages back)."""
+    second = "And the dates?"
+    steps = [(MessageRole.ASSISTANT, "")] * 3
+    thread = await _seed(
+        container,
+        (MessageRole.USER, ASKED),
+        *steps,
+        (MessageRole.ASSISTANT, "Hotel Avenida."),
+        (MessageRole.USER, second),
+        *steps,
+        (MessageRole.ASSISTANT, "12 to 14 May."),
+    )
+    bundle = await container.services["context_builder"].build(
+        _ctx(thread), FOLLOW_UP, window=False
+    )
+    assert bundle.diagnostics["follow_up"] == f"{second} {ASKED}"
+
+
+async def test_a_follow_up_of_up_to_twelve_words_is_searched_with_the_questions_before_it(
+    container,
+) -> None:
+    """ "Which of the two should I trust, and why?" is nine words, and names nothing the
+    search can find (break-and-fix bf1-mixed-06: the user's note on a lead time, in the
+    first question's context, never reached the third's)."""
+    nine = "Which of the two is in charge, and why?"
+    assert 8 < len(nine.split()) <= builder.FOLLOW_UP_WORDS
+    thread = await _seed(
+        container, (MessageRole.USER, ASKED), (MessageRole.ASSISTANT, "Hotel Avenida.")
+    )
+    bundle = await container.services["context_builder"].build(_ctx(thread), nine, window=False)
+    assert bundle.diagnostics["follow_up"] == ASKED
