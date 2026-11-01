@@ -99,7 +99,7 @@ STANDING = True
 #: does (CRAG), so a short question on a new topic, which finds its own evidence, keeps its
 #: ranking and its size. Measured on pronoun follow-ups and topic changes
 #: (``benchmark/follow_ups.py``).
-FOLLOW_UP_WORDS: Final = 8
+FOLLOW_UP_WORDS: Final = 12
 #: The best dense similarity under which a short question's own search counts as weak. On the
 #: frozen English encoder the benchmark's topic changes found their evidence at 0.49 to 0.77,
 #: and the follow-ups whose evidence ranked past third, or was missed, peaked at 0.40 or less.

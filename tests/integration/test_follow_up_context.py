@@ -140,3 +140,18 @@ async def test_a_follow_up_about_two_answers_back_is_searched_with_both_question
         _ctx(thread), FOLLOW_UP, window=False
     )
     assert bundle.diagnostics["follow_up"] == f"{second} {ASKED}"
+
+
+async def test_a_follow_up_of_up_to_twelve_words_is_searched_with_the_questions_before_it(
+    container,
+) -> None:
+    """ "Which of the two should I trust, and why?" is nine words, and names nothing the
+    search can find (break-and-fix bf1-mixed-06: the user's note on a lead time, in the
+    first question's context, never reached the third's)."""
+    nine = "Which of the two is in charge, and why?"
+    assert 8 < len(nine.split()) <= builder.FOLLOW_UP_WORDS
+    thread = await _seed(
+        container, (MessageRole.USER, ASKED), (MessageRole.ASSISTANT, "Hotel Avenida.")
+    )
+    bundle = await container.services["context_builder"].build(_ctx(thread), nine, window=False)
+    assert bundle.diagnostics["follow_up"] == ASKED
