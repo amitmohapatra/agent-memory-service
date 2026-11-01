@@ -106,8 +106,10 @@ FOLLOW_UP_WORDS: Final = 8
 FOLLOW_UP_FLOOR: Final = 0.45
 #: The most of the previous questions the search text takes.
 FOLLOW_UP_CHARS: Final = 500
-#: How many of the thread's newest messages are looked through for its previous question.
-FOLLOW_UP_MESSAGES: Final = 6
+#: How many of the thread's newest messages are looked through for its previous questions: a
+#: harness records an empty assistant message for each step that called tools, so a turn can
+#: take several (one indexed read either way; ``FOLLOW_UP_CHARS`` bounds what is kept).
+FOLLOW_UP_MESSAGES: Final = 24
 #: What the assistant answered in the user's earlier conversations, for a question
 #: (``Searcher.earlier_chats``, ADR 0044).
 EarlierChats = Callable[[MemoryExecutionContext, str], Awaitable[list[EarlierChatLine]]]
