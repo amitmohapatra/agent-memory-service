@@ -269,6 +269,55 @@ async def test_a_reinstated_value_is_no_longer_marked_in_search(container, uow_f
     assert all(i.superseded is None for i in items if old in i.text)
 
 
+CORRECTED = {
+    "en": (
+        "What torque do the flange bolts on the PX-400 take?",
+        "Torque the PX-400 flange bolts to 40 Nm.",
+        "That's wrong for the PX-400 — its flange bolts go to 55 Nm in a star pattern.",
+        "What torque for the PX-400 flange bolts?",
+    ),
+    "de": (
+        "Mit welchem Drehmoment werden die Flanschschrauben der PX-400 angezogen?",
+        "Ziehe die Flanschschrauben der PX-400 mit 40 Nm an.",
+        "Das stimmt nicht für die PX-400 — ihre Flanschschrauben kommen auf 55 Nm im Sternmuster.",
+        "Welches Drehmoment für die Flanschschrauben der PX-400?",
+    ),
+}
+
+
+@pytest.mark.parametrize("lang", sorted(CORRECTED))
+async def test_a_reply_the_user_corrected_next_is_marked_in_search(
+    container, uow_factory, lang
+) -> None:
+    """ "No, it's 55 Nm": the user's next turn corrects the assistant's answer. The correction
+    reaches later conversations as a memory, but a search of what was said served the wrong
+    answer unmarked beside it (the capability eval's test-time-learning search surface was
+    0/5, every failure the corrected reply)."""
+    asked, wrong, fix, ask = CORRECTED[lang]
+    chat = _chat()
+    await _say(container, uow_factory, chat, asked)
+    await _say(container, uow_factory, chat, wrong, role=MessageRole.ASSISTANT)
+    await _say(container, uow_factory, chat, fix)
+
+    said = {i.text: i for i in await _searched(container, _chat(), ask) if i.kind == "message"}
+    assert said[f"ASSISTANT: {wrong}"].superseded is True, "the corrected reply"
+    assert said[f"USER: {fix}"].superseded is None, "the correction is current"
+    assert said[f"USER: {asked}"].superseded is None
+
+
+async def test_a_reply_followed_by_anything_but_a_correction_is_not_marked(
+    container, uow_factory
+) -> None:
+    asked, wrong, _, ask = CORRECTED["en"]
+    chat = _chat()
+    await _say(container, uow_factory, chat, asked)
+    await _say(container, uow_factory, chat, wrong, role=MessageRole.ASSISTANT)
+    await _say(container, uow_factory, chat, "Thanks. Can you list tomorrow's deliveries?")
+
+    said = {i.text: i for i in await _searched(container, _chat(), ask) if i.kind == "message"}
+    assert said[f"ASSISTANT: {wrong}"].superseded is None
+
+
 async def test_forgetting_the_new_statement_reinstates_the_old_one(container, uow_factory) -> None:
     old, new, ask = STATEMENTS["en"]
     _scripted(container, 0.97)
