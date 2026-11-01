@@ -88,7 +88,7 @@ def test_a_statement_names_its_names_and_identifiers() -> None:
 
 
 def test_a_possessive_names_the_same_person() -> None:
-    """"Jordan Lee's temp assignment has ended" is about the Jordan Lee of the shift logs: the
+    """ "Jordan Lee's temp assignment has ended" is about the Jordan Lee of the shift logs: the
     possessive is no part of the name, or the two share no name and the ended assignment
     leaves every log of it current."""
     new = "Jordan Lee's temp assignment has ended; his badge is deactivated."
