@@ -155,7 +155,8 @@
         }
        ]
       }
-     }
+     },
+     "split": "dev"
     }
    ],
    "origin": "inventorysmart-5"
@@ -307,7 +308,8 @@
         }
        ]
       }
-     }
+     },
+     "split": "dev"
     }
    ]
   },
@@ -462,7 +464,8 @@
         }
        ]
       }
-     }
+     },
+     "split": "dev"
     }
    ]
   },
@@ -611,7 +614,8 @@
         "4471"
        ]
       }
-     }
+     },
+     "split": "dev"
     }
    ]
   },
@@ -750,7 +754,8 @@
         "1.8"
        ]
       }
-     }
+     },
+     "split": "dev"
     }
    ]
   },
@@ -889,7 +894,8 @@
         "3.99"
        ]
       }
-     }
+     },
+     "split": "dev"
     }
    ]
   },
@@ -1038,7 +1044,8 @@
         "Tom"
        ]
       }
-     }
+     },
+     "split": "dev"
     }
    ]
   },
@@ -1185,7 +1192,8 @@
        "abstain": true,
        "absent": []
       }
-     }
+     },
+     "split": "dev"
     }
    ]
   },
@@ -1336,7 +1344,8 @@
         }
        ]
       }
-     }
+     },
+     "split": "dev"
     }
    ]
   },
@@ -1484,6 +1493,761 @@
        "absent": [
         "R-1182",
         "R-1183"
+       ]
+      }
+     },
+     "split": "dev"
+    }
+   ]
+  },
+  {
+   "id": "abstain-fresh-retail-truck-plate",
+   "domain": "retail",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -9,
+     "at": "08:30",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "FreshWay delivers chilled goods to the back dock on Tuesdays and Fridays.",
+        "de": "FreshWay liefert Kühlware dienstags und freitags an die hintere Rampe.",
+        "es": "FreshWay entrega los productos refrigerados en el muelle trasero los martes y viernes.",
+        "ar": "تسلّم FreshWay البضائع المبردة إلى الرصيف الخلفي يومي الثلاثاء والجمعة.",
+        "hi": "FreshWay मंगलवार और शुक्रवार को पीछे वाले डॉक पर ठंडा सामान पहुँचाता है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "Our own delivery van has the plate KX-4471.",
+        "de": "Unser eigener Lieferwagen hat das Kennzeichen KX-4471.",
+        "es": "Nuestra propia furgoneta de reparto tiene la matrícula KX-4471.",
+        "ar": "شاحنة التوصيل الخاصة بنا لوحتها KX-4471.",
+        "hi": "हमारी अपनी डिलीवरी वैन की नंबर प्लेट KX-4471 है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "split": "heldout",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What is the licence plate of the FreshWay truck?",
+        "de": "Welches Kennzeichen hat der FreshWay-Lkw?",
+        "es": "¿Cuál es la matrícula del camión de FreshWay?",
+        "ar": "ما رقم لوحة شاحنة FreshWay؟",
+        "hi": "FreshWay के ट्रक की नंबर प्लेट क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Security wants the FreshWay truck's plate on the gate list before Friday.",
+        "de": "Der Werkschutz will das Kennzeichen des FreshWay-Lkw vor Freitag auf der Torliste haben.",
+        "es": "Seguridad quiere la matrícula del camión de FreshWay en la lista de la puerta antes del viernes.",
+        "ar": "الأمن يريد لوحة شاحنة FreshWay في قائمة البوابة قبل الجمعة.",
+        "hi": "सिक्योरिटी को शुक्रवार से पहले गेट लिस्ट में FreshWay ट्रक की प्लेट चाहिए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which registration number does FreshWay's delivery lorry carry?",
+        "de": "Mit welcher Zulassungsnummer fährt der Lieferwagen von FreshWay?",
+        "es": "¿Qué número de matrícula lleva el camión de reparto de FreshWay?",
+        "ar": "ما رقم تسجيل شاحنة التوصيل التابعة لـ FreshWay؟",
+        "hi": "FreshWay की डिलीवरी गाड़ी का रजिस्ट्रेशन नंबर क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "freshway truk plate numbr",
+        "de": "kennzeichn freshway lkw",
+        "es": "matricula camion freshwey",
+        "ar": "لوحة شاحنه فريش واي",
+        "hi": "फ्रेशवे ट्रक प्लेट नंबर"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The new gate guard turns away any vehicle that isn't on his list, and FreshWay comes on Friday morning with the chilled order, so before I leave tonight I need to add their truck by its licence plate. What is it?",
+        "de": "Der neue Pförtner weist jedes Fahrzeug ab, das nicht auf seiner Liste steht, und FreshWay kommt Freitagfrüh mit der Kühlware. Bevor ich heute Abend gehe, muss ich ihren Lkw mit Kennzeichen eintragen. Wie lautet es?",
+        "es": "El nuevo guardia de la puerta rechaza cualquier vehículo que no esté en su lista, y FreshWay viene el viernes por la mañana con el pedido refrigerado, así que antes de irme esta noche tengo que añadir su camión por la matrícula. ¿Cuál es?",
+        "ar": "حارس البوابة الجديد يرفض أي مركبة ليست في قائمته، وFreshWay تأتي صباح الجمعة بالطلبية المبردة، لذا قبل أن أغادر الليلة أحتاج إلى إضافة شاحنتهم برقم لوحتها. ما هو؟",
+        "hi": "नया गेट गार्ड लिस्ट से बाहर की हर गाड़ी लौटा देता है, और FreshWay शुक्रवार सुबह ठंडा ऑर्डर लेकर आता है, इसलिए आज रात जाने से पहले मुझे उनका ट्रक नंबर प्लेट से जोड़ना है। वह क्या है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Add the FreshWay truck to Friday's gate list.",
+        "de": "Trag den FreshWay-Lkw in die Torliste für Freitag ein.",
+        "es": "Añade el camión de FreshWay a la lista de la puerta del viernes.",
+        "ar": "أضف شاحنة FreshWay إلى قائمة البوابة ليوم الجمعة.",
+        "hi": "शुक्रवार की गेट लिस्ट में FreshWay का ट्रक जोड़ दो।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not our van's plate, the FreshWay truck's: what is it?",
+        "de": "Nicht das Kennzeichen unseres Lieferwagens, das vom FreshWay-Lkw: wie lautet es?",
+        "es": "No la matrícula de nuestra furgoneta, la del camión de FreshWay: ¿cuál es?",
+        "ar": "ليست لوحة شاحنتنا، بل لوحة شاحنة FreshWay: ما هي؟",
+        "hi": "हमारी वैन की नहीं, FreshWay ट्रक की प्लेट: वह क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Did I ever note FreshWay's truck plate? What was it?",
+        "de": "Habe ich je das Kennzeichen des FreshWay-Lkw notiert? Wie lautete es?",
+        "es": "¿Apunté alguna vez la matrícula del camión de FreshWay? ¿Cuál era?",
+        "ar": "هل دوّنت يومًا لوحة شاحنة FreshWay؟ ما كانت؟",
+        "hi": "क्या मैंने कभी FreshWay ट्रक की प्लेट लिखी थी? वह क्या थी?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "FreshWay truck plate?",
+        "de": "Kennzeichen FreshWay-Lkw?",
+        "es": "¿Matrícula camión FreshWay?",
+        "ar": "لوحة شاحنة FreshWay؟",
+        "hi": "FreshWay ट्रक प्लेट?"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the FreshWay truck's licence plate.",
+        "de": "Gib mir das Kennzeichen des FreshWay-Lkw.",
+        "es": "Dame la matrícula del camión de FreshWay.",
+        "ar": "أعطني رقم لوحة شاحنة FreshWay.",
+        "hi": "मुझे FreshWay ट्रक की नंबर प्लेट दो।"
+       }
+      }
+     ],
+     "expect": {
+      "abstain": true,
+      "answer": {
+       "abstain": true,
+       "absent": [
+        "KX-4471"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "abstain-fresh-personal-nephew-birthday",
+   "domain": "personal",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -20,
+     "at": "19:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "My niece Lena turns nine on March 3.",
+        "de": "Meine Nichte Lena wird am 3. März neun.",
+        "es": "Mi sobrina Lena cumple nueve años el 3 de marzo.",
+        "ar": "ابنة أختي لينا تبلغ التاسعة في 3 مارس.",
+        "hi": "मेरी भांजी लेना 3 मार्च को नौ साल की होगी।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "My brother moved to Leeds last year.",
+        "de": "Mein Bruder ist letztes Jahr nach Leeds gezogen.",
+        "es": "Mi hermano se mudó a Leeds el año pasado.",
+        "ar": "أخي انتقل إلى ليدز العام الماضي.",
+        "hi": "मेरा भाई पिछले साल लीड्स चला गया।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "split": "heldout",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "When is my nephew's birthday?",
+        "de": "Wann hat mein Neffe Geburtstag?",
+        "es": "¿Cuándo es el cumpleaños de mi sobrino?",
+        "ar": "متى عيد ميلاد ابن أخي؟",
+        "hi": "मेरे भतीजे का जन्मदिन कब है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I want to send my nephew a card in time for his birthday.",
+        "de": "Ich will meinem Neffen rechtzeitig zum Geburtstag eine Karte schicken.",
+        "es": "Quiero mandarle a mi sobrino una tarjeta a tiempo para su cumpleaños.",
+        "ar": "أريد أن أرسل لابن أخي بطاقة في الوقت المناسب لعيد ميلاده.",
+        "hi": "मैं अपने भतीजे को उसके जन्मदिन पर समय से कार्ड भेजना चाहता हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "On what date was my nephew born?",
+        "de": "An welchem Datum ist mein Neffe geboren?",
+        "es": "¿En qué fecha nació mi sobrino?",
+        "ar": "في أي تاريخ وُلد ابن أخي؟",
+        "hi": "मेरा भतीजा किस तारीख़ को पैदा हुआ था?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "nephew bday when",
+        "de": "neffe geburtstg wann",
+        "es": "cumple de mi sobrino cuando",
+        "ar": "عيد ميلاد ابن اخوي متى",
+        "hi": "भतीजे का बर्थडे कब"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "I'm terrible with family dates and I've already missed one birthday this year, so I'm putting all of them into my calendar tonight. When does my nephew have his birthday?",
+        "de": "Ich bin schlecht mit Familiendaten und habe dieses Jahr schon einen Geburtstag verpasst, also trage ich heute Abend alle in meinen Kalender ein. Wann hat mein Neffe Geburtstag?",
+        "es": "Soy malísimo con las fechas familiares y este año ya se me pasó un cumpleaños, así que esta noche las voy a meter todas en el calendario. ¿Cuándo es el cumpleaños de mi sobrino?",
+        "ar": "أنا سيئ في تذكر مواعيد العائلة وفاتني عيد ميلاد هذا العام، لذا سأضيفها كلها إلى تقويمي الليلة. متى عيد ميلاد ابن أخي؟",
+        "hi": "मुझे परिवार की तारीख़ें याद नहीं रहतीं और इस साल एक जन्मदिन पहले ही छूट गया, इसलिए आज रात सब कैलेंडर में डाल रहा हूँ। मेरे भतीजे का जन्मदिन कब है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Remind me a week before my nephew's birthday.",
+        "de": "Erinnere mich eine Woche vor dem Geburtstag meines Neffen.",
+        "es": "Recuérdame una semana antes del cumpleaños de mi sobrino.",
+        "ar": "ذكّرني قبل عيد ميلاد ابن أخي بأسبوع.",
+        "hi": "भतीजे के जन्मदिन से एक हफ़्ता पहले मुझे याद दिलाना।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not my niece's birthday, my nephew's: when is it?",
+        "de": "Nicht der Geburtstag meiner Nichte, der meines Neffen: wann ist er?",
+        "es": "No el cumpleaños de mi sobrina, el de mi sobrino: ¿cuándo es?",
+        "ar": "ليس عيد ميلاد ابنة أختي، بل ابن أخي: متى هو؟",
+        "hi": "भांजी का नहीं, भतीजे का जन्मदिन: वह कब है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "I think I told you my nephew's birthday once. When is it?",
+        "de": "Ich glaube, ich habe dir mal den Geburtstag meines Neffen gesagt. Wann ist er?",
+        "es": "Creo que una vez te dije el cumpleaños de mi sobrino. ¿Cuándo es?",
+        "ar": "أظن أنني أخبرتك مرة بعيد ميلاد ابن أخي. متى هو؟",
+        "hi": "मुझे लगता है मैंने एक बार भतीजे का जन्मदिन बताया था। वह कब है?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Nephew's birthday?",
+        "de": "Geburtstag Neffe?",
+        "es": "¿Cumpleaños de mi sobrino?",
+        "ar": "عيد ميلاد ابن أخي؟",
+        "hi": "भतीजे का जन्मदिन?"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Tell me my nephew's birthday.",
+        "de": "Sag mir den Geburtstag meines Neffen.",
+        "es": "Dime el cumpleaños de mi sobrino.",
+        "ar": "أخبرني بعيد ميلاد ابن أخي.",
+        "hi": "मुझे भतीजे का जन्मदिन बताओ।"
+       }
+      }
+     ],
+     "expect": {
+      "abstain": true,
+      "answer": {
+       "abstain": true,
+       "absent": [
+        {
+         "re": "\\b3\\b|\\bmarch|\\bmärz|\\bmarzo|مارس|मार्च"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "abstain-fresh-it-berlin-wifi",
+   "domain": "it_support",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -14,
+     "at": "10:15",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The Berlin office guest Wi-Fi network is called BER-Guest.",
+        "de": "Das Gast-WLAN im Berliner Büro heißt BER-Guest.",
+        "es": "La red wifi de invitados de la oficina de Berlín se llama BER-Guest.",
+        "ar": "شبكة الواي فاي للضيوف في مكتب برلين اسمها BER-Guest.",
+        "hi": "बर्लिन ऑफ़िस के गेस्ट वाई-फ़ाई नेटवर्क का नाम BER-Guest है।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "The Munich guest Wi-Fi password is Alpen#2026 this month.",
+        "de": "Das Münchner Gast-WLAN-Passwort ist diesen Monat Alpen#2026.",
+        "es": "La contraseña del wifi de invitados de Múnich este mes es Alpen#2026.",
+        "ar": "كلمة مرور واي فاي الضيوف في ميونخ هذا الشهر هي Alpen#2026.",
+        "hi": "म्यूनिख गेस्ट वाई-फ़ाई का पासवर्ड इस महीने Alpen#2026 है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "split": "heldout",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the password for the Berlin guest Wi-Fi?",
+        "de": "Wie lautet das Passwort für das Berliner Gast-WLAN?",
+        "es": "¿Cuál es la contraseña del wifi de invitados de Berlín?",
+        "ar": "ما كلمة مرور واي فاي الضيوف في برلين؟",
+        "hi": "बर्लिन गेस्ट वाई-फ़ाई का पासवर्ड क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "A visitor in Berlin can't get on the guest network and needs the password.",
+        "de": "Ein Besucher in Berlin kommt nicht ins Gastnetz und braucht das Passwort.",
+        "es": "Un visitante en Berlín no puede entrar en la red de invitados y necesita la contraseña.",
+        "ar": "زائر في برلين لا يستطيع الدخول إلى شبكة الضيوف ويحتاج كلمة المرور.",
+        "hi": "बर्लिन में एक विज़िटर गेस्ट नेटवर्क पर नहीं जुड़ पा रहा, उसे पासवर्ड चाहिए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "How do guests log in to BER-Guest — what's the key?",
+        "de": "Wie melden sich Gäste bei BER-Guest an — wie lautet der Schlüssel?",
+        "es": "¿Cómo entran los invitados en BER-Guest? ¿Cuál es la clave?",
+        "ar": "كيف يدخل الضيوف إلى BER-Guest؟ ما المفتاح؟",
+        "hi": "मेहमान BER-Guest में कैसे लॉग इन करें — कुंजी क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "berlin guest wifi pasword",
+        "de": "berlin gast wlan paswort",
+        "es": "contrasena wifi invitados berlin",
+        "ar": "باسورد واي فاي ضيوف برلين",
+        "hi": "बर्लिन गेस्ट वाईफाई पासवर्ड"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "We have a client workshop in the Berlin office tomorrow with about a dozen people from outside, and they'll all need to get online during the session, so I'd like to print the guest Wi-Fi password on the agenda. What is it?",
+        "de": "Wir haben morgen im Berliner Büro einen Kundenworkshop mit etwa zwölf Externen, die während der Sitzung alle online müssen, also möchte ich das Gast-WLAN-Passwort auf die Agenda drucken. Wie lautet es?",
+        "es": "Mañana tenemos un taller con clientes en la oficina de Berlín, con una docena de personas de fuera que necesitarán conectarse durante la sesión, así que quiero imprimir la contraseña del wifi de invitados en la agenda. ¿Cuál es?",
+        "ar": "لدينا غدًا ورشة عمل مع عملاء في مكتب برلين بحضور نحو اثني عشر شخصًا من الخارج، وسيحتاجون جميعًا إلى الاتصال بالإنترنت أثناء الجلسة، لذا أريد طباعة كلمة مرور واي فاي الضيوف على جدول الأعمال. ما هي؟",
+        "hi": "कल बर्लिन ऑफ़िस में क्लाइंट वर्कशॉप है, बाहर से लगभग बारह लोग आएँगे और सबको सेशन के दौरान ऑनलाइन होना होगा, इसलिए मैं एजेंडा पर गेस्ट वाई-फ़ाई पासवर्ड छापना चाहता हूँ। वह क्या है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Put the Berlin guest Wi-Fi details on tomorrow's workshop agenda.",
+        "de": "Schreib die Berliner Gast-WLAN-Daten auf die Workshop-Agenda für morgen.",
+        "es": "Pon los datos del wifi de invitados de Berlín en la agenda del taller de mañana.",
+        "ar": "ضع بيانات واي فاي الضيوف في برلين على جدول ورشة الغد.",
+        "hi": "कल की वर्कशॉप के एजेंडा पर बर्लिन गेस्ट वाई-फ़ाई की डिटेल डाल दो।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not Munich's, Berlin's guest Wi-Fi password: what is it?",
+        "de": "Nicht das Münchner, das Berliner Gast-WLAN-Passwort: wie lautet es?",
+        "es": "No la de Múnich, la contraseña del wifi de invitados de Berlín: ¿cuál es?",
+        "ar": "ليست كلمة مرور ميونخ، بل كلمة مرور واي فاي الضيوف في برلين: ما هي؟",
+        "hi": "म्यूनिख का नहीं, बर्लिन गेस्ट वाई-फ़ाई का पासवर्ड: वह क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Did I give you the Berlin guest Wi-Fi password at some point? What was it?",
+        "de": "Habe ich dir irgendwann das Berliner Gast-WLAN-Passwort gegeben? Wie lautete es?",
+        "es": "¿Te di en algún momento la contraseña del wifi de invitados de Berlín? ¿Cuál era?",
+        "ar": "هل أعطيتك في وقت ما كلمة مرور واي فاي الضيوف في برلين؟ ما كانت؟",
+        "hi": "क्या मैंने कभी बर्लिन गेस्ट वाई-फ़ाई का पासवर्ड दिया था? वह क्या था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "BER-Guest password?",
+        "de": "BER-Guest Passwort?",
+        "es": "¿Contraseña BER-Guest?",
+        "ar": "كلمة مرور BER-Guest؟",
+        "hi": "BER-Guest पासवर्ड?"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Send me the Berlin guest Wi-Fi password.",
+        "de": "Schick mir das Berliner Gast-WLAN-Passwort.",
+        "es": "Envíame la contraseña del wifi de invitados de Berlín.",
+        "ar": "أرسل لي كلمة مرور واي فاي الضيوف في برلين.",
+        "hi": "मुझे बर्लिन गेस्ट वाई-फ़ाई का पासवर्ड भेजो।"
+       }
+      }
+     ],
+     "expect": {
+      "abstain": true,
+      "answer": {
+       "abstain": true,
+       "absent": [
+        "Alpen#2026"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "abstain-fresh-finance-audit-fee",
+   "domain": "finance_hr",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -18,
+     "at": "14:00",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "Northwind did our Q3 audit; their report came in on 12 October.",
+        "de": "Northwind hat unser Q3-Audit gemacht; der Bericht kam am 12. Oktober.",
+        "es": "Northwind hizo nuestra auditoría del T3; su informe llegó el 12 de octubre.",
+        "ar": "أجرت Northwind تدقيق الربع الثالث لدينا؛ وصل تقريرها في 12 أكتوبر.",
+        "hi": "Northwind ने हमारा Q3 ऑडिट किया; उनकी रिपोर्ट 12 अक्टूबर को आई।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "The Q2 audit by Brightline cost €18,000.",
+        "de": "Das Q2-Audit von Brightline hat 18.000 € gekostet.",
+        "es": "La auditoría del T2 de Brightline costó 18.000 €.",
+        "ar": "كلّف تدقيق الربع الثاني من Brightline مبلغ 18,000 يورو.",
+        "hi": "Brightline के Q2 ऑडिट की लागत €18,000 थी।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "split": "heldout",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "How much did we pay Northwind for the Q3 audit?",
+        "de": "Wie viel haben wir Northwind für das Q3-Audit bezahlt?",
+        "es": "¿Cuánto le pagamos a Northwind por la auditoría del T3?",
+        "ar": "كم دفعنا لـ Northwind مقابل تدقيق الربع الثالث؟",
+        "hi": "Q3 ऑडिट के लिए हमने Northwind को कितना भुगतान किया?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "I'm reconciling audit costs and need Northwind's Q3 fee.",
+        "de": "Ich gleiche die Prüfungskosten ab und brauche das Q3-Honorar von Northwind.",
+        "es": "Estoy cuadrando los costes de auditoría y necesito la tarifa de Northwind del T3.",
+        "ar": "أطابق تكاليف التدقيق وأحتاج أتعاب Northwind عن الربع الثالث.",
+        "hi": "मैं ऑडिट लागतों का मिलान कर रहा हूँ और मुझे Northwind की Q3 फ़ीस चाहिए।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "What did Northwind charge us for auditing Q3?",
+        "de": "Was hat Northwind uns für die Prüfung von Q3 berechnet?",
+        "es": "¿Cuánto nos cobró Northwind por auditar el T3?",
+        "ar": "كم تقاضت منا Northwind لتدقيق الربع الثالث؟",
+        "hi": "Q3 के ऑडिट के लिए Northwind ने हमसे कितना लिया?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "northwnd q3 audit fee",
+        "de": "northwind q3 prüfung kostn",
+        "es": "honorario northwind auditoria t3",
+        "ar": "رسوم تدقيق نورثويند الربع ٣",
+        "hi": "नॉर्थविंड Q3 ऑडिट फीस"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The CFO wants a side-by-side of what each audit firm has cost us this year before we pick one for next year, and I already have the Q2 figure, so I just need the amount we paid Northwind for the Q3 audit.",
+        "de": "Der CFO will vor der Auswahl für nächstes Jahr eine Gegenüberstellung, was jede Prüfungsgesellschaft uns dieses Jahr gekostet hat. Die Q2-Zahl habe ich schon, ich brauche nur den Betrag, den wir Northwind für das Q3-Audit bezahlt haben.",
+        "es": "El director financiero quiere comparar lo que nos ha costado cada firma de auditoría este año antes de elegir una para el próximo, y ya tengo la cifra del T2, así que solo necesito lo que le pagamos a Northwind por la auditoría del T3.",
+        "ar": "يريد المدير المالي مقارنة ما كلفتنا إياه كل شركة تدقيق هذا العام قبل أن نختار واحدة للعام القادم، ولدي رقم الربع الثاني بالفعل، لذا أحتاج فقط المبلغ الذي دفعناه لـ Northwind عن تدقيق الربع الثالث.",
+        "hi": "CFO अगले साल के लिए फ़र्म चुनने से पहले देखना चाहते हैं कि इस साल हर ऑडिट फ़र्म पर कितना खर्च हुआ, Q2 का आंकड़ा मेरे पास है, बस Northwind को Q3 ऑडिट के लिए दी गई रकम चाहिए।"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Add Northwind's Q3 audit fee to the cost comparison.",
+        "de": "Füg das Q3-Prüfungshonorar von Northwind zum Kostenvergleich hinzu.",
+        "es": "Añade la tarifa de auditoría del T3 de Northwind a la comparación de costes.",
+        "ar": "أضف أتعاب تدقيق Northwind للربع الثالث إلى مقارنة التكاليف.",
+        "hi": "लागत तुलना में Northwind की Q3 ऑडिट फ़ीस जोड़ दो।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not Brightline's Q2 fee, Northwind's for Q3: how much was it?",
+        "de": "Nicht das Q2-Honorar von Brightline, das von Northwind für Q3: wie viel war es?",
+        "es": "No la tarifa de Brightline del T2, la de Northwind del T3: ¿cuánto fue?",
+        "ar": "ليست أتعاب Brightline للربع الثاني، بل أتعاب Northwind للربع الثالث: كم كانت؟",
+        "hi": "Brightline की Q2 फ़ीस नहीं, Northwind की Q3 वाली: वह कितनी थी?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Did I ever tell you what the Northwind audit cost? How much?",
+        "de": "Habe ich dir je gesagt, was das Northwind-Audit gekostet hat? Wie viel?",
+        "es": "¿Te dije alguna vez cuánto costó la auditoría de Northwind? ¿Cuánto?",
+        "ar": "هل أخبرتك يومًا بتكلفة تدقيق Northwind؟ كم؟",
+        "hi": "क्या मैंने कभी बताया था कि Northwind ऑडिट कितने का था? कितना?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Northwind Q3 audit fee?",
+        "de": "Northwind Q3-Prüfungshonorar?",
+        "es": "¿Tarifa auditoría T3 Northwind?",
+        "ar": "أتعاب تدقيق Northwind للربع الثالث؟",
+        "hi": "Northwind Q3 ऑडिट फ़ीस?"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the amount we paid Northwind for Q3.",
+        "de": "Nenn mir den Betrag, den wir Northwind für Q3 bezahlt haben.",
+        "es": "Dime la cantidad que le pagamos a Northwind por el T3.",
+        "ar": "أعطني المبلغ الذي دفعناه لـ Northwind عن الربع الثالث.",
+        "hi": "मुझे बताओ हमने Northwind को Q3 के लिए कितना दिया।"
+       }
+      }
+     ],
+     "expect": {
+      "abstain": true,
+      "answer": {
+       "abstain": true,
+       "absent": [
+        {
+         "re": "18[.,]?000"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "abstain-fresh-field-tracking-number",
+   "domain": "field_service",
+   "sessions": [
+    {
+     "id": "s1",
+     "day": -5,
+     "at": "11:40",
+     "turns": [
+      {
+       "role": "USER",
+       "text": {
+        "en": "The replacement compressor for Site 14 shipped from Lyon on Monday.",
+        "de": "Der Ersatzkompressor für Standort 14 ist am Montag aus Lyon verschickt worden.",
+        "es": "El compresor de repuesto para el Sitio 14 salió de Lyon el lunes.",
+        "ar": "شُحن الضاغط البديل للموقع 14 من ليون يوم الاثنين.",
+        "hi": "साइट 14 का रिप्लेसमेंट कंप्रेसर सोमवार को लियोन से भेजा गया।"
+       }
+      },
+      {
+       "role": "USER",
+       "text": {
+        "en": "The filter kit shipment has tracking number 1Z999AA10123456784.",
+        "de": "Die Filterset-Sendung hat die Sendungsnummer 1Z999AA10123456784.",
+        "es": "El envío del kit de filtros tiene el número de seguimiento 1Z999AA10123456784.",
+        "ar": "شحنة طقم الفلاتر رقم تتبعها 1Z999AA10123456784.",
+        "hi": "फ़िल्टर किट शिपमेंट का ट्रैकिंग नंबर 1Z999AA10123456784 है।"
+       }
+      }
+     ]
+    }
+   ],
+   "queries": [
+    {
+     "id": "q1",
+     "split": "heldout",
+     "phrasings": [
+      {
+       "kind": "direct",
+       "text": {
+        "en": "What's the tracking number for the compressor shipment?",
+        "de": "Wie lautet die Sendungsnummer für den Kompressor?",
+        "es": "¿Cuál es el número de seguimiento del envío del compresor?",
+        "ar": "ما رقم تتبع شحنة الضاغط؟",
+        "hi": "कंप्रेसर शिपमेंट का ट्रैकिंग नंबर क्या है?"
+       }
+      },
+      {
+       "kind": "indirect",
+       "text": {
+        "en": "Site 14 is asking where their compressor is and I want to track the parcel.",
+        "de": "Standort 14 fragt, wo der Kompressor bleibt, und ich will das Paket verfolgen.",
+        "es": "El Sitio 14 pregunta dónde está su compresor y quiero rastrear el paquete.",
+        "ar": "الموقع 14 يسأل أين الضاغط وأريد تتبع الشحنة.",
+        "hi": "साइट 14 पूछ रही है कि कंप्रेसर कहाँ है और मैं पार्सल ट्रैक करना चाहता हूँ।"
+       }
+      },
+      {
+       "kind": "paraphrase",
+       "text": {
+        "en": "Which tracking code did the Lyon compressor parcel get?",
+        "de": "Welche Trackingnummer hat das Kompressorpaket aus Lyon bekommen?",
+        "es": "¿Qué código de seguimiento tiene el paquete del compresor de Lyon?",
+        "ar": "ما رمز التتبع لطرد الضاغط القادم من ليون؟",
+        "hi": "लियोन से आए कंप्रेसर पार्सल का ट्रैकिंग कोड क्या है?"
+       }
+      },
+      {
+       "kind": "typo",
+       "text": {
+        "en": "compresor trackng number site 14",
+        "de": "kompresor sendungsnumer",
+        "es": "numero de seguimento compresor",
+        "ar": "رقم تتبع الضاغظ",
+        "hi": "कंप्रेसर ट्रेकिंग नंबर"
+       }
+      },
+      {
+       "kind": "long_winded",
+       "text": {
+        "en": "The technician at Site 14 has the old compressor half out and is asking whether he should wait or button it back up for the weekend, so I need to check the carrier's site for the replacement's delivery date. What's its tracking number?",
+        "de": "Der Techniker an Standort 14 hat den alten Kompressor halb ausgebaut und fragt, ob er warten oder fürs Wochenende wieder zumachen soll, also muss ich auf der Seite des Versanddienstes das Lieferdatum des Ersatzes prüfen. Wie lautet die Sendungsnummer?",
+        "es": "El técnico del Sitio 14 tiene el compresor viejo medio desmontado y pregunta si espera o lo vuelve a cerrar para el fin de semana, así que tengo que mirar en la web del transportista la fecha de entrega del repuesto. ¿Cuál es su número de seguimiento?",
+        "ar": "الفني في الموقع 14 فكّ نصف الضاغط القديم ويسأل هل ينتظر أم يعيد تركيبه لعطلة نهاية الأسبوع، لذا أحتاج إلى التحقق من موعد تسليم البديل على موقع شركة الشحن. ما رقم تتبعه؟",
+        "hi": "साइट 14 का टेक्नीशियन पुराना कंप्रेसर आधा निकाल चुका है और पूछ रहा है कि इंतज़ार करे या वीकेंड के लिए वापस बंद कर दे, इसलिए मुझे कैरियर की साइट पर रिप्लेसमेंट की डिलीवरी तारीख़ देखनी है। उसका ट्रैकिंग नंबर क्या है?"
+       }
+      },
+      {
+       "kind": "implicit",
+       "text": {
+        "en": "Check when the Site 14 compressor will be delivered.",
+        "de": "Prüf, wann der Kompressor für Standort 14 geliefert wird.",
+        "es": "Mira cuándo se entregará el compresor del Sitio 14.",
+        "ar": "تحقق متى سيُسلَّم ضاغط الموقع 14.",
+        "hi": "देखो साइट 14 का कंप्रेसर कब डिलीवर होगा।"
+       }
+      },
+      {
+       "kind": "negated",
+       "text": {
+        "en": "Not the filter kit's, the compressor's tracking number: what is it?",
+        "de": "Nicht die vom Filterset, die Sendungsnummer des Kompressors: wie lautet sie?",
+        "es": "No el del kit de filtros, el número de seguimiento del compresor: ¿cuál es?",
+        "ar": "ليس رقم تتبع طقم الفلاتر، بل رقم تتبع الضاغط: ما هو؟",
+        "hi": "फ़िल्टर किट का नहीं, कंप्रेसर का ट्रैकिंग नंबर: वह क्या है?"
+       }
+      },
+      {
+       "kind": "later",
+       "text": {
+        "en": "Did I ever pass on the compressor's tracking number? What was it?",
+        "de": "Habe ich dir je die Sendungsnummer des Kompressors gegeben? Wie lautete sie?",
+        "es": "¿Te pasé alguna vez el número de seguimiento del compresor? ¿Cuál era?",
+        "ar": "هل أعطيتك يومًا رقم تتبع الضاغط؟ ما كان؟",
+        "hi": "क्या मैंने कभी कंप्रेसर का ट्रैकिंग नंबर दिया था? वह क्या था?"
+       }
+      },
+      {
+       "kind": "terse",
+       "text": {
+        "en": "Compressor tracking number?",
+        "de": "Sendungsnummer Kompressor?",
+        "es": "¿Seguimiento del compresor?",
+        "ar": "رقم تتبع الضاغط؟",
+        "hi": "कंप्रेसर ट्रैकिंग नंबर?"
+       }
+      },
+      {
+       "kind": "imperative",
+       "text": {
+        "en": "Give me the compressor shipment's tracking number.",
+        "de": "Gib mir die Sendungsnummer der Kompressorlieferung.",
+        "es": "Dame el número de seguimiento del envío del compresor.",
+        "ar": "أعطني رقم تتبع شحنة الضاغط.",
+        "hi": "मुझे कंप्रेसर शिपमेंट का ट्रैकिंग नंबर दो।"
+       }
+      }
+     ],
+     "expect": {
+      "abstain": true,
+      "answer": {
+       "abstain": true,
+       "absent": [
+        "1Z999AA10123456784"
        ]
       }
      }

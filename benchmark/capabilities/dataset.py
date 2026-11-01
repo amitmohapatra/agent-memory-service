@@ -127,6 +127,8 @@ class Query:
     tools: tuple[str, ...] = ()
     #: dev or heldout (assigned at load, ``assign_splits``)
     split: str = "dev"
+    #: a split the data fixes for this query (``"split"`` in the file), out of the alternation
+    pin: str | None = None
 
 
 @dataclass(frozen=True)
@@ -260,6 +262,7 @@ def _scenario(raw: Mapping[str, Any], capability: str) -> Scenario:
                 phrasings=tuple(Phrasing(p["kind"], p["text"]) for p in q["phrasings"]),
                 expect=q.get("expect", {}),
                 tools=tuple(q.get("tools", ())),
+                pin=q.get("split"),
             )
             for q in raw["queries"]
         ),
@@ -333,10 +336,17 @@ def assign_splits(dataset: Dataset) -> None:
     ordered by the hash of their id and alternate dev, held-out, dev, ... - so each half has
     every capability, the assignment never depends on file order, and adding a query moves
     no other query between halves more than its neighbours. The held-out half is never used
-    to tune anything (docs/eval/capabilities.md)."""
+    to tune anything (docs/eval/capabilities.md). A query the data pins to a half (``"split"``:
+    the abstention items a rule was written on are dev, fresh ones held-out) keeps it and is
+    out of the alternation, so it moves no other query."""
     for cap in dataset.capabilities:
         keyed = sorted(
-            ((_rank(f"{s.id}/{q.id}"), s, q) for s in cap.scenarios for q in s.queries),
+            (
+                (_rank(f"{s.id}/{q.id}"), s, q)
+                for s in cap.scenarios
+                for q in s.queries
+                if q.pin is None
+            ),
             key=lambda x: x[0],
         )
         assigned: dict[tuple[str, str], str] = {
@@ -345,7 +355,14 @@ def assign_splits(dataset: Dataset) -> None:
         new_scenarios = []
         for s in cap.scenarios:
             queries = tuple(
-                Query(q.id, q.phrasings, q.expect, q.tools, assigned[(s.id, q.id)])
+                Query(
+                    q.id,
+                    q.phrasings,
+                    q.expect,
+                    q.tools,
+                    q.pin or assigned[(s.id, q.id)],
+                    q.pin,
+                )
                 for q in s.queries
             )
             new_scenarios.append(_replace_queries(s, queries))
@@ -429,7 +446,7 @@ def select(dataset: Dataset, sel: Selection) -> list[Scenario]:
                     continue
                 phrasings = tuple(p for p in q.phrasings if not sel.kinds or p.kind in sel.kinds)
                 if phrasings:
-                    queries.append(Query(q.id, phrasings, q.expect, q.tools, q.split))
+                    queries.append(Query(q.id, phrasings, q.expect, q.tools, q.split, q.pin))
             if queries:
                 out.append(_replace_queries(s, tuple(queries)))
     return out
