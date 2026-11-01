@@ -40,6 +40,7 @@ from memory_service.modules.llm.policy import identity_of
 from memory_service.modules.memory.admission import AdmissionGate
 from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.memory.native import normalized_hash
+from memory_service.modules.memory.referred import referred_turn
 from memory_service.modules.memory.replacement import CrossConversationReplacement
 from memory_service.modules.memory.restatement import restate
 from memory_service.modules.memory.revisions import bump_memory_revisions
@@ -381,7 +382,8 @@ class ObservationPipeline:
         if not await self._to_process(observation):
             return []
         ctx = context_from_observation(observation)
-        preceding = await self._preceding_turn(observation)
+        prior = await self._prior_message(observation)
+        preceding = self._preceding_turn(prior)
         async with self.assist.bound(identity_of(ctx)):
             with (
                 span("memory.process", tenant_id=tenant_id, kind=observation.kind.value),
@@ -401,6 +403,7 @@ class ObservationPipeline:
                         c.model_copy(update={"preceding_turn": preceding}) for c in candidates
                     ]
                 candidates = await self._restated(observation, candidates, preceding)
+                candidates = [*candidates, *referred_turn(observation, candidates, prior)]
                 outcomes: list[ConsolidationOutcome] = []
                 hinted = (
                     observation.hints.memory_type is not None
@@ -642,15 +645,18 @@ class ObservationPipeline:
         first = turns[0]
         return [c.model_copy(update=update) if c is first else c for c in candidates]
 
-    async def _preceding_turn(self, observation: Observation) -> dict[str, str] | None:
-        """The conversation's previous message, which the indexer puts beside a verbatim turn
-        and retrieval uses to find a turn's neighbours (``index_preceding_turn``)."""
+    async def _prior_message(self, observation: Observation) -> Observation | None:
+        """The conversation's previous message (``index_preceding_turn``), if any."""
         if not self.cfg.index_preceding_turn or observation.kind is not ObservationKind.MESSAGE:
             return None
         async with self.uow_factory() as uow:
-            prior = await uow.observations.preceding_message(
+            return await uow.observations.preceding_message(
                 observation, within=self.cfg.preceding_turn_window
             )
+
+    def _preceding_turn(self, prior: Observation | None) -> dict[str, str] | None:
+        """The conversation's previous message, which the indexer puts beside a verbatim turn
+        and retrieval uses to find a turn's neighbours (``index_preceding_turn``)."""
         if prior is None:
             return None
         return {
