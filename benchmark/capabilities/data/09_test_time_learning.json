@@ -1525,6 +1525,17 @@
       "answer": {
        "contains": [
         "Entra"
+       ],
+       "absent": [
+        {
+         "text": "Helpdesk Tool",
+         "unless": [
+          "Entra",
+          {
+           "re": "\\b(retired|no longer|don't|do not|not|instead|old)\\b|n't"
+          }
+         ]
+        }
        ]
       }
      }

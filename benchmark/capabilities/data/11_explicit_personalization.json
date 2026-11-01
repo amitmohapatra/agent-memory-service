@@ -1301,7 +1301,8 @@
           }
          ]
         }
-       ]
+       ],
+       "contains": []
       }
      }
     }
@@ -1814,6 +1815,9 @@
          "unless": [
           {
            "re": "\\b(not|never|cannot|avoid|outside|except|exclud\\w*|skip\\w*|omit\\w*|without|no)\\b|n't"
+          },
+          {
+           "re": "\\b(conflict\\w*|rule\\w*|ruled out)\\b"
           }
          ]
         },
@@ -1822,6 +1826,9 @@
          "unless": [
           {
            "re": "\\b(not|never|cannot|avoid|outside|except|exclud\\w*|skip\\w*|omit\\w*|without|no)\\b|n't"
+          },
+          {
+           "re": "\\b(conflict\\w*|rule\\w*|ruled out)\\b"
           }
          ]
         }
