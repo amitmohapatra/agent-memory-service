@@ -278,17 +278,6 @@ class SqlWorkspaceRepository:
     async def ever_existed(self, tenant_id: str, workspace_id: str) -> bool:
         return await self.s.get(WorkspaceRow, (tenant_id, workspace_id)) is not None
 
-    async def memberships_of(self, tenant_id: str, principal: str) -> list[str]:
-        stmt = (
-            select(WorkspaceMemberRow.workspace_id)
-            .where(
-                WorkspaceMemberRow.tenant_id == tenant_id,
-                WorkspaceMemberRow.principal == principal,
-            )
-            .order_by(WorkspaceMemberRow.workspace_id)
-        )
-        return list((await self.s.scalars(stmt)).all())
-
     async def put_member(self, member: WorkspaceMember) -> MemberRole | None:
         previous = await self.s.scalar(
             select(WorkspaceMemberRow.role).where(

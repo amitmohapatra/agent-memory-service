@@ -185,6 +185,12 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **Dead code: `WorkspaceRepository.memberships_of` and its index are gone** (service;
+  migration `0032_drop_memberships_index`). Nothing called it: every membership read names its
+  workspace, which the primary key serves. `ix_workspace_members_principal` was its only use,
+  a write on every membership change; the downgrade puts it back. A unit test now fails when a
+  port method has no caller (`test_every_port_method_has_a_caller`); the seven it still finds
+  are listed for a decision (`UNCALLED_PORT_METHODS`), never to grow.
 - A follow-up about the previous answer ("where did you get that?", "which steps did you
   take?") has the turn behind it: the messages form of the window (`window_format="messages"`)
   gives whole turns - a USER message with every tool call, result and answer after it - or

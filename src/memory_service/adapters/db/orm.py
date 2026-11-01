@@ -1088,9 +1088,6 @@ class WorkspaceMemberRow(Base):
     added_by: Mapped[str] = mapped_column(String(512), nullable=False)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=_now())
 
-    # memberships_of: which workspaces admitted this principal
-    __table_args__ = (Index("ix_workspace_members_principal", "tenant_id", "principal"),)
-
 
 class ReadAuditRow(Base):
     """Append-only: who read which records. Written in batches off the request path."""
