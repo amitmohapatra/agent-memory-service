@@ -191,6 +191,13 @@ def test_a_header_eats_neither_a_caption_nor_the_first_clause_of_prose() -> None
         ("I'm a staff engineer at ACME.", MemoryType.USER, "role", "staff engineer at acme"),
         ("I prefer concise answers.", MemoryType.PREFERENCE, "prefers", "concise answers"),
         ("I don't like verbose output.", MemoryType.PREFERENCE, "dislikes", "verbose output"),
+        (
+            "I'd rather source eggs from a farm within 100 miles.",
+            MemoryType.PREFERENCE,
+            "prefers",
+            "source eggs",
+        ),
+        ("We would rather pay by invoice.", MemoryType.PREFERENCE, "prefers", "pay by invoice"),
         ("My favourite editor is neovim.", MemoryType.PREFERENCE, "favourite_editor", "neovim"),
         ("Please never use emojis.", MemoryType.PREFERENCE, "rule", "never use emojis"),
         ("We decided to use PostgreSQL.", MemoryType.SEMANTIC, "decided", "use postgresql"),
