@@ -6791,7 +6791,7 @@
                 "type": "null"
               }
             ],
-            "description": "true when a later statement replaced what this says: a memory, the message that said it, or an earlier conversation that holds nothing else of what its speaker said. Use the newer value; observed_on says when each was said.",
+            "description": "true when a later statement replaced or corrected what this says: a memory, the message that said it, an assistant reply the user's next message corrected, or an earlier conversation that holds nothing else of what its speaker said. Use the newer value; observed_on says when each was said.",
             "title": "Superseded"
           },
           "text": {

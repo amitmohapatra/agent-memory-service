@@ -32,6 +32,11 @@ each entry says which one moved. Decisions behind each change are in the
   tool calls (Granite 3.3's) still shows what was done. The newest turn's question, answer and
   steps list are always given (`over_budget` when they alone are over it). No new field: the
   messages are the turns' own, the record is in `rendered`.
+- **A search marks the assistant's reply that the user corrected next** (ADR 0038, extended;
+  service). "Torque the PX-400 flange bolts to 40 Nm." then "That's wrong - 55 Nm": the
+  correction reached later conversations, but a search of what was said served the wrong
+  reply unmarked beside it. A reply whose next message is a user turn the statement labeller
+  read as a `CORRECTION` now comes back `superseded: true`.
 - **A search marks the messages and conversations that said a replaced value** (ADR 0038,
   extended; service). A replaced memory already came back `superseded: true`; the message
   that said it and an earlier conversation (episode) holding nothing else of what its speaker

@@ -20,7 +20,7 @@ from memory_service.domain.documents import (
     DocumentNode,
     DocumentVersion,
 )
-from memory_service.domain.enums import ContextGraphEdge, TemporalStatus
+from memory_service.domain.enums import ContextGraphEdge, StatementKind, TemporalStatus
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.observation import Observation
 from memory_service.domain.revisions import RevisionKind
@@ -405,12 +405,19 @@ class MemoryRepository(Protocol):
         ...
 
     async def verbatim_turns(
-        self, tenant_id: str, thread_ids: Sequence[str], *, replaced: bool
+        self,
+        tenant_id: str,
+        thread_ids: Sequence[str],
+        *,
+        replaced: bool | None = None,
+        kind: StatementKind | None = None,
     ) -> list[CanonicalMemory]:
-        """The live (not forgotten) verbatim turns of ``thread_ids``: those a later statement
-        replaced (``system_metadata["replaced_by"]``, either grade) when ``replaced``, else
-        the others. What tells a search whether a message, or a whole earlier conversation,
-        says only what was since replaced (ADR 0038). An indexed range (tenant, thread)."""
+        """The live (not forgotten) verbatim turns of ``thread_ids``: with ``replaced``, those a
+        later statement replaced (``system_metadata["replaced_by"]``, either grade), or
+        without it the others; with ``kind``, those the statement labeller read as that kind
+        (ADR 0037). What tells a search whether a message, or a whole earlier conversation,
+        says only what was since replaced or corrected (ADR 0038). An indexed range (tenant,
+        thread)."""
         ...
 
     async def get(self, tenant_id: str, memory_id: str) -> CanonicalMemory | None: ...
