@@ -35,7 +35,6 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import EarlierChatLine
 from memory_service.domain.conversation import Message
 from memory_service.domain.enums import (
-    MemoryType,
     MessageKind,
     MessageRole,
     QueryType,
@@ -43,6 +42,7 @@ from memory_service.domain.enums import (
     TemporalStatus,
 )
 from memory_service.domain.memory import CanonicalMemory, statement_kind_of
+from memory_service.domain.profile import PROFILE_MEMORY_TYPES
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.replacement import anchors, relate
@@ -73,8 +73,6 @@ OWNED_WORDS: Final = 16
 _WORD: Final = re.compile(r"\w+")
 #: The kinds that carry what was said as said: marked when a later statement replaced it.
 _SAID: Final = frozenset({"message", "episode"})
-#: what the user says of themselves, kept for the user rather than the conversation
-_PROFILE_KINDS: Final = (MemoryType.USER, MemoryType.PREFERENCE)
 #: the user's newest profile memories read to tell a superseded value, and a conversation's
 #: first messages read to tell whether it said anything else
 _PROFILE_READ: Final = 200
@@ -238,7 +236,7 @@ def _said_in(turns: Sequence[CanonicalMemory]) -> set[str]:
 async def _profile_values_moved_on(uow: UnitOfWork, tenant_id: str, user_id: str) -> set[str]:
     """The messages that said a profile value of the user a later one superseded, less those
     that also said one still current."""
-    kinds = [t.value for t in _PROFILE_KINDS]
+    kinds = [t.value for t in PROFILE_MEMORY_TYPES]
     gone = await uow.memories.about_user(
         tenant_id,
         user_id,

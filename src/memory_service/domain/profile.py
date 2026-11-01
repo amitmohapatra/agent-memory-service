@@ -21,6 +21,7 @@ from typing import Any, Final, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from memory_service.domain.context import MemoryExecutionContext
+from memory_service.domain.enums import MemoryType
 from memory_service.domain.errors import ValidationFailed
 
 #: A block's text is bounded: it is in every pushed context.
@@ -29,6 +30,9 @@ PROFILE_BLOCK_MAX_CHARS: Final = 4000
 BLOCK_NAME = re.compile(r"^(user|agent|workspace)(\.[a-z0-9][a-z0-9_-]{0,39})?$")
 #: The block the profile job maintains from USER and PREFERENCE memories.
 USER_BLOCK: Final = "user"
+#: The memory kinds the ``user`` block is kept from (``profile.refresh``): what the user says
+#: of themselves, pinned into every context of theirs.
+PROFILE_MEMORY_TYPES: Final = (MemoryType.USER, MemoryType.PREFERENCE)
 SOURCE_QUERY_MAX_CHARS: Final = 1000
 
 BlockSource = Literal["learned", "edited"]
