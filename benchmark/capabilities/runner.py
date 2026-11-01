@@ -52,6 +52,7 @@ from benchmark.capabilities.dataset import (
     ALL_LANGUAGES,
     Case,
     Dataset,
+    Query,
     Scenario,
     Selection,
     cases,
@@ -589,6 +590,14 @@ def _expect(w: Written, case: Case) -> Mapping[str, Any]:
     return w.expects.get(case.query.id, case.query.expect)
 
 
+def pulled(query: Query, expect: Mapping[str, Any]) -> bool:
+    """Whether the agent's pull (search) is scored: an unknowable question has no abstention
+    signal there (``scorable``), and a learned tool procedure - a query that names its tools -
+    is no search kind: the pull returns memories, episodes and messages, the procedure reaches
+    the agent as the pushed context's skills, where it is scored."""
+    return scorable(expect, "search") and not query.tools
+
+
 async def ask(service: Service, w: Written, case: Case, settings: Settings) -> list[Asked]:
     out: list[Asked] = []
     expect = _expect(w, case)
@@ -636,7 +645,7 @@ async def ask(service: Service, w: Written, case: Case, settings: Settings) -> l
         if (
             "search" in settings.surfaces
             and placement == "new_session"
-            and scorable(expect, "search")
+            and pulled(case.query, expect)
         ):
             t = _now()
             found = await ctx.search(

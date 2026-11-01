@@ -1241,7 +1241,32 @@
          }
         ]
        }
-      ]
+      ],
+      "answer": {
+       "absent": [
+        {
+         "text": {
+          "en": "a third of the way",
+          "de": "ein Drittel",
+          "es": "un tercio",
+          "ar": "ثلثها",
+          "hi": "एक तिहाई"
+         },
+         "unless": [
+          {
+           "en": "finished",
+           "de": "zu Ende",
+           "es": "terminé",
+           "ar": "أنهيت",
+           "hi": "ख़त्म"
+          },
+          {
+           "re": "\\b(not|never|don't|do not|confuse\\w*|earlier|previous\\w*|replaced|superseded|instead|former)\\b|n't"
+          }
+         ]
+        }
+       ]
+      }
      }
     }
    ]
@@ -1419,7 +1444,47 @@
          }
         ]
        }
-      ]
+      ],
+      "answer": {
+       "contains": [
+        [
+         {
+          "en": "resolved",
+          "de": "gelöst",
+          "es": "resuelta",
+          "ar": "حُلّت",
+          "hi": "INC-5521 हल"
+         },
+         {
+          "en": "restored",
+          "de": "wiederhergestellt",
+          "es": "restablecid",
+          "ar": "استُعيد",
+          "hi": "बहाल"
+         }
+        ]
+       ],
+       "absent": [
+        {
+         "text": {
+          "en": "engineers investigating",
+          "de": "Techniker untersuchen",
+          "es": "los técnicos investigan",
+          "ar": "المهندسون يحققون",
+          "hi": "इंजीनियर जाँच कर रहे हैं"
+         },
+         "unless": [
+          {
+           "en": "resolved",
+           "de": "gelöst",
+           "es": "resuelta",
+           "ar": "حُلّت",
+           "hi": "INC-5521 हल"
+          }
+         ]
+        }
+       ]
+      }
      }
     }
    ]
@@ -1597,7 +1662,47 @@
          }
         ]
        }
-      ]
+      ],
+      "answer": {
+       "contains": [
+        [
+         {
+          "en": "is back",
+          "de": "zurück",
+          "es": "ha vuelto",
+          "ar": "عادت",
+          "hi": "लौट आई"
+         },
+         {
+          "en": "returned",
+          "de": "zurückgekehrt",
+          "es": "regresó",
+          "ar": "عادت",
+          "hi": "लौट"
+         }
+        ]
+       ],
+       "absent": [
+        {
+         "text": {
+          "en": "until further notice",
+          "de": "bis auf Weiteres",
+          "es": "hasta nuevo aviso",
+          "ar": "حتى إشعار آخر",
+          "hi": "अगली सूचना तक"
+         },
+         "unless": [
+          {
+           "en": "is back",
+           "de": "zurück",
+           "es": "ha vuelto",
+           "ar": "عادت",
+           "hi": "लौट आई"
+          }
+         ]
+        }
+       ]
+      }
      }
     }
    ]

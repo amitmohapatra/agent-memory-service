@@ -212,7 +212,21 @@
         "FZ-2"
        ],
        "absent": [
-        "TRU-7"
+        {
+         "text": "TRU-7",
+         "unless": [
+          {
+           "en": "dismantled",
+           "de": "abgebaut",
+           "es": "desmontado",
+           "ar": "تفكيك",
+           "hi": "हटा दिया"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
+          }
+         ]
+        }
        ]
       }
      }
@@ -411,7 +425,21 @@
         "NEW-21"
        ],
        "absent": [
-        "OLD-55"
+        {
+         "text": "OLD-55",
+         "unless": [
+          {
+           "en": "discontinued",
+           "de": "eingestellt",
+           "es": "descatalogado",
+           "ar": "متوقف",
+           "hi": "बंद कर दिया"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
+          }
+         ]
+        }
        ]
       }
      }
@@ -609,7 +637,21 @@
         "Back to School Saver"
        ],
        "absent": [
-        "Summer BBQ Bonanza"
+        {
+         "text": "Summer BBQ Bonanza",
+         "unless": [
+          {
+           "en": "ended",
+           "de": "beendet",
+           "es": "terminado",
+           "ar": "انتهى",
+           "hi": "ख़त्म"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
+          }
+         ]
+        }
        ]
       }
      }
@@ -808,7 +850,21 @@
         "Mei Tanaka"
        ],
        "absent": [
-        "Jordan Lee"
+        {
+         "text": "Jordan Lee",
+         "unless": [
+          {
+           "en": "ended",
+           "de": "beendet",
+           "es": "terminado",
+           "ar": "انتهت",
+           "hi": "ख़त्म"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
+          }
+         ]
+        }
        ]
       }
      }
@@ -1012,7 +1068,21 @@
         "112"
        ],
        "absent": [
-        "140"
+        {
+         "text": "140",
+         "unless": [
+          {
+           "en": "closed",
+           "de": "geschlossen",
+           "es": "cerrado",
+           "ar": "أُغلق",
+           "hi": "बंद हो गया"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
+          }
+         ]
+        }
        ]
       }
      }
@@ -1210,7 +1280,21 @@
         "L-3307"
        ],
        "absent": [
-        "L-2291"
+        {
+         "text": "L-2291",
+         "unless": [
+          {
+           "en": "closed",
+           "de": "abgeschlossen",
+           "es": "cerrada",
+           "ar": "أُغلق",
+           "hi": "बंद है"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
+          }
+         ]
+        }
        ]
       }
      }
@@ -1407,7 +1491,8 @@
          "ar": "سباحة",
          "hi": "तैराकी"
         }
-       ]
+       ],
+       "absent": []
       }
      }
     }
@@ -1423,7 +1508,7 @@
      "at": "06:00",
      "turns": [],
      "repeat": {
-      "count": 30,
+      "count": 28,
       "every_hours": 24,
       "role": "EVENT",
       "text": {
@@ -1610,7 +1695,21 @@
         "db-03"
        ],
        "absent": [
-        "legacy-db-02"
+        {
+         "text": "legacy-db-02",
+         "unless": [
+          {
+           "en": "decommissioned",
+           "de": "außer Dienst",
+           "es": "dado de baja",
+           "ar": "أُخرج",
+           "hi": "सेवा से हटा"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
+          }
+         ]
+        }
        ]
       }
      }
@@ -1802,7 +1901,17 @@
         "PaperPoint"
        ],
        "absent": [
-        "OfficeHub"
+        {
+         "text": "OfficeHub",
+         "unless": [
+          {
+           "re": "\\b(ended|closed|no longer|former|old)\\b"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
+          }
+         ]
+        }
        ]
       }
      }
@@ -2004,7 +2113,21 @@
         "UPS-4"
        ],
        "absent": [
-        "GEN-T1"
+        {
+         "text": "GEN-T1",
+         "unless": [
+          {
+           "en": "removed",
+           "de": "abgebaut",
+           "es": "retirado",
+           "ar": "أُزيل",
+           "hi": "हटा दिया"
+          },
+          {
+           "re": "\\b(exclud\\w*|not included|not part of|no longer|inactive|left out|superseded)\\b"
+          }
+         ]
+        }
        ]
       }
      }

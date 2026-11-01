@@ -1035,7 +1035,18 @@
       "answer": {
        "abstain": true,
        "absent": [
-        "Tom"
+        {
+         "text": "Tom",
+         "unless": [
+          {
+           "en": "brother",
+           "de": "Bruder",
+           "es": "hermano",
+           "ar": "أخ",
+           "hi": "भाई"
+          }
+         ]
+        }
        ]
       }
      }
@@ -1482,8 +1493,18 @@
       "answer": {
        "abstain": true,
        "absent": [
-        "R-1182",
-        "R-1183"
+        {
+         "text": "R-1182",
+         "unless": [
+          "Riverside"
+         ]
+        },
+        {
+         "text": "R-1183",
+         "unless": [
+          "Riverside"
+         ]
+        }
        ]
       }
      }

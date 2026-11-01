@@ -169,7 +169,15 @@
         "PackagingCorp"
        ],
        "absent": [
-        "Uline"
+        {
+         "text": "Uline",
+         "unless": [
+          "PackagingCorp",
+          {
+           "re": "\\b(ended|moved|from|old|former|retired|read-only|no longer|instead|not|never|left (it )?out|no record)\\b|n't"
+          }
+         ]
+        }
        ]
       }
      }
@@ -1356,6 +1364,17 @@
       "answer": {
        "contains": [
         "Freshservice"
+       ],
+       "absent": [
+        {
+         "text": "Zendesk",
+         "unless": [
+          "Freshservice",
+          {
+           "re": "\\b(ended|moved|from|old|former|retired|read-only|no longer|instead|not|never|left (it )?out|no record)\\b|n't"
+          }
+         ]
+        }
        ]
       }
      }
@@ -1686,6 +1705,18 @@
       "answer": {
        "contains": [
         "Peter Brandt"
+       ],
+       "absent": [
+        {
+         "text": "Ana Silva",
+         "unless": [
+          "Peter Brandt",
+          "van #9",
+          {
+           "re": "\\b(not|never|don't|do not|confuse\\w*|earlier|previous\\w*|replaced|superseded|instead|former)\\b|n't"
+          }
+         ]
+        }
        ]
       }
      }
