@@ -34,7 +34,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import EarlierChatLine
 from memory_service.domain.conversation import Message
-from memory_service.domain.enums import MessageKind, MessageRole, QueryType, StatementKind
+from memory_service.domain.enums import (
+    MemoryType,
+    MessageKind,
+    MessageRole,
+    QueryType,
+    StatementKind,
+    TemporalStatus,
+)
 from memory_service.domain.memory import CanonicalMemory, statement_kind_of
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.llm.assist import LLMAssist
@@ -66,6 +73,12 @@ OWNED_WORDS: Final = 16
 _WORD: Final = re.compile(r"\w+")
 #: The kinds that carry what was said as said: marked when a later statement replaced it.
 _SAID: Final = frozenset({"message", "episode"})
+#: what the user says of themselves, kept for the user rather than the conversation
+_PROFILE_KINDS: Final = (MemoryType.USER, MemoryType.PREFERENCE)
+#: the user's newest profile memories read to tell a superseded value, and a conversation's
+#: first messages read to tell whether it said anything else
+_PROFILE_READ: Final = 200
+_EPISODE_READ: Final = 50
 #: The most of the assistant's earlier answers a pushed context carries for a question that
 #: points to an earlier chat, and the share of the best answer's score one needs to be kept: a
 #: line that shares only the question's commonest words with it is not what was asked about.
@@ -222,6 +235,35 @@ def _said_in(turns: Sequence[CanonicalMemory]) -> set[str]:
     return {e.message_id for m in turns for e in m.evidence if e.message_id}
 
 
+async def _profile_values_moved_on(uow: UnitOfWork, tenant_id: str, user_id: str) -> set[str]:
+    """The messages that said a profile value of the user a later one superseded, less those
+    that also said one still current."""
+    kinds = [t.value for t in _PROFILE_KINDS]
+    gone = await uow.memories.about_user(
+        tenant_id,
+        user_id,
+        memory_types=kinds,
+        limit=_PROFILE_READ,
+        status=TemporalStatus.SUPERSEDED,
+    )
+    moved = _said_in([m for m in gone if m.temporal.superseded_by])
+    if not moved:
+        return moved
+    live = await uow.memories.about_user(
+        tenant_id, user_id, memory_types=kinds, limit=_PROFILE_READ
+    )
+    return moved - _said_in(live)
+
+
+async def _said_only(uow: UnitOfWork, tenant_id: str, thread: str, moved: set[str]) -> bool:
+    """Every message the user said in ``thread`` is one of ``moved``."""
+    messages = await uow.messages.list_after(
+        tenant_id, thread, after_sequence=0, limit=_EPISODE_READ
+    )
+    users = [m.message_id for m in messages if m.role is MessageRole.USER]
+    return bool(users) and all(m in moved for m in users)
+
+
 def _replaced_items(
     replaced: Sequence[CanonicalMemory], live: Sequence[CanonicalMemory]
 ) -> set[str]:
@@ -353,7 +395,32 @@ class Searcher:
         async with self.uow_factory() as uow:
             stale = await self._replaced(uow, ctx.tenant_id, threads)
             stale |= await self._corrected(uow, ctx.tenant_id, shown)
+            stale |= await self._moved_on(uow, ctx, [i for i in items if i.id not in stale])
         return [i.model_copy(update={"superseded": True}) if i.id in stale else i for i in items]
+
+    @staticmethod
+    async def _moved_on(
+        uow: UnitOfWork, ctx: MemoryExecutionContext, items: list[SearchItem]
+    ) -> set[str]:
+        """The messages, and the conversations, that said only a value of the user's profile
+        a later one superseded ("I live in Seattle", then "I moved to Austin"). Such a
+        statement is kept for the user, not the conversation, and no turn of it verbatim, so
+        the threads' turns cannot tell (``_replaced``). Two indexed reads of the user's profile
+        memories, a third of the threads' live turns and one per conversation shown, only when
+        a superseded value is found."""
+        said = [i for i in items if i.kind in _SAID and i.thread_id]
+        if not said or not ctx.user_id:
+            return set()
+        moved = await _profile_values_moved_on(uow, ctx.tenant_id, ctx.user_id)
+        if not moved:
+            return set()
+        threads = sorted({str(i.thread_id) for i in said})
+        moved -= _said_in(await uow.memories.verbatim_turns(ctx.tenant_id, threads, replaced=False))
+        out = {i.id for i in said if i.kind == "message" and i.id in moved}
+        for thread in sorted({str(i.thread_id) for i in said if i.kind == "episode"}):
+            if await _said_only(uow, ctx.tenant_id, thread, moved):
+                out.add(episode_id(thread))
+        return out
 
     @staticmethod
     async def _replaced(uow: UnitOfWork, tenant_id: str, threads: list[str]) -> set[str]:
