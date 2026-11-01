@@ -39,7 +39,7 @@ from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import identity_of
 from memory_service.modules.memory.admission import AdmissionGate
 from memory_service.modules.memory.ephemeral import EphemeralMemory
-from memory_service.modules.memory.native import normalized_hash
+from memory_service.modules.memory.native import follows_user, normalized_hash
 from memory_service.modules.memory.referred import referred_turn
 from memory_service.modules.memory.replacement import CrossConversationReplacement
 from memory_service.modules.memory.restatement import restate
@@ -67,6 +67,11 @@ log = get_logger(__name__)
 TASK_MEMORY_EXPIRE = "memory.expire"
 
 SHORT_TERM_TTL = timedelta(days=7)
+
+#: Observations whose statements are compared with the user's earlier ones (ADR 0038): a
+#: message, and an event recorded for the user (ADR 0043). A decision, feedback, a file or an
+#: import is not.
+_REPLACING_KINDS = frozenset({ObservationKind.MESSAGE, ObservationKind.EVENT})
 
 
 def context_from_observation(o: Observation) -> MemoryExecutionContext:
@@ -457,13 +462,16 @@ class ObservationPipeline:
         since: datetime,
     ) -> set[str]:
         """What the user's new statement replaces among their statements in any of their
-        conversations (ADR 0038): the ids marked or superseded, for the index job."""
+        conversations (ADR 0038): the ids marked or superseded, for the index job. An event
+        that follows its user (ADR 0043) replaces and is replaced like a statement: a later
+        "van #7 has been reassigned" would otherwise stay current beside the earlier value
+        in every conversation of theirs."""
         if (
             self.replacement is None
             or not self.replacement.enabled
             or not affected
-            or observation.kind is not ObservationKind.MESSAGE
-            or observation.agent_authored
+            or observation.kind not in _REPLACING_KINDS
+            or not follows_user(observation)
         ):
             return set()
         touched = await uow.memories.get_many(ctx.tenant_id, sorted(affected))

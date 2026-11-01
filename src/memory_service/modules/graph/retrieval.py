@@ -118,6 +118,25 @@ def fact_candidate(r: Relation, names: dict[str, str]) -> Candidate:
     )
 
 
+def _without_replaced_facts(candidates: list[Candidate]) -> list[Candidate]:
+    """No fact read from a memory that is an earlier value among the candidates (ADR 0038):
+    "PO-88120 has shipped" replaced by "PO-88120 was delivered" went to the history, while
+    the relation read from it ("po-88120 has shipped") was still served as a current fact.
+    The memory itself still answers a question about what was. A twin collapsed into it
+    (``duplicates``: the same statement read as a fact) is replaced with it."""
+    replaced = {
+        record_id
+        for c in candidates
+        if c.kind == "memory" and c.payload.get("earlier_value")
+        for record_id in (c.record_id, *c.payload.get("duplicates", ()))
+    }
+    if not replaced:
+        return candidates
+    return [
+        c for c in candidates if not (c.kind == "fact" and c.payload.get("memory_id") in replaced)
+    ]
+
+
 class GraphStage:
     name = "graph"
 
@@ -292,6 +311,7 @@ class GraphStage:
                 )
                 candidates[first_fact:first_fact] = added
                 diagnostics["graph"]["expansion_memories"] = len(added)
+            candidates = _without_replaced_facts(candidates)
         return candidates
 
     async def _expand_memories(

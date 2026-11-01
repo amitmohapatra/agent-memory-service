@@ -1,7 +1,11 @@
 # ADR 0036: What a user says follows that user, in the words they said it
 
-Date: 2026-10-08. Status: accepted. Amends ADR 0005 (default audiences) and ADR 0013 (an agent's
-working notes).
+Date: 2026-10-08. Status: accepted; amended by ADR 0043. Amends ADR 0005 (default audiences) and
+ADR 0013 (an agent's working notes).
+
+> **Amended (2026-10-31, ADR 0043):** an `EVENT` that names a user is no longer among the
+> observations that "keep their defaults" in decision 1: it follows that user as their own
+> words do. `IMPORT` and `FILE` keep theirs, and so does an event with no user.
 
 ## Context
 

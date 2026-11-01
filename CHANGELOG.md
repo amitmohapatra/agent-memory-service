@@ -8,6 +8,20 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Changed
+- **A user's events follow the user** (ADR 0043; service). A `role: "EVENT"` message (or an
+  `EVENT` observation) that names a user, recorded by them or by an agent acting for them, is
+  `USER` by default like their own words (ADR 0036): read in all their conversations and by the
+  agents acting for them, never by another person or by the same agent acting for someone else.
+  It also replaces, and is replaced by, their statements in other conversations (ADR 0038). An
+  event with no user, explicit `THREAD`, `IMPORT` and `FILE` are unchanged; stored rows keep
+  their audience. No API change.
+- **No graph fact read from an earlier value is served as current** (ADR 0043; service). A
+  replaced statement or event went to the context's history section, but the relation read
+  from it ("po-88120 has shipped") was still served among the current graph facts.
+- **An earlier value is not compared again** (ADR 0043; service). Cross-conversation
+  replacement compared a new statement with earlier values already replaced by another one;
+  a stream of readings about one thing made that quadratic in NLI work. Only the user's
+  statements no other one has replaced are compared, as superseded ones already were not.
 - **The steps list says when each value was fetched, and grades its evidence.** A tool
   result's `custom_metadata.run_record` may also carry `fetched` (when the call returned, ISO
   8601 UTC) and `max_age` (the seconds its value stays current); the steps list shows the

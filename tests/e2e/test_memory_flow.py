@@ -56,9 +56,9 @@ def test_messages_and_events_become_memories(client) -> None:
     tz = by_pred["timezone"]
     assert tz["memory_type"] == "USER" and tz["visibility"] == "USER"
     assert tz["temporal_status"] == "CURRENT" and tz["evidence"][0]["source_type"] == "message"
+    # an event recorded for the user follows the user, as their own words do (ADR 0043)
     assert (
-        by_pred["decided"]["visibility"] == "THREAD"
-        and by_pred["decided"]["category"] == "decision"
+        by_pred["decided"]["visibility"] == "USER" and by_pred["decided"]["category"] == "decision"
     )
     one = client.get(f"/v1/memories/{tz['memory_id']}", headers=H)
     assert one.status_code == 200 and one.json()["object"] == "europe/berlin"
