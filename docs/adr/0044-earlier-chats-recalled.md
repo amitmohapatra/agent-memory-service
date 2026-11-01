@@ -80,8 +80,18 @@ remembered.
 
 ## Consequences
 
-* Measured: the numbers are in the pull request that carries this ADR (the capability eval
-  before and after, the break-and-fix cross-chat cases with Haiku, and context tokens per turn).
+* Measured (private stack, the pull request that carries this ADR has the tables):
+  * the capability eval, nollm, English, `direct` and `later` phrasings, context in a new and the
+    same session and search: every cell as on main (its `later` questions ask for what the user
+    said, which the user's memories already carry);
+  * the break-and-fix rounds with Haiku through the harness (`ReAct`, memory history): the
+    turns asked in another chat 29 → 30 of 36 correct, `memory_search` calls 13 → 6; the
+    held-out `bfh-mixed-01` correct on both, with 2.33 → 1.67 model calls and about 12,700 →
+    8,300 input tokens for its cross-chat turn, the same in each of three repeats;
+  * context tokens per turn, the prompt form over six earlier chats: 20 questions that do not
+    point back, the same text and the same estimate on both; 10 that do, 26 → 135 tokens on
+    average, the earlier answer asked about in 9 of the 10. The `memory_search` description
+    is four words longer: 5 input tokens on every request that offers the memory tools.
 * A question that does not point to an earlier chat reads nothing more and its context is the
   same size: the cue is a regular expression over the question, checked before any read.
 * A question that does reads one more indexed read beside the retrieval (the message search's
