@@ -277,3 +277,18 @@ async def test_a_weekday_keeps_the_library_s_reading(text: str, said: str, kept:
         found = await _extract(_native(gateway), text, model_first=True)
     turn = next(c for c in found if c.category == "verbatim_turn")
     assert turn.dated_mentions == kept
+
+
+async def test_a_sentence_the_rules_read_adds_nothing_to_the_turn_s_key() -> None:
+    """One reading of a statement: the rules' where they read it ("Remind me ..." is a task),
+    the model's facts only for the sentences they did not."""
+    text = "Remind me to water the plants on Thursday. My sister moved to Lisbon."
+    reply = _reply(
+        _fact("The user wants a reminder to water the plants on 2023-05-11", kind="task"),
+        _fact("The user's sister moved to Lisbon", cited=(1,)),
+    )
+    with mocked_gateway([reply]) as gateway:
+        found = await _extract(_native(gateway), text, model_first=True)
+    assert [c.category for c in found if c.category == "task"] == ["task"]
+    turn = next(c for c in found if c.category == "verbatim_turn")
+    assert turn.restatement == "The user's sister moved to Lisbon"

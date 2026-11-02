@@ -499,14 +499,30 @@ def _new_slot(fact: SourceFact, read: dict[int, list[MemoryCandidate]]) -> bool:
     )
 
 
-def _with_reading(reading: Reading, candidates: list[MemoryCandidate]) -> list[MemoryCandidate]:
+def _read(read: dict[int, list[MemoryCandidate]], sentence: int) -> bool:
+    """Whether a rule read the sentence, beyond an event it kept only because it names a time
+    ("yesterday"): the model's fact of such a sentence, its date resolved, is still its key."""
+    return any(c.category != "event" for c in read.get(sentence, ()))
+
+
+def _with_reading(
+    reading: Reading,
+    candidates: list[MemoryCandidate],
+    read: dict[int, list[MemoryCandidate]],
+) -> list[MemoryCandidate]:
     """The model's reading on the observation's memories. Each carries the relative dates its
     own words name, resolved by the model (one mechanism for the whole observation). The turn
-    as said carries the facts, pronouns and dates resolved, appended to the key it is found by
-    (``restatement``, ADR 0027): measured in LongMemEval's study, facts appended to the turn's
-    key raised recall where facts as memories of their own lowered it, and a fact said five
-    ways is then never five memories."""
-    facts = " ".join(f.text for f in reading.facts if not is_single_valued(f.predicate))
+    as said carries the facts of the sentences no rule read, pronouns and dates resolved,
+    appended to the key it is found by (``restatement``, ADR 0027): measured in LongMemEval's
+    study, facts appended to the turn's key raised recall where facts as memories of their own
+    lowered it, and a fact said five ways is then never five memories. A sentence the rules
+    read keeps their reading alone: a rewrite of "Remind me to water the plants on Thursday"
+    on its turn's key cost a standing rule of the same conversation its place."""
+    facts = " ".join(
+        f.text
+        for f in reading.facts
+        if not is_single_valued(f.predicate) and not all(_read(read, i) for i in f.sentences)
+    )
     out: list[MemoryCandidate] = []
     for c in candidates:
         update: dict[str, Any] = {
@@ -833,7 +849,7 @@ class NativeMemoryIntelligence:
             for turn in self._verbatim(text, observation, ctx, evidence)
             if normalized_hash(turn.content) not in held
         )
-        return out if reading is None else _with_reading(reading, out)
+        return out if reading is None else _with_reading(reading, out, read)
 
     async def _read_with_model(
         self, observation: Observation, sentences: list[str]
