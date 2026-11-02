@@ -185,6 +185,12 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **A length of time is no date** (service). "SUP-20's lead time is 32 days, from my call
+  today" was stored with "32 days = 2026-10-01" beside it: with a relative cue in the text
+  ("today"), the relative-time parser read a bare count of a unit as that long ago, and an
+  agent recalling the note called it inconsistent. A count with no direction ("32 days",
+  "3 weeks", "in 2 months") is no longer a dated mention; "3 days ago" and "in two weeks from
+  today" still are.
 - **A later chat recalls the figure an "Approve it" approved** (service). #74 keeps "Approve it
   as my north order for this item." with the answer it refers to ("... (in reply to: ... 19
   units)"), but recall groups every form of one statement and showed the bare turn for it, so
