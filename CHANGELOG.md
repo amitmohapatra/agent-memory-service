@@ -185,6 +185,12 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **A length of time is no date** (service). "SUP-20's lead time is 32 days, from my call
+  today" was stored with "32 days = 2026-10-01" beside it: with a relative cue in the text
+  ("today"), the relative-time parser read a bare count of a unit as that long ago, and an
+  agent recalling the note called it inconsistent. A count with no direction ("32 days",
+  "3 weeks", "in 2 months") is no longer a dated mention; "3 days ago" and "in two weeks from
+  today" still are.
 - **Dead code: six more port methods nothing called are gone** (service; migration
   `0033_drop_agent_runs_turn_index`): `UnitOfWork.committed` and `dispatched_job_ids`, the
   cache's `incr`, `AgentRunRepository.list_for_turn` (with `ix_agent_runs_turn`, its only use),
