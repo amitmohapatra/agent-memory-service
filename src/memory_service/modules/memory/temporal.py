@@ -134,6 +134,17 @@ _ENGLISH = re.compile(
 )
 
 
+#: A length of time, not a day: a count of a unit with no direction ("32 days", "3 weeks",
+#: "in 2 months"). The relative-time parser reads it as that long ago; with "ago", "from now"
+#: or "from today" it is a day and is kept.
+_DURATION = re.compile(
+    r"(?:(?:in|within|for|over)\s+)?(?:\d+(?:[.,]\d+)?|an?|one|two|three|four|five|six|seven|"
+    r"eight|nine|ten|eleven|twelve|(?:a\s+)?(?:few|couple(?:\s+of)?)|several)\s+"
+    r"(?:minutes?|hours?|days?|weeks?|fortnights?|months?|years?)[\s,.;:]*",
+    re.IGNORECASE,
+)
+
+
 def _span(first: date, last: date) -> str:
     return first.isoformat() if first == last else f"{first.isoformat()}..{last.isoformat()}"
 
@@ -225,6 +236,8 @@ def resolve_dated_mentions(
         ruled = list(seen)
         for phrase, when in search_dates(text, languages=list(languages), settings=settings) or ():
             cleaned = _trimmed(phrase, _cues(languages).skip).casefold()
+            if _DURATION.fullmatch(cleaned):
+                continue  # a length of time is no day
             # a phrase the English rules already read (as a range) is not read again as a day
             if not cleaned or cleaned in seen or any(cleaned in r or r in cleaned for r in ruled):
                 continue

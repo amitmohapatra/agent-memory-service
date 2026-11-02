@@ -132,3 +132,28 @@ def test_the_renderer_prints_the_resolved_date_beside_the_text() -> None:
         "(three days ago = 2023-05-05)"
     )
     assert _memory_line(item, "m1", body="(see Most relevant)").endswith("(see Most relevant)")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "SUP-20's lead time is 32 days, from my call with them today.",
+        "Delivery takes 3 weeks, I heard today.",
+        "We launch in 2 months, they told me today.",
+        "Today I learned the trial lasts 2 weeks.",
+    ],
+)
+def test_a_duration_beside_today_is_never_a_date(text: str) -> None:
+    """A length of time ("32 days", "3 weeks", "in 2 months") is no day: read as one, "32 days"
+    beside "today" became "= 2026-10-01" in a recalled note (break-and-fix re-measure)."""
+    found = {m.text.casefold().strip(" ,."): m.date for m in _resolve(text)}
+    assert set(found) == {"today"}, found
+
+
+def test_a_count_with_its_direction_is_still_a_date() -> None:
+    found = {
+        m.text.casefold(): m.date
+        for m in _resolve("We met 3 days ago; review in two weeks from today.")
+    }
+    assert found["3 days ago"] == "2023-05-05"
+    assert found["in two weeks from today"] == "2023-05-22"
