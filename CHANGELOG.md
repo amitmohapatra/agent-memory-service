@@ -193,7 +193,8 @@ each entry says which one moved. Decisions behind each change are in the
   "in 2 months", "in drei Wochen", "2 महीने में". "3 days ago", "vor 3 Tagen", "hace 3 días",
   "3 दिन पहले" and "in two weeks from today" still are. dateparser decides it from its own
   reading (a phrase whose day moves when the parser is told to prefer the future states no
-  direction), not from an English word list. On 64 cases in en/de/es/ar/hi/fr, 56 are right
+  direction; one the search cut short, "il y a 3 jours" found as "a 3 jours", is read with
+  the words before it), not from an English word list. On 64 cases in en/de/es/ar/hi/fr, 57 are right
   (43 before).
 - **A later chat recalls the figure an "Approve it" approved** (service). #74 keeps "Approve it
   as my north order for this item." with the answer it refers to ("... (in reply to: ... 19

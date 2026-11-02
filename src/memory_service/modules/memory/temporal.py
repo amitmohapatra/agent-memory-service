@@ -235,9 +235,12 @@ def resolve_dated_mentions(
         }
         ruled = list(seen)
         found = search_dates(text, languages=list(languages), settings=settings) or ()
-        for phrase, when in found:
-            if _length_of_time(phrase, when, base=base, languages=languages, named=cues.named):
-                continue
+        for found_phrase, when in found:
+            phrase = _as_a_day(
+                found_phrase, when, text, base=base, languages=languages, named=cues.named
+            )
+            if phrase is None:
+                continue  # a length of time
             cleaned = _trimmed(phrase, cues.skip).casefold()
             # a phrase the English rules already read (as a range) is not read again as a day
             if not cleaned or cleaned in seen or any(cleaned in r or r in cleaned for r in ruled):
@@ -249,40 +252,76 @@ def resolve_dated_mentions(
     return out[:limit]
 
 
-def _length_of_time(
+#: words before a found phrase it may be read with: the search can cut an expression short
+_CONTEXT_WORDS = 3
+
+
+def _as_a_day(
     phrase: str,
     when: datetime,
+    text: str,
     *,
     base: datetime,
     languages: tuple[str, ...],
     named: frozenset[str],
-) -> bool:
-    """Whether dateparser's own reading of ``phrase`` makes it a length of time, not a day.
+) -> str | None:
+    """``phrase`` as the day it names, or None when dateparser's own reading makes it a
+    length of time.
 
     The relative-time parser reads a bare count ("32 Tage", "durante tres semanas", "32
     يومًا") as that long ago only because it was told to prefer the past: read again
     preferring the future, it moves, since its words fix no direction. A phrase that says its
     direction ("vor 3 Tagen", "hace 3 días", "3 दिन पहले") resolves the same either way.
+    The search can cut that direction off ("il y a 3 jours" is reported as "a 3 jours"), so
+    a phrase that moves is read once more with up to ``_CONTEXT_WORDS`` words before it, and
+    the widest reading that names the same day either way is the phrase.
+
     A count ahead with nothing to count from ("in drei Wochen", "dans 2 mois", "2 महीने में")
     is how long something takes as often as the day it ends, so it is kept only when it is,
     or names, one of the locale's named days ("tomorrow", "next week", the "today" of "two
     weeks from today"). Every word here is dateparser's locale data, in each of its languages.
     """
+    day = when.date()
+    said = next(
+        (
+            candidate
+            for candidate in _with_context(phrase, text)
+            # the search already read ``phrase`` itself preferring the past: ``day``
+            if (candidate is phrase or _read(candidate, "past", base, languages) == day)
+            and _read(candidate, "future", base, languages) == day
+        ),
+        None,
+    )
+    if said is None:
+        return None
+    if day <= base.date() or any(word in said.casefold() for word in named):
+        return said
+    return None
+
+
+def _with_context(phrase: str, text: str) -> list[str]:
+    """``phrase``, then the same with one, two, ... of the words before it in ``text``,
+    widest first after the phrase itself."""
+    at = text.casefold().find(phrase.casefold())
+    before = text[:at].split() if at > 0 else []
+    widened = [
+        " ".join([*before[-n:], text[at : at + len(phrase)]])
+        for n in range(min(_CONTEXT_WORDS, len(before)), 0, -1)
+    ]
+    return [phrase, *widened]
+
+
+def _read(phrase: str, prefer: str, base: datetime, languages: tuple[str, ...]) -> date | None:
     from dateparser import parse
 
     settings = {
         "PARSERS": ["relative-time"],
         "RELATIVE_BASE": base.replace(tzinfo=None),
-        "PREFER_DATES_FROM": "future",
+        "PREFER_DATES_FROM": prefer,
         "RETURN_AS_TIMEZONE_AWARE": False,
     }
-    ahead = parse(phrase, languages=list(languages), settings=settings)
-    if ahead is None or ahead.date() != when.date():
-        return True
-    if when.date() <= base.date():
-        return False
-    lowered = phrase.casefold()
-    return not any(word in lowered for word in named)
+    read = parse(phrase, languages=list(languages), settings=settings)
+    return read.date() if read is not None else None
 
 
 def _trimmed(phrase: str, skip: frozenset[str]) -> str:

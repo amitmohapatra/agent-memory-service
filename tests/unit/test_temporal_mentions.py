@@ -245,7 +245,6 @@ LIBRARY_GAPS: dict[str, str] = {
     "غيرنا الأسعار قبل شهر.": "dateparser's Arabic locale has no 'قبل N' (ago)",
     "2 हफ़्ते पहले शिपमेंट आया।": "dateparser's search finds no date in '2 हफ़्ते पहले'",
     "एक महीने पहले हमने कीमतें बदलीं।": "dateparser's search finds no date in 'एक महीने पहले'",
-    "Nous nous sommes vus il y a 3 jours.": "dateparser's search returns 'a 3 jours', without 'il y'",
 }
 
 
@@ -266,3 +265,22 @@ def test_a_length_of_time_is_told_from_a_day_in_every_language(
     lang: str, text: str, expected: frozenset[str]
 ) -> None:
     assert {m.date for m in _resolve(text)} == expected, [m.as_dict() for m in _resolve(text)]
+
+
+@pytest.mark.parametrize(
+    ("text", "phrase"),
+    [
+        ("Nous nous sommes vus il y a 3 jours.", "il y a 3 jours"),
+        ("Il y a trois jours, nous avons signé.", "Il y a trois jours"),
+        ("Wir haben vor drei Tagen unterschrieben.", "vor drei Tagen"),
+        ("Wir haben uns vor 3 Tagen getroffen.", "vor 3 Tagen"),
+        ("Firmamos hace 3 días.", "hace 3 días"),
+        ("وقعنا منذ 3 أيام.", "منذ 3 أيام"),
+        ("हमने 3 दिन पहले हस्ताक्षर किए।", "3 दिन पहले"),
+    ],
+)
+def test_n_days_ago_is_a_day_in_every_language(text: str, phrase: str) -> None:
+    """ "N days ago" says its direction in every language, so it stays a day, the phrase
+    whole. dateparser's search reports French "il y a 3 jours" as "a 3 jours", which alone
+    states no direction; read in the words just before it, it is the day it names."""
+    assert [m.as_dict() for m in _resolve(text)] == [{"text": phrase, "date": "2023-05-05"}]
