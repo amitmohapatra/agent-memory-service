@@ -167,7 +167,7 @@ def _meeting(container, monkeypatch, parties: int, timeout: float = 2.0) -> list
     arrived: list[bool] = []
     everyone = asyncio.Event()
 
-    async def meet(candidate, existing, ctx):
+    async def meet(candidate, existing, ctx, **kwargs):
         if candidate.predicate == "works_at":
             n = len(arrived)
             arrived.append(False)
@@ -177,7 +177,7 @@ def _meeting(container, monkeypatch, parties: int, timeout: float = 2.0) -> list
                 await asyncio.wait_for(everyone.wait(), timeout)
             except TimeoutError:
                 arrived[n] = True
-        return await consolidate(candidate, existing, ctx)
+        return await consolidate(candidate, existing, ctx, **kwargs)
 
     monkeypatch.setattr(provider, "consolidate", meet)
     return arrived
