@@ -253,3 +253,27 @@ async def test_a_new_value_the_model_reads_replaces_the_old_one() -> None:
                 native, earlier, "Ich wohne jetzt in München.", model_first=model_first
             )
         assert ("Der Nutzer wohnt in München", expected) in got, got
+
+
+@pytest.mark.parametrize(
+    ("text", "said", "kept"),
+    [
+        # a bare weekday: past or coming is not in the words, and the nollm contract leaves
+        # it unresolved (``temporal``); resolved, a reminder "on Thursday" outranked a
+        # standing rule in its conversation on the capability eval
+        ("Remind me to water the plants on Thursday.", "Thursday", []),
+        ("Erinnere mich am Donnerstag an die Pflanzen.", "Donnerstag", []),
+        # with its direction the rules read it: the library's day is kept
+        (
+            "We met last Thursday.",
+            "last Thursday",
+            [{"text": "last Thursday", "date": "2023-05-04"}],
+        ),
+    ],
+)
+async def test_a_weekday_keeps_the_library_s_reading(text: str, said: str, kept: list) -> None:
+    reply = _reply(times=[{"text": said, "kind": "relative_date", "date": "2023-05-11"}])
+    with mocked_gateway([reply]) as gateway:
+        found = await _extract(_native(gateway), text, model_first=True)
+    turn = next(c for c in found if c.category == "verbatim_turn")
+    assert turn.dated_mentions == kept

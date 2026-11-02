@@ -21,6 +21,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
+from functools import cache
 from typing import Any, Final
 
 from memory_service.domain.enums import MemoryType
@@ -32,6 +33,7 @@ from memory_service.domain.language import (
 )
 from memory_service.domain.script import Script
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.memory.temporal import LANGUAGES, dated_mentions
 
 MAX_SENTENCES: Final = 24
 MAX_INPUT_CHARS: Final = 6000
@@ -238,7 +240,7 @@ async def read_message(
         for f in select_facts(output, sentences, eligible)
         if _numbers_said(f.text, " ".join(sentences[i] for i in f.sentences))
     ]
-    return Reading(facts, select_times(output.get("times"), source, said_at.date()))
+    return Reading(facts, select_times(output.get("times"), source, said_at))
 
 
 _ISO_DAY: Final = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
@@ -251,11 +253,13 @@ def _numbers_said(text: str, source: str) -> bool:
     return all(n in source for n in _NUMBER.findall(_ISO_DAY.sub(" ", text)))
 
 
-def select_times(items: object, source: str, said_on: date) -> list[dict[str, str]]:
+def select_times(items: object, source: str, said_at: datetime) -> list[dict[str, str]]:
     """The relative dates the model resolved, checked as ``source_facts`` checks a fact: the
     phrase occurs in the message, and its day (or ``first..last`` period) parses and falls
     within ``MAX_TIME_YEARS`` of the day it was said. A duration and an absolute date are not
-    stored (``modules.memory.temporal``'s contract)."""
+    stored, and a phrase naming a weekday keeps the library's reading - a bare one ("on
+    Thursday") none, since past or coming is not in the words (``modules.memory.temporal``'s
+    contract)."""
     if not isinstance(items, list):
         return []
     lowered = source.casefold()
@@ -264,10 +268,36 @@ def select_times(items: object, source: str, said_on: date) -> list[dict[str, st
         if not isinstance(item, dict) or item.get("kind") != "relative_date":
             continue
         text = " ".join(str(item.get("text", "")).split())
-        day = _resolved(str(item.get("date", "")), said_on)
-        if text and day and text.casefold() in lowered and text not in {t["text"] for t in out}:
+        day = _resolved(str(item.get("date", "")), said_at.date())
+        if not text or not day or text.casefold() not in lowered:
+            continue
+        if _weekdays().intersection(_WORD.findall(text.casefold())):
+            read = dated_mentions(text, base=said_at)
+            day = read[0]["date"] if read else None
+        if day and text not in {t["text"] for t in out}:
             out.append({"text": text, "date": day})
     return out
+
+
+_WORD: Final = re.compile(r"\w+")
+
+
+@cache
+def _weekdays() -> frozenset[str]:
+    """The weekday names dateparser's locale data holds for the languages the library reads
+    (``temporal.LANGUAGES``), its abbreviations of fewer than four letters left out ("do",
+    "th" are words)."""
+    from dateparser.languages.loader import default_loader
+
+    days = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+    return frozenset(
+        name.casefold()
+        for languages in LANGUAGES.values()
+        for language in languages
+        for day in days
+        for name in default_loader.get_locale(language).info.get(day) or ()
+        if len(name) >= 4
+    )
 
 
 def _resolved(value: str, said_on: date) -> str | None:
