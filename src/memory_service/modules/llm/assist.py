@@ -53,6 +53,14 @@ SOURCE_LANGUAGE_RULE = (
 )
 
 
+#: The output budget of a call whose answer is a short verdict ({"verdict": "update"}). A
+#: model that reasons before it answers spends its budget there first: Haiku on Anthropic's
+#: endpoint used 59 output tokens for a six-token verdict, so a budget of 50 ended every
+#: conflict adjudication before any text ("output budget exhausted"), and the native outcome
+#: stood in for the model's every time. Only the tokens generated are billed.
+VERDICT_MAX_TOKENS = 256
+
+
 def with_language_rule(system: str) -> str:
     return f"{system}\n\n{SOURCE_LANGUAGE_RULE}"
 

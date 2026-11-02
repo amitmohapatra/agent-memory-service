@@ -72,7 +72,7 @@ from memory_service.domain.memory import (
 )
 from memory_service.domain.predicates import is_single_valued
 from memory_service.domain.script import Script, detect_script, script_of
-from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.llm.assist import VERDICT_MAX_TOKENS, LLMAssist
 from memory_service.ports.models import EmbeddingProvider, NLIProvider
 from memory_service.ports.uow import UnitOfWork
 
@@ -1312,7 +1312,7 @@ class CrossConversationReplacement:
                 f"{pair.old.content[:_ASSIST_MAX_CHARS]}"
             ),
             schema=_ADJUDICATION_SCHEMA,
-            max_tokens=50,
+            max_tokens=VERDICT_MAX_TOKENS,
         )
         verdict = out.get("verdict") if out else None
         if verdict in ("update", "contradict"):

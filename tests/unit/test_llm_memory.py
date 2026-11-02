@@ -96,6 +96,52 @@ async def test_grey_band_is_adjudicated_by_the_model(verdict, decision) -> None:
         assert out.reason.startswith("model:")
 
 
+NEIGHBOURS = (
+    EXISTING,
+    "The build server runs on Ubuntu 22.04 in the Hamburg rack.",
+    "The build server runs on Ubuntu 22.04 with 64 GB of disk cache.",
+)
+
+
+async def _neighbours():
+    plain = _native()
+    now = datetime.now(UTC)
+    existing = [build_memory(await _first(plain, text), CTX, now=now) for text in NEIGHBOURS]
+    return await _first(plain, NEAR), existing
+
+
+@pytest.mark.parametrize("number", [1, 2, 3])
+async def test_the_adjudicator_sees_the_closest_neighbours_and_names_the_one(number) -> None:
+    """The update decision with the candidate's undecided neighbours in view (Mem0's, over
+    the memories no rule settled): one call shows them numbered, and the verdict applies to
+    the one the model names."""
+    cand, existing = await _neighbours()
+    with mocked_gateway([{"verdict": "update", "existing": number}]) as gw:
+        out = await _native(gw.assist(uses=["conflict_adjudication"])).consolidate(
+            cand, existing, CTX
+        )
+    assert gw.route.call_count == 1
+    prompt = gw.prompts()[0]["messages"][1]["content"]
+    shown = [line for line in prompt.splitlines() if line in NEIGHBOURS]
+    assert len(shown) == 2, "the 64 GB one states another number: never asked about"
+    assert out.decision is DedupDecision.SUPERSEDE or number > len(shown)
+    if number <= len(shown):
+        named = next(m for m in existing if m.content == shown[number - 1])
+        assert out.target_memory_id == named.memory_id
+    else:
+        assert out.decision is DedupDecision.CREATE, "a number it was not shown keeps native"
+
+
+async def test_the_verdict_has_room_for_a_model_that_reasons_first() -> None:
+    """A budget of 50 tokens ended Haiku's adjudication before any text (it used 59 for a
+    six-token verdict): the native outcome stood in every time."""
+    cand, existing = await _pair(EXISTING, NEAR)
+    with mocked_gateway([{"verdict": "same"}]) as gw:
+        await _native(gw.assist(uses=["conflict_adjudication"])).consolidate(cand, existing, CTX)
+    body = gw.prompts()[0]
+    assert max(body.get("max_tokens", 0), body.get("max_completion_tokens", 0)) >= 256
+
+
 async def test_grey_band_hard_blocks_are_never_sent_to_the_model() -> None:
     with mocked_gateway([{"verdict": "same"}]) as gw:
         provider = _native(gw.assist(uses=["conflict_adjudication"]))

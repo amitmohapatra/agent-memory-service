@@ -197,3 +197,20 @@ with identical decisions. Subjects and topics up to 300 characters are cached, a
 (20,000 distinct sentence-length parses: +19 MB RSS, bounded). The encoder runs only on the
 83 of 5,760 pairs the words leave undecided, p50 5.0 ms / p95 8.7 ms each, and only with the
 model on. With the adjudicator on, LoCoMo writes ask it 0.022 times per turn (main: 0.004).
+
+## Amendment (2026-11-02): the closest undecided neighbours, and room for the verdict
+
+The adjudicator was shown the one closest memory the matcher left undecided. It is now shown
+the closest three (`ADJUDICATION_NEIGHBOURS`), numbered, in the same call, and names the one its
+verdict is about: Mem0's update decision with a fact's nearest memories in view, over the
+memories no rule settled. The hard blocks (numbers, negation) are checked on each one before
+it is shown; a number it was not shown keeps the native outcome.
+
+Its output budget was 50 tokens. Haiku on Anthropic's endpoint spent 59 on a six-token verdict
+and the call ended before any text ("output budget exhausted"): on the paraphrase set
+(`benchmark/paraphrases.py`, rules-first, two runs each) 2 of 6 adjudications on main fell back
+to the native outcome, 0 of 7 now. The budget is `VERDICT_MAX_TOKENS` (256) here and in
+cross-conversation replacement (ADR 0038); only the tokens generated are billed (+9 input tokens
+a message on that set). Duplicate rate 0.41-0.44 on main and on this change, stale rate 0.4 and
+false-merge rate 0 on both.
+

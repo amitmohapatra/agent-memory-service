@@ -40,7 +40,7 @@ from memory_service.domain.observation import Observation
 from memory_service.domain.predicates import is_single_valued
 from memory_service.domain.subjects import SubjectVerdict
 from memory_service.domain.text import ACKNOWLEDGEMENT, SENTENCE_BREAK, normalise_number
-from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.llm.assist import VERDICT_MAX_TOKENS, LLMAssist
 from memory_service.modules.memory.narrative import (
     eligible_for_contextual_extraction,
     extract_narrative_units,
@@ -443,18 +443,25 @@ _ASSIST_MIN_SIMILARITY = 0.5
 #: a memory the adjudicator may be asked about: the memory, its lexical similarity, and the
 #: subject matcher's view of the pair
 _Uncertain = tuple[CanonicalMemory, float, SubjectPair]
+#: How many of a candidate's closest undecided neighbours the adjudicator sees at once: the
+#: update decision Mem0 makes with a fact's nearest memories in view, here only over the ones
+#: no rule settled.
+ADJUDICATION_NEIGHBOURS = 3
 _ADJUDICATION_SYSTEM = (
-    "Compare a NEW memory with an EXISTING one and answer with a verdict: 'same' when both "
-    "state the same fact (paraphrase, no new information); 'update' when the new one gives a "
-    "newer value for the same thing and should replace the existing one; 'contradict' when "
-    "they disagree about the same thing and neither clearly replaces the other; 'different' "
-    "when they are about different things. When unsure answer 'different'."
+    "Compare a NEW memory with the EXISTING ones (numbered) and answer with a verdict: 'same' "
+    "when one of them states the same fact (paraphrase, no new information); 'update' when "
+    "the new one gives a newer value for the same thing and should replace it; 'contradict' "
+    "when they disagree about the same thing and neither clearly replaces the other; "
+    "'different' when the new one is about something none of them is about. With the "
+    "verdict give existing: the number of the existing memory it is about (1 when one is "
+    "given). When unsure answer 'different'."
 )
 _ADJUDICATION_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["verdict"],
     "properties": {
-        "verdict": {"type": "string", "enum": ["same", "update", "contradict", "different"]}
+        "verdict": {"type": "string", "enum": ["same", "update", "contradict", "different"]},
+        "existing": {"type": "integer", "minimum": 1, "maximum": ADJUDICATION_NEIGHBOURS},
     },
 }
 
@@ -472,6 +479,25 @@ def _clean_object(text: str) -> str:
     t = _OBJECT_TAIL.sub("", t)
     t = _OBJECT_END.sub("", normalize(t))
     return t.strip(" ,;:")
+
+
+def _adjudication_prompt(
+    candidate: MemoryCandidate, existing: list[CanonicalMemory], ctx: MemoryExecutionContext
+) -> str:
+    """The adjudicator's input: the new statement, then the existing ones, numbered."""
+    observed = candidate.evidence[0].observed_at if candidate.evidence else datetime.now(UTC)
+    shown = "\n\n".join(
+        f"EXISTING {n} (by {mem.owner_principal}, observed "
+        f"{mem.temporal.observed_at.isoformat()}):\n{mem.content[:_ASSIST_MAX_CHARS]}\n"
+        f"triple: {mem.subject or '-'} / {mem.predicate or '-'} / {mem.object or '-'}"
+        for n, mem in enumerate(existing, start=1)
+    )
+    return (
+        f"NEW (by {ctx.principal_id}, observed {observed.isoformat()}):\n"
+        f"{candidate.content[:_ASSIST_MAX_CHARS]}\n"
+        f"triple: {candidate.subject or '-'} / {candidate.predicate or '-'} / "
+        f"{candidate.object or '-'}\n\n{shown}"
+    )
 
 
 def _evidence(observation: Observation) -> list[EvidenceRef]:
@@ -1381,18 +1407,13 @@ class NativeMemoryIntelligence:
                             reason=f"conflicting value for {candidate.predicate} from "
                             f"{ctx.principal_id} vs {mem.owner_principal}",
                         )
-                        return await self._adjudicate(
-                            candidate,
-                            mem,
-                            ctx,
-                            native=native,
-                            same=native.model_copy(
-                                update={
-                                    "decision": DedupDecision.REINFORCE,
-                                    "reason": f"equivalent value for {candidate.predicate}",
-                                }
-                            ),
+                        same = native.model_copy(
+                            update={
+                                "decision": DedupDecision.REINFORCE,
+                                "reason": f"equivalent value for {candidate.predicate}",
+                            }
                         )
+                        return await self._adjudicate(candidate, [(mem, same)], ctx, native=native)
                     # a newer value for a single-valued slot replaces the older one
                     return ConsolidationOutcome(
                         decision=DedupDecision.SUPERSEDE,
@@ -1477,22 +1498,32 @@ class NativeMemoryIntelligence:
         create = ConsolidationOutcome(
             decision=DedupDecision.CREATE, candidate=candidate, reason="no match"
         )
-        grey = await self._uncertain(candidate, pairs, askable) if best is None else None
-        if grey is not None:
+        grey = await self._uncertain(candidate, pairs, askable) if best is None else []
+        if grey:
             # about the same subject but not a duplicate: the native answer is "keep both";
-            # the model may recognise a paraphrase, an update or a contradiction
-            mem, sim, pair = grey
-            same = ConsolidationOutcome(
-                decision=DedupDecision.MERGE
-                if c_tokens - tokens(mem.content)
-                else DedupDecision.REINFORCE,
-                candidate=candidate,
-                target_memory_id=mem.memory_id,
-                score=sim,
-                reason=f"subject {pair.statement.verdict.value}: {pair.statement.reason}; "
-                f"lexical similarity {sim:.2f}",
+            # the model, shown the closest of them at once, may recognise a paraphrase, an
+            # update or a contradiction of one
+            return await self._adjudicate(
+                candidate,
+                [
+                    (
+                        mem,
+                        ConsolidationOutcome(
+                            decision=DedupDecision.MERGE
+                            if c_tokens - tokens(mem.content)
+                            else DedupDecision.REINFORCE,
+                            candidate=candidate,
+                            target_memory_id=mem.memory_id,
+                            score=sim,
+                            reason=f"subject {pair.statement.verdict.value}: "
+                            f"{pair.statement.reason}; lexical similarity {sim:.2f}",
+                        ),
+                    )
+                    for mem, sim, pair in grey
+                ],
+                ctx,
+                native=create,
             )
-            return await self._adjudicate(candidate, mem, ctx, native=create, same=same)
         return best or create
 
     async def _uncertain(
@@ -1500,16 +1531,16 @@ class NativeMemoryIntelligence:
         candidate: MemoryCandidate,
         pairs: dict[str, SubjectPair],
         askable: list[tuple[CanonicalMemory, float]],
-    ) -> _Uncertain | None:
-        """The one memory worth asking the adjudicator about: the closest of ``askable``
-        whose statement the subject matcher does not call DIFFERENT (SAME before POSSIBLE,
-        then the matcher's score, then the wording). When the words leave every pair
-        undecided, the encoder is asked too - only here, so a write without the model never
-        pays for it."""
+    ) -> list[_Uncertain]:
+        """The memories worth asking the adjudicator about, closest first and at most
+        ``ADJUDICATION_NEIGHBOURS``: those of ``askable`` whose statement the subject matcher
+        does not call DIFFERENT (SAME before POSSIBLE, then the matcher's score, then the
+        wording). When the words leave every pair undecided, the encoder is asked too - only
+        here, so a write without the model never pays for it."""
         if not askable:
-            return None
+            return []
 
-        def closest(by: dict[str, SubjectPair]) -> _Uncertain | None:
+        def closest(by: dict[str, SubjectPair]) -> list[_Uncertain]:
             ranked = [
                 (mem, sim, by[mem.memory_id])
                 for mem, sim in askable
@@ -1519,18 +1550,18 @@ class NativeMemoryIntelligence:
                     and sim >= _ASSIST_MIN_SIMILARITY
                 )
             ]
-            return max(
+            return sorted(
                 ranked,
                 key=lambda r: (
                     r[2].statement.verdict is SubjectVerdict.SAME,
                     r[2].statement.score,
                     r[1],
                 ),
-                default=None,
-            )
+                reverse=True,
+            )[:ADJUDICATION_NEIGHBOURS]
 
         found = closest(pairs)
-        if found is None:
+        if not found:
             # only the memories that could be asked about are encoded
             asked = [mem for mem, _ in askable]
             found = closest(await self.subjects.with_vectors(candidate, asked, pairs))
@@ -1539,38 +1570,37 @@ class NativeMemoryIntelligence:
     async def _adjudicate(
         self,
         candidate: MemoryCandidate,
-        mem: CanonicalMemory,
+        choices: list[tuple[CanonicalMemory, ConsolidationOutcome]],
         ctx: MemoryExecutionContext,
         *,
         native: ConsolidationOutcome,
-        same: ConsolidationOutcome,
     ) -> ConsolidationOutcome:
-        """Ask the model to settle a candidate against one existing memory. The hard blocks
-        (differing numbers or negation) are checked first and are never overridden; any
-        failure or a 'different' verdict keeps the native outcome."""
+        """Ask the model to settle a candidate against its closest undecided memories, each
+        with what 'same' means for it, in one call. The hard blocks (differing numbers or
+        negation) are checked first and are never overridden; any failure, a 'different'
+        verdict or a number out of range keeps the native outcome."""
         if not self.assist.wants("conflict_adjudication"):
             return native
-        if figures(mem.content) != figures(candidate.content) or has_negation(
-            mem.content
-        ) != has_negation(candidate.content):
+        choices = [
+            (mem, same)
+            for mem, same in choices
+            if figures(mem.content) == figures(candidate.content)
+            and has_negation(mem.content) == has_negation(candidate.content)
+        ]
+        if not choices:
             return native
-        observed = candidate.evidence[0].observed_at if candidate.evidence else datetime.now(UTC)
         out = await self.assist.structured(
             "conflict_adjudication",
             system=_ADJUDICATION_SYSTEM,
-            user=(
-                f"NEW (by {ctx.principal_id}, observed {observed.isoformat()}):\n"
-                f"{candidate.content[:_ASSIST_MAX_CHARS]}\n"
-                f"triple: {candidate.subject or '-'} / {candidate.predicate or '-'} / "
-                f"{candidate.object or '-'}\n\n"
-                f"EXISTING (by {mem.owner_principal}, observed "
-                f"{mem.temporal.observed_at.isoformat()}):\n{mem.content[:_ASSIST_MAX_CHARS]}\n"
-                f"triple: {mem.subject or '-'} / {mem.predicate or '-'} / {mem.object or '-'}"
-            ),
+            user=_adjudication_prompt(candidate, [mem for mem, _ in choices], ctx),
             schema=_ADJUDICATION_SCHEMA,
-            max_tokens=50,
+            max_tokens=VERDICT_MAX_TOKENS,
         )
         verdict = out.get("verdict") if out else None
+        number = out.get("existing", 1) if out else 1
+        if type(number) is not int or not 1 <= number <= len(choices):
+            return native
+        mem, same = choices[number - 1]
         if verdict == "same":
             return same.model_copy(update={"reason": f"model: same ({same.reason})"})
         if verdict in ("update", "contradict"):

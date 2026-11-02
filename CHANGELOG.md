@@ -7,6 +7,13 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Fixed
+- **The conflict adjudicator answers on a model that reasons first, and sees the closest
+  neighbours** (ADR 0035 amendment; service). Its 50-token budget ended Haiku's verdict before
+  any text, so the native outcome stood in for the model (2 of 6 calls on the paraphrase set);
+  the budget is now 256 here and in cross-conversation replacement. The adjudicator is shown
+  the three closest memories no rule settled, numbered, and names the one its verdict is about.
+
 ### Changed
 - **A later chat recalls what the assistant answered in an earlier one** (ADR 0044; service,
   SDK `trellis-memory` 0.6.3). "What was that reorder number you worked out on Monday?": the
