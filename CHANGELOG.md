@@ -188,9 +188,13 @@ each entry says which one moved. Decisions behind each change are in the
 - **A length of time is no date** (service). "SUP-20's lead time is 32 days, from my call
   today" was stored with "32 days = 2026-10-01" beside it: with a relative cue in the text
   ("today"), the relative-time parser read a bare count of a unit as that long ago, and an
-  agent recalling the note called it inconsistent. A count with no direction ("32 days",
-  "3 weeks", "in 2 months") is no longer a dated mention; "3 days ago" and "in two weeks from
-  today" still are.
+  agent recalling the note called it inconsistent. A count with no direction is no longer a
+  dated mention, in any language: "32 days", "32 Tage", "durante tres semanas", "32 يومًا",
+  "in 2 months", "in drei Wochen", "2 महीने में". "3 days ago", "vor 3 Tagen", "hace 3 días",
+  "3 दिन पहले" and "in two weeks from today" still are. dateparser decides it from its own
+  reading (a phrase whose day moves when the parser is told to prefer the future states no
+  direction), not from an English word list. On 64 cases in en/de/es/ar/hi/fr, 56 are right
+  (43 before).
 - **A later chat recalls the figure an "Approve it" approved** (service). #74 keeps "Approve it
   as my north order for this item." with the answer it refers to ("... (in reply to: ... 19
   units)"), but recall groups every form of one statement and showed the bare turn for it, so

@@ -84,6 +84,9 @@ class DatedMention:
 class _Cues:
     phrases: tuple[str, ...]
     patterns: tuple[re.Pattern[str], ...]
+    #: the named expressions ("today", "tomorrow", "next week", "heute", "आज"): a day the
+    #: words fix on their own, unlike a count ("in three weeks")
+    named: frozenset[str]
     #: the connectives dateparser skips ("and", "on", "de"): a found phrase may start or
     #: end with one, and the mention rendered beside the text should not
     skip: frozenset[str]
@@ -103,16 +106,23 @@ def _cues(languages: tuple[str, ...]) -> _Cues:
 
     phrases: set[str] = set()
     patterns: list[re.Pattern[str]] = []
+    named: set[str] = set()
     skip: set[str] = set()
     for language in languages:
         info = default_loader.get_locale(language).info
         phrases.update(word.casefold() for word in info.get("ago") or ())
         for words in (info.get("relative-type") or {}).values():
-            phrases.update(word.casefold() for word in words)
+            named.update(word.casefold() for word in words)
+        phrases.update(named)
         for expressions in (info.get("relative-type-regex") or {}).values():
             patterns.extend(re.compile(expression, re.IGNORECASE) for expression in expressions)
         skip.update(word.casefold() for word in info.get("skip") or () if word.strip().isalpha())
-    return _Cues(tuple(sorted(phrases, key=len, reverse=True)), tuple(patterns), frozenset(skip))
+    return _Cues(
+        tuple(sorted(phrases, key=len, reverse=True)),
+        tuple(patterns),
+        frozenset(named),
+        frozenset(skip),
+    )
 
 
 _WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
@@ -130,17 +140,6 @@ _ENGLISH = re.compile(
     r"|(?P<today>this\s+(?:morning|afternoon|evening)|tonight|earlier\s+today)"
     r"|(?P<p_dir>last|next)\s+(?P<period>week|month|year)"
     r"|(?:a\s+)?(?P<vague>few|couple(?:\s+of)?|several)\s+(?P<unit>days|weeks|months)\s+ago)\b",
-    re.IGNORECASE,
-)
-
-
-#: A length of time, not a day: a count of a unit with no direction ("32 days", "3 weeks",
-#: "in 2 months"). The relative-time parser reads it as that long ago; with "ago", "from now"
-#: or "from today" it is a day and is kept.
-_DURATION = re.compile(
-    r"(?:(?:in|within|for|over)\s+)?(?:\d+(?:[.,]\d+)?|an?|one|two|three|four|five|six|seven|"
-    r"eight|nine|ten|eleven|twelve|(?:a\s+)?(?:few|couple(?:\s+of)?)|several)\s+"
-    r"(?:minutes?|hours?|days?|weeks?|fortnights?|months?|years?)[\s,.;:]*",
     re.IGNORECASE,
 )
 
@@ -227,6 +226,7 @@ def resolve_dated_mentions(
     if _cues(languages).found_in(text):
         from dateparser.search import search_dates
 
+        cues = _cues(languages)
         settings = {
             "PARSERS": ["relative-time"],
             "RELATIVE_BASE": base.replace(tzinfo=None),
@@ -234,22 +234,55 @@ def resolve_dated_mentions(
             "RETURN_AS_TIMEZONE_AWARE": False,
         }
         ruled = list(seen)
-        for phrase, when in search_dates(text, languages=list(languages), settings=settings) or ():
-            cleaned = _trimmed(phrase, _cues(languages).skip).casefold()
-            if _DURATION.fullmatch(cleaned):
-                continue  # a length of time is no day
+        found = search_dates(text, languages=list(languages), settings=settings) or ()
+        for phrase, when in found:
+            if _length_of_time(phrase, when, base=base, languages=languages, named=cues.named):
+                continue
+            cleaned = _trimmed(phrase, cues.skip).casefold()
             # a phrase the English rules already read (as a range) is not read again as a day
             if not cleaned or cleaned in seen or any(cleaned in r or r in cleaned for r in ruled):
                 continue
             seen.add(cleaned)
-            out.append(
-                DatedMention(
-                    text=_trimmed(phrase, _cues(languages).skip), date=when.date().isoformat()
-                )
-            )
+            out.append(DatedMention(text=_trimmed(phrase, cues.skip), date=when.date().isoformat()))
     lowered = text.casefold()
     out.sort(key=lambda m: lowered.find(m.text.casefold()))
     return out[:limit]
+
+
+def _length_of_time(
+    phrase: str,
+    when: datetime,
+    *,
+    base: datetime,
+    languages: tuple[str, ...],
+    named: frozenset[str],
+) -> bool:
+    """Whether dateparser's own reading of ``phrase`` makes it a length of time, not a day.
+
+    The relative-time parser reads a bare count ("32 Tage", "durante tres semanas", "32
+    يومًا") as that long ago only because it was told to prefer the past: read again
+    preferring the future, it moves, since its words fix no direction. A phrase that says its
+    direction ("vor 3 Tagen", "hace 3 días", "3 दिन पहले") resolves the same either way.
+    A count ahead with nothing to count from ("in drei Wochen", "dans 2 mois", "2 महीने में")
+    is how long something takes as often as the day it ends, so it is kept only when it is,
+    or names, one of the locale's named days ("tomorrow", "next week", the "today" of "two
+    weeks from today"). Every word here is dateparser's locale data, in each of its languages.
+    """
+    from dateparser import parse
+
+    settings = {
+        "PARSERS": ["relative-time"],
+        "RELATIVE_BASE": base.replace(tzinfo=None),
+        "PREFER_DATES_FROM": "future",
+        "RETURN_AS_TIMEZONE_AWARE": False,
+    }
+    ahead = parse(phrase, languages=list(languages), settings=settings)
+    if ahead is None or ahead.date() != when.date():
+        return True
+    if when.date() <= base.date():
+        return False
+    lowered = phrase.casefold()
+    return not any(word in lowered for word in named)
 
 
 def _trimmed(phrase: str, skip: frozenset[str]) -> str:

@@ -157,3 +157,112 @@ def test_a_count_with_its_direction_is_still_a_date() -> None:
     }
     assert found["3 days ago"] == "2023-05-05"
     assert found["in two weeks from today"] == "2023-05-22"
+
+
+#: A length of time against a day, in every pack language (``lexicon/generic.json``) and in
+#: French: the dates each text should resolve to. A count with no direction of its own ("32
+#: Tage", "durante tres semanas", "in 2 months", "دو महीने में") is a length of time; one that
+#: says its direction ("vor 3 Tagen", "hace dos semanas", "قبل 3 أيام", "3 दिन पहले", "from
+#: today") is a day. BASE is Monday 2023-05-08. Where dateparser itself misses a day the text
+#: names, the case says so (``LIBRARY_GAPS``): it is measured, not hidden, and an upgrade that
+#: reads it fails the strict xfail until the mark is removed.
+DURATION_OR_DATE: list[tuple[str, str, frozenset[str]]] = [
+    (lang, text, frozenset(dates))
+    for lang, text, dates in [
+        ("en", "The trial lasts fourteen days.", ()),
+        ("en", "We rented the van for three weeks.", ()),
+        ("en", "The warranty runs 2 years and the audit took 6 hours.", ()),
+        ("en", "Shipping is 10 days, the supplier said today.", ("2023-05-08",)),
+        ("en", "In 3 weeks the store opens, I was told today.", ("2023-05-08",)),
+        ("en", "The lease started on 8 May 2023 and lasts 12 months.", ()),
+        ("en", "Two weeks ago the shipment arrived.", ("2023-04-24",)),
+        ("en", "We changed prices a month ago.", ("2023-04-08",)),
+        ("en", "Inventory is 10 days from today.", ("2023-05-18",)),
+        ("en", "Next Monday we restock aisle 4.", ("2023-05-15",)),
+        ("en", "Yesterday the supplier said lead time is 45 days.", ("2023-05-07",)),
+        ("en", "Today I heard the probation is 6 months.", ("2023-05-08",)),
+        ("de", "Die Lieferzeit beträgt 32 Tage, das habe ich heute erfahren.", ("2023-05-08",)),
+        ("de", "Die Testphase dauert vierzehn Tage.", ()),
+        ("de", "Wir mieten den Transporter für drei Wochen.", ()),
+        ("de", "In drei Wochen starten wir, sagte er heute.", ("2023-05-08",)),
+        ("de", "Das Projekt dauert zwei Monate.", ()),
+        ("de", "Die Garantie gilt 2 Jahre.", ()),
+        ("de", "Der Mietvertrag begann am 8. Mai 2023 und läuft 12 Monate.", ()),
+        ("de", "Wir haben uns vor 3 Tagen getroffen.", ("2023-05-05",)),
+        ("de", "Vor zwei Wochen kam die Lieferung an.", ("2023-04-24",)),
+        ("de", "Vor einem Monat haben wir die Preise geändert.", ("2023-04-08",)),
+        ("de", "Gestern sagte der Lieferant, die Lieferzeit sei 45 Tage.", ("2023-05-07",)),
+        ("de", "Heute habe ich gehört, dass die Probezeit 6 Monate dauert.", ("2023-05-08",)),
+        ("es", "El plazo de entrega es de 32 días, me lo dijeron hoy.", ("2023-05-08",)),
+        ("es", "La prueba dura catorce días.", ()),
+        ("es", "Alquilamos la furgoneta durante tres semanas.", ()),
+        ("es", "Lanzamos dentro de 2 meses, me dijeron hoy.", ("2023-05-08",)),
+        ("es", "El proyecto tarda dos meses.", ()),
+        ("es", "La garantía es de 2 años.", ()),
+        ("es", "El contrato empezó el 8 de mayo de 2023 y dura 12 meses.", ()),
+        ("es", "Nos vimos hace 3 días.", ("2023-05-05",)),
+        ("es", "Hace dos semanas llegó el envío.", ("2023-04-24",)),
+        ("es", "Hace un mes cambiamos los precios.", ("2023-04-08",)),
+        ("es", "Ayer el proveedor dijo que el plazo es de 45 días.", ("2023-05-07",)),
+        ("es", "Hoy supe que el periodo de prueba dura 6 meses.", ("2023-05-08",)),
+        ("ar", "مدة التسليم 32 يومًا، عرفت ذلك اليوم.", ("2023-05-08",)),
+        ("ar", "تستمر التجربة أربعة عشر يومًا.", ()),
+        ("ar", "استأجرنا الشاحنة لمدة ثلاثة أسابيع.", ()),
+        ("ar", "سنطلق المنتج خلال 3 أشهر، أخبروني اليوم.", ("2023-05-08",)),
+        ("ar", "يستغرق المشروع 3 أشهر.", ()),
+        ("ar", "الضمان لمدة 2 سنوات.", ()),
+        ("ar", "بدأ العقد في 8 مايو 2023 ومدته 12 شهرًا.", ()),
+        ("ar", "التقينا قبل 3 أيام.", ("2023-05-05",)),
+        ("ar", "وصلت الشحنة قبل 2 أسابيع.", ("2023-04-24",)),
+        ("ar", "غيرنا الأسعار قبل شهر.", ("2023-04-08",)),
+        ("ar", "أمس قال المورد إن مدة التسليم 45 يومًا.", ("2023-05-07",)),
+        ("ar", "اليوم عرفت أن فترة التجربة 6 أشهر.", ("2023-05-08",)),
+        ("hi", "डिलीवरी में 32 दिन लगते हैं, आज पता चला।", ("2023-05-08",)),
+        ("hi", "ट्रायल चौदह दिन चलता है।", ()),
+        ("hi", "हमने वैन तीन हफ़्ते के लिए किराए पर ली।", ()),
+        ("hi", "हम 2 महीने में लॉन्च करेंगे, आज बताया गया।", ("2023-05-08",)),
+        ("hi", "प्रोजेक्ट में 2 महीने लगेंगे।", ()),
+        ("hi", "वारंटी 2 साल की है।", ()),
+        ("hi", "अनुबंध 8 मई 2023 को शुरू हुआ और 12 महीने चलेगा।", ()),
+        ("hi", "हम 3 दिन पहले मिले थे।", ("2023-05-05",)),
+        ("hi", "2 हफ़्ते पहले शिपमेंट आया।", ("2023-04-24",)),
+        ("hi", "एक महीने पहले हमने कीमतें बदलीं।", ("2023-04-08",)),
+        ("hi", "आज सप्लायर ने कहा कि लीड टाइम 45 दिन है।", ("2023-05-08",)),
+        ("hi", "आज मुझे पता चला कि ट्रायल 6 महीने का है।", ("2023-05-08",)),
+        ("fr", "Le délai de livraison est de 32 jours, appris aujourd'hui.", ("2023-05-08",)),
+        ("fr", "Nous avons loué le camion pendant trois semaines.", ()),
+        ("fr", "Dans 2 mois nous lançons, m'a-t-on dit aujourd'hui.", ("2023-05-08",)),
+        ("fr", "Nous nous sommes vus il y a 3 jours.", ("2023-05-05",)),
+    ]
+]
+
+
+LIBRARY_GAPS: dict[str, str] = {
+    "Inventory is 10 days from today.": "dateparser reads '10 days from today' as today",
+    "Hace dos semanas llegó el envío.": "dateparser's search finds no date in 'Hace dos semanas'",
+    "التقينا قبل 3 أيام.": "dateparser's Arabic locale has no 'قبل N' (ago)",
+    "وصلت الشحنة قبل 2 أسابيع.": "dateparser's Arabic locale has no 'قبل N' (ago)",
+    "غيرنا الأسعار قبل شهر.": "dateparser's Arabic locale has no 'قبل N' (ago)",
+    "2 हफ़्ते पहले शिपमेंट आया।": "dateparser's search finds no date in '2 हफ़्ते पहले'",
+    "एक महीने पहले हमने कीमतें बदलीं।": "dateparser's search finds no date in 'एक महीने पहले'",
+    "Nous nous sommes vus il y a 3 jours.": "dateparser's search returns 'a 3 jours', without 'il y'",
+}
+
+
+@pytest.mark.parametrize(
+    ("lang", "text", "expected"),
+    [
+        pytest.param(
+            *case,
+            id=f"{case[0]}-{i}",
+            marks=[pytest.mark.xfail(strict=True, reason=LIBRARY_GAPS[case[1]])]
+            if case[1] in LIBRARY_GAPS
+            else [],
+        )
+        for i, case in enumerate(DURATION_OR_DATE)
+    ],
+)
+def test_a_length_of_time_is_told_from_a_day_in_every_language(
+    lang: str, text: str, expected: frozenset[str]
+) -> None:
+    assert {m.date for m in _resolve(text)} == expected, [m.as_dict() for m in _resolve(text)]
