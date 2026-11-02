@@ -138,6 +138,7 @@ class TenancyService:
         clear_retention: bool = False,
         clear_rate_limit: bool = False,
         admission_gate: bool | None = None,
+        model_first_extraction: bool | None = None,
     ) -> tuple[Tenant, bool]:
         """The updated tenant, and whether its status changed (every key of a suspended
         tenant must stop working on its next request, so the caller invalidates them)."""
@@ -153,6 +154,8 @@ class TenancyService:
             changes["rate_limit_per_minute"] = None if clear_rate_limit else rate_limit_per_minute
         if admission_gate is not None:
             changes["admission_gate"] = admission_gate
+        if model_first_extraction is not None:
+            changes["model_first_extraction"] = model_first_extraction
         tenant = current.model_copy(update=changes)
         await uow.tenants.update(tenant_id, changes)
         return tenant, tenant.status != current.status

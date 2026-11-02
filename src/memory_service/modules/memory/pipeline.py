@@ -24,7 +24,7 @@ from memory_service.domain.enums import (
     TemporalStatus,
     Visibility,
 )
-from memory_service.domain.fiscal import FiscalCalendar
+from memory_service.domain.fiscal import FiscalCalendar, resolve_fiscal_mentions
 from memory_service.domain.memory import (
     LASTING_TYPES,
     SELF_ANYWHERE,
@@ -46,7 +46,7 @@ from memory_service.modules.memory.replacement import CrossConversationReplaceme
 from memory_service.modules.memory.restatement import restate
 from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.modules.memory.subjects import SubjectMatcher
-from memory_service.modules.memory.temporal import dated_mentions
+from memory_service.modules.memory.temporal import MAX_MENTIONS, dated_mentions
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import (
     memory_decisions_total,
@@ -193,7 +193,7 @@ def build_memory(
     )
     # "last Tuesday" resolved against the day it was said, once, here - the renderer and
     # the reader get the date beside the phrase instead of doing the arithmetic themselves
-    dated = dated_mentions(candidate.content, base=observed_at, fiscal=fiscal)
+    dated = _dated(candidate, observed_at, fiscal)
     return CanonicalMemory(
         tenant_id=ctx.tenant_id,
         scope=scope,
@@ -240,6 +240,24 @@ def build_memory(
         created_at=now,
         updated_at=now,
     )
+
+
+def _dated(
+    candidate: MemoryCandidate, base: datetime, fiscal: FiscalCalendar | None
+) -> list[dict[str, str]]:
+    """The relative dates a memory's text names. Read model-first, the model's resolved dates
+    after the fiscal phrases the deployment's retail calendar reads ("last week" is then a
+    fiscal week), as ``temporal.dated_mentions`` orders them; else the library's."""
+    text, resolved = candidate.content, candidate.dated_mentions
+    if resolved is None:
+        return dated_mentions(text, base=base, fiscal=fiscal)
+    out = (
+        [m.as_dict() for m in resolve_fiscal_mentions(text, base=base, calendar=fiscal)]
+        if fiscal is not None
+        else []
+    )
+    covered = {m["text"].casefold() for m in out}
+    return [*out, *(m for m in resolved if m["text"].casefold() not in covered)][:MAX_MENTIONS]
 
 
 def supersede(target: CanonicalMemory, replacement: CanonicalMemory, *, now: datetime) -> None:
@@ -394,6 +412,7 @@ class ObservationPipeline:
         if not await self._to_process(observation):
             return []
         ctx = context_from_observation(observation)
+        model_first = await self._model_first(tenant_id)
         prior = await self._prior_message(observation)
         preceding = self._preceding_turn(prior)
         async with self.assist.bound(identity_of(ctx)):
@@ -408,7 +427,7 @@ class ObservationPipeline:
                         await self.provider.classify(self._apply_hints(c, observation), ctx),
                         observation,
                     )
-                    for c in await self.provider.extract(observation, ctx)
+                    for c in await self.provider.extract(observation, ctx, model_first=model_first)
                 ]
                 if preceding is not None:
                     candidates = [
@@ -431,6 +450,7 @@ class ObservationPipeline:
                         outcomes,
                         hinted=hinted,
                         gate=await self._gate_for(uow, tenant_id),
+                        model_first=model_first,
                     )
                     affected |= await self._replace_earlier(uow, ctx, observation, affected, since)
                     if affected:
@@ -531,6 +551,16 @@ class ObservationPipeline:
             update["importance"] = h.importance
         return c.model_copy(update=update) if update else c
 
+    async def _model_first(self, tenant_id: str) -> bool:
+        """Whether the tenant reads its messages with the model first
+        (``Tenant.model_first_extraction``, off by default). Not looked up where no model can
+        be reached: the rules read every message there."""
+        if not self.assist.available:
+            return False
+        async with self.uow_factory() as uow:
+            tenant = await uow.tenants.get(tenant_id)
+        return tenant is not None and tenant.model_first_extraction
+
     async def _gate_for(self, uow: UnitOfWork, tenant_id: str) -> AdmissionGate | None:
         """The admission gate, when the tenant turned it on (``Tenant.admission_gate``, off by
         default). A tenant with no row - the development tenant, a jwt deployment's tenants -
@@ -583,6 +613,7 @@ class ObservationPipeline:
         *,
         hinted: bool = False,
         gate: AdmissionGate | None = None,
+        model_first: bool = False,
     ) -> set[str]:
         """Returns the ids written (created or reinforced). With a ``gate``, a candidate it
         does not admit is recorded as IGNORE with the gate's reasons and not stored."""
@@ -607,7 +638,7 @@ class ObservationPipeline:
                 subjects=self.subjects.spellings(cand.subject),
                 limit=self.cfg.dedup_candidate_k,
             )
-            outcome = await self.provider.consolidate(cand, existing, ctx)
+            outcome = await self.provider.consolidate(cand, existing, ctx, model_first=model_first)
             admission: AdmissionDecision | None = None
             if gate is not None:
                 admission = await self._admission(gate, ctx, cand, outcome, hinted=hinted, now=now)
@@ -654,10 +685,14 @@ class ObservationPipeline:
         )
         if said is None:
             return candidates
-        update = {"restatement": said.text or None, "restatement_relations": said.relations}
         # one restatement of the whole turn, carried by its first piece when a long turn was
-        # kept in several (``native.verbatim_windows``)
+        # kept in several (``native.verbatim_windows``), after the facts a model-first reading
+        # already put there
         first = turns[0]
+        update = {
+            "restatement": " ".join(filter(None, (first.restatement, said.text))) or None,
+            "restatement_relations": said.relations,
+        }
         return [c.model_copy(update=update) if c is first else c for c in candidates]
 
     async def _prior_message(self, observation: Observation) -> Observation | None:

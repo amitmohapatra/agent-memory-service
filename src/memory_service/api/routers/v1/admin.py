@@ -158,6 +158,7 @@ async def update_tenant(
             clear_retention=body.clear_retention,
             clear_rate_limit=body.clear_rate_limit,
             admission_gate=body.admission_gate,
+            model_first_extraction=body.model_first_extraction,
         )
         if body.status is not None:
             # Keyed on the requested status, not on a change, so a retry after a failure

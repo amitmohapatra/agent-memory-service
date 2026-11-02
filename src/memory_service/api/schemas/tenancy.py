@@ -35,6 +35,11 @@ _ADMISSION = (
     "when it is said again. Off (the default) stores every deduplicated candidate. Statements "
     "made with POST /v1/memories are never gated"
 )
+_MODEL_FIRST = (
+    "read every statement of a user's message with the model first, where the tenant's model "
+    "policy allows contextual_extraction, and keep its facts beside the rules' through the same "
+    "deduplication. Off (the default) reads messages as before"
+)
 _QUOTA = (
     "requests per minute per credential of this tenant, replacing the service default; "
     "0 disables the limiter for the tenant (to stop serving it, suspend it)"
@@ -95,6 +100,7 @@ class UpdateTenantRequest(BaseModel):
         description="true: remove the tenant's own quota, so the service default applies again.",
     )
     admission_gate: bool | None = Field(default=None, description=_ADMISSION)
+    model_first_extraction: bool | None = Field(default=None, description=_MODEL_FIRST)
 
 
 class TenantResponse(BaseModel):
@@ -109,6 +115,7 @@ class TenantResponse(BaseModel):
         "service default."
     )
     admission_gate: bool = Field(description=_ADMISSION)
+    model_first_extraction: bool = Field(description=_MODEL_FIRST)
     created_at: datetime = Field(description="When it was onboarded (ISO 8601, UTC).")
     updated_at: datetime = Field(description="When the record last changed (ISO 8601, UTC).")
 

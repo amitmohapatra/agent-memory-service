@@ -48,7 +48,9 @@ class FixedExtraction:
     def __init__(self, *candidates: MemoryCandidate) -> None:
         self.candidates = candidates
 
-    async def extract(self, observation: Any, ctx: Any) -> list[MemoryCandidate]:
+    async def extract(
+        self, observation: Any, ctx: Any, *, model_first: bool = False
+    ) -> list[MemoryCandidate]:
         seen = EvidenceRef(
             source_type="message",
             source_id=observation.observation_id,
@@ -60,7 +62,7 @@ class FixedExtraction:
         return candidate
 
     async def consolidate(
-        self, candidate: MemoryCandidate, existing: Any, ctx: Any
+        self, candidate: MemoryCandidate, existing: Any, ctx: Any, *, model_first: bool = False
     ) -> ConsolidationOutcome:
         return ConsolidationOutcome(decision=DedupDecision.CREATE, candidate=candidate)
 

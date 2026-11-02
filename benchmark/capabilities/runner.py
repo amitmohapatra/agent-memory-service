@@ -156,6 +156,8 @@ class Settings:
     #: llm set indexes through a CPU model, which takes hours when its calls are answered)
     settle_seconds: float = SETTLE_SECONDS
     out: Path | None = None
+    #: the tenant reads its messages with the model first (``Tenant.model_first_extraction``)
+    model_first: bool = False
     #: the date every session is anchored to (``Session.day`` is relative to it); None is the
     #: UTC date the run starts. Recorded as ``meta.run_date``.
     run_date: date | None = None
@@ -766,6 +768,8 @@ async def _tenant(settings: Settings, factory: ClientFactory) -> tuple[str, Any]
         else:
             if not settings.reuse:
                 raise SystemExit(STORE_IN_USE.format(what=f"tenant {settings.tenant!r} exists"))
+        if settings.model_first:
+            await platform.admin.update_tenant(settings.tenant, model_first_extraction=True)
     async with factory(admin_key) as admin:
         tenant = admin.administer(settings.tenant)
         model = os.environ.get(policy.get("model_env", ""), "")
@@ -785,6 +789,7 @@ async def _tenant(settings: Settings, factory: ClientFactory) -> tuple[str, Any]
             "models": dict(stored.models),
             "key_id": key.key_id,
             "admin_key": admin_key,
+            "model_first_extraction": settings.model_first,
         }
 
 
@@ -1046,6 +1051,11 @@ def parse(argv: Sequence[str] | None = None) -> tuple[Settings, argparse.Namespa
         help="YYYY-MM-DD the sessions are dated from (default: today, UTC); recorded in the result",
     )
     p.add_argument("--out", default=None, help="default benchmark/results/capabilities/<mode>.json")
+    p.add_argument(
+        "--model-first",
+        action="store_true",
+        help="turn on the eval tenant's model-first extraction (Tenant.model_first_extraction)",
+    )
     a = p.parse_args(argv)
     sample: dict[str, Any] = {}
     if a.sample:
@@ -1084,6 +1094,7 @@ def parse(argv: Sequence[str] | None = None) -> tuple[Settings, argparse.Namespa
         settle_seconds=float(sample.get("settle_seconds", a.settle_seconds)),
         out=Path(a.out) if a.out else None,
         run_date=date.fromisoformat(a.run_date) if a.run_date else None,
+        model_first=a.model_first,
     )
     return settings, a
 

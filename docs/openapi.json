@@ -7110,6 +7110,11 @@
             "title": "Created At",
             "type": "string"
           },
+          "model_first_extraction": {
+            "description": "read every statement of a user's message with the model first, where the tenant's model policy allows contextual_extraction, and keep its facts beside the rules' through the same deduplication. Off (the default) reads messages as before",
+            "title": "Model First Extraction",
+            "type": "boolean"
+          },
           "name": {
             "description": "The tenant's display name.",
             "title": "Name",
@@ -7167,6 +7172,7 @@
           "retention_days",
           "rate_limit_per_minute",
           "admission_gate",
+          "model_first_extraction",
           "created_at",
           "updated_at"
         ],
@@ -7746,6 +7752,18 @@
             "description": "true: remove the retention limit (memories are kept until forgotten).",
             "title": "Clear Retention",
             "type": "boolean"
+          },
+          "model_first_extraction": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "read every statement of a user's message with the model first, where the tenant's model policy allows contextual_extraction, and keep its facts beside the rules' through the same deduplication. Off (the default) reads messages as before",
+            "title": "Model First Extraction"
           },
           "name": {
             "anyOf": [

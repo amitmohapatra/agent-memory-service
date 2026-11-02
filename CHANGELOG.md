@@ -7,6 +7,17 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added
+- **Model-first extraction, a tenant's choice** (ADR 0045; service). `model_first_extraction`
+  on the tenant (`PATCH /v1/admin/tenants`, off by default): where the tenant's model policy
+  allows `contextual_extraction`, one call reads every statement of a user's message, in any
+  language, told the day it was said. A one-valued slot no rule read ("Ich wohne jetzt in
+  München") is a memory consolidated like the rules' (a new value supersedes the old one, the
+  same value is not stored twice); every other fact, pronouns and dates resolved, is appended
+  to the turn's index key; the message's relative dates are the model's. Off, or with no
+  model, nothing changes. On a paraphrase set (one fact said five ways in three languages)
+  the duplicate rate is 0.09, against 0.44 rules-first with the same model and 0.16 with none.
+
 ### Changed
 - **A later chat recalls what the assistant answered in an earlier one** (ADR 0044; service,
   SDK `trellis-memory` 0.6.3). "What was that reorder number you worked out on Monday?": the

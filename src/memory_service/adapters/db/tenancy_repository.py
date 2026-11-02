@@ -38,6 +38,7 @@ def _tenant(row: TenantRow) -> Tenant:
         retention_days=row.retention_days,
         rate_limit_per_minute=row.rate_limit_per_minute,
         admission_gate=row.admission_gate,
+        model_first_extraction=row.model_first_extraction,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

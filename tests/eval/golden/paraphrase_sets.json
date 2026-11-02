@@ -1,0 +1,26 @@
+{
+  "description": "One user's statements across turns and languages, for the duplicate, false-merge and stale-value rates of extraction and consolidation (benchmark/paraphrases.py, ADR 0045). A same group is one fact said five ways: every typed memory past the first is a duplicate. An update group says a value twice, then a new one twice (from turn changes_at): a memory of an earlier turn left current, and not marked as an earlier value, is stale. A distinct group is a near-identical statement of another thing: merging it into any other group is a false merge. The turns are said in round-robin order over the groups, alternating two conversations, one day apart, by user u1 unless a group names another (an update group's user is not the one a same group of the same slot speaks for: one person lives in one city).",
+  "groups": [
+    {"id": "same-lives", "kind": "same", "turns": ["I live in Toronto.", "Toronto is home for me these days.", "Ich wohne in Toronto.", "Vivo en Toronto.", "I'm based in Toronto."]},
+    {"id": "same-works", "kind": "same", "turns": ["I work at Siemens.", "My employer is Siemens.", "Ich arbeite bei Siemens.", "Trabajo en Siemens.", "I'm employed by Siemens."]},
+    {"id": "same-tea", "kind": "same", "turns": ["I prefer tea over coffee.", "Tea is my drink, not coffee.", "Ich trinke lieber Tee als Kaffee.", "Prefiero el té al café.", "Given the choice I always take tea instead of coffee."]},
+    {"id": "same-code", "kind": "same", "turns": ["The warehouse door code is 4417.", "Door code for the warehouse: 4417.", "Der Code für die Lagertür ist 4417.", "El código de la puerta del almacén es 4417.", "To open the warehouse door you type 4417."]},
+    {"id": "same-sister", "kind": "same", "turns": ["My sister Ana is a nurse.", "Ana, my sister, works as a nurse.", "Meine Schwester Ana ist Krankenschwester.", "Mi hermana Ana es enfermera.", "Ana is my sister and a nurse by profession."]},
+    {"id": "same-supplier", "kind": "same", "turns": ["Our main supplier for pallets is Uline.", "We buy most of our pallets from Uline.", "Unser Hauptlieferant für Paletten ist Uline.", "Nuestro proveedor principal de palés es Uline.", "Uline supplies most of our pallets."]},
+    {"id": "same-timezone", "kind": "same", "turns": ["My timezone is CET.", "I'm on CET.", "Meine Zeitzone ist CET.", "Mi zona horaria es CET.", "I work in the CET timezone."]},
+    {"id": "same-allergy", "kind": "same", "turns": ["I'm allergic to peanuts.", "Peanuts give me an allergic reaction.", "Ich bin allergisch gegen Erdnüsse.", "Soy alérgico a los cacahuetes.", "I have a peanut allergy."]},
+    {"id": "update-lives", "kind": "update", "user": "u2", "changes_at": 2, "old": "Berlin", "new": "Madrid", "turns": ["I live in Berlin.", "Berlin is my home.", "I moved to Madrid last month.", "Ich wohne jetzt in Madrid."]},
+    {"id": "update-works", "kind": "update", "user": "u2", "changes_at": 2, "old": "Acme", "new": "Globex", "turns": ["I work at Acme.", "My employer is Acme.", "I left Acme and I now work at Globex.", "Ahora trabajo en Globex."]},
+    {"id": "update-code", "kind": "update", "user": "u2", "changes_at": 2, "old": "2231", "new": "9087", "turns": ["The server room code is 2231.", "Server room: code 2231.", "The server room code changed to 9087.", "Der Code für den Serverraum ist jetzt 9087."]},
+    {"id": "update-supplier", "kind": "update", "user": "u2", "changes_at": 2, "old": "Brightway", "new": "Corrimax", "turns": ["Our crate supplier is Brightway.", "We get our crates from Brightway.", "We ended the Brightway agreement; crates now come from Corrimax.", "Unsere Kisten kommen jetzt von Corrimax."]},
+    {"id": "update-manager", "kind": "update", "user": "u2", "changes_at": 2, "old": "Priya", "new": "Tom", "turns": ["My manager is Priya.", "I report to Priya.", "My new manager is Tom.", "Mi jefe ahora es Tom."]},
+    {"id": "distinct-forklift-3", "kind": "distinct", "turns": ["Forklift 3 is due for service on Friday."]},
+    {"id": "distinct-forklift-4", "kind": "distinct", "turns": ["Forklift 4 is due for service on Friday."]},
+    {"id": "distinct-dock-2", "kind": "distinct", "turns": ["Dock 2 opens at 6am."]},
+    {"id": "distinct-dock-5", "kind": "distinct", "turns": ["Dock 5 opens at 6am."]},
+    {"id": "distinct-brother", "kind": "distinct", "turns": ["My brother Leo is a teacher."]},
+    {"id": "distinct-cousin", "kind": "distinct", "turns": ["My cousin Leo is a teacher."]},
+    {"id": "distinct-store-512", "kind": "distinct", "turns": ["Store 512 closes at 9pm."]},
+    {"id": "distinct-store-513", "kind": "distinct", "turns": ["Store 513 closes at 9pm."]}
+  ]
+}

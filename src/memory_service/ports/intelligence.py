@@ -105,6 +105,12 @@ class MemoryCandidate(BaseModel):
         description="a verbatim turn restated to stand on its own, appended to its index key "
         "(set by the pipeline from the model, never by a provider)",
     )
+    dated_mentions: list[dict[str, str]] | None = Field(
+        default=None,
+        description="the relative dates the text names, each with the day it resolves to, "
+        "as the model-first extraction read them (``Tenant.model_first_extraction``); None "
+        "leaves them to the library at write (``modules.memory.temporal``)",
+    )
     restatement_relations: list[tuple[str, str, str]] = Field(
         default_factory=list,
         description="(person, predicate, object) the restatement found in the turn, which the "
@@ -137,8 +143,11 @@ class MemoryIntelligenceProvider(Protocol):
     info: ProviderInfo
 
     async def extract(
-        self, observation: Observation, ctx: MemoryExecutionContext
-    ) -> list[MemoryCandidate]: ...
+        self, observation: Observation, ctx: MemoryExecutionContext, *, model_first: bool = False
+    ) -> list[MemoryCandidate]:
+        """``model_first``: the tenant reads its messages with the model first
+        (``Tenant.model_first_extraction``)."""
+        ...
 
     async def classify(
         self, candidate: MemoryCandidate, ctx: MemoryExecutionContext
@@ -151,6 +160,8 @@ class MemoryIntelligenceProvider(Protocol):
         candidate: MemoryCandidate,
         existing: Sequence[CanonicalMemory],
         ctx: MemoryExecutionContext,
+        *,
+        model_first: bool = False,
     ) -> ConsolidationOutcome: ...
 
 

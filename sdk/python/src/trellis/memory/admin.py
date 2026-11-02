@@ -94,7 +94,8 @@ class AdminAPI:
 
     async def update_tenant(self, tenant_id: str, **changes: Any) -> TenantInfo:
         """``name``, ``status``, ``retention_days`` / ``clear_retention``,
-        ``rate_limit_per_minute`` / ``clear_rate_limit``, ``admission_gate``."""
+        ``rate_limit_per_minute`` / ``clear_rate_limit``, ``admission_gate``,
+        ``model_first_extraction``."""
         return TenantInfo.model_validate(
             await self._t.request("PATCH", f"/v1/admin/tenants/{tenant_id}", json=changes)
         )

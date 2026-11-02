@@ -1,0 +1,204 @@
+{
+  "arm": "nollm",
+  "candidates": 84,
+  "decisions": {
+    "CONTRADICT": 0,
+    "CREATE": 82,
+    "IGNORE": 0,
+    "MERGE": 0,
+    "REINFORCE": 1,
+    "SUPERSEDE": 1,
+    "UPDATE": 0
+  },
+  "duplicate_rate": 0.1562,
+  "duplicates": 5,
+  "false_merge_rate": 0.0,
+  "false_merges": [],
+  "messages": 68,
+  "new_value_kept": 2,
+  "per_group": {
+    "distinct-brother": {
+      "typed_current": [
+        "My brother Leo is a teacher."
+      ]
+    },
+    "distinct-cousin": {
+      "typed_current": [
+        "My cousin Leo is a teacher."
+      ]
+    },
+    "distinct-dock-2": {
+      "typed_current": []
+    },
+    "distinct-dock-5": {
+      "typed_current": []
+    },
+    "distinct-forklift-3": {
+      "typed_current": [
+        "Forklift 3 is due for service on Friday."
+      ]
+    },
+    "distinct-forklift-4": {
+      "typed_current": [
+        "Forklift 4 is due for service on Friday."
+      ]
+    },
+    "distinct-store-512": {
+      "typed_current": []
+    },
+    "distinct-store-513": {
+      "typed_current": []
+    },
+    "same-allergy": {
+      "typed_current": [
+        "I have a peanut allergy."
+      ]
+    },
+    "same-code": {
+      "typed_current": [
+        "The warehouse door code is 4417."
+      ]
+    },
+    "same-lives": {
+      "typed_current": [
+        "Toronto is home for me these days.",
+        "I live in Toronto."
+      ]
+    },
+    "same-sister": {
+      "typed_current": [
+        "My sister Ana is a nurse.",
+        "Ana is my sister and a nurse by profession."
+      ]
+    },
+    "same-supplier": {
+      "typed_current": [
+        "Our main supplier for pallets is Uline."
+      ]
+    },
+    "same-tea": {
+      "typed_current": [
+        "I prefer tea over coffee.",
+        "Tea is my drink, not coffee.",
+        "Given the choice I always take tea instead of coffee."
+      ]
+    },
+    "same-timezone": {
+      "typed_current": [
+        "My timezone is CET."
+      ]
+    },
+    "same-works": {
+      "typed_current": [
+        "I work at Siemens.",
+        "My employer is Siemens."
+      ]
+    },
+    "update-code": {
+      "new_current": false,
+      "stale_turns": [],
+      "stale_typed": [],
+      "typed_current": []
+    },
+    "update-lives": {
+      "new_current": true,
+      "stale_turns": [
+        "Berlin is my home."
+      ],
+      "stale_typed": [
+        "Berlin is my home."
+      ],
+      "typed_current": [
+        "Berlin is my home.",
+        "I moved to Madrid last month."
+      ]
+    },
+    "update-manager": {
+      "new_current": true,
+      "stale_turns": [
+        "I report to Priya."
+      ],
+      "stale_typed": [
+        "I report to Priya."
+      ],
+      "typed_current": [
+        "I report to Priya.",
+        "My new manager is Tom."
+      ]
+    },
+    "update-supplier": {
+      "new_current": false,
+      "stale_turns": [],
+      "stale_typed": [],
+      "typed_current": []
+    },
+    "update-works": {
+      "new_current": false,
+      "stale_turns": [],
+      "stale_typed": [],
+      "typed_current": []
+    }
+  },
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "unknown",
+    "host_load": {
+      "load_per_core": 0.48,
+      "loadavg_15m": 1.91,
+      "loadavg_1m": 1.9,
+      "loadavg_5m": 2.12
+    },
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    },
+    "machine": "x86_64",
+    "memory_gb": 15.7,
+    "models": {
+      "bekko-embedding-v1-a8m": {
+        "repo": "hotchpotch/bekko-embedding-v1-a8m",
+        "revision": "c721113d59a1d91b447450324f51c4b3332c924a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "mdeberta-v3-base-xnli-multilingual-nli-2mil7": {
+        "repo": "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7",
+        "revision": "b5113eb38ab63efdd7f280f8c144ea8b13f978ce"
+      },
+      "mxbai-edge-colbert-v0-32m": {
+        "repo": "mixedbread-ai/mxbai-edge-colbert-v0-32m",
+        "revision": "bb13a29ec9b1e7edd4ba8f7a0776c48b55cbad66"
+      }
+    },
+    "packages": {
+      "docling": "not-installed",
+      "fastapi": "0.141.1",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.18.44-fc-v185-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "timestamp": "2026-11-02T11:54:53.565267+00:00"
+  },
+  "repeats": 32,
+  "stale_any_rate": 0.4,
+  "stale_typed_rate": 0.4,
+  "tokens_per_message": {
+    "input": 0.0,
+    "output": 0.0
+  },
+  "typed_current": 21,
+  "write_seconds_per_message": {
+    "max": 0.593,
+    "mean": 0.207,
+    "p50": 0.188
+  }
+}

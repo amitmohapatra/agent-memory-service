@@ -46,7 +46,12 @@ from memory_service.modules.memory.narrative import (
     extract_narrative_units,
 )
 from memory_service.modules.memory.source_facts import CONFIDENCE as SOURCE_FACT_CONFIDENCE
-from memory_service.modules.memory.source_facts import extract_source_facts
+from memory_service.modules.memory.source_facts import (
+    Reading,
+    SourceFact,
+    extract_source_facts,
+    read_message,
+)
 from memory_service.modules.memory.statements import (
     RULE_KINDS,
     Lexicon,
@@ -474,6 +479,47 @@ def _clean_object(text: str) -> str:
     return t.strip(" ,;:")
 
 
+def _statements(sentences: Sequence[str]) -> set[int]:
+    """The indices of the sentences that state something: not a question, not an
+    acknowledgement."""
+    return {
+        index
+        for index, sentence in enumerate(sentences)
+        if not is_question(sentence) and not ACKNOWLEDGEMENT.match(sentence)
+    }
+
+
+def _new_slot(fact: SourceFact, read: dict[int, list[MemoryCandidate]]) -> bool:
+    """The model's ``fact`` sets a one-valued slot of the speaker ("lives_in": a city) that no
+    rule read from the sentences it cites: a memory of its own, which a later value replaces."""
+    return (
+        is_single_valued(fact.predicate)
+        and bool(fact.object)
+        and all(c.predicate != fact.predicate for i in fact.sentences for c in read.get(i, ()))
+    )
+
+
+def _with_reading(reading: Reading, candidates: list[MemoryCandidate]) -> list[MemoryCandidate]:
+    """The model's reading on the observation's memories. Each carries the relative dates its
+    own words name, resolved by the model (one mechanism for the whole observation). The turn
+    as said carries the facts, pronouns and dates resolved, appended to the key it is found by
+    (``restatement``, ADR 0027): measured in LongMemEval's study, facts appended to the turn's
+    key raised recall where facts as memories of their own lowered it, and a fact said five
+    ways is then never five memories."""
+    facts = " ".join(f.text for f in reading.facts if not is_single_valued(f.predicate))
+    out: list[MemoryCandidate] = []
+    for c in candidates:
+        update: dict[str, Any] = {
+            "dated_mentions": [
+                t for t in reading.times if t["text"].casefold() in c.content.casefold()
+            ]
+        }
+        if facts and c.category == "verbatim_turn":
+            update["restatement"], facts = facts, ""  # the first piece of a long turn
+        out.append(c.model_copy(update=update))
+    return out
+
+
 def _evidence(observation: Observation) -> list[EvidenceRef]:
     source_type = {
         ObservationKind.MESSAGE: EvidenceSource.MESSAGE,
@@ -647,15 +693,15 @@ class NativeMemoryIntelligence:
 
     # -- extraction -----------------------------------------------------------------
     async def extract(
-        self, observation: Observation, ctx: MemoryExecutionContext
+        self, observation: Observation, ctx: MemoryExecutionContext, *, model_first: bool = False
     ) -> list[MemoryCandidate]:
-        candidates = await self._extract(observation, ctx)
+        candidates = await self._extract(observation, ctx, model_first=model_first)
         if not follows_user(observation):
             return candidates
         return [c.model_copy(update={"follows_user": True}) for c in candidates]
 
     async def _extract(
-        self, observation: Observation, ctx: MemoryExecutionContext
+        self, observation: Observation, ctx: MemoryExecutionContext, *, model_first: bool
     ) -> list[MemoryCandidate]:
         if observation.hints.skip_extraction or not observation.content.strip():
             return []
@@ -719,8 +765,15 @@ class NativeMemoryIntelligence:
         labels = await self.labeller.label(
             sentences, models=kind is ObservationKind.MESSAGE and not observation.agent_authored
         )
-        contextual = await self._contextual_candidates(observation, ctx, evidence, sentences)
-        for sentence, label in zip(sentences, labels, strict=True):
+        reading = await self._read_with_model(observation, sentences) if model_first else None
+        contextual = (
+            await self._contextual_candidates(observation, ctx, evidence, sentences)
+            if not model_first
+            else []
+        )
+        #: what the rules read from each sentence (by index)
+        read: dict[int, list[MemoryCandidate]] = {}
+        for index, (sentence, label) in enumerate(zip(sentences, labels, strict=True)):
             clauses = split_clauses(sentence)
             for clause in clauses:
                 cand = self._from_sentence(
@@ -728,11 +781,19 @@ class NativeMemoryIntelligence:
                 )
                 if cand is None:
                     continue
+                read.setdefault(index, []).append(cand)
                 key = normalized_hash(cand.content)
                 if key in seen:
                     continue
                 seen.add(key)
                 out.append(cand)
+        if reading is not None:
+            # the model's value of a one-valued slot the rules did not read is a memory of its
+            # own, consolidated like the rules' (a later value replaces it); every other fact
+            # it read goes to the key the turn is found by (``_with_reading``)
+            contextual = self._fact_candidates(
+                [f for f in reading.facts if _new_slot(f, read)], ctx, evidence
+            )
         original_key = normalized_hash(text) if self.cfg.keep_verbatim_turns else None
         for cand in contextual:
             key = normalized_hash(cand.content)
@@ -772,7 +833,22 @@ class NativeMemoryIntelligence:
             for turn in self._verbatim(text, observation, ctx, evidence)
             if normalized_hash(turn.content) not in held
         )
-        return out
+        return out if reading is None else _with_reading(reading, out)
+
+    async def _read_with_model(
+        self, observation: Observation, sentences: list[str]
+    ) -> Reading | None:
+        """Model-first (``Tenant.model_first_extraction``): one call reads every statement of
+        a user's message, in any language; None when no model may be asked or it failed."""
+        if (
+            observation.kind is not ObservationKind.MESSAGE
+            or observation.agent_authored
+            or not self.assist.wants("contextual_extraction")
+        ):
+            return None
+        return await read_message(
+            self.assist, sentences, _statements(sentences), said_at=observation.occurred_at
+        )
 
     async def _contextual_candidates(
         self,
@@ -831,12 +907,16 @@ class NativeMemoryIntelligence:
         evidence: list[EvidenceRef],
         sentences: list[str],
     ) -> list[MemoryCandidate]:
-        eligible = {
-            index
-            for index, sentence in enumerate(sentences)
-            if not is_question(sentence) and not ACKNOWLEDGEMENT.match(sentence)
-        }
-        facts = await extract_source_facts(self.assist, sentences, eligible)
+        return self._fact_candidates(
+            await extract_source_facts(self.assist, sentences, _statements(sentences)) or [],
+            ctx,
+            evidence,
+        )
+
+    @staticmethod
+    def _fact_candidates(
+        facts: list[SourceFact], ctx: MemoryExecutionContext, evidence: list[EvidenceRef]
+    ) -> list[MemoryCandidate]:
         return [
             MemoryCandidate(
                 content=fact.text,
@@ -851,7 +931,7 @@ class NativeMemoryIntelligence:
                 category="source_fact",
                 provider="llm",
             )
-            for fact in facts or []
+            for fact in facts
         ]
 
     async def _contextual_units(
@@ -1287,6 +1367,8 @@ class NativeMemoryIntelligence:
         candidate: MemoryCandidate,
         existing: Sequence[CanonicalMemory],
         ctx: MemoryExecutionContext,
+        *,
+        model_first: bool = False,
     ) -> ConsolidationOutcome:
         if not existing:
             return ConsolidationOutcome(
@@ -1328,6 +1410,10 @@ class NativeMemoryIntelligence:
             if generated != unverified_representation(mem.system_metadata):
                 # Never let a generated rewrite reinforce or replace an asserted source,
                 # even when its text happens to be identical.
+                if model_first and generated:
+                    known = self._asserted(candidate, mem, pairs[mem.memory_id], ctx)
+                    if known is not None:
+                        return known
                 continue
             if transcript != (mem.system_metadata.get("category") == "verbatim_turn"):
                 # A turn as said and a rule's reading of it are two memories even in the same
@@ -1347,7 +1433,9 @@ class NativeMemoryIntelligence:
             # similarity is not equivalence: a small foreign-language negation or changed
             # relationship can otherwise replace the only surviving source statement.
             if (
-                generated
+                # model-first, the model's facts are compared with each other as the rules'
+                # readings are: the turns they come from are kept apart from both
+                (generated and not model_first)
                 or candidate.category in {"verbatim_turn", "narrative_unit"}
                 or (mem.system_metadata.get("category") in {"verbatim_turn", "narrative_unit"})
             ):
@@ -1494,6 +1582,44 @@ class NativeMemoryIntelligence:
             )
             return await self._adjudicate(candidate, mem, ctx, native=create, same=same)
         return best or create
+
+    def _asserted(
+        self,
+        candidate: MemoryCandidate,
+        mem: CanonicalMemory,
+        pair: SubjectPair,
+        ctx: MemoryExecutionContext,
+    ) -> ConsolidationOutcome | None:
+        """A model-first fact (a one-valued slot, ``_new_slot``) against what the user said
+        (a rule's reading). The same value is not stored beside it. A new value of the user's
+        own slot - copied from the message (``source_facts``) - supersedes it, as the rule
+        reading the same words would: left current, the old value is served as current."""
+        c_obj = _clean_object(candidate.object or "")
+        m_obj = _clean_object(mem.object or "")
+        if (
+            candidate.predicate
+            and mem.predicate == candidate.predicate
+            and pair.subject.verdict is SubjectVerdict.SAME
+            and c_obj
+            and m_obj
+        ):
+            if c_obj == m_obj:
+                return ConsolidationOutcome(
+                    decision=DedupDecision.IGNORE,
+                    candidate=candidate,
+                    target_memory_id=mem.memory_id,
+                    score=0.98,
+                    reason="model fact: the source states this value",
+                )
+            if is_single_valued(candidate.predicate) and not _other_principals_shared(mem, ctx):
+                return ConsolidationOutcome(
+                    decision=DedupDecision.SUPERSEDE,
+                    candidate=candidate,
+                    target_memory_id=mem.memory_id,
+                    score=0.95,
+                    reason=f"model fact: new value for single-valued slot {candidate.predicate}",
+                )
+        return None
 
     async def _uncertain(
         self,

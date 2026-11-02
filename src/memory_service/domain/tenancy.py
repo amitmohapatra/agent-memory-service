@@ -82,6 +82,12 @@ class Tenant(BaseModel):
         description="score each extracted memory candidate before it is stored and keep only "
         "the ones worth keeping (modules/memory/admission.py); off keeps every candidate",
     )
+    model_first_extraction: bool = Field(
+        default=False,
+        description="read every statement of a user's message with the model first, where a "
+        "model may be asked (contextual_extraction), and keep its facts beside the rules' "
+        "through the same consolidation (ADR 0045); off reads messages as before",
+    )
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
 

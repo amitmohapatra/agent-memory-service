@@ -47,6 +47,11 @@ each candidate is scored and only the admitted ones are stored
 ([memory.md](memory.md#the-admission-gate)). A tenant with no row — the development tenant —
 keeps every candidate.
 
+`model_first_extraction` (off by default, `PATCH` only) reads every statement of a user's message
+with the model first, where the tenant's model policy allows `contextual_extraction`: one call per
+message, its facts kept beside the rules' through the same deduplication
+([ADR 0045](../adr/0045-model-first-extraction.md)).
+
 ## Operations
 
 | Route | Answers | Status |
