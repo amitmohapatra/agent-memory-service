@@ -37,6 +37,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any
 
+from memory_service.domain.enums import StatementKind
+from memory_service.modules.memory.referred import REFERRED
 from memory_service.modules.retrieval import periods
 from memory_service.ports.search import SearchHit, VectorName
 
@@ -197,9 +199,7 @@ def statements(pool: ArmPool) -> ArmPool:
     forms: dict[str, list[SearchHit]] = {}
     for rids in groups:
         ordered = sorted(rids, key=lambda r: (-base[r], r))
-        # the turn as said stands for its statement when it is in hand: it holds every
-        # reading of it whole (a list of codes, a format's every column)
-        turn = next((r for r in ordered if pool.hits[r].payload.get("category") == TURN), None)
+        turn = _standing_for(ordered, pool)
         if turn is not None:
             ordered.remove(turn)
             ordered.insert(0, turn)
@@ -213,6 +213,21 @@ def statements(pool: ArmPool) -> ArmPool:
         ranks[name] = closed
     hits = {rid: hit for rid, hit in pool.hits.items() if shown.get(rid, rid) == rid}
     return ArmPool(hits=hits, ranks=ranks, forms=forms)
+
+
+def _standing_for(ordered: list[str], pool: ArmPool) -> str | None:
+    """The form that stands for a statement when it is in hand: the turn as said, which holds
+    every reading of it whole (a list of codes, a format's every column); before it, a
+    referring turn kept with the answer it refers to ("Approve it", ``memory.referred``), which
+    holds the turn whole and the figure it points at - unless the turn corrects that answer,
+    whose figure is then the replaced one ("That's wrong ... 186 units", after 137)."""
+    category = {r: pool.hits[r].payload.get("category") for r in ordered}
+    corrects = any(
+        pool.hits[r].payload.get("statement_kind") == StatementKind.CORRECTION.value
+        for r in ordered
+    )
+    wanted = (TURN,) if corrects else (REFERRED, TURN)
+    return next((r for kind in wanted for r in ordered if category[r] == kind), None)
 
 
 def fused(pool: ArmPool) -> dict[str, float]:

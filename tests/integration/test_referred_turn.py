@@ -20,6 +20,16 @@ pytestmark = pytest.mark.integration
 
 USER = MemoryExecutionContext(tenant_id="acme", user_id="ada", workspace_id="ws1")
 WHEN = datetime(2026, 10, 30, 9, tzinfo=UTC)
+ASKED = (
+    "Reorder qty of the Cotton Cardigan Burgundy for the north? reorder qty = average daily "
+    "units sold over 2026-09-03..2026-09-30 (28 days) x (supplier lead time + 7 review days) - "
+    "units on hand, rounded up, never below 0 (north only)."
+)
+LATER = (
+    "Today's stock is in. How far is my approved quantity for the Cotton Cardigan Burgundy from "
+    "what the formula gives today, and what would today's number be if the lead time were 5 "
+    "days longer?"
+)
 ANSWER = (
     "**Reorder quantity for Cotton Cardigan Burgundy (SKU-00116), north: 19 units**\n\n"
     "- North units sold, 3-30 Sep 2026: 15, so 0.5357 a day\n- Supplier lead time: 38 days"
@@ -92,3 +102,20 @@ async def test_a_statement_that_stands_alone_is_not_tied_to_the_answer(
         role="USER",
     )
     assert all("19 units" not in c for c in await _contents(container, uow_factory))
+
+
+async def test_a_later_chat_recalls_the_figure_it_approved(container, uow_factory) -> None:
+    """The recall the stored turn exists for (break-and-fix re-measure, Claude and Kimi on
+    ``bf2-mixed-01``): the next chat recalls "Approve it ... 19 units". The bare turn and the
+    referring one are one statement (``memory_ranking.statements``), and the bare one stood
+    for it, so the context said "Approve it as my north order for this item." and no figure."""
+    from memory_service.domain.enums import MessageRole
+    from tests.integration.test_statements_follow_the_user import _chat, _recalled, _say
+
+    chat = _chat("ada")
+    await _say(container, uow_factory, chat, ASKED)
+    await _say(container, uow_factory, chat, ANSWER, role=MessageRole.ASSISTANT)
+    await _say(container, uow_factory, chat, "Approve it as my north order for this item.")
+    recalled = await _recalled(container, _chat("ada"), LATER)
+    approved = [line for line in recalled.splitlines() if line.startswith("Approve it")]
+    assert approved and all("19 units" in line for line in approved), recalled

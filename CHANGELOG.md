@@ -191,6 +191,12 @@ each entry says which one moved. Decisions behind each change are in the
   agent recalling the note called it inconsistent. A count with no direction ("32 days",
   "3 weeks", "in 2 months") is no longer a dated mention; "3 days ago" and "in two weeks from
   today" still are.
+- **A later chat recalls the figure an "Approve it" approved** (service). #74 keeps "Approve it
+  as my north order for this item." with the answer it refers to ("... (in reply to: ... 19
+  units)"), but recall groups every form of one statement and showed the bare turn for it, so
+  the next chat read that something was approved and not what (break-and-fix re-measure,
+  Claude and Kimi). The referring form now stands for its statement, except when the turn
+  corrects that answer (its figure is then the replaced one).
 - **Dead code: six more port methods nothing called are gone** (service; migration
   `0033_drop_agent_runs_turn_index`): `UnitOfWork.committed` and `dispatched_job_ids`, the
   cache's `incr`, `AgentRunRepository.list_for_turn` (with `ix_agent_runs_turn`, its only use),

@@ -16,6 +16,9 @@ from memory_service.domain.enums import Lifetime, MemoryType, ObservationKind
 from memory_service.domain.observation import Observation
 from memory_service.ports.intelligence import MemoryCandidate
 
+#: The category of the turn kept with the answer's headline; recall shows it in place of the
+#: bare turn (``retrieval.memory_ranking.statements``).
+REFERRED: Final = "referred_turn"
 #: A turn this long or longer says what it means itself.
 MAX_CHARS: Final = 200
 #: The headline of the answer kept beside the turn, at most.
@@ -66,7 +69,7 @@ def referred_turn(
                 "lifetime": Lifetime.LONG_TERM,
                 # above the bare turn: it says what the bare turn only points at
                 "importance": max(said.importance, 0.5),
-                "category": "referred_turn",
+                "category": REFERRED,
             }
         )
     ]
