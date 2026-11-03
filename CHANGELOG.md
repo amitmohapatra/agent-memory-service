@@ -8,6 +8,13 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Changed
+- **A standing rule or preference says when it was said, and what it superseded** (ADR 0041;
+  service). Each line of `standing_rules` and `preferences` ends `(said 2026-11-03)`, so the
+  agent can say which rule it used and from when. A rule that superseded an earlier one on the
+  same subject (read from the words, not said by the user) says it too: `(said 2026-11-03;
+  earlier: <the earlier rule>, said 2026-11-02)`, so the agent can ask which holds. An earlier
+  value the user replaced (ADR 0038) still never shows. `listed_rules` (the tool guard) reads
+  the rule without them. The sections' bounds are unchanged.
 - **A later chat recalls what the assistant answered in an earlier one** (ADR 0044; service,
   SDK `trellis-memory` 0.6.3). "What was that reorder number you worked out on Monday?": the
   user's memories hold their own words, never the assistant's, so a figure the assistant
