@@ -95,7 +95,11 @@ async def test_the_rules_that_apply_and_the_newest_of_one_subject() -> None:
         engine, "Run the stockout audit for region 5", None, _Vectors()
     )
     rules = next(b for b in blocks if b.block == standing.RULES_BLOCK).text
-    assert "CSV" in rules and "markdown" not in rules  # the later rule on the subject
+    # the later rule on the subject, dated, with the earlier one it superseded and its date
+    assert rules == (
+        "- Answer stockout audits as a CSV file from now on. (said 2026-10-05; earlier: "
+        "Always answer stockout audits as a markdown table; no prose., said 2026-09-01)"
+    )
     assert "transfer" not in rules and "Sundays" not in rules  # they do not apply
     # the store searched those categories only, within the reader's own scope
     assert engine.store.filters[0].should_any == {
@@ -105,7 +109,7 @@ async def test_the_rules_that_apply_and_the_newest_of_one_subject() -> None:
     }
     assert engine.store.filters[0].must_any["visibility_keys"] == ["user:t/u"]
     prefs = next(b for b in blocks if b.block == standing.PREFERENCES_BLOCK).text
-    assert prefs == "- I manage store 4779."  # related by the encoder, not by its words
+    assert prefs == "- I manage store 4779. (said 2026-10-01)"  # by the encoder, not its words
 
 
 @pytest.mark.asyncio
@@ -121,8 +125,8 @@ async def test_what_was_said_with_an_applying_preference_comes_with_it() -> None
     )
     prefs = blocks[0].text.splitlines()
     assert prefs == [
-        "- I care about high-ROS styles with short WOS.",
-        "- I manage store 4779 at Northgate.",
+        "- I care about high-ROS styles with short WOS. (said 2026-10-01)",
+        "- I manage store 4779 at Northgate. (said 2026-10-01)",
     ]
 
 
@@ -166,8 +170,14 @@ async def test_a_restated_rule_or_preference_with_new_values_keeps_only_the_newe
             _Engine(hits), "Schedule my store visit on weekdays", None, _Vectors()
         )
     }
-    assert "06:20" in blocks["standing_rules"] and "06:50" not in blocks["standing_rules"]
-    assert "ZB1871" in blocks["preferences"] and "JN4786" not in blocks["preferences"]
+    # the newest form applies; the earlier one is said with it, so the agent can ask which holds
+    assert blocks["standing_rules"].startswith("- Never schedule anything before 06:20")
+    assert (
+        "earlier: Never schedule anything before 06:50 on weekdays., said 2026-09-01)"
+        in (blocks["standing_rules"])
+    )
+    assert blocks["preferences"].count("\n") == 0 and "ZB1871" in blocks["preferences"]
+    assert "earlier: I manage store JN4786" in blocks["preferences"]
 
 
 STOCK_RULE_TASK = "Create a stock rule for ST-101 at S40, min 1 max 3."

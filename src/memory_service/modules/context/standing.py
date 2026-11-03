@@ -15,7 +15,10 @@ applies when the encoder puts it close to the request (``RULE_SIMILARITY``) or i
 content word or code with it (``SHARED_STEMS``), in any language; a preference the same way at
 ``PREFERENCE_SIMILARITY``. A later rule on the same subject supersedes an earlier one
 (``_superseded``), what was said with an applying one comes with it; an earlier value (ADR
-0038) never applies. They come back as two profile sections, ``standing_rules`` and
+0038) never applies. Each line says when it was said, and a rule or preference that superseded
+another says the earlier one too ("(said 2026-11-03; earlier: ..., said 2026-11-02)"): the
+superseding is read from the words, not said by the user, so the agent can tell the user which
+rule it used and ask which holds. They come back as two profile sections, ``standing_rules`` and
 ``preferences``, in new conversations as in old ones, bounded (``RULES_MAX``,
 ``PREFERENCES_MAX``).
 """
@@ -134,12 +137,16 @@ def applies(query_stems: set[str], hit_stems: set[str], similarity: float, floor
     return similarity >= floor or len(query_stems & hit_stems) >= SHARED_STEMS
 
 
+#: what a listed line says after the statement: when it was said, and what it superseded
+_DATED = re.compile(r" \(said \d{4}-\d{2}-\d{2}(?:;.*)?\)$")
+
+
 def listed_rules(profile: Iterable[Any]) -> list[str]:
     """The rules the ``standing_rules`` section of ``profile`` lists (``standing_blocks``): the
     user's current rules that apply to the request, nothing replaced, superseded or
-    forgotten."""
+    forgotten (a line's date and earlier rule left out)."""
     return [
-        line.removeprefix("- ")
+        _DATED.sub("", line.removeprefix("- "))
         for block in profile
         if getattr(block, "block", None) == RULES_BLOCK
         for line in str(block.text).splitlines()
@@ -211,10 +218,11 @@ def restated(rules: Iterable[tuple[str, str, Any]]) -> set[str]:
     return out
 
 
-def _superseded(chosen: Sequence[tuple[SearchHit, set[str]]]) -> set[str]:
-    """The rules a later one on the same subject supersedes: of two that share
-    ``SAME_SUBJECT`` of the shorter one's stems, the earlier said."""
-    out: set[str] = set()
+def _superseded(chosen: Sequence[tuple[SearchHit, set[str]]]) -> dict[str, SearchHit]:
+    """The rules a later one on the same subject supersedes (of two that share
+    ``SAME_SUBJECT`` of the shorter one's stems, the earlier said), each with the latest that
+    supersedes it."""
+    out: dict[str, SearchHit] = {}
     for i, (a, sa) in enumerate(chosen):
         for b, sb in chosen[i + 1 :]:
             shorter = min(len(sa), len(sb))
@@ -223,7 +231,9 @@ def _superseded(chosen: Sequence[tuple[SearchHit, set[str]]]) -> set[str]:
             said_a, said_b = _said(a), _said(b)
             if said_a == said_b or said_a[1] == said_b[1]:
                 continue  # one statement's forms, or two said at one instant: no order
-            out.add((a if said_a[1] < said_b[1] else b).record_id)
+            old, new = (a, b) if said_a[1] < said_b[1] else (b, a)
+            if old.record_id not in out or _said(out[old.record_id])[1] < _said(new)[1]:
+                out[old.record_id] = new
     return out
 
 
@@ -270,8 +280,9 @@ async def standing_blocks(
         (RULES_BLOCK, rules, RULE_SIMILARITY, RULES_MAX),
         (PREFERENCES_BLOCK, preferences, PREFERENCE_SIMILARITY, PREFERENCES_MAX),
     ):
-        chosen = [c for c in _choose(found, query_stems, lang, floor) if _said(c[0]) not in shown]
-        lines = _lines(chosen)[:most]
+        picked, earlier = _choose(found, query_stems, lang, floor)
+        chosen = [c for c in picked if _said(c[0]) not in shown]
+        lines = _lines(chosen, earlier)[:most]
         shown |= {_said(hit) for hit, _, _ in chosen}
         if lines:
             out.append(ProfileBlockView(block=block, text="\n".join(lines), version=0))
@@ -308,10 +319,10 @@ def _about(found: Sequence[tuple[SearchHit, float]], shown: set[tuple], lang: st
 
 def _choose(
     found: Sequence[tuple[SearchHit, float]], query_stems: set[str], lang: str, floor: float
-) -> list[tuple[SearchHit, set[str], float]]:
+) -> tuple[list[tuple[SearchHit, set[str], float]], dict[str, SearchHit]]:
     """The current, not superseded statements that apply, best first, with what was said in
     the same turn as each ("I manage branch 512 in the north district. I care about
-    fast-moving items.")."""
+    fast-moving items."); and by a superseding one's id, the latest it superseded."""
     current = [
         (hit, _stems(_text(hit), lang), similarity)
         for hit, similarity in found
@@ -319,18 +330,28 @@ def _choose(
     ]
     gone = _superseded([(hit, _frame(_text(hit), lang)) for hit, _, _ in current])
     live = [c for c in current if c[0].record_id not in gone]
+    hits = {hit.record_id: hit for hit, _, _ in current}
     chosen = sorted(
         (c for c in live if applies(query_stems, c[1], c[2], floor)),
         key=lambda c: (-len(query_stems & c[1]), -c[2]),
     )
     said = {_said(hit) for hit, _, _ in chosen}
-    return chosen + [c for c in live if c not in chosen and _said(c[0]) in said]
+    earlier: dict[str, SearchHit] = {}
+    for old, new in ((hits[rid], new) for rid, new in gone.items()):
+        if new.record_id not in earlier or _said(earlier[new.record_id])[1] < _said(old)[1]:
+            earlier[new.record_id] = old
+    return chosen + [c for c in live if c not in chosen and _said(c[0]) in said], earlier
 
 
-def _lines(chosen: Sequence[tuple[SearchHit, set[str], float]]) -> list[str]:
+def _lines(
+    chosen: Sequence[tuple[SearchHit, set[str], float]],
+    earlier: dict[str, SearchHit] | None = None,
+) -> list[str]:
     """One line per statement, in the order chosen, each in its fullest form: a sentence read
     from a turn that the turn itself also brings ("... with columns: Store, SKU, Style. No
-    prose before the table.") is not listed apart, so a list or a format comes back whole."""
+    prose before the table.") is not listed apart, so a list or a format comes back whole.
+    With ``earlier`` (by a statement's id, the one it superseded) each line says its date, and
+    the earlier statement with its own."""
     texts: dict[tuple, list[str]] = {}
     for hit, _, _ in chosen:
         texts.setdefault(_said(hit), []).append(_text(hit))
@@ -338,8 +359,24 @@ def _lines(chosen: Sequence[tuple[SearchHit, set[str], float]]) -> list[str]:
     for hit, _, _ in chosen:
         text, same = _text(hit), texts[_said(hit)]
         if not any(text != other and text in other for other in same):
-            lines.append(f"- {text}")
+            dated = "" if earlier is None else _dated(hit, earlier.get(hit.record_id))
+            lines.append(f"- {text}{dated}")
     return list(dict.fromkeys(lines))
+
+
+def _dated(hit: SearchHit, old: SearchHit | None) -> str:
+    """`` (said <day>; earlier: <what it superseded>, said <day>)``, or nothing undated."""
+    day = _day(hit)
+    if not day:
+        return ""
+    before = _text(old)[:ABOUT_LINE_CHARS] if old is not None else ""
+    was = f"; earlier: {before}, said {_day(old)}" if before and _day(old) else ""
+    return f" (said {day}{was})"
+
+
+def _day(hit: SearchHit | None) -> str:
+    said = str((hit.payload if hit is not None else {}).get("observed_at") or "")[:10]
+    return said if re.fullmatch(r"\d{4}-\d{2}-\d{2}", said) else ""
 
 
 def _said(hit: SearchHit) -> tuple:
