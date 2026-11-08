@@ -8,6 +8,12 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Changed
+- **An earlier answer comes with the steps that made it.** In the context's "Earlier
+  conversations", an answer whose turn made calls carries that turn's steps list under it: each
+  call (tool, arguments) and the message holding its result (`result msg_...`). A later chat can
+  say which tools it used last time, and when, and can read a past result whole with the
+  existing `GET /v1/messages/{message_id}`, which applies that thread's read rules. There is no
+  new route. The full form's `earlier_chats[].steps` carries the same. trellis-memory 0.6.4.
 - **A tool call's output is never cut.** An output longer than its 600-character summary is
   stored whole in the blob store (it was only past 4096 characters, so 601 to 4096 lost their
   tail), compressed with the archive's codec, once per content, under a hash-sharded tenant key

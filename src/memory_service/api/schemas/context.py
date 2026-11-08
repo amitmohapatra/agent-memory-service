@@ -309,6 +309,13 @@ class EarlierChatBody(BaseModel):
         description="true when the user's next message in that conversation corrected it: "
         "use the correction.",
     )
+    steps: str | None = Field(
+        default=None,
+        description="The steps list of the turn it answered: each call (tool, arguments) and "
+        "the message holding its result (`result msg_...`, read whole with GET "
+        "/v1/messages/{message_id} under that thread's read rules); omitted when it made no "
+        "call.",
+    )
 
 
 class ConversationBody(BaseModel):

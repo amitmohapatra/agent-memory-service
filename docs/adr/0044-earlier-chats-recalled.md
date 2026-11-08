@@ -57,7 +57,12 @@ remembered.
    message: use the correction" when the user's next turn there was a correction (ADR 0037,
    the mark search already gave, PR #69). The user's own words in those chats are not repeated:
    they are memories already (ADR 0036). An earlier answer is no evidence for `/v1/verify`:
-   it is what the model said then, not proof.
+   it is what the model said then, not proof. An answer whose turn made calls carries that
+   turn's steps list under it (2026-11-08; `Searcher._steps`: one more indexed read of its
+   thread, at most `TURN_SCAN` messages): each call and the message holding its result
+   (`result msg_...`), so "which tool did you use last time?" is answered from the record, and
+   a past result is read whole with `GET /v1/messages/{message_id}`, under its thread's own
+   read rules (no new route, no new permission).
 3. **`memory_search` reads what was said when such a question names no kinds**
    (`search.default_kinds`): memory, chunk and message. The tool's description says message
    includes the assistant's own earlier answers. The call stays a tool call in the run, as any

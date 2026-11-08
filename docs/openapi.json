@@ -2285,6 +2285,18 @@
             "title": "Said At",
             "type": "string"
           },
+          "steps": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The steps list of the turn it answered: each call (tool, arguments) and the message holding its result (`result msg_...`, read whole with GET /v1/messages/{message_id} under that thread's read rules); omitted when it made no call.",
+            "title": "Steps"
+          },
           "text": {
             "description": "What was said, as said (a long answer: its start and its end).",
             "title": "Text",

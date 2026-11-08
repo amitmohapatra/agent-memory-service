@@ -76,3 +76,18 @@ def test_the_full_form_carries_them() -> None:
         ],
     }
     assert ContextResponse.model_validate(body).earlier_chats[0].corrected is True
+
+
+def test_an_answer_comes_with_the_steps_that_made_it() -> None:
+    """An answer whose turn made calls carries its steps list under it: which tools, with
+    what, and each result's message, dated by its line."""
+    steps = 'For "Top supplier?" (1 call):\n1. sales_summary(group_by="supplier"): result msg_9'
+    line = _line("SUP-24 leads.", 26).model_copy(update={"steps": steps})
+    [section] = earlier_chats_section([line, _line("West: 182,340.", 27)])
+    shown = section.split("\n")[2:]
+    assert shown == [
+        "- 2026-10-26 Monday, conversation thr_26, the assistant said: SUP-24 leads.",
+        '  Its steps: For "Top supplier?" (1 call):',
+        '  1. sales_summary(group_by="supplier"): result msg_9',
+        "- 2026-10-27 Tuesday, conversation thr_27, the assistant said: West: 182,340.",
+    ]

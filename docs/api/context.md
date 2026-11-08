@@ -119,7 +119,7 @@ you..." (English, German, Spanish, Arabic and Hindi cue words), or a conversatio
 that carries on from something ("And for the cotton one in that same colour?"): the user's memories hold their
 own words, never the assistant's, so the best matching answers of the assistant in the user's
 earlier conversations are added under "## Earlier conversations" in `rendered` and as
-`earlier_chats` (`format="full"`: `id`, `role`, `text`, `thread_id`, `said_at`, `corrected`):
+`earlier_chats` (`format="full"`: `id`, `role`, `text`, `thread_id`, `said_at`, `corrected`, and `steps`: the steps list of the turn it answered, each result as `result msg_...`):
 at most three, each within half the best match's score, oldest first in `rendered`, each with
 its date and weekday, its conversation and "the assistant said", and "corrected by the user's
 next message" when it was. A long answer keeps its start and its end (1,000 characters). They

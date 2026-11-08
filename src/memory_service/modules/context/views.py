@@ -92,6 +92,8 @@ def _earlier(line: EarlierChatLine) -> dict[str, Any]:
     }
     if line.corrected:
         body["corrected"] = True
+    if line.steps:
+        body["steps"] = line.steps
     return body
 
 

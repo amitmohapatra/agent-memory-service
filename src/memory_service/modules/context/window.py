@@ -195,8 +195,10 @@ class Step:
     arguments: dict[str, Any]
     facts: dict[str, Any]
     result: str
+    #: the message holding its result (none when the result is missing)
+    ref: str | None = None
 
-    def line(self, n: int, earlier: Sequence[str]) -> str:
+    def line(self, n: int, earlier: Sequence[str], *, ref: bool = False) -> str:
         args = ", ".join(f"{k}={_short(v)}" for k, v in self.arguments.items())
         facts = self.facts
         said = [
@@ -205,6 +207,7 @@ class Step:
             _said("fetched", facts.get("fetched")),
             _said("source", facts.get("sources")),
             _from_step(self.arguments, earlier),
+            f"result {self.ref}" if ref and self.ref else None,
         ]
         told = ", ".join(x for x in said if x)
         return f"{n}. {self.name}({args})" + (f": {told}" if told else "")
@@ -235,6 +238,7 @@ def _steps(turn: Sequence[list[Message]]) -> list[Step]:
             call.arguments,
             _facts(results.get(call.id)),
             results[call.id].content if call.id in results else "",
+            results[call.id].message_id if call.id in results else None,
         )
         for unit in turn
         for call in unit[0].tool_calls
@@ -281,15 +285,21 @@ def evidence(steps: Sequence[Step], run: dict[str, Any], now: datetime) -> str |
     return f"Evidence: {'; '.join(x for x in said if x)}. How sure, from this record: {sure}."
 
 
-def steps_list(turn: Sequence[list[Message]], now: datetime | None = None) -> str:
+def steps_list(
+    turn: Sequence[list[Message]], now: datetime | None = None, *, refs: bool = False
+) -> str:
     """The turn's calls as plain text under its question, one numbered line each (the tool, its
-    arguments in short, and the facts the caller recorded on its result), the run's own
-    recorded facts, then its :func:`evidence` as of ``now`` (default: the current time); empty
-    for a turn that made no call."""
+    arguments in short, and the facts the caller recorded on its result; with ``refs``, the
+    message holding the result: an earlier conversation's, which a later chat reads whole by
+    its id, under that thread's read rules), the run's own recorded facts, then its
+    :func:`evidence` as of ``now`` (default: the current time); empty for a turn that made no
+    call."""
     steps = _steps(turn)
     if not steps:
         return ""
-    lines = [s.line(n, [e.result for e in steps[: n - 1]]) for n, s in enumerate(steps, 1)]
+    lines = [
+        s.line(n, [e.result for e in steps[: n - 1]], ref=refs) for n, s in enumerate(steps, 1)
+    ]
     run = _facts(turn[-1][-1])
     said = [
         f"status {run['status']}" if run.get("status") else None,

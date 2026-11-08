@@ -17,7 +17,9 @@ from datetime import UTC, datetime
 import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import MessageRole
+from memory_service.domain.conversation import MessageToolCall
+from memory_service.domain.enums import MessageKind, MessageRole
+from memory_service.domain.errors import ScopeDenied
 from memory_service.domain.ids import new_id
 from memory_service.modules.jobs.registry import register_handlers
 
@@ -234,3 +236,52 @@ async def test_a_new_chat_that_continues_an_earlier_one_gets_its_answer(
     assert (await _context(container, ongoing, CONTINUES)).earlier_chats == []
     plain = await _context(container, _chat(), "What was revenue for denim jeans in Q3 2026?")
     assert plain.earlier_chats == []
+
+
+#: Monday's long tool result: every knitwear SKU's units, past what an answer repeats.
+LIST = "sku,units\n" + "\n".join(f"SKU-{n:05d},{1000 - n}" for n in range(300))
+TOP_ASK = "Which knitwear SKU sold the most units in Q3? Look at the whole list."
+TOP_SAID = "SKU-00000 sold the most knitwear units in Q3: 1000."
+
+
+async def _with_a_call(container, uow_factory, ctx) -> str:
+    """Monday's question answered with one call: its whole result's message id."""
+    register_handlers(container)
+    conversation = container.services["conversation"]
+    call = MessageToolCall(id="call_1", name="sales_summary", arguments={"group_by": "sku"})
+    async with uow_factory() as uow:
+        await conversation.append_message(uow, ctx, role=MessageRole.USER, content=TOP_ASK,
+                                          occurred_at=MONDAY)  # fmt: skip
+        await conversation.append_message(uow, ctx, role=MessageRole.ASSISTANT, content="",
+                                          tool_calls=[call], occurred_at=MONDAY)  # fmt: skip
+        result = await conversation.append_message(
+            uow, ctx, role=MessageRole.TOOL, content=LIST, kind=MessageKind.INTERNAL,
+            tool_call_id="call_1", occurred_at=MONDAY,
+        )  # fmt: skip
+        await conversation.append_message(uow, ctx, role=MessageRole.ASSISTANT, content=TOP_SAID,
+                                          occurred_at=MONDAY)  # fmt: skip
+        await uow.commit()
+    await container.tasks.drain()
+    assert result.message is not None
+    return result.message.message_id
+
+
+async def test_an_earlier_answer_comes_with_its_steps_and_each_result_reads_whole(
+    container, uow_factory
+) -> None:
+    """ "Which tool did you use in our other chat?" and "number 7 on that list": the earlier
+    answer's line carries its steps, each result named by its message, which the existing read
+    (``get_message``: the thread's read rules) gives whole - to this user's agent, never to
+    another user's."""
+    monday = _chat()
+    ref = await _with_a_call(container, uow_factory, monday)
+    bundle = await _context(container, _chat(), "In our earlier chat, which tool gave the top SKU?")
+    [line] = [c for c in bundle.earlier_chats if "SKU-00000" in c.text]
+    assert line.steps.splitlines()[1] == f'1. sales_summary(group_by="sku"): result {ref}'
+    assert f'  1. sales_summary(group_by="sku"): result {ref}' in bundle.render()
+    service = container.services["conversation"]
+    async with uow_factory() as uow:
+        assert (await service.get_message(uow, _chat(), ref)).content == LIST
+    with pytest.raises(ScopeDenied):
+        async with uow_factory() as uow:
+            await service.get_message(uow, _chat("bob"), ref)

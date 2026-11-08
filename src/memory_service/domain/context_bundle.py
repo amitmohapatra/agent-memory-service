@@ -124,6 +124,9 @@ class EarlierChatLine(BaseModel):
     said_at: datetime
     #: the user's next message in that conversation corrected it (ADR 0037)
     corrected: bool = False
+    #: the steps list of the turn it answered (``modules/context/window.steps_list``, each
+    #: result named by its message); empty when that turn made no call
+    steps: str = ""
 
 
 #: The heading the rendered context gives the earlier conversations' lines, and what it says
@@ -137,13 +140,18 @@ EARLIER_CHATS_NOTE = (
 
 def earlier_chats_section(lines: Sequence[EarlierChatLine]) -> list[str]:
     """The earlier conversations' lines as the context's section, oldest first, each dated
-    with its weekday, its conversation and who said it: one line each."""
+    with its weekday, its conversation and who said it: one line each, then the steps that made
+    an answer (indented under it)."""
     if not lines:
         return []
     shown = [
         f"- {c.said_at.date().isoformat()} {c.said_at.strftime('%A')}, conversation "
         f"{c.thread_id}, the {c.role.value.lower()} said: {' '.join(c.text.split())}"
         + (" (corrected by the user's next message: use the correction)" if c.corrected else "")
+        + "".join(
+            f"\n  {'Its steps: ' if n == 0 else ''}{step}"
+            for n, step in enumerate(c.steps.splitlines())
+        )
         for c in sorted(lines, key=lambda c: c.said_at)
     ]
     return [f"## {EARLIER_CHATS_HEADING}\n{EARLIER_CHATS_NOTE}\n" + "\n".join(shown)]

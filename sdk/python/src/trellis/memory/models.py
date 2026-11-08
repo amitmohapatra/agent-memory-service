@@ -584,6 +584,9 @@ class EarlierChat(BaseModel):
     said_at: datetime
     #: the user's next message in that conversation corrected it: use the correction
     corrected: bool = False
+    #: the steps list of the turn it answered, each result named by its message (``result
+    #: msg_...``: read whole with ``messages.get``); empty when it made no call
+    steps: str = ""
 
 
 class ContextBundle(BaseModel):
