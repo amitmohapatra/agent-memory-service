@@ -480,3 +480,14 @@ def test_the_evidence_status_is_labelled_as_long_term_memorys() -> None:
     )
     assert f"## {EVIDENCE_HEADING}\nINSUFFICIENT" in bundle.render()
     assert EVIDENCE_HEADING == "Evidence status (long-term memory)"
+
+
+def test_a_steps_list_with_refs_names_each_result_by_its_message() -> None:
+    """For an earlier conversation's turn, each step names its result's message: what a later
+    chat reads it whole by (``GET /v1/messages/{id}``, the thread's own read rules)."""
+    turn = _recorded(_turn("Top SKUs?", ["a,1", "b,2"], "a"), {"status": "ok"}, {})
+    results = [m.message_id for m in turn if m.role is T]
+    lines = steps_list(turns(units(turn))[0], NOW, refs=True).splitlines()
+    assert lines[1] == f'1. lookup(q="Top SKUs-0"): ok, result {results[0]}'
+    assert lines[2] == f'2. lookup(q="Top SKUs-1"): result {results[1]}'
+    assert "result " not in steps_list(turns(units(turn))[0], NOW), "the window's own: no refs"

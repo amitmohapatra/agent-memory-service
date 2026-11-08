@@ -43,6 +43,7 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.memory import CanonicalMemory, statement_kind_of
 from memory_service.domain.profile import PROFILE_MEMORY_TYPES
+from memory_service.modules.context.window import steps_list, turns, units
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.replacement import anchors, relate
@@ -68,6 +69,9 @@ HISTORY_SCAN: Final = 200
 #: the user's most recently active threads (every message appended makes its thread active).
 OWNED_SCAN: Final = 200
 OWNED_THREADS: Final = 100
+#: The most messages read back from an earlier answer for the turn it ends (its question,
+#: calls and results: a turn of 30 calls fits).
+TURN_SCAN: Final = 64
 #: The query's longest words the database filters earlier conversations by.
 OWNED_WORDS: Final = 16
 _WORD: Final = re.compile(r"\w+")
@@ -527,6 +531,7 @@ class Searcher:
         kept = [m for n, m in answers if n >= EARLIER_CHAT_SHARE * best][:EARLIER_CHAT_LINES]
         async with self.uow_factory() as uow:
             corrected = await self._corrected(uow, ctx.tenant_id, kept)
+            steps = [await self._steps(uow, ctx.tenant_id, m) for m in kept]
         return [
             EarlierChatLine(
                 message_id=m.message_id,
@@ -535,9 +540,25 @@ class Searcher:
                 thread_id=m.thread_id,
                 said_at=m.occurred_at,
                 corrected=m.message_id in corrected,
+                steps=made,
             )
-            for m in kept
+            for m, made in zip(kept, steps, strict=True)
         ]
+
+    @staticmethod
+    async def _steps(uow: UnitOfWork, tenant_id: str, answer: Message) -> str:
+        """The steps list of the turn ``answer`` ends (``window.steps_list``, each result
+        named by its message: "which tools did you use?", "number 7 on that list"); empty
+        when it made no call. One indexed read of its thread, newest first, up to it."""
+        read = await uow.messages.list_thread(
+            tenant_id,
+            answer.thread_id,
+            limit=TURN_SCAN,
+            before_sequence=answer.sequence + 1,
+            include_internal=True,
+        )
+        found = turns(units(read))
+        return steps_list(found[-1], refs=True) if found else ""
 
     async def _thread(self, ctx: MemoryExecutionContext) -> list[Message]:
         if not ctx.thread_id:
