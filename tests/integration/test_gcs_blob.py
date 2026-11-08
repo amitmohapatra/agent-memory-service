@@ -32,10 +32,11 @@ from memory_service.application.container import Container, build_container
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.conversation import Thread
 from memory_service.domain.enums import ArchiveStatus
-from memory_service.modules.tools.service import INLINE_OUTPUT_LIMIT
+from memory_service.modules.tools.service import SUMMARY_CHARS
 from tests.conftest import PG_AVAILABLE
 from tests.integration.conftest import TABLES, integration_overrides, integration_settings
 from tests.integration.test_archive import TENANT, _seed
+from tests.integration.test_tool_outputs import read_output
 
 EMULATOR = os.environ.get("MEMORY_TEST_GCS_EMULATOR")
 
@@ -142,12 +143,12 @@ async def test_an_uploaded_document_lands_in_the_file_bucket(gcs) -> None:
     assert staged is None, "the hot copy is purged once the archive is verified"
 
 
-async def test_a_tool_output_over_the_inline_limit_lands_in_the_bucket(gcs) -> None:
+async def test_a_tool_output_past_its_summary_lands_in_the_bucket(gcs) -> None:
     tools = gcs.services["tool_memory"]
     ctx = MemoryExecutionContext(
         tenant_id=TENANT, user_id="u1", agent_id="bot", agent_run_id="run_gcs"
     )
-    output = "row " * (INLINE_OUTPUT_LIMIT // 2)
+    output = "row " * SUMMARY_CHARS
     for step in (0, 1):  # the same output twice: one object, both calls point at it
         async with gcs.services["uow_factory"]() as uow:
             invocation, _ = await tools.record(
@@ -156,6 +157,7 @@ async def test_a_tool_output_over_the_inline_limit_lands_in_the_bucket(gcs) -> N
             await uow.commit()
         assert invocation.output_blob_ref is not None
     stored = _objects(gcs, gcs.settings.blob.file_bucket)
-    [(key, data)] = stored.items()
+    [key] = stored
     assert invocation.output_blob_ref == f"{gcs.settings.blob.file_bucket}/{key}"
-    assert data.decode() == output and key.startswith(f"{TENANT}/tool-output/")
+    assert f"/tenant={TENANT}/tool-output/" in key and key.endswith(".txt.zst")
+    assert await read_output(gcs.blob, invocation.output_blob_ref) == output
