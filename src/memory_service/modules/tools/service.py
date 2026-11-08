@@ -12,11 +12,15 @@ same audience keys a memory written by the same caller would.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 from collections.abc import Sequence
 from typing import Any, Final
 
+import zstandard
+
+from memory_service.config.constants import ARCHIVE
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import Lifetime, MemoryType, Visibility
 from memory_service.domain.revisions import RevisionKind
@@ -28,6 +32,7 @@ from memory_service.domain.tools import (
     ToolStatus,
     stable_hash,
 )
+from memory_service.modules.archive.segments import tenant_shard
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.memory.pipeline import keys_for, scope_for
 from memory_service.modules.tenancy.gate import guard_workspace_visibility
@@ -43,7 +48,10 @@ log = get_logger(__name__)
 
 TASK_TOOLS_INDEX: Final = "tools.index"
 TASK_TOOLS_LEARN: Final = "tools.learn"
-INLINE_OUTPUT_LIMIT: Final = 4096
+#: Stores a tool output whose upload failed when it was recorded (the outbox retries it).
+TASK_TOOLS_OUTPUT: Final = "tools.output"
+#: What a call's row keeps of its output (the context reads it); a longer output is stored
+#: whole in the blob store, by reference.
 SUMMARY_CHARS: Final = 600
 #: Entries one catalog listing or upsert handles.
 CATALOG_MAX: Final = 500
@@ -135,7 +143,9 @@ class ToolMemoryService:
         descriptor = await uow.tools.by_name(
             ctx.tenant_id, tool, workspace_id=ctx.workspace_id
         ) or await uow.tools.ensure(ctx.tenant_id, tool)
-        summary, blob_ref, output_digest = await self._store_output(ctx, output, output_summary)
+        summary, blob_ref, output_digest = await self._store_output(
+            uow, ctx, output, output_summary
+        )
         invocation = ToolInvocation(
             tenant_id=ctx.tenant_id,
             tool_id=descriptor.tool_id,
@@ -184,30 +194,57 @@ class ToolMemoryService:
         return max((i.step for i in existing), default=-1) + 1
 
     async def _store_output(
-        self, ctx: MemoryExecutionContext, output: Any, provided_summary: str | None
+        self,
+        uow: UnitOfWork,
+        ctx: MemoryExecutionContext,
+        output: Any,
+        provided_summary: str | None,
     ) -> tuple[str, str | None, str | None]:
+        """The row's summary, the reference to the whole output, and its digest. An output
+        longer than the summary is stored whole (``store_output``); an upload that fails is
+        retried by the outbox (``TASK_TOOLS_OUTPUT``, in the call's transaction) under the
+        same content address, so the reference holds and nothing is cut."""
         if output is None:
             return (provided_summary or "", None, None)
         text = output if isinstance(output, str) else _render(output)
         digest = hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()
         summary = provided_summary or text[:SUMMARY_CHARS]
-        blob_ref: str | None = None
-        if len(text) > INLINE_OUTPUT_LIMIT and self.blob is not None:
-            path = f"{ctx.tenant_id}/tool-output/{digest}.txt"
-            try:
-                await self.blob.put(
-                    self.blob_bucket,
-                    path,
-                    text.encode("utf-8", "replace"),
-                    content_type="text/plain",
+        if len(text) <= SUMMARY_CHARS:
+            return (summary, None, digest)
+        key = output_key(ctx.tenant_id, digest)
+        try:
+            if self.blob is None:
+                raise RuntimeError("no blob store")
+            await store_output(self.blob, self.blob_bucket, key, text)
+        except Exception as exc:  # the store's own errors vary by provider
+            log.warning("tools.output_deferred", error=type(exc).__name__, key=key)
+            await uow.enqueue(
+                JobSpec(
+                    task_name=TASK_TOOLS_OUTPUT,
+                    queue=Queue.RECONCILE,
+                    payload={"bucket": self.blob_bucket, "key": key, "text": text},
+                    tenant_id=ctx.tenant_id,
+                    idempotency_key=f"tool-output:{key}",
                 )
-                blob_ref = f"{self.blob_bucket}/{path}"
-            except BlobAlreadyExists:
-                # content-addressed: the same output was archived by an earlier call
-                blob_ref = f"{self.blob_bucket}/{path}"
-            except Exception as exc:
-                log.warning("tools.output_archive_failed", error=type(exc).__name__)
-        return (summary, blob_ref, digest)
+            )
+        return (summary, f"{self.blob_bucket}/{key}", digest)
+
+
+def output_key(tenant_id: str, digest: str) -> str:
+    """Where a tool output is stored: by its digest, under the tenant, sharded as the archive's
+    segments are (``archive.segments``), compressed with the archive's codec."""
+    shard = tenant_shard(tenant_id, ARCHIVE.tenant_shards)
+    return f"tenant-shard={shard:03d}/tenant={tenant_id}/tool-output/sha256={digest}.txt.zst"
+
+
+async def store_output(blob: Any, bucket: str, key: str, text: str) -> None:
+    """Store an output once (the same digest is the same object): zstd, as the archive."""
+    data = zstandard.ZstdCompressor(level=ARCHIVE.zstd_level).compress(
+        text.encode("utf-8", "replace")
+    )
+    # content-addressed: an earlier call that stored the same output stored this object
+    with contextlib.suppress(BlobAlreadyExists):
+        await blob.put(bucket, key, data, content_type="application/zstd")
 
 
 def _visibility_keys(ctx: MemoryExecutionContext, visibility: Visibility) -> list[str]:

@@ -8,6 +8,11 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Changed
+- **A tool call's output is never cut.** An output longer than its 600-character summary is
+  stored whole in the blob store (it was only past 4096 characters, so 601 to 4096 lost their
+  tail), compressed with the archive's codec, once per content, under a hash-sharded tenant key
+  (`tenant-shard=<n>/tenant=<t>/tool-output/sha256=<digest>.txt.zst`). An upload that fails is
+  retried by the outbox (`tools.output`) instead of only logged. Nothing to do.
 - **A standing rule or preference says when it was said, and what it superseded** (ADR 0041;
   service). Each line of `standing_rules` and `preferences` ends `(said 2026-11-03)`, so the
   agent can say which rule it used and from when. A rule that superseded an earlier one on the

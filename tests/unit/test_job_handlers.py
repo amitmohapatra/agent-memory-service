@@ -15,8 +15,10 @@ from typing import Any
 
 import pytest
 import structlog
+import zstandard
 from structlog.testing import capture_logs
 
+from memory_service.adapters.blob.memory import MemoryBlobStore
 from memory_service.config.constants import TASKS
 from memory_service.domain.enums import MemoryType
 from memory_service.domain.memory import CanonicalMemory
@@ -29,6 +31,11 @@ from memory_service.modules.jobs.names import (
 )
 from memory_service.modules.llm.cost import llm_accounting, record_llm_tokens
 from memory_service.modules.profile.service import TASK_PROFILE_REFRESH
+from memory_service.modules.tools.service import (
+    TASK_TOOLS_INDEX,
+    TASK_TOOLS_LEARN,
+    TASK_TOOLS_OUTPUT,
+)
 from memory_service.ports.tasks import JobSpec, Queue
 
 pytestmark = pytest.mark.unit
@@ -517,17 +524,24 @@ async def test_profile_jobs_refresh_answer_and_schedule() -> None:
 async def test_tool_jobs_index_and_learn() -> None:
     tool_index, learning = _Service(), _Service()
     queue, _, _ = _wire({"tool_index": tool_index, "tool_learning": learning})
-    index_task = next(
-        n for n, (q, _) in queue.options.items() if q is Queue.EMBEDDING and n.startswith("tools")
-    )
-    learn_task = next(
-        n for n, (q, _) in queue.options.items() if q is Queue.RECONCILE and n.startswith("tools")
-    )
-    await queue.handlers[index_task]({"tenant_id": "acme", "tool_ids": ["tool_1"]})
-    await queue.handlers[learn_task]({"tenant_id": "acme"})
+    assert queue.options[TASK_TOOLS_INDEX][0] is Queue.EMBEDDING
+    assert queue.options[TASK_TOOLS_LEARN][0] is Queue.RECONCILE
+    await queue.handlers[TASK_TOOLS_INDEX]({"tenant_id": "acme", "tool_ids": ["tool_1"]})
+    await queue.handlers[TASK_TOOLS_LEARN]({"tenant_id": "acme"})
     await queue.handlers["periodic.tools_learn"]({})
     assert tool_index.calls == [("index", ("acme", ["tool_1"]), {})]
     assert learning.calls == [("learn", ("acme",), {}), ("learn", (None,), {})]
+
+
+async def test_a_tool_output_whose_upload_failed_is_stored_by_its_job() -> None:
+    queue, _, container = _wire()
+    container.blob = MemoryBlobStore()
+    assert queue.options[TASK_TOOLS_OUTPUT][0] is Queue.RECONCILE
+    job = {"bucket": "b", "key": "k.txt.zst", "text": "ü" * 1000}
+    for _ in range(2):  # a retried job stores the same object once
+        await queue.handlers[TASK_TOOLS_OUTPUT](job)
+    data = await container.blob.get("b", "k.txt.zst")
+    assert zstandard.ZstdDecompressor().decompress(data).decode() == job["text"]
 
 
 async def test_tool_records_embedded_from_older_text_are_refreshed_on_a_schedule() -> None:

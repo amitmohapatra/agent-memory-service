@@ -25,7 +25,12 @@ from memory_service.modules.profile.service import (
     TASK_PROFILE_REFRESH,
     ProfileService,
 )
-from memory_service.modules.tools.service import TASK_TOOLS_INDEX, TASK_TOOLS_LEARN
+from memory_service.modules.tools.service import (
+    TASK_TOOLS_INDEX,
+    TASK_TOOLS_LEARN,
+    TASK_TOOLS_OUTPUT,
+    store_output,
+)
 from memory_service.observability.logging import get_logger
 from memory_service.ports.tasks import JobSpec, Queue, TaskHandler
 
@@ -348,6 +353,10 @@ def register_handlers(container: Container) -> None:
         """Fold recorded tool calls into stored procedures and graph edges."""
         await container.services["tool_learning"].learn(payload.get("tenant_id"))
 
+    async def tools_output(payload: dict[str, Any]) -> None:
+        """Store a tool output whose upload failed when its call was recorded."""
+        await store_output(container.blob, payload["bucket"], payload["key"], payload["text"])
+
     async def outbox_sweep(payload: dict[str, Any]) -> None:
         relay = container.services.get("outbox_relay")
         if relay is not None:
@@ -459,6 +468,7 @@ def register_handlers(container: Container) -> None:
         "periodic.profile_queries", Queue.RECONCILE, profile_queries, cron="*/5 * * * *"
     )
     queue.register(TASK_TOOLS_INDEX, Queue.EMBEDDING, tools_index, retries=5)
+    queue.register(TASK_TOOLS_OUTPUT, Queue.RECONCILE, tools_output, retries=10)
     _register_tools_refresh(queue, container)
     queue.register(TASK_TOOLS_LEARN, Queue.RECONCILE, tools_learn, retries=0)
     queue.register_periodic(
