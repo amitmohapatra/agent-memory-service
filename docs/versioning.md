@@ -68,11 +68,11 @@ Elsewhere:
 
 | Package | Version | Needs |
 |---|---|---|
-| `trellis-memory-service` (this repository) | 0.4.0 | `bifrost-sdk>=0.4` (auth strategies, profile shaping), `trellis-contracts>=0.6.3,<0.7` (`Endpoint`) |
+| `trellis-memory-service` (this repository) | 0.4.0 | `bifrost-sdk>=0.4` (auth strategies, profile shaping), `trellis-contracts>=0.6.3,<0.8` (`Endpoint`) |
 | `trellis-memory` (this repository's SDK) | 0.6.3 | a 0.4.0 service (the model-key routes take an `endpoint`) |
-| `trellis-harness` ([agent-harness](https://github.com/amitmohapatra/agent-harness)) | 0.4.0 | `trellis-memory>=0.4`, `trellis-runs>=0.4.0`, `trellis-contracts>=0.6.0,<0.7`, `bifrost-sdk>=0.3` |
-| `agent-runs` and `trellis-runs` ([agent-runs](https://github.com/amitmohapatra/agent-runs)) | 0.4.0 | `trellis-contracts>=0.6.1,<0.7` |
-| `trellis-contracts` ([agent-contracts](https://github.com/amitmohapatra/agent-contracts)) | 0.6.3 | nothing of the others |
+| `trellis-harness` ([agent-harness](https://github.com/amitmohapatra/agent-harness)) | 0.4.0 | `trellis-memory>=0.4`, `trellis-runs>=0.4.0`, `trellis-contracts>=0.6.5,<0.8`, `bifrost-sdk>=0.3` |
+| `agent-runs` and `trellis-runs` ([agent-runs](https://github.com/amitmohapatra/agent-runs)) | 0.4.1 | `trellis-contracts>=0.6.2,<0.8` |
+| `trellis-contracts` ([agent-contracts](https://github.com/amitmohapatra/agent-contracts)) | 0.7.0 | nothing of the others |
 | `bifrost-sdk` ([bifrost-sdk](https://github.com/amitmohapatra/bifrost-sdk)) | 0.4.0 | any OpenAI-compatible endpoint |
 
 The memory service imports `trellis-contracts` for one type, the `Endpoint` an agent

@@ -41,7 +41,7 @@ dependencies = [
   "bifrost-sdk>=0.4",
   # ``Endpoint``: what an agent registers (where its model is, how to reach it, what the
   # model accepts). One owner of that shape, shared with the harness that sends it.
-  "trellis-contracts>=0.6.3,<0.7",
+  "trellis-contracts>=0.6.3,<0.8",
   # ``trellis.memory.approval``: the one implementation of approve_when and of the argument
   # shape approvals are pooled by, shared with the harness that evaluates them.
   "trellis-memory",

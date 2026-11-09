@@ -16,10 +16,15 @@ each entry says which one moved. Decisions behind each change are in the
   message's, its date is the temporal library's (the model's only for a phrase the library
   cannot read) and it says something new; an update or a contradiction is decided by the
   replacement path, and kept as an earlier value when unsure. On an 80-case extraction eval it
-  keeps 0.94 of the facts against the rules' 0.23, with no false fact and fewer duplicates;
-  LoCoMo answers are unchanged within run-to-run noise. The narrative units, the non-English
+  keeps 0.94 of the facts against the rules' 0.23, with no false fact; words the rules and
+  the model both read, or the model read twice, are held once (duplicates 0.10-0.20 -> 0.03-0.06
+  over runs, the rest mostly two facts sharing the eval's words); LoCoMo answers are unchanged within run-to-run noise. The narrative units, the non-English
   typed facts and the statement labeller's model tier are removed: one call does their work.
   No setting, use name, route or SDK call changed; without a model nothing changed.
+- **The service admits agent-contracts 0.7** (`trellis-contracts>=0.6.3,<0.8`; service). 0.7.0
+  removes only the run inbox names (`RunMessage`, `RunUsage`, `InterruptReason.PAUSE`), which
+  moved to agent-contracts' `background-agents` branch; the service uses `Endpoint` alone, so
+  nothing else changes.
 - **An earlier answer comes with the steps that made it.** In the context's "Earlier
   conversations", an answer whose turn made calls carries that turn's steps list under it: each
   call (tool, arguments) and the message holding its result (`result msg_...`). A later chat can
