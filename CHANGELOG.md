@@ -8,6 +8,10 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Changed
+- **The service admits agent-contracts 0.7** (`trellis-contracts>=0.6.3,<0.8`; service). 0.7.0
+  removes only the run inbox names (`RunMessage`, `RunUsage`, `InterruptReason.PAUSE`), which
+  moved to agent-contracts' `background-agents` branch; the service uses `Endpoint` alone, so
+  nothing else changes.
 - **An earlier answer comes with the steps that made it.** In the context's "Earlier
   conversations", an answer whose turn made calls carries that turn's steps list under it: each
   call (tool, arguments) and the message holding its result (`result msg_...`). A later chat can
