@@ -82,3 +82,35 @@ async def test_without_a_model_the_memories_are_the_rules_alone(container, uow_f
     unwired = _shape(await _memories(uow_factory, U2, container))
     assert wired == unwired
     assert all(category != "source_fact" for _, _, category, _ in wired)
+
+
+async def test_a_rule_reading_the_model_read_again_is_held_once(container, uow_factory):
+    """vdate-4 of the hard eval: the rules read "The audit is due the Friday before
+    Christmas." and the model the same words with the day resolved: one memory, the
+    model's."""
+    said = "The audit is due the Friday before Christmas."
+    resolved = "The audit is due on 2026-12-18."
+    ops = {
+        "ops": [
+            {
+                "op": "add",
+                "fact": resolved,
+                "quote": said,
+                "type": "plan",
+                "subject": "audit",
+                "date": "2026-12-18",
+                "confidence": 0.9,
+                "target": 0,
+            }
+        ]
+    }
+    pipeline = container.services["observation_pipeline"]
+    with mocked_gateway([ops]) as gateway:
+        pipeline.gapfill = GapFill(gateway.assist(uses=["contextual_extraction"]))
+        await _observe(container, uow_factory, U1, said, hints=USER)
+    readings = [
+        m.content
+        for m in await _memories(uow_factory, U1, container)
+        if m.system_metadata.get("category") != "verbatim_turn" and "audit" in m.content
+    ]
+    assert readings == [resolved]

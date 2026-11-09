@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Final
 
 from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.context import MemoryExecutionContext
@@ -45,6 +45,7 @@ from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.memory.gapfill import POOL, RECENT_TURNS, GapFill, Turn, worth_asking
 from memory_service.modules.memory.gapfill import TYPES as GAP_TYPES
 from memory_service.modules.memory.gapfill import candidate as gap_candidate
+from memory_service.modules.memory.gapfill import covered as gap_covered
 from memory_service.modules.memory.native import follows_user, normalized_hash, split_sentences
 from memory_service.modules.memory.referred import referred_turn
 from memory_service.modules.memory.replacement import CrossConversationReplacement
@@ -349,6 +350,11 @@ def said_by_a_person(memory: CanonicalMemory) -> bool:
     )
 
 
+#: the rules' readings that are a sentence as said (not a slot: a preference, an attribute,
+#: a task), which a model's fact of the same words replaces (``Gaps.covered``)
+SENTENCE_READINGS: Final = frozenset({"fact", "event"})
+
+
 def _speaker(observation: Observation) -> str:
     """Who said a message: the agent for its own words, else the person."""
     if observation.agent_authored:
@@ -363,6 +369,9 @@ class Gaps:
 
     fills: list[tuple[MemoryCandidate, CanonicalMemory | None]] = field(default_factory=list)
     known: list[CanonicalMemory] = field(default_factory=list)
+    #: the rules' sentence readings the model read again (``gapfill.covered``): held by
+    #: the model's facts, which say them with who and when resolved
+    covered: frozenset[str] = frozenset()
 
 
 class ObservationPipeline:
@@ -429,6 +438,11 @@ class ObservationPipeline:
                     await self.provider.extract(observation, ctx), observation, ctx
                 )
                 gaps = await self._gaps(observation, ctx, candidates, prior)
+                candidates = [
+                    c
+                    for c in candidates
+                    if c.content not in gaps.covered or c.category not in SENTENCE_READINGS
+                ]
                 candidates += await self._classified([c for c, _ in gaps.fills], observation, ctx)
                 if preceding is not None:
                     candidates = [
@@ -546,6 +560,11 @@ class ObservationPipeline:
                 for f in fills
             ],
             known,
+            frozenset(
+                gap_covered(
+                    [c.content for c in candidates if c.category in SENTENCE_READINGS], fills
+                )
+            ),
         )
 
     async def _recent(

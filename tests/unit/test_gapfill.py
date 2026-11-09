@@ -174,3 +174,98 @@ async def test_a_rule_reading_said_again_with_the_speakers_name_is_not_added():
         rules=["Our pallet supplier is Uline.", "Her name is Biscuit."],
     )
     assert [f.fact for f in out] == ["Ana's dog is named Biscuit."]
+
+
+# ------------------------------------------------- one memory per fact (the hard eval's duplicates)
+
+
+def _known(text: str):
+    from memory_service.domain.enums import Lifetime, Visibility
+    from memory_service.domain.evidence import EvidenceRef
+    from memory_service.modules.memory.pipeline import build_memory
+    from memory_service.ports.intelligence import MemoryCandidate
+
+    said = EvidenceRef(source_type="message", source_id="m0", observed_at=SAID)
+    return build_memory(
+        MemoryCandidate(
+            content=text,
+            memory_type=MemoryType.SEMANTIC,
+            lifetime=Lifetime.LONG_TERM,
+            visibility=Visibility.USER,
+            category="fact",
+            evidence=[said],
+        ),
+        CTX,
+        now=SAID,
+    )
+
+
+async def test_a_change_the_rules_already_read_is_not_stored_again():
+    """contra-4: the rules read "Forklift 4 is back in service since this morning." and closed
+    the earlier value; the model's contradict op restating it was a second memory of it."""
+    back = op(
+        op="contradict",
+        fact="Forklift 4 is back in service.",
+        quote="Forklift 4 is back in service",
+        target=1,
+    )
+    out, _ = await fill(
+        [{"ops": [back]}],
+        message="Forklift 4 is back in service since this morning.",
+        rules=["Forklift 4 is back in service since this morning."],
+        known=[_known("Forklift 4 is out of service.")],
+    )
+    assert out == []
+
+
+async def test_an_add_of_the_words_an_update_rests_on_is_the_update():
+    """update-6 / hi-update: "Priya handed on-call over to Marcus this week." read as the new
+    value of the lead (update) and again as an event (add) was two memories of one change; an
+    add resting on other words of the message is kept."""
+    quote = "Priya handed on-call over to Marcus this week"
+    update = op(op="update", fact="Our on-call lead is now Marcus.", quote=quote, target=1)
+    event = op(fact="Priya handed on-call duty over to Marcus.", quote=quote)
+    other = op(fact="Ana's team has a new pager.", quote="We also got a new pager")
+    out, _ = await fill(
+        [{"ops": [update, event, other]}],
+        message=f"{quote}. We also got a new pager.",
+        known=[_known("Our on-call lead is Priya.")],
+    )
+    assert [f.fact for f in out] == [
+        "Our on-call lead is now Marcus.",
+        "Ana's team has a new pager.",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("reading", "quotes", "covered"),
+    [
+        # vdate-4: the model read the same words and resolved the day
+        (
+            "The audit is due the Friday before Christmas.",
+            ["The audit is due the Friday before Christmas"],
+            True,
+        ),
+        # opinion-1: the model read the sentence as its two facts
+        (
+            "I think the new CRM is clunky, but the team already migrated to it in May.",
+            ["I think the new CRM is clunky", "the team already migrated to it in May"],
+            True,
+        ),
+        # a fill that read only part of the reading leaves the rest to it
+        (
+            "Forklift 4 is back in service since this morning.",
+            ["Forklift 4 is back in service"],
+            False,
+        ),
+        # a fill of other words
+        ("Our biggest client is renewing.", ["The renewal is for three years"], False),
+    ],
+)
+def test_a_rule_reading_whose_words_the_model_read_is_the_model_s(reading, quotes, covered):
+    fills = [
+        checked(op(fact=f"{q} (resolved).", quote=q), [reading, *quotes], SAID, [], "Ana")
+        for q in quotes
+    ]
+    assert all(fills)
+    assert (gapfill.covered([reading], [f for f in fills if f]) == [reading]) is covered

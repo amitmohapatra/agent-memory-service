@@ -314,8 +314,13 @@ class GapFill:
         held = [*rules, *(m.content for m in known)]
         seen = {_norm(t) for t in held}
         out: list[Fill] = []
+        # what an update or contradict rests on is that change: an add of the same words
+        # ("Priya handed on-call over to Marcus") is the change told again, as an event
+        changes = [_norm(f.quote) for f in fills if f.op != "add"]
         for f in fills:
-            if f.op == "add" and (_norm(f.fact) in seen or _restates(f, rules, speaker)):
+            if (f.op == "add" and (_norm(f.fact) in seen or _overlaps(f.quote, changes))) or (
+                _restates(f, rules, speaker)
+            ):
                 continue
             seen.add(_norm(f.fact))
             out.append(f)
@@ -459,6 +464,27 @@ def _day(quote: str, given: str, said_at: datetime) -> date | None:
     except ValueError:
         return None
     return day if abs(day.year - said_at.year) <= MAX_DATE_YEARS else None
+
+
+def covered(readings: Sequence[str], fills: Sequence[Fill]) -> list[str]:
+    """The rules' ``readings`` the model read again: every word of one is in the quotes of
+    the fills that rest on it ("The audit is due the Friday before Christmas" read as "The
+    audit is due on 2026-12-18"; one sentence read as its two facts). The fills say it with
+    who and when resolved, so the reading would be the same statement held twice. A reading
+    a fill read only part of keeps its own memory."""
+    out = []
+    for reading in readings:
+        quotes = [f.quote for f in fills if _overlaps(f.quote, [_norm(reading)])]
+        if quotes and tokens(reading) <= tokens(" ".join(quotes)):
+            out.append(reading)
+    return out
+
+
+def _overlaps(quote: str, others: Sequence[str]) -> bool:
+    """Whether ``quote`` and one of the normalised ``others`` are the same words, or one
+    holds the other."""
+    mine = _norm(quote).rstrip(".!?")
+    return any(mine in other or other.rstrip(".!?") in mine for other in others if other)
 
 
 def _restates(fill: Fill, rules: Sequence[str], speaker: str) -> bool:
