@@ -8,6 +8,18 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Changed
+- **With a model, one call per message fills what the rules missed** (ADR 0045). The rules read
+  a person's message first, as before; then one `contextual_extraction` call reads it with the
+  four turns before it, what the rules read and the speaker's eight closest memories, and
+  returns facts to add and memories to update or contradict, each quoting the message. Code
+  keeps an op only when its quote is there, its numbers are said, its language is the
+  message's, its date is the temporal library's (the model's only for a phrase the library
+  cannot read) and it says something new; an update or a contradiction is decided by the
+  replacement path, and kept as an earlier value when unsure. On an 80-case extraction eval it
+  keeps 0.94 of the facts against the rules' 0.23, with no false fact and fewer duplicates;
+  LoCoMo answers are unchanged within run-to-run noise. The narrative units, the non-English
+  typed facts and the statement labeller's model tier are removed: one call does their work.
+  No setting, use name, route or SDK call changed; without a model nothing changed.
 - **An earlier answer comes with the steps that made it.** In the context's "Earlier
   conversations", an answer whose turn made calls carries that turn's steps list under it: each
   call (tool, arguments) and the message holding its result (`result msg_...`). A later chat can

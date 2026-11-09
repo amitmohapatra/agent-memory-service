@@ -820,11 +820,10 @@ def _model_uses(llm_ingestion: bool, ingest_uses: Sequence[str] = ()) -> tuple[s
     """The uses the bench tenant's policy lets the model run for.
 
     The judge only, by default: it is the instrument, not the system under test. Arm A1
-    (``--llm-ingestion``) adds ``contextual_extraction``, the source-span selector in
-    ``modules/memory/narrative.py``: the model picks sentence ranges from the turn and no
-    generated text is stored, so A1 and A0 differ in *which spans become memories*, not in
-    whether the corpus contains model prose. The uses land in the corpus ledger key, so A1
-    cannot silently reuse A0's index.
+    (``--llm-ingestion``) adds ``contextual_extraction``, the gap-fill call of
+    ``modules/memory/gapfill.py`` (ADR 0045): the model's facts, each quoting its message,
+    beside the rules' readings. The uses land in the corpus ledger key, so A1 cannot silently
+    reuse A0's index.
     """
     base = (*JUDGE_USES, "contextual_extraction") if llm_ingestion else JUDGE_USES
     return (*base, *ingest_uses)
@@ -1485,7 +1484,7 @@ def main() -> int:
     parser.add_argument(
         "--llm-ingestion",
         action="store_true",
-        help="arm A1: add contextual_extraction (the source-span selector) to the ingestion "
+        help="arm A1: add contextual_extraction (the gap-fill call, ADR 0045) to the ingestion "
         "path's model uses. Needs --judge's generative model; gets its own corpus.",
     )
     parser.add_argument(

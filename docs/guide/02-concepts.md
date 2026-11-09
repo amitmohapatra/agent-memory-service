@@ -133,9 +133,8 @@ as metadata only and is stored as it was before the labeller.
 
 The labeller (`modules/memory/statements.py`) reads cue words from data packs
 (`modules/memory/lexicon/generic.json` and the default domain pack `retail.json`) and leaves
-what they cannot settle to the grounding model's NLI head and, when the tenant's policy
-allows `contextual_extraction`, to the model - whose proposal counts only if the NLI head
-confirms it; when the head fails, the lexicon's label stands and the message is stored as
+what they cannot settle to the grounding model's NLI head (the model reads those sentences,
+with the rest of the message, in the gap-fill call: ADR 0045); when the head fails, the lexicon's label stands and the message is stored as
 usual. Nothing reads the kind yet: retrieval, consolidation and the bundle are unchanged. It
 is recorded so that later stages can act on it.
 

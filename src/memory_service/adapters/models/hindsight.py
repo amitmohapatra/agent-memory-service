@@ -15,8 +15,12 @@ from memory_service.config.constants import HINDSIGHT
 from memory_service.config.settings import HindsightSettings
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.modules.llm.cost import record_llm_tokens
-from memory_service.modules.memory.narrative import MAX_INPUT_CHARS, MAX_UNIT_CHARS, MAX_UNITS
 from memory_service.observability.logging import get_logger
+
+#: what one message may send the server, and what its answer may hold
+MAX_INPUT_CHARS = 6000
+MAX_UNITS = 6
+MAX_UNIT_CHARS = 2000
 
 if TYPE_CHECKING:
     from hindsight_client import Hindsight

@@ -8,6 +8,7 @@ job is retried from the durable observation either way).
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -32,6 +33,7 @@ from memory_service.domain.memory import (
     CanonicalMemory,
     Scope,
     TemporalState,
+    unverified_representation,
 )
 from memory_service.domain.observation import AGENT_ROLES, Observation
 from memory_service.modules.authz.visibility import readable_by
@@ -40,7 +42,10 @@ from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import identity_of
 from memory_service.modules.memory.admission import AdmissionGate
 from memory_service.modules.memory.ephemeral import EphemeralMemory
-from memory_service.modules.memory.native import follows_user, normalized_hash
+from memory_service.modules.memory.gapfill import POOL, RECENT_TURNS, GapFill, Turn, worth_asking
+from memory_service.modules.memory.gapfill import TYPES as GAP_TYPES
+from memory_service.modules.memory.gapfill import candidate as gap_candidate
+from memory_service.modules.memory.native import follows_user, normalized_hash, split_sentences
 from memory_service.modules.memory.referred import referred_turn
 from memory_service.modules.memory.replacement import CrossConversationReplacement
 from memory_service.modules.memory.restatement import restate
@@ -344,6 +349,22 @@ def said_by_a_person(memory: CanonicalMemory) -> bool:
     )
 
 
+def _speaker(observation: Observation) -> str:
+    """Who said a message: the agent for its own words, else the person."""
+    if observation.agent_authored:
+        return observation.agent_id or "assistant"
+    return observation.user_id or observation.agent_id or ""
+
+
+@dataclass(frozen=True)
+class Gaps:
+    """What ``gapfill`` read from one message: each candidate with the memory it claims to
+    update or contradict, and the memories it was shown."""
+
+    fills: list[tuple[MemoryCandidate, CanonicalMemory | None]] = field(default_factory=list)
+    known: list[CanonicalMemory] = field(default_factory=list)
+
+
 class ObservationPipeline:
     def __init__(
         self,
@@ -356,8 +377,11 @@ class ObservationPipeline:
         assist: LLMAssist | None = None,
         subjects: SubjectMatcher | None = None,
         replacement: CrossConversationReplacement | None = None,
+        gapfill: GapFill | None = None,
     ) -> None:
         self.uow_factory = uow_factory
+        #: the model's one call per user message for what the rules missed (``gapfill``)
+        self.gapfill = gapfill
         #: a user's new statement against their earlier ones in other conversations (ADR 0038)
         self.replacement = replacement
         self.provider = provider
@@ -401,15 +425,11 @@ class ObservationPipeline:
                 span("memory.process", tenant_id=tenant_id, kind=observation.kind.value),
                 stage_seconds.labels("memory.process").time(),
             ):
-                # hints are applied before classification (so the provider sees the intended
-                # type) and again after it (explicit lifetime/visibility/importance always win)
-                candidates = [
-                    self._apply_hints(
-                        await self.provider.classify(self._apply_hints(c, observation), ctx),
-                        observation,
-                    )
-                    for c in await self.provider.extract(observation, ctx)
-                ]
+                candidates = await self._classified(
+                    await self.provider.extract(observation, ctx), observation, ctx
+                )
+                gaps = await self._gaps(observation, ctx, candidates, prior)
+                candidates += await self._classified([c for c, _ in gaps.fills], observation, ctx)
                 if preceding is not None:
                     candidates = [
                         c.model_copy(update={"preceding_turn": preceding}) for c in candidates
@@ -433,6 +453,7 @@ class ObservationPipeline:
                         gate=await self._gate_for(uow, tenant_id),
                     )
                     affected |= await self._replace_earlier(uow, ctx, observation, affected, since)
+                    affected |= await self._settle(uow, ctx, gaps, affected, since)
                     if affected:
                         await uow.enqueue(
                             JobSpec(
@@ -459,6 +480,130 @@ class ObservationPipeline:
             decisions={o.decision.value: 1 for o in outcomes},
         )
         return outcomes
+
+    async def _classified(
+        self,
+        candidates: list[MemoryCandidate],
+        observation: Observation,
+        ctx: MemoryExecutionContext,
+    ) -> list[MemoryCandidate]:
+        """Hints applied before classification (so the provider sees the intended type) and
+        again after it (explicit lifetime/visibility/importance always win)."""
+        return [
+            self._apply_hints(
+                await self.provider.classify(self._apply_hints(c, observation), ctx), observation
+            )
+            for c in candidates
+        ]
+
+    async def _gaps(
+        self,
+        observation: Observation,
+        ctx: MemoryExecutionContext,
+        candidates: list[MemoryCandidate],
+        prior: Observation | None,
+    ) -> Gaps:
+        """What the model reads from a user's message beyond the rules (``gapfill``): each
+        candidate with the memory it claims to update or contradict, if any, and the memories
+        it was shown."""
+        turn = next((c for c in candidates if c.category == "verbatim_turn"), None)
+        if self.gapfill is None or turn is None or not self.gapfill.wanted(observation, ctx):
+            return Gaps()
+        speaker = _speaker(observation)
+        async with self.uow_factory() as uow:
+            recent = await self._recent(uow, observation, prior)
+            if not worth_asking(split_sentences(observation.content), recent, speaker):
+                return Gaps()
+            # where this message's memories are anchored, a profile fact's (the user's) too
+            anchors = [*candidates, turn.model_copy(update={"memory_type": MemoryType.USER})]
+            pool = await uow.memories.list_scope(
+                ctx.tenant_id,
+                scope_keys=sorted({scope_for(c, ctx).key() for c in anchors}),
+                memory_types=sorted({t.value for t in GAP_TYPES.values()}),
+                limit=POOL,
+            )
+        known = await self.gapfill.nearest(observation.content, pool)
+        fills = await self.gapfill.fill(
+            ctx.tenant_id,
+            message=observation.content.strip(),
+            speaker=speaker,
+            said_at=observation.occurred_at,
+            recent=recent,
+            rules=[c.content for c in candidates if c.category != "verbatim_turn"],
+            known=known,
+        )
+        return Gaps(
+            [
+                (
+                    gap_candidate(
+                        f,
+                        speaker=turn.subject or speaker,
+                        evidence=turn.evidence,
+                        follows_user=turn.follows_user,
+                    ),
+                    f.target,
+                )
+                for f in fills
+            ],
+            known,
+        )
+
+    async def _recent(
+        self, uow: UnitOfWork, observation: Observation, prior: Observation | None
+    ) -> list[Turn]:
+        """The conversation's turns before ``observation``, oldest first."""
+        out: list[Observation] = []
+        current = prior or await uow.observations.preceding_message(
+            observation, within=self.cfg.preceding_turn_window
+        )
+        while current is not None and len(out) < RECENT_TURNS:
+            out.append(current)
+            current = await uow.observations.preceding_message(
+                current, within=self.cfg.preceding_turn_window
+            )
+        return [
+            Turn(_speaker(o), o.content.strip()[: self.cfg.preceding_turn_max_chars])
+            for o in reversed(out)
+        ]
+
+    async def _settle(
+        self,
+        uow: UnitOfWork,
+        ctx: MemoryExecutionContext,
+        gaps: Gaps,
+        affected: set[str],
+        since: datetime,
+    ) -> set[str]:
+        """The model's readings against the model's earlier readings it was shown, by the
+        replacement path: an update or a contradiction it named, and any other it relates.
+        (What the person said is compared by ``_replace_earlier``; a model's reading never
+        replaces it.)"""
+        if not gaps.fills or self.replacement is None or not self.replacement.enabled:
+            return set()
+        shown = [m for m in gaps.known if unverified_representation(m.system_metadata)]
+        by_hash = {normalized_hash(c.content): old for c, old in gaps.fills}
+        written = [
+            m
+            for m in await uow.memories.get_many(ctx.tenant_id, sorted(affected))
+            if m.created_at >= since and m.normalized_hash in by_hash
+        ]
+        changed: set[str] = set()
+        try:
+            for new in written:
+                target = by_hash[new.normalized_hash]
+                outcome = await self.replacement.settle(
+                    uow,
+                    ctx,
+                    new,
+                    [target] if target is not None else shown,
+                    claimed=target is not None,
+                    now=datetime.now(UTC),
+                )
+                changed |= {m.memory_id for m in outcome.changed}
+        except Exception as exc:  # a failing head never costs the message
+            memory_replacement_skipped_total.inc()
+            log.warning("memory.replacement_skipped", error=type(exc).__name__, reason=str(exc))
+        return changed
 
     async def _replace_earlier(
         self,

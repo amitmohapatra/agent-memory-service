@@ -669,8 +669,6 @@ class StatementLabellerSettings(BaseModel):
             StatementKind.CORRECTION: 0.8,
         }
     )
-    #: entailment at or above which a kind the tenant's model proposed is accepted
-    llm_confirm_min: float = Field(default=0.4, ge=0.0, le=1.0)
     #: open sentences scored per observation (a pasted document is not labelled whole)
     nli_max_sentences: int = Field(default=12, ge=0)
     nli_max_chars: int = Field(default=400, ge=1)

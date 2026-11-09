@@ -16,10 +16,14 @@ from memory_service.ports.credentials import ModelIdentity
 from tests.integration.test_memory import _observe
 from tests.support_llm import BASE, bound_to, chat_response, mocked_gateway
 from tests.unit.test_agent_credential_cipher import TEST_KEY
-from tests.unit.test_narrative_memory import MESSAGE
 from trellis.contracts import Endpoint
 
 pytestmark = pytest.mark.integration
+
+MESSAGE = (
+    "Maya restored the payment queue after the outage. She did not restart the database. "
+    "Omar shipped the invoice exporter on Tuesday. He postponed the dashboard until Friday."
+)
 ALICE = MemoryExecutionContext(tenant_id="acme", user_id="alice", agent_id="research")
 BOB = ALICE.model_copy(update={"user_id": "bob"})
 #: another agent: an agent's endpoint is its own, whichever user a run is for
@@ -269,9 +273,11 @@ async def test_background_ingestion_uses_owner_key_and_never_hindsight_operator_
     if registered:
         await save(credentials, uow_factory, ALICE, "vk-job-test")
     async with preview_server(facts=[]) as server:
-        with mocked_gateway([{"units": [{"start": 0, "end": 1}]}]) as gateway:
+        with mocked_gateway([{"ops": []}]) as gateway:
             provider = container.services["memory_provider"]
             provider.assist = gateway.assist(["contextual_extraction"])
+            # an agent's message is the gap-fill call's, on the owner's key, never Hindsight's
+            container.services["observation_pipeline"].gapfill.assist = provider.assist
             provider.assist.provider.credentials = credentials
             provider.contextual_extractor = server.extractor
             try:
@@ -415,7 +421,6 @@ async def test_configure_the_harness_only_and_memory_follows(container, uow_fact
 
     from memory_service.adapters.wiring import _wire_llm, _wire_memory
     from tests.integration.test_memory import _memories
-    from tests.unit.test_narrative_memory import UNITS
 
     container.settings.agent_credentials = AgentCredentialSettings(
         active_key_id="test", encryption_keys={"test": TEST_KEY}
@@ -434,7 +439,7 @@ async def test_configure_the_harness_only_and_memory_follows(container, uow_fact
         import json
 
         completion = gateway.post(f"{BASE}/chat/completions").respond(
-            200, json=chat_response(json.dumps(UNITS))
+            200, json=chat_response(json.dumps({"ops": []}))
         )
         await _observe(container, uow_factory, ALICE, MESSAGE)
         assert catalog.call_count == completion.call_count == 1

@@ -1034,6 +1034,50 @@ class CrossConversationReplacement:
         outcome.decisions.update(later.decisions)
         return outcome
 
+    async def settle(
+        self,
+        uow: UnitOfWork,
+        ctx: MemoryExecutionContext,
+        new: CanonicalMemory,
+        olds: Sequence[CanonicalMemory],
+        *,
+        claimed: bool,
+        now: datetime,
+    ) -> Outcome:
+        """A model's reading (``gapfill``) against model readings it was shown, decided as any
+        related pair is: the encoder relates them, the NLI head scores the contradiction, the
+        adjudicator settles what the head leaves in between. ``claimed``: the model said
+        ``new`` updates or contradicts the one old memory - the same slot with another value,
+        a stated change - which still needs the head's contradiction; on its doubt nothing is
+        replaced and both stay."""
+        olds = [o for o in olds if o.memory_id != new.memory_id]
+        if not self.enabled or not olds:
+            return Outcome()
+        pairs = [
+            _Pair(
+                new,
+                old,
+                Relation(False, False, apart=False, shared_slot=True)
+                if claimed
+                else relate(
+                    anchors(new.content, new.lang or None),
+                    anchors(old.content, old.lang or None),
+                    new.content,
+                    old.content,
+                ),
+            )
+            for old in olds
+        ]
+        if self.embedding is not None:
+            await self._cosines(pairs)
+        pairs = [p for p in pairs if related(p.relation, p.cosine)]
+        if not pairs:
+            return Outcome()
+        await self._contradiction(pairs)
+        kinds = [StatementKind.CORRECTION] if claimed else []
+        best = await self._decide(pairs, kinds, ctx)
+        return await self._apply(uow, ctx, best, olds, now=now)
+
     async def _replaced_by_later(
         self,
         uow: UnitOfWork,

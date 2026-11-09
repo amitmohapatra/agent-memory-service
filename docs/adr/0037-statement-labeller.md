@@ -79,10 +79,9 @@ The pattern was English-only and anchored at the start of the sentence.
      the one that fires least on chat. "The speaker is correcting an earlier mistake." was
      dropped because it holds for 47% of LoCoMo's chat sentences. A stand-in head
      (`LexicalNLI`) is never read as a classifier.
-   - **LLM**, when the tenant's policy allows `contextual_extraction` - no new use, no new
-     option - and only for sentences the head was unsure of (an entailment between the
-     confirmation and the decision thresholds). The model proposes a kind as JSON; the
-     proposal is taken only when the head confirms the sentence entails that kind.
+   - **LLM**: removed by ADR 0045. The sentences the head is unsure of are read by the model
+     in the gap-fill call with the rest of their message (an update or a contradiction it
+     names is decided by the replacement path), not in a call of their own.
 4. **Unsure keeps the reading without the rule.** When neither the words nor the head settle
    it ("We always look forward to our camping trip" / "We never ship hazardous goods on
    Fridays"), the sentence is what it is without the suspected kind: a FACT, or - for a

@@ -7,9 +7,13 @@ from memory_service.domain.observation import ProcessingHints
 from tests.integration.test_memory import U1, U2, _memories, _observe
 from tests.support_hindsight import preview_server
 from tests.support_llm import mocked_gateway
-from tests.unit.test_narrative_memory import MESSAGE
 
 pytestmark = pytest.mark.integration
+
+MESSAGE = (
+    "Maya restored the payment queue after the outage. She did not restart the database. "
+    "Omar shipped the invoice exporter on Tuesday. He postponed the dashboard until Friday."
+)
 
 
 async def test_sdk_ingest_recall_replay_forget_and_cross_user_isolation(container, uow_factory):
