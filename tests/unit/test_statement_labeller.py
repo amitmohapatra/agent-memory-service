@@ -27,7 +27,6 @@ from memory_service.modules.memory.statements import (
     most_salient,
 )
 from memory_service.ports.models import NLIScore
-from tests.support_llm import mocked_gateway
 
 pytestmark = pytest.mark.unit
 
@@ -356,7 +355,6 @@ PLAIN = "The cooler in aisle 5 stopped this morning."
 CFG = StatementLabellerSettings()
 SURE = CFG.thresholds[K.STATUS] + 0.05
 #: above the bar at which a model proposal is confirmed, below the one at which the head decides
-UNSURE = (CFG.llm_confirm_min + CFG.thresholds[K.STATUS]) / 2
 
 
 async def test_the_head_decides_only_what_the_lexicon_left_open() -> None:
@@ -393,47 +391,6 @@ async def test_a_stand_in_head_is_never_read_as_a_classifier() -> None:
     assert labeller.nli is None
     [label] = await labeller.label([PLAIN])
     assert label.kind is K.FACT and label.source == "lexicon"
-
-
-async def test_the_model_is_asked_only_when_the_head_is_unsure_and_must_be_confirmed() -> None:
-    # above the confirmation bar, below the decision bar
-    unsure = {(PLAIN, K.STATUS): UNSURE}
-    with mocked_gateway([{"labels": [{"index": 0, "kind": "status"}]}]) as gw:
-        labeller = StatementLabeller(
-            nli=ScriptedNLI(unsure),  # type: ignore[arg-type]
-            assist=gw.assist(uses=["contextual_extraction"]),
-        )
-        [label] = await labeller.label([PLAIN])
-        assert label.kind is K.STATUS and label.source == "llm"
-        assert gw.route.call_count == 1
-    with mocked_gateway([{"labels": [{"index": 0, "kind": "lifecycle"}]}]) as gw:
-        labeller = StatementLabeller(
-            nli=ScriptedNLI(unsure),  # type: ignore[arg-type]
-            assist=gw.assist(uses=["contextual_extraction"]),
-        )
-        [label] = await labeller.label([PLAIN])
-        assert label.kind is K.FACT, "a proposal the head does not confirm is not taken"
-    with mocked_gateway([{"labels": [{"index": 0, "kind": "status"}]}]) as gw:
-        sure = {(PLAIN, K.STATUS): SURE}
-        labeller = StatementLabeller(
-            nli=ScriptedNLI(sure),  # type: ignore[arg-type]
-            assist=gw.assist(uses=["contextual_extraction"]),
-        )
-        await labeller.label([PLAIN])
-        assert gw.route.call_count == 0, "a sure head needs no model call"
-
-
-async def test_a_failing_gateway_keeps_the_head_s_answer() -> None:
-    with mocked_gateway(failing=True) as gw:
-        labeller = StatementLabeller(
-            nli=ScriptedNLI({(PLAIN, K.STATUS): UNSURE}),  # type: ignore[arg-type]
-            assist=gw.assist(uses=["contextual_extraction"]),
-        )
-        [label] = await labeller.label([PLAIN])
-        assert label.kind is K.FACT
-
-
-# --------------------------------------------------------------------------- write path
 
 
 def _obs(text: str) -> Observation:

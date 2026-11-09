@@ -61,7 +61,8 @@ sequenceDiagram
 
 `role: "EVENT"` is stored as an internal message and learned from as an event. A message in a
 language other than English is kept verbatim and indexed in the multilingual dense space; the
-model reads it into typed facts only when the tenant's key and policy allow
+model reads it into facts in its language, as it reads an English one, only when the tenant's
+key and policy allow
 ([chapter 8](guide/08-models.md#the-eleven-uses)). `ctx.remember(...)` (`POST /v1/memories`) is
 the direct path: one memory, stored verbatim, never gated.
 

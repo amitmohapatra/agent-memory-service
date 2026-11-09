@@ -559,6 +559,7 @@ def _wire_memory(container: Container) -> None:
     from memory_service.modules.memory.admission import AdmissionGate
     from memory_service.modules.memory.connections import ConnectionService
     from memory_service.modules.memory.forgetting import ForgettingService
+    from memory_service.modules.memory.gapfill import GapFill
     from memory_service.modules.memory.native import NativeMemoryIntelligence
     from memory_service.modules.memory.pipeline import ObservationPipeline
     from memory_service.modules.memory.reflection import ReflectionService
@@ -566,7 +567,6 @@ def _wire_memory(container: Container) -> None:
     from memory_service.modules.memory.service import MemoryService
     from memory_service.modules.memory.statements import StatementLabeller
     from memory_service.modules.memory.subjects import SubjectMatcher
-    from memory_service.ports.intelligence import MemoryIntelligenceProvider
 
     cfg = container.tuning.memory_intelligence
     extractor = None
@@ -582,13 +582,14 @@ def _wire_memory(container: Container) -> None:
             container.add_closer("hindsight_extractor", extractor.close)
     # one subject matcher for the provider's slot rules and the pipeline's candidate lookup
     subjects = SubjectMatcher(container.embedding)
-    provider: MemoryIntelligenceProvider = NativeMemoryIntelligence(
+    provider = NativeMemoryIntelligence(
         cfg,
         container.embedding,
         assist=container.services["llm_assist"],
         contextual_extractor=extractor,
         # the grounding cascade's NLI head decides what the lexicon leaves open (ADR 0037)
-        labeller=StatementLabeller(nli=container.nli, assist=container.services["llm_assist"]),
+        # what the head leaves open the model reads in the gap-fill call (``gapfill``)
+        labeller=StatementLabeller(nli=container.nli),
         subjects=subjects,
         # the same head reads a restatement in other words as the memory already held
         nli=container.nli,
@@ -609,6 +610,14 @@ def _wire_memory(container: Container) -> None:
             container.nli,
             _multilingual_encoder(container),
             assist=container.services["llm_assist"],
+        ),
+        # what the model reads beyond the rules, one call a message, unless a Hindsight
+        # server reads it (``NativeMemoryIntelligence.server_reads``)
+        gapfill=GapFill(
+            container.services["llm_assist"],
+            container.embedding,
+            container.nli,
+            server_reads=provider.server_reads,
         ),
     )
     container.services["memory"] = MemoryService(

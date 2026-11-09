@@ -22,9 +22,9 @@ from memory_service.domain.observation import Observation
 from memory_service.modules.graph.native import NativeGraphEnrichment
 from memory_service.modules.ingestion.chunking import situated_candidates
 from memory_service.modules.llm.assist import SOURCE_LANGUAGE_RULE
-from memory_service.modules.memory.native import NativeMemoryIntelligence
+from memory_service.modules.memory.gapfill import GapFill, checked
+from memory_service.modules.memory.native import NativeMemoryIntelligence, split_sentences
 from memory_service.modules.memory.pipeline import build_memory
-from memory_service.modules.memory.source_facts import select_facts
 from memory_service.modules.retrieval.router import QueryRouter
 from tests.support_llm import mocked_gateway
 from tests.unit.test_memory_native import CTX, _obs
@@ -94,52 +94,49 @@ def test_every_stored_record_carries_its_language() -> None:
     assert chunk.lang == "de"
 
 
-def _reply(fact: str, slot: str, value: str, *, kind: str = "profile") -> dict:
+def _reply(fact: str, quote: str, *, kind: str = "profile") -> dict:
     return {
-        "facts": [
-            {"text": fact, "kind": kind, "slot": slot, "value": value, "sentences": [0]},
+        "ops": [
+            {
+                "op": "add",
+                "fact": fact,
+                "quote": quote,
+                "type": kind,
+                "subject": "",
+                "date": "",
+                "confidence": 0.9,
+                "target": 0,
+            }
         ]
     }
 
 
 @pytest.mark.parametrize("lang", sorted(FIXTURES))
-async def test_a_message_the_rules_cannot_read_becomes_typed_facts_in_its_language(
-    lang: str,
-) -> None:
-    message, fact, slot, value = FIXTURES[lang]
+async def test_a_message_the_rules_cannot_read_becomes_facts_in_its_language(lang: str) -> None:
+    message, fact, _, value = FIXTURES[lang]
     observation = _obs(message)
     assert observation.lang == lang
-    with mocked_gateway([_reply(fact, slot, value)]) as gateway:
-        native = NativeMemoryIntelligence(
-            MemoryIntelligenceSettings(), assist=gateway.assist(uses=["contextual_extraction"])
+    quote = next(part for part in split_sentences(message) if value in part)
+    with mocked_gateway([_reply(fact, quote)]) as gateway:
+        filler = GapFill(gateway.assist(uses=["contextual_extraction"]))
+        assert filler.wanted(observation, CTX)
+        fills = await filler.fill(
+            "t1",
+            message=message,
+            speaker="u1",
+            said_at=NOW,
+            recent=[],
+            rules=[],
+            known=[],
         )
-        candidates = await native.extract(observation, CTX)
-    facts = [c for c in candidates if c.category == "source_fact"]
-    assert len(facts) == 1, candidates
-    (extracted,) = facts
-    assert extracted.content == fact and detect_language(extracted.content) in (lang, "en")
+    (extracted,) = fills
+    assert extracted.fact == fact and detect_language(extracted.fact) in (lang, "en")
     assert extracted.memory_type is MemoryType.USER
-    assert (extracted.predicate, extracted.object) == ("lives_in", value)
-    assert extracted.subject == "user:u1" and extracted.provider == "llm"
-    assert extracted.evidence[0].source_id == observation.message_id
-    assert any(c.category == "verbatim_turn" for c in candidates), "the turn is kept too"
     (prompt,) = gateway.prompts()
     assert prompt["model"] == "gemini/gemini-3.8-flash", "contextual_extraction is a fast-tier use"
     system, user = (m["content"] for m in prompt["messages"])
     assert SOURCE_LANGUAGE_RULE in system
-    sent = json.loads(user)["sentences"]
-    assert sent[0]["index"] == 0 and sent[0]["text"] in message
-
-
-async def test_an_english_message_stays_on_the_rules_and_narrative_units() -> None:
-    with mocked_gateway([{"units": []}]) as gateway:
-        native = NativeMemoryIntelligence(
-            MemoryIntelligenceSettings(), assist=gateway.assist(uses=["contextual_extraction"])
-        )
-        candidates = await native.extract(_obs("I live in Berlin."), CTX)
-    assert any(c.predicate == "lives_in" for c in candidates)
-    assert not any(c.category == "source_fact" for c in candidates)
-    assert gateway.route.call_count == 0, "one rule-parsed sentence needs no model"
+    assert json.loads(user)["message"] == message
 
 
 async def test_without_a_key_a_foreign_message_is_kept_verbatim() -> None:
@@ -149,56 +146,21 @@ async def test_without_a_key_a_foreign_message_is_kept_verbatim() -> None:
 
 
 def test_model_output_that_is_translated_ungrounded_or_malformed_is_dropped() -> None:
-    sentences = ["Ich wohne jetzt in Köln.", "Ich arbeite bei Siemens."]
-    kept = select_facts(
-        {
-            "facts": [
-                # translated into English: dropped
-                {
-                    "text": "The user lives in Cologne",
-                    "kind": "profile",
-                    "slot": "lives_in",
-                    "value": "Cologne",
-                    "sentences": [0],
-                },
-                # a slot value not in the cited text: kept as a plain fact, no slot
-                {
-                    "text": "Der Nutzer arbeitet bei Siemens AG",
-                    "kind": "fact",
-                    "slot": "works_at",
-                    "value": "Siemens AG",
-                    "sentences": [1],
-                },
-                # cites nothing real
-                {
-                    "text": "Der Nutzer mag Hunde",
-                    "kind": "preference",
-                    "slot": "none",
-                    "value": "",
-                    "sentences": [7],
-                },
-                # an unknown kind
-                {
-                    "text": "Der Nutzer",
-                    "kind": "opinion",
-                    "slot": "none",
-                    "value": "",
-                    "sentences": [0],
-                },
-                "not an object",
-            ]
-        },
-        sentences,
-        {0, 1},
-    )
-    assert [(f.text, f.memory_type, f.predicate) for f in kept] == [
-        ("Der Nutzer arbeitet bei Siemens AG", MemoryType.SEMANTIC, None)
-    ]
-    japanese = select_facts(
-        _reply("The user lives in Tokyo", "lives_in", "Tokyo"), ["私は東京に住んでいます。"], {0}
-    )
-    assert japanese == [], "another script than the source is a translation"
-    assert select_facts({"facts": "nope"}, sentences, {0}) == []
+    source = ["Ich wohne jetzt in Köln. Ich arbeite bei Siemens."]
+
+    def kept(fact: str, quote: str, kind: str = "fact") -> bool:
+        item = _reply(fact, quote, kind=kind)["ops"][0]
+        return checked(item, source, NOW, []) is not None
+
+    assert not kept("The user lives in Cologne", "Ich wohne jetzt in Köln.")  # translated
+    assert kept("Der Nutzer arbeitet bei Siemens", "Ich arbeite bei Siemens.")
+    assert not kept("Der Nutzer mag Hunde", "Ich mag Hunde.")  # cites nothing said
+    assert not kept("Der Nutzer", "Ich wohne jetzt in Köln.", kind="rumour")  # unknown type
+    assert checked("not an object", source, NOW, []) is None
+    hindi = _reply("u_7 पुणे में रहता है।", "मैं पुणे में रहता हूँ।")["ops"][0]
+    assert checked(hindi, ["मैं पुणे में रहता हूँ।"], NOW, [], "u_7") is not None, "the id is no script"
+    japanese = _reply("The user lives in Tokyo", "私は東京に住んでいます。")["ops"][0]
+    assert checked(japanese, ["私は東京に住んでいます。"], NOW, []) is None, "a translation"
     assert english_evidence("the user lives in the city") >= 2
 
 

@@ -23,9 +23,13 @@ from memory_service.modules.memory.native import NativeMemoryIntelligence
 from tests.support_hindsight import preview_server
 from tests.support_llm import mocked_gateway
 from tests.unit.test_memory_native import CTX, _obs
-from tests.unit.test_narrative_memory import MESSAGE
 
 pytestmark = pytest.mark.contract
+
+MESSAGE = (
+    "Maya restored the payment queue after the outage. She did not restart the database. "
+    "Omar shipped the invoice exporter on Tuesday. He postponed the dashboard until Friday."
+)
 
 FACT = {
     "text": "Omar postponed the dashboard until Friday.",

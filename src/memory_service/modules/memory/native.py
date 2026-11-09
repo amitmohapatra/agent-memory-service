@@ -41,12 +41,6 @@ from memory_service.domain.predicates import is_single_valued
 from memory_service.domain.subjects import SubjectVerdict
 from memory_service.domain.text import ACKNOWLEDGEMENT, SENTENCE_BREAK, normalise_number
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.memory.narrative import (
-    eligible_for_contextual_extraction,
-    extract_narrative_units,
-)
-from memory_service.modules.memory.source_facts import CONFIDENCE as SOURCE_FACT_CONFIDENCE
-from memory_service.modules.memory.source_facts import extract_source_facts
 from memory_service.modules.memory.statements import (
     RULE_KINDS,
     Lexicon,
@@ -645,7 +639,7 @@ class NativeMemoryIntelligence:
         self.contextual_extractor = contextual_extractor
         #: what each user sentence does (ADR 0037); the lexicon alone unless the wiring gives
         #: it the NLI head
-        self.labeller = labeller or StatementLabeller(assist=self.assist)
+        self.labeller = labeller or StatementLabeller()
         #: whether two statements share a subject: the slot rules and the adjudicator's gate
         self.subjects = subjects or SubjectMatcher(embedding)
 
@@ -778,6 +772,21 @@ class NativeMemoryIntelligence:
         )
         return out
 
+    def server_reads(self, observation: Observation, ctx: MemoryExecutionContext) -> bool:
+        """Whether a Hindsight server (``contextual_extractor``) reads what the rules left of
+        ``observation``: a person's own English message, not under an agent's key - Hindsight
+        cannot revalidate an agent's policy after waiting for a server slot, nor accept its
+        model key. Every other message the model may read is the gap-fill call's
+        (``gapfill``)."""
+        return (
+            self.contextual_extractor is not None
+            and observation.kind is ObservationKind.MESSAGE
+            and not observation.agent_authored
+            and not ctx.is_agent
+            and is_english(observation.lang)
+            and self.assist.wants("contextual_extraction")
+        )
+
     async def _contextual_candidates(
         self,
         observation: Observation,
@@ -785,33 +794,25 @@ class NativeMemoryIntelligence:
         evidence: list[EvidenceRef],
         sentences: list[str],
     ) -> list[MemoryCandidate]:
-        """Model-extracted facts for the sentences no rule matched (empty when not wanted).
-
-        English: the narrative units of the sentences no rule parsed. Any other language
-        (``Observation.lang``): typed facts in that language, since no rule can parse it.
-        """
-        if (
-            observation.kind is not ObservationKind.MESSAGE
-            or observation.agent_authored
-            or not self.assist.wants("contextual_extraction")
-        ):
+        """The Hindsight server's facts for a message with at least two sentences no rule
+        read (``server_reads``); empty otherwise."""
+        extractor = self.contextual_extractor
+        if extractor is None or not self.server_reads(observation, ctx):
             return []
-        if not is_english(observation.lang):
-            return await self._source_facts(ctx, evidence, sentences)
-        eligible = {
-            index
-            for index, sentence in enumerate(sentences)
+        unread = [
+            sentence
+            for sentence in sentences
             if not is_question(sentence)
             and not ACKNOWLEDGEMENT.match(sentence)
             and any(
                 self._from_sentence(clause, ctx, evidence, kind=observation.kind) is None
                 for clause in split_clauses(sentence)
             )
-        }
-        if not eligible_for_contextual_extraction(sentences, eligible):
+        ]
+        if len(unread) < 2:
             return []
-        units, provider, category, confidence = await self._contextual_units(
-            observation, ctx, sentences, eligible
+        units = await extractor.extract(
+            observation.content.strip(), timestamp=observation.occurred_at
         )
         return [
             MemoryCandidate(
@@ -822,61 +823,12 @@ class NativeMemoryIntelligence:
                 predicate="said",
                 evidence=evidence,
                 importance=0.4,
-                confidence=confidence,
-                category=category,
-                provider=provider,
+                confidence=0.5,
+                category="contextual_fact",
+                provider=extractor.name,
             )
-            for content in units or []
+            for content in units
         ]
-
-    async def _source_facts(
-        self,
-        ctx: MemoryExecutionContext,
-        evidence: list[EvidenceRef],
-        sentences: list[str],
-    ) -> list[MemoryCandidate]:
-        eligible = {
-            index
-            for index, sentence in enumerate(sentences)
-            if not is_question(sentence) and not ACKNOWLEDGEMENT.match(sentence)
-        }
-        facts = await extract_source_facts(self.assist, sentences, eligible)
-        return [
-            MemoryCandidate(
-                content=fact.text,
-                memory_type=fact.memory_type,
-                lifetime=_LIFETIME_BY_TYPE.get(fact.memory_type, Lifetime.LONG_TERM),
-                subject=_user_subject(ctx),
-                predicate=fact.predicate,
-                object=fact.object,
-                evidence=evidence,
-                importance=_IMPORTANCE_BY_TYPE.get(fact.memory_type, 0.5),
-                confidence=SOURCE_FACT_CONFIDENCE,
-                category="source_fact",
-                provider="llm",
-            )
-            for fact in facts or []
-        ]
-
-    async def _contextual_units(
-        self,
-        observation: Observation,
-        ctx: MemoryExecutionContext,
-        sentences: list[str],
-        eligible: set[int],
-    ) -> tuple[list[str] | None, str, str, float]:
-        """Select one extraction engine before making any model request."""
-        extractor = self.contextual_extractor
-        if extractor is None or ctx.is_agent:
-            # Every agent stays on the credential-aware transport, including before its
-            # first key registration. Hindsight cannot revalidate an agent policy after
-            # waiting for a server extraction slot, and cannot accept its model VK.
-            units = await extract_narrative_units(self.assist, sentences, eligible)
-            return units, "native", "narrative_unit", 0.99
-        units = await extractor.extract(
-            observation.content.strip(), timestamp=observation.occurred_at
-        )
-        return units, extractor.name, "contextual_fact", 0.5
 
     def _verbatim(
         self,

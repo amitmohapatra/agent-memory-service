@@ -36,12 +36,11 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cache
 from pathlib import Path
-from typing import Any, Final, Literal
+from typing import Final, Literal
 
 from memory_service.config.constants import STATEMENT_LABELLER, StatementLabellerSettings
 from memory_service.domain.enums import StatementKind
 from memory_service.domain.language import ENGLISH, detect_language, english_evidence
-from memory_service.modules.llm.assist import LLMAssist
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import statement_labeller_fallback_total
 from memory_service.ports.models import NLIProvider
@@ -65,7 +64,7 @@ PRECEDENCE: Final = (
     StatementKind.STATUS,
     StatementKind.FACT,
 )
-Source = Literal["lexicon", "nli", "llm"]
+Source = Literal["lexicon", "nli"]
 
 #: The fields a pack may carry (see ``lexicon/generic.json`` for what each one means).
 _FIELDS: Final = (
@@ -740,38 +739,6 @@ def _clean_clause(text: str) -> str:
 
 # --------------------------------------------------------------------------- the labeller
 
-#: The JSON the model answers with: one kind (or "none") per open sentence, by index.
-_LLM_SCHEMA: Final[dict[str, Any]] = {
-    "type": "object",
-    "required": ["labels"],
-    "properties": {
-        "labels": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": ["index", "kind"],
-                "properties": {
-                    "index": {"type": "integer"},
-                    "kind": {
-                        "type": "string",
-                        "enum": [k.value.lower() for k in StatementKind] + ["none"],
-                    },
-                },
-            },
-        }
-    },
-}
-_LLM_SYSTEM: Final = (
-    "Label what each numbered sentence a user said does. Answer one kind per sentence: "
-    "'rule' - a standing instruction for future answers (always/never/from now on, "
-    "'whenever I ask for X, do Y'); 'conditional_rule' - a standing instruction with an "
-    "exception or a condition about the world ('unless ...', 'if stock drops below ...'); "
-    "'status' - the current state of a thing (broken, repaired, out of stock, delayed); "
-    "'lifecycle' - a thing or a relationship began or ended (terminated, dismantled, "
-    "launched, a new supplier); 'correction' - revises something said earlier; 'fact' - any "
-    "other statement; 'none' - a question, a greeting or a one-off request."
-)
-
 
 @dataclass
 class _Open:
@@ -783,21 +750,20 @@ class _Open:
 
 class StatementLabeller:
     """Labels the sentences of one observation: the lexicon for all, the NLI head for the
-    open ones (one batch), and the tenant's model, NLI-confirmed, for what is still open."""
+    open ones (one batch). What the head leaves open the model reads in the gap-fill call
+    (``gapfill``), with the rest of the message."""
 
     def __init__(
         self,
         lexicon: Lexicon | None = None,
         *,
         nli: NLIProvider | None = None,
-        assist: LLMAssist | None = None,
         settings: StatementLabellerSettings = STATEMENT_LABELLER,
     ) -> None:
         self.lexicon = lexicon or Lexicon.default()
         # A stand-in classifier (token overlap) cannot read a hypothesis: the model tiers are
         # used only with a trained head, never silently with an arithmetic substitute.
         self.nli = nli if nli is not None and getattr(nli, "representative", False) else None
-        self.assist = assist or LLMAssist.disabled()
         self.cfg = settings
 
     def lexical(self, sentence: str) -> StatementLabel:
@@ -822,14 +788,8 @@ class StatementLabeller:
             statement_labeller_fallback_total.labels(tier="nli").inc()
             log.warning("statement_labeller.nli_failed", error=type(exc).__name__)
             return labels
-        try:
-            proposals = await self._ask_model(open_, seen)
-        except Exception as exc:  # as above, for the model tier
-            statement_labeller_fallback_total.labels(tier="llm").inc()
-            log.warning("statement_labeller.llm_failed", error=type(exc).__name__)
-            proposals = {}
         for n, o in enumerate(open_):
-            labels[o.index] = self._resolve(o, proposals.get(n), seen.get(n, {}), labels[o.index])
+            labels[o.index] = self._resolve(o, seen.get(n, {}), labels[o.index])
         return labels
 
     def _open(self, sentences: Sequence[str], lexical: list[LexicalLabel]) -> list[_Open]:
@@ -840,51 +800,9 @@ class StatementLabeller:
             if not x.decided and len(s) <= self.cfg.nli_max_chars
         ][: self.cfg.nli_max_sentences]
 
-    async def _ask_model(
-        self, open_: list[_Open], seen: dict[int, dict[StatementKind, float]]
-    ) -> dict[int, StatementKind]:
-        """The tenant's model's kinds for what the head was unsure of - a score in the band
-        between confirming a proposal and deciding alone - so a model call is the exception
-        on the write path, not one per message. ``seen`` gains the confirming scores."""
-        unsure = [n for n, o in enumerate(open_) if self._unsure(o, seen.get(n, {}))]
-        proposals = await self._proposals(open_, unsure)
-        extra = [
-            (n, k) for n, p in proposals.items() for k in _checked(p) if k not in seen.get(n, {})
-        ]
-        if extra:
-            for n, scores in (await self._entail(open_, extra)).items():
-                seen.setdefault(n, {}).update(scores)
-        return proposals
-
     def _candidates(self, x: LexicalLabel) -> tuple[StatementKind, ...]:
         """What the NLI head checks for an open sentence: the kind the lexicon suspects."""
         return (x.maybe,) if x.maybe is not None else ()
-
-    def _unsure(self, o: _Open, seen: dict[StatementKind, float]) -> bool:
-        decided = any(seen[k] >= self.cfg.thresholds[k] for k in seen)
-        return not decided and any(seen[k] >= self.cfg.llm_confirm_min for k in seen)
-
-    async def _proposals(self, open_: list[_Open], unsure: list[int]) -> dict[int, StatementKind]:
-        """The model's kind for each unsure sentence (by its index in ``open_``)."""
-        if not unsure or not self.assist.wants("contextual_extraction"):
-            return {}
-        numbered = "\n".join(f"{k}. {open_[n].sentence}" for k, n in enumerate(unsure))
-        out = await self.assist.structured(
-            "contextual_extraction",
-            system=_LLM_SYSTEM,
-            user=numbered,
-            schema=_LLM_SCHEMA,
-            max_tokens=40 + 16 * len(unsure),
-        )
-        proposals: dict[int, StatementKind] = {}
-        for item in out.get("labels", []) if isinstance(out, dict) else []:
-            try:
-                k, kind = int(item["index"]), str(item["kind"]).upper()
-            except (KeyError, TypeError, ValueError):
-                continue
-            if 0 <= k < len(unsure) and kind in StatementKind.__members__:
-                proposals[unsure[k]] = StatementKind(kind)
-        return proposals
 
     async def _entail(
         self, open_: list[_Open], checks: Sequence[tuple[int, StatementKind]]
@@ -906,32 +824,11 @@ class StatementLabeller:
         return seen
 
     def _resolve(
-        self,
-        o: _Open,
-        proposed: StatementKind | None,
-        seen: dict[StatementKind, float],
-        label: StatementLabel,
+        self, o: _Open, seen: dict[StatementKind, float], label: StatementLabel
     ) -> StatementLabel:
-        for checked in _checked(proposed):
-            if seen.get(checked, 0.0) >= self.cfg.llm_confirm_min:
-                # a proposed rule keeps the lexicon's reading of its trigger and exception
-                kind = (
-                    o.lexical.maybe
-                    if proposed in RULE_KINDS and o.lexical.maybe in RULE_KINDS
-                    else proposed
-                )
-                return replace(label, kind=kind, source="llm", confidence=seen[checked])
         maybe = o.lexical.maybe
         score = seen.get(maybe, 0.0) if maybe is not None else 0.0
         if maybe is not None and score >= self.cfg.thresholds[maybe]:
             return replace(label, kind=maybe, source="nli", confidence=score)
         # not confirmed: the reading the sentence has without it (a fact, or a request)
         return replace(label, source="nli", confidence=1.0 - score)
-
-
-def _checked(proposed: StatementKind | None) -> tuple[StatementKind, ...]:
-    """The hypothesis a model proposal is confirmed by; nothing to confirm for no proposal
-    or a fact, the fallback anyway."""
-    if proposed is None or proposed is StatementKind.FACT:
-        return ()
-    return (proposed,)

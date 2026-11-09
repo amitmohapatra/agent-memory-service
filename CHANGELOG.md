@@ -8,6 +8,19 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Changed
+- **With a model, one call per message fills what the rules missed** (ADR 0045). The rules read
+  a person's message first, as before; then one `contextual_extraction` call reads it with the
+  four turns before it, what the rules read and the speaker's eight closest memories, and
+  returns facts to add and memories to update or contradict, each quoting the message. Code
+  keeps an op only when its quote is there, its numbers are said, its language is the
+  message's, its date is the temporal library's (the model's only for a phrase the library
+  cannot read) and it says something new; an update or a contradiction is decided by the
+  replacement path, and kept as an earlier value when unsure. On an 80-case extraction eval it
+  keeps 0.94 of the facts against the rules' 0.23, with no false fact; words the rules and
+  the model both read, or the model read twice, are held once (duplicates 0.10-0.20 -> 0.03-0.06
+  over runs, the rest mostly two facts sharing the eval's words); LoCoMo answers are unchanged within run-to-run noise. The narrative units, the non-English
+  typed facts and the statement labeller's model tier are removed: one call does their work.
+  No setting, use name, route or SDK call changed; without a model nothing changed.
 - **The service admits agent-contracts 0.7** (`trellis-contracts>=0.6.3,<0.8`; service). 0.7.0
   removes only the run inbox names (`RunMessage`, `RunUsage`, `InterruptReason.PAUSE`), which
   moved to agent-contracts' `background-agents` branch; the service uses `Endpoint` alone, so

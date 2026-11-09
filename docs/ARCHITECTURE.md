@@ -217,7 +217,7 @@ flowchart LR
   msg["every 20 messages"] --> sr["summary.refresh<br/>the thread's rolling summary"]
   up["USER / PREFERENCE memory"] --> pr["profile.refresh<br/>the user's pinned block"]
   cat["catalog upsert"] --> ti["tools.index<br/>the tools search collection"]
-  obs["observation (any language)"] --> mp["memory.process<br/>English rules; other languages:<br/>contextual_extraction (tenant model)"]
+  obs["observation (any language)"] --> mp["memory.process<br/>rules, then one gap-fill call:<br/>contextual_extraction (tenant model)"]
   md["memory / document"] --> ge["graph.enrich_memories / graph.enrich_document<br/>(once indexed: jobs of their own on the graph queue with a model, in the index job without one):<br/>native entities and edges;<br/>relation_extraction (tenant model)"]
 ```
 

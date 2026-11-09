@@ -88,7 +88,7 @@ stores it as `lang` (migration 0018). It decides three things:
 
 | where | English | any other language |
 |---|---|---|
-| memory extraction | the rules, then narrative units for what they missed | typed facts in the message's language when a key can pay (`contextual_extraction`, fast tier); a slot is kept only when its value is copied from the cited sentence |
+| memory extraction | the rules, then one gap-fill call for what they missed (`contextual_extraction`, fast tier) | the same gap-fill call: facts in the message's language, each quoting it exactly; a translated fact is dropped |
 | graph enrichment | rule entities; the model types relations between them | the model names both entities (verbatim in the text) and the relation (`relation_extraction`) |
 | query routing | the cue patterns | GENERAL_SEMANTIC, and query expansion when the read may use the model |
 
