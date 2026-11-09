@@ -326,11 +326,38 @@ class GapFill:
                 continue
             seen.add(_norm(f.fact))
             out.append(f)
+        out = await self._entailed(out)
         adds = [f for f in out if f.op == "add"]
         if not adds or not held or self.embedding is None:
             return out
         repeats = await self._repeats(adds, held, self.embedding)
         return [f for f in out if id(f) not in repeats]
+
+    async def _entailed(self, fills: list[Fill]) -> list[Fill]:
+        """``fills`` without an add another add of the message entails: "Arjun moved to
+        Toronto for a job at SickKids" says "Arjun works at SickKids in Toronto"; "learning
+        Portuguese since moving to Lisbon" says the move. The fuller fact is kept (the first
+        of two that say each other); two facts neither of which says the other both are."""
+        adds = [f for f in fills if f.op == "add"]
+        if len(adds) < 2 or self.nli is None:
+            return fills
+        pairs = [(a, b) for a in adds for b in adds if a is not b]
+        scores = await self.nli.entail_groups([([a.fact], b.fact) for a, b in pairs])
+        says = {
+            (id(a), id(b))
+            for (a, b), row in zip(pairs, scores, strict=True)
+            if row[0].entailment >= SAME_ENTAILMENT
+        }
+        dropped: set[int] = set()
+        for n, a in enumerate(adds):
+            for b in adds[n + 1 :]:
+                if id(a) in dropped or id(b) in dropped:
+                    continue
+                if (id(a), id(b)) in says:
+                    dropped.add(id(b))
+                elif (id(b), id(a)) in says:
+                    dropped.add(id(a))
+        return [f for f in fills if id(f) not in dropped]
 
     async def _repeats(
         self, adds: list[Fill], held: list[str], embedding: EmbeddingProvider

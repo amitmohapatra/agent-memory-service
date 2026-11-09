@@ -269,3 +269,64 @@ def test_a_rule_reading_whose_words_the_model_read_is_the_model_s(reading, quote
     ]
     assert all(fills)
     assert (gapfill.covered([reading], [f for f in fills if f]) == [reading]) is covered
+
+
+class _Entails:
+    """The NLI head as the frozen one reads these pairs: premise -> hypotheses it entails."""
+
+    representative = True
+
+    def __init__(self, entails: dict[str, set[str]]) -> None:
+        self.entails = entails
+
+    async def entail_groups(self, groups):
+        from memory_service.ports.models import NLIScore
+
+        return [
+            [
+                NLIScore(entailment=e, neutral=1 - e, contradiction=0.0)
+                for e in (0.98 if hyp in self.entails.get(p, set()) else 0.01 for p in premises)
+            ]
+            for premises, hyp in groups
+        ]
+
+
+@pytest.mark.parametrize(
+    ("facts", "entails", "kept"),
+    [
+        # coref-1: the job says where he works
+        (
+            [
+                "Arjun moved to Toronto for a job at SickKids.",
+                "Arjun works at SickKids in Toronto.",
+            ],
+            {
+                "Arjun moved to Toronto for a job at SickKids.": {
+                    "Arjun works at SickKids in Toronto."
+                }
+            },
+            ["Arjun moved to Toronto for a job at SickKids."],
+        ),
+        # implied-3: learning Portuguese since moving there says the move
+        (
+            ["Ana moved to Lisbon.", "Ana has been learning Portuguese since moving to Lisbon."],
+            {"Ana has been learning Portuguese since moving to Lisbon.": {"Ana moved to Lisbon."}},
+            ["Ana has been learning Portuguese since moving to Lisbon."],
+        ),
+        # two facts neither of which says the other: both kept
+        (
+            ["Ana's cat is named Pimienta.", "Pimienta is a Siamese cat."],
+            {},
+            ["Ana's cat is named Pimienta.", "Pimienta is a Siamese cat."],
+        ),
+    ],
+)
+async def test_a_fact_another_fact_of_the_message_says_is_not_added_too(facts, entails, kept):
+    message = "Since moving I have news. " + " ".join(facts)
+    ops = [op(fact=f, quote=message) for f in facts]
+    with mocked_gateway([{"ops": ops}]) as gateway:
+        filler = GapFill(gateway.assist(uses=["contextual_extraction"]), nli=_Entails(entails))
+        out = await filler.fill(
+            "t1", message=message, speaker="Ana", said_at=SAID, recent=[], rules=[], known=[]
+        )
+    assert [f.fact for f in out] == kept
