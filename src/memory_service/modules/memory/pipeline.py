@@ -369,8 +369,9 @@ class Gaps:
 
     fills: list[tuple[MemoryCandidate, CanonicalMemory | None]] = field(default_factory=list)
     known: list[CanonicalMemory] = field(default_factory=list)
-    #: the rules' sentence readings the model read again (``gapfill.covered``): held by
-    #: the model's facts, which say them with who and when resolved
+    #: the rules' sentence readings, and the message itself, the model read again
+    #: (``gapfill.covered``): held by the model's facts, which say them with who, when and
+    #: what "it" is resolved
     covered: frozenset[str] = frozenset()
 
 
@@ -449,7 +450,9 @@ class ObservationPipeline:
                         c.model_copy(update={"preceding_turn": preceding}) for c in candidates
                     ]
                 candidates = await self._restated(observation, candidates, preceding)
-                candidates = [*candidates, *referred_turn(observation, candidates, prior)]
+                if observation.content.strip() not in gaps.covered:
+                    # a reply the model read whole holds what it refers to already
+                    candidates = [*candidates, *referred_turn(observation, candidates, prior)]
                 outcomes: list[ConsolidationOutcome] = []
                 hinted = (
                     observation.hints.memory_type is not None
@@ -562,7 +565,11 @@ class ObservationPipeline:
             known,
             frozenset(
                 gap_covered(
-                    [c.content for c in candidates if c.category in SENTENCE_READINGS], fills
+                    [
+                        *(c.content for c in candidates if c.category in SENTENCE_READINGS),
+                        observation.content.strip(),
+                    ],
+                    fills,
                 )
             ),
         )

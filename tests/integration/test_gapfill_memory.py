@@ -114,3 +114,46 @@ async def test_a_rule_reading_the_model_read_again_is_held_once(container, uow_f
         if m.system_metadata.get("category") != "verbatim_turn" and "audit" in m.content
     ]
     assert readings == [resolved]
+
+
+async def test_a_reply_the_model_read_whole_is_not_kept_again_with_its_question(
+    container, uow_factory
+):
+    """spread-2 of the hard eval: "In Tacoma. It handles all the West Coast returns." after
+    "Where is it?" was kept with the question beside it, and the model read both sentences
+    with "it" resolved: the same words held twice. A reply the model did not read whole
+    keeps the question beside it (tests/integration/test_referred_turn.py)."""
+    from datetime import UTC, datetime, timedelta
+
+    from tests.integration.test_referred_turn import _contents, _turn
+
+    reply = "In Tacoma. It handles all the West Coast returns."
+    quotes = ("In Tacoma.", "It handles all the West Coast returns.")
+    facts = ("Ada's second warehouse is in Tacoma.", "Ada's Tacoma warehouse handles returns.")
+    ops = {
+        "ops": [
+            {
+                "op": "add",
+                "fact": fact,
+                "quote": quote,
+                "type": "fact",
+                "subject": "",
+                "date": "",
+                "confidence": 0.9,
+                "target": 0,
+            }
+            for fact, quote in zip(facts, quotes, strict=True)
+        ]
+    }
+    at = datetime(2026, 10, 30, 9, tzinfo=UTC)
+    pipeline = container.services["observation_pipeline"]
+    with mocked_gateway([{"ops": []}, ops]) as gateway:
+        pipeline.gapfill = GapFill(gateway.assist(uses=["contextual_extraction"]))
+        await _turn(container, uow_factory, "We opened a second warehouse.", at=at, role="user")
+        await _turn(
+            container, uow_factory, "Where is it?", at=at + timedelta(minutes=1), role="assistant"
+        )
+        await _turn(container, uow_factory, reply, at=at + timedelta(minutes=2), role="user")
+    held = await _contents(container, uow_factory)
+    assert not [c for c in held if "(in reply to:" in c], held
+    assert set(facts) <= set(held)
