@@ -235,7 +235,7 @@ async def test_the_late_arm_rescores_the_union_of_the_other_arms() -> None:
     assert kwargs["query"].rrf.weights == [2.0, 2.0, 3.0]
 
 
-async def test_every_arm_is_read_unfused_in_one_round_trip() -> None:
+async def test_every_arm_is_read_unfused_and_the_late_arms_rescore_what_they_found() -> None:
     store, client = _store()
     out = await store.search_arms(
         "c",
@@ -248,21 +248,21 @@ async def test_every_arm_is_read_unfused_in_one_round_trip() -> None:
         flt=SearchFilter(tenant_id="acme"),
         limit=7,
     )
-    [(_, kwargs)] = [call for call in client.calls if call[0] == "query_batch_points"]
-    requests = kwargs["requests"]
-    # an empty sparse query is no arm; each late arm rescores the union of the others
-    assert [r.using for r in requests] == [
-        "dense_ml",
-        "dense_ml_ctx",
-        "bm25",
-        "colbert",
-        "colbert_ctx",
-    ]
-    for late in requests[3:]:
-        assert [p.using for p in late.prefetch] == ["dense_ml", "dense_ml_ctx", "bm25"]
-    assert all(r.limit == 7 for r in requests)
+    first, second = [kw for name, kw in client.calls if name == "query_batch_points"]
+    # an empty sparse query is no arm; the arms are searched once, in one round trip
+    assert [r.using for r in first["requests"]] == ["dense_ml", "dense_ml_ctx", "bm25"]
+    # each late arm rescores the union the arms returned, by id: the arms are not searched
+    # again inside it (they were, twice per memory search, and a search's cost grew with
+    # every arm over every point of the tenant)
+    late = second["requests"]
+    assert [r.using for r in late] == ["colbert", "colbert_ctx"]
+    for request in late:
+        assert request.prefetch is None and request.query == [[1.0, 0.0]]
+        [only] = request.filter.must
+        assert only.has_id == ["x"]
+    assert all(r.limit == 7 for r in first["requests"] + late)
     # ids and scores from the arms; each point's payload read once, afterwards
-    assert all(r.with_payload is False for r in requests)
+    assert all(r.with_payload is False for r in first["requests"] + late)
     [(_, read)] = [call for call in client.calls if call[0] == "retrieve"]
     assert read["ids"] == ["x"]
     assert list(out) == [
