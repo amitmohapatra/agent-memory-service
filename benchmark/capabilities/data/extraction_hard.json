@@ -1,0 +1,2206 @@
+{
+ "description": "Hard extraction cases: what must be stored, what must not, what an update must close (benchmark/extraction.py).",
+ "cases": [
+  {
+   "id": "spread-1",
+   "kind": "spread",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I finally adopted a dog last month.",
+     "day": 0
+    },
+    {
+     "role": "assistant",
+     "text": "Congratulations! What's its name?",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Her name is Biscuit, a beagle mix.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Biscuit",
+     "dog"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "spread-2",
+   "kind": "spread",
+   "turns": [
+    {
+     "role": "user",
+     "text": "We opened a second warehouse.",
+     "day": 0
+    },
+    {
+     "role": "assistant",
+     "text": "Where is it?",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "In Tacoma. It handles all the West Coast returns.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Tacoma",
+     "warehouse"
+    ],
+    [
+     "Tacoma",
+     "returns"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "spread-3",
+   "kind": "spread",
+   "turns": [
+    {
+     "role": "user",
+     "text": "My manager changed again.",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "It's Lena Ortiz now, she came over from the Denver office.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Lena Ortiz",
+     "manager"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "spread-4",
+   "kind": "spread",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I signed up for a marathon.",
+     "day": 0
+    },
+    {
+     "role": "assistant",
+     "text": "Which one?",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Chicago, in October. My goal is under four hours.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Chicago",
+     "marathon"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "spread-5",
+   "kind": "spread",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Our biggest client is renewing.",
+     "day": 0
+    },
+    {
+     "role": "assistant",
+     "text": "Which client?",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Halvorsen Foods. The renewal is for three years.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Halvorsen",
+     "renew"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "spread-6",
+   "kind": "spread",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I picked up a new hobby.",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Pottery, mostly wheel throwing on Tuesday evenings.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "pottery"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "coref-1",
+   "kind": "coref",
+   "turns": [
+    {
+     "role": "user",
+     "text": "My brother Arjun is a nurse.",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "He just moved to Toronto for a job at SickKids.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Arjun",
+     "Toronto"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "coref-2",
+   "kind": "coref",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I bought a Subaru Outback in March.",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "It already needs new brakes.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Outback",
+     "brakes"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "coref-3",
+   "kind": "coref",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Our CTO is Maya Chen.",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "She wants every service on Kubernetes by Q3.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Maya",
+     "Kubernetes"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "coref-4",
+   "kind": "coref",
+   "turns": [
+    {
+     "role": "user",
+     "text": "My daughter Zoe started kindergarten.",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "She loves the art corner and hates nap time.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Zoe",
+     "art"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "coref-5",
+   "kind": "coref",
+   "turns": [
+    {
+     "role": "user",
+     "text": "The vendor we use for labels is Avery.",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "They raised prices by 12 percent this quarter.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Avery",
+     "12"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "coref-6",
+   "kind": "coref",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I met my neighbour Tom at the gym.",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Turns out he's a retired pilot.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Tom",
+     "pilot"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "implied-1",
+   "kind": "implied",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I'll have to skip the wine tasting, I'm eight months pregnant.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "pregnant"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "implied-2",
+   "kind": "implied",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Walking the kids to school takes five minutes, so the house is perfect.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "kids"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "implied-3",
+   "kind": "implied",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Since moving to Lisbon I've been learning Portuguese every evening.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Lisbon"
+    ],
+    [
+     "Portuguese"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "implied-4",
+   "kind": "implied",
+   "turns": [
+    {
+     "role": "user",
+     "text": "After my knee surgery I can't run anymore, so I swim instead.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "knee"
+    ],
+    [
+     "swim"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "implied-5",
+   "kind": "implied",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Can you suggest vegan options? I haven't eaten meat or dairy in six years.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "vegan"
+    ]
+   ],
+   "forbid": [
+    [
+     "eats meat"
+    ]
+   ],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "implied-6",
+   "kind": "implied",
+   "turns": [
+    {
+     "role": "user",
+     "text": "My shift at the hospital ends at 7am, then I sleep till 3.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "hospital"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "confirm-1",
+   "kind": "confirm",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I need a hotel in Kyoto for the conference.",
+     "day": 0
+    },
+    {
+     "role": "assistant",
+     "text": "The Hotel Granvia is next to the station and has rooms at 180 dollars. Shall I book it?",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Yes, book the Granvia.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Granvia",
+     "book"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "confirm-2",
+   "kind": "confirm",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Pick a supplier for the cardboard boxes.",
+     "day": 0
+    },
+    {
+     "role": "assistant",
+     "text": "I suggest Pratt Industries; they deliver weekly. Should I set them as the default?",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Sounds good, go with Pratt.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Pratt",
+     "box"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "confirm-3",
+   "kind": "confirm",
+   "turns": [
+    {
+     "role": "user",
+     "text": "What time should we schedule the standup?",
+     "day": 0
+    },
+    {
+     "role": "assistant",
+     "text": "How about 9:30 every weekday?",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Perfect, 9:30 it is.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "9:30",
+     "standup"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "confirm-4",
+   "kind": "confirm",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I need a name for the new puppy.",
+     "day": 0
+    },
+    {
+     "role": "assistant",
+     "text": "How about Maple or Juniper?",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Let's go with Juniper.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Juniper",
+     "puppy"
+    ]
+   ],
+   "forbid": [
+    [
+     "Maple"
+    ]
+   ],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "confirm-5",
+   "kind": "confirm",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Plan my Saturday.",
+     "day": 0
+    },
+    {
+     "role": "assistant",
+     "text": "You could visit the Getty museum in the morning. Want me to add it?",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "No, I've been there too often.",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [
+    [
+     "plans",
+     "Getty"
+    ]
+   ],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "confirm-6",
+   "kind": "confirm",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Which database should the analytics team use?",
+     "day": 0
+    },
+    {
+     "role": "assistant",
+     "text": "I'd recommend ClickHouse for that workload.",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Agreed, we'll standardize on ClickHouse.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "ClickHouse",
+     "analytics"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "vdate-1",
+   "kind": "vague_date",
+   "turns": [
+    {
+     "role": "user",
+     "text": "We're flying to Goa the week before Diwali.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Goa"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [
+    {
+     "q": "When is the Goa trip?",
+     "expect": [
+      "Goa",
+      "Diwali"
+     ]
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "vdate-2",
+   "kind": "vague_date",
+   "turns": [
+    {
+     "role": "user",
+     "text": "My sister's wedding is the weekend after Thanksgiving.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "wedding"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "vdate-3",
+   "kind": "vague_date",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I started at Stripe two summers ago.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Stripe"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "vdate-4",
+   "kind": "vague_date",
+   "turns": [
+    {
+     "role": "user",
+     "text": "The audit is due the Friday before Christmas.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "audit"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "vdate-5",
+   "kind": "vague_date",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I got my driving licence three days ago.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "licen",
+     "2026-09-28"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "vdate-6",
+   "kind": "vague_date",
+   "turns": [
+    {
+     "role": "user",
+     "text": "We moved into the new flat last week.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "flat"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [
+    {
+     "q": "When did I move into the new flat?",
+     "expect": [
+      "flat"
+     ]
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "update-1",
+   "kind": "update",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Our primary pallet supplier is Uline.",
+     "day": -40
+    },
+    {
+     "role": "user",
+     "text": "We dropped Uline last week over pricing; PackagingCorp is now our pallet supplier.",
+     "day": -3
+    }
+   ],
+   "expect": [
+    [
+     "PackagingCorp"
+    ]
+   ],
+   "forbid": [],
+   "stale": [
+    [
+     "primary pallet supplier is Uline"
+    ]
+   ],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "update-2",
+   "kind": "update",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I live in Austin.",
+     "day": -60
+    },
+    {
+     "role": "user",
+     "text": "I moved to Seattle last month.",
+     "day": -2
+    }
+   ],
+   "expect": [
+    [
+     "Seattle"
+    ]
+   ],
+   "forbid": [],
+   "stale": [
+    [
+     "live in Austin"
+    ]
+   ],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "update-3",
+   "kind": "update",
+   "turns": [
+    {
+     "role": "user",
+     "text": "My phone number is 555-0134.",
+     "day": -30
+    },
+    {
+     "role": "user",
+     "text": "New number: 555-0199, the old one is disconnected.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "555-0199"
+    ]
+   ],
+   "forbid": [],
+   "stale": [
+    [
+     "555-0134"
+    ]
+   ],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "update-4",
+   "kind": "update",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Team standup is at 10am.",
+     "day": -20
+    },
+    {
+     "role": "user",
+     "text": "We moved standup to 9am starting this week.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "9"
+    ]
+   ],
+   "forbid": [],
+   "stale": [
+    [
+     "standup is at 10"
+    ]
+   ],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "update-5",
+   "kind": "update",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I'm a vegetarian.",
+     "day": -90
+    },
+    {
+     "role": "user",
+     "text": "I started eating fish again, so pescatarian now.",
+     "day": -5
+    }
+   ],
+   "expect": [
+    [
+     "pescatarian"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "update-6",
+   "kind": "update",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Our on-call lead is Priya.",
+     "day": -14
+    },
+    {
+     "role": "user",
+     "text": "Priya handed on-call over to Marcus this week.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "Marcus"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "dup-1",
+   "kind": "duplicate",
+   "turns": [
+    {
+     "role": "user",
+     "text": "My favourite cuisine is Thai.",
+     "day": -10
+    },
+    {
+     "role": "user",
+     "text": "Thai food is my favourite, by the way.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "Thai"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "Thai"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "dup-2",
+   "kind": "duplicate",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I work at Shopify as a data engineer.",
+     "day": -20
+    },
+    {
+     "role": "user",
+     "text": "As I said, I'm a data engineer at Shopify.",
+     "day": -2
+    }
+   ],
+   "expect": [
+    [
+     "Shopify"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "Shopify"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "dup-3",
+   "kind": "duplicate",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Our warehouse in Reno ships the East orders.",
+     "day": -5
+    },
+    {
+     "role": "user",
+     "text": "Reno handles the East orders, remember.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "Reno"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "Reno"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "dup-4",
+   "kind": "duplicate",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I have two cats, Miso and Tofu.",
+     "day": -8
+    },
+    {
+     "role": "user",
+     "text": "Miso and Tofu, my two cats, say hi.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "Miso"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "Miso"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "dup-5",
+   "kind": "duplicate",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I'm allergic to peanuts.",
+     "day": -12
+    },
+    {
+     "role": "user",
+     "text": "Remember I can't have peanuts, I'm allergic.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "peanut"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "peanut"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "dup-6",
+   "kind": "duplicate",
+   "turns": [
+    {
+     "role": "user",
+     "text": "My dog is called Rex.",
+     "day": -3
+    },
+    {
+     "role": "user",
+     "text": "I also have a parrot called Kiwi.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "Rex"
+    ],
+    [
+     "Kiwi"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "Rex"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "contra-1",
+   "kind": "contradiction",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I'm allergic to penicillin.",
+     "day": -30
+    },
+    {
+     "role": "user",
+     "text": "Turns out I'm not allergic to penicillin after all, the test was negative.",
+     "day": -1
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [
+    [
+     "is allergic to penicillin"
+    ],
+    [
+     "I'm allergic to penicillin"
+    ]
+   ],
+   "keep": [
+    [
+     "not allergic"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "contra-2",
+   "kind": "contradiction",
+   "turns": [
+    {
+     "role": "user",
+     "text": "The Berlin office is closing in June.",
+     "day": -20
+    },
+    {
+     "role": "user",
+     "text": "Correction: the Berlin office is staying open.",
+     "day": -1
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [
+    [
+     "closing"
+    ]
+   ],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "contra-3",
+   "kind": "contradiction",
+   "turns": [
+    {
+     "role": "user",
+     "text": "My mother's name is Grace.",
+     "day": -50
+    },
+    {
+     "role": "user",
+     "text": "Sorry, I mistyped earlier: my mother is Joyce, Grace is my aunt.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "Joyce"
+    ]
+   ],
+   "forbid": [],
+   "stale": [
+    [
+     "mother's name is Grace"
+    ]
+   ],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "contra-4",
+   "kind": "contradiction",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Forklift 4 is out of service.",
+     "day": -6
+    },
+    {
+     "role": "user",
+     "text": "Forklift 4 is back in service since this morning.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "back in service"
+    ]
+   ],
+   "forbid": [],
+   "stale": [
+    [
+     "out of service"
+    ]
+   ],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "contra-5",
+   "kind": "contradiction",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I don't drink coffee.",
+     "day": -15
+    },
+    {
+     "role": "user",
+     "text": "I've become a coffee person, two cups a day.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "coffee"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "contra-6",
+   "kind": "contradiction",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Bike #3 has a flat tyre.",
+     "day": -4
+    },
+    {
+     "role": "user",
+     "text": "Bike #4 has a flat tyre too.",
+     "day": -1
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "Bike #3"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "opinion-1",
+   "kind": "opinion",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I think the new CRM is clunky, but the team already migrated to it in May.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "CRM"
+    ]
+   ],
+   "forbid": [
+    [
+     "CRM is not used"
+    ]
+   ],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "opinion-2",
+   "kind": "opinion",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Honestly Rust feels overrated to me; we write everything in Go.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Go"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "opinion-3",
+   "kind": "opinion",
+   "turns": [
+    {
+     "role": "user",
+     "text": "The quarterly review went badly in my view, though revenue was up 8 percent.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "8"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "opinion-4",
+   "kind": "opinion",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I love hiking but I hate camping overnight.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "hik"
+    ],
+    [
+     "camp"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "opinion-5",
+   "kind": "opinion",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Maybe we should switch to Notion someday, who knows.",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [
+    [
+     "switched to Notion"
+    ],
+    [
+     "uses Notion"
+    ]
+   ],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "opinion-6",
+   "kind": "opinion",
+   "turns": [
+    {
+     "role": "user",
+     "text": "If I won the lottery I'd buy a boat in Croatia.",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [
+    [
+     "owns a boat"
+    ],
+    [
+     "bought a boat"
+    ]
+   ],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "multihop-1",
+   "kind": "multihop",
+   "turns": [
+    {
+     "role": "user",
+     "text": "My sister Priya lives in Pune.",
+     "day": -10
+    },
+    {
+     "role": "user",
+     "text": "Pune has been flooding all week.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "Priya",
+     "Pune"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [
+    {
+     "q": "Is my sister affected by the floods?",
+     "expect": [
+      "Priya",
+      "Pune"
+     ]
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "multihop-2",
+   "kind": "multihop",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Dr. Okafor is my cardiologist.",
+     "day": -20
+    },
+    {
+     "role": "user",
+     "text": "My cardiologist moved her practice to Oakland.",
+     "day": -2
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [
+    {
+     "q": "Where is Dr. Okafor's practice now?",
+     "expect": [
+      "Okafor",
+      "Oakland"
+     ]
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "multihop-3",
+   "kind": "multihop",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Jamal manages the Dallas store.",
+     "day": -9
+    },
+    {
+     "role": "user",
+     "text": "The Dallas store hit its sales target this month.",
+     "day": -1
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [
+    {
+     "q": "Did Jamal's store hit its target?",
+     "expect": [
+      "Jamal",
+      "Dallas"
+     ]
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "multihop-4",
+   "kind": "multihop",
+   "turns": [
+    {
+     "role": "user",
+     "text": "My son plays for the Hornets under-12 team.",
+     "day": -6
+    },
+    {
+     "role": "user",
+     "text": "The Hornets won the regional final on Sunday.",
+     "day": -1
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [
+    {
+     "q": "How did my son's team do?",
+     "expect": [
+      "Hornets",
+      "won"
+     ]
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "multihop-5",
+   "kind": "multihop",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Our ERP is SAP.",
+     "day": -25
+    },
+    {
+     "role": "user",
+     "text": "The SAP upgrade is scheduled for November 14.",
+     "day": -2
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [
+    {
+     "q": "When is our ERP being upgraded?",
+     "expect": [
+      "SAP",
+      "November 14"
+     ]
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "multihop-6",
+   "kind": "multihop",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Lucia is my running partner.",
+     "day": -15
+    },
+    {
+     "role": "user",
+     "text": "My running partner just sprained her ankle.",
+     "day": -1
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [
+    {
+     "q": "Is Lucia okay?",
+     "expect": [
+      "ankle"
+     ]
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "temporal-1",
+   "kind": "temporal",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I visited Rome in April.",
+     "day": -150
+    },
+    {
+     "role": "user",
+     "text": "Then Madrid in June.",
+     "day": -90
+    },
+    {
+     "role": "user",
+     "text": "And Vienna last week.",
+     "day": -1
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [
+    {
+     "q": "Which city did I visit first?",
+     "expect": [
+      "Rome"
+     ]
+    },
+    {
+     "q": "Where was I last week?",
+     "expect": [
+      "Vienna"
+     ]
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "temporal-2",
+   "kind": "temporal",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I started the new job yesterday.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "job"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [
+    {
+     "q": "When did I start the new job?",
+     "expect": [
+      "2026-09-30"
+     ]
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "temporal-3",
+   "kind": "temporal",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Our lease ends in 3 months.",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [
+    {
+     "q": "When does our lease end?",
+     "expect": [
+      "lease"
+     ]
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "temporal-4",
+   "kind": "temporal",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I had my wisdom teeth out two weeks ago.",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [
+    {
+     "q": "When did I have dental surgery?",
+     "expect": [
+      "wisdom"
+     ]
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "temporal-5",
+   "kind": "temporal",
+   "turns": [
+    {
+     "role": "user",
+     "text": "We launched the beta on Monday.",
+     "day": -2
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [
+    {
+     "q": "When was the beta launched?",
+     "expect": [
+      "beta"
+     ]
+    }
+   ],
+   "negative": false
+  },
+  {
+   "id": "temporal-6",
+   "kind": "temporal",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I'll be in Singapore from the 12th to the 18th of next month.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Singapore"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "de-coref",
+   "kind": "multilingual",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Mein Bruder Lukas ist Koch.",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Er arbeitet jetzt in Hamburg im Restaurant Fischmarkt.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Lukas",
+     "Hamburg"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "de-update",
+   "kind": "multilingual",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Unser Hauptlieferant für Paletten ist Uline.",
+     "day": -40
+    },
+    {
+     "role": "user",
+     "text": "Wir haben den Vertrag mit Uline gekündigt; neuer Palettenlieferant ist PackagingCorp.",
+     "day": -2
+    }
+   ],
+   "expect": [
+    [
+     "PackagingCorp"
+    ]
+   ],
+   "forbid": [],
+   "stale": [
+    [
+     "Hauptlieferant für Paletten ist Uline"
+    ]
+   ],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "es-spread",
+   "kind": "multilingual",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Adopté un gato el mes pasado.",
+     "day": 0
+    },
+    {
+     "role": "assistant",
+     "text": "¿Cómo se llama?",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Se llama Pimienta y es siamesa.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Pimienta",
+     "gat"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "es-confirm",
+   "kind": "multilingual",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Necesito un hotel en Lisboa.",
+     "day": 0
+    },
+    {
+     "role": "assistant",
+     "text": "El Hotel Avenida Palace está en el centro. ¿Lo reservo?",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Sí, resérvalo.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Avenida Palace"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "ar-coref",
+   "kind": "multilingual",
+   "turns": [
+    {
+     "role": "user",
+     "text": "أختي سارة طبيبة.",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "انتقلت إلى دبي الشهر الماضي.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "سارة",
+     "دبي"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "ar-update",
+   "kind": "multilingual",
+   "turns": [
+    {
+     "role": "user",
+     "text": "رقم هاتفي هو 555-0134.",
+     "day": -30
+    },
+    {
+     "role": "user",
+     "text": "رقمي الجديد هو 555-0199، والقديم لم يعد يعمل.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "555-0199"
+    ]
+   ],
+   "forbid": [],
+   "stale": [
+    [
+     "555-0134"
+    ]
+   ],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "hi-spread",
+   "kind": "multilingual",
+   "turns": [
+    {
+     "role": "user",
+     "text": "मैंने एक नया शौक शुरू किया है।",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "मिट्टी के बर्तन बनाना, हर मंगलवार शाम को।",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "मिट्टी"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "hi-update",
+   "kind": "multilingual",
+   "turns": [
+    {
+     "role": "user",
+     "text": "मैं पुणे में रहता हूँ।",
+     "day": -60
+    },
+    {
+     "role": "user",
+     "text": "मैं पिछले महीने बेंगलुरु चला गया।",
+     "day": -2
+    }
+   ],
+   "expect": [
+    [
+     "बेंगलुरु"
+    ]
+   ],
+   "forbid": [],
+   "stale": [
+    [
+     "पुणे में रहता"
+    ]
+   ],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "chat-1",
+   "kind": "chitchat",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Hi!",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Thanks, that's helpful.",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": true
+  },
+  {
+   "id": "chat-2",
+   "kind": "chitchat",
+   "turns": [
+    {
+     "role": "user",
+     "text": "lol ok",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "haha nice",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": true
+  },
+  {
+   "id": "chat-3",
+   "kind": "chitchat",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Good morning, how are you?",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Great, thanks for asking!",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": true
+  },
+  {
+   "id": "chat-4",
+   "kind": "chitchat",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Can you summarise that?",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Thanks!",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": true
+  },
+  {
+   "id": "chat-5",
+   "kind": "chitchat",
+   "turns": [
+    {
+     "role": "user",
+     "text": "What's the weather like on Mars?",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Cool, thanks.",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": true
+  },
+  {
+   "id": "chat-6",
+   "kind": "chitchat",
+   "turns": [
+    {
+     "role": "user",
+     "text": "ok",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "sure",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "bye",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": true
+  }
+ ]
+}

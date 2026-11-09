@@ -7,8 +7,9 @@ after each session. Each question is answered from the in-process ``/v1/context`
 the strong model behind Bifrost and scored with the benchmark's own grader: LongMemEval's
 GPT-judge prompt repeated ``judge_runs`` times (mean ± sd), LoCoMo's F1/BLEU-1 rules.
 
-Configurations: ``native`` (no LLM uses inside the pipeline) and ``bifrost`` (every LLM use
-enabled).
+Configurations: ``native`` (no LLM uses inside the pipeline), ``extraction`` (the model reads
+each message at ingestion, ``contextual_extraction`` alone: ADR 0045) and ``bifrost`` (every
+LLM use enabled).
 """
 
 from __future__ import annotations
@@ -21,14 +22,14 @@ from typing import Any, get_args
 
 from sqlalchemy import text
 
-from benchmark.env import bench_overrides
+from benchmark.env import JUDGE_USES, bench_overrides, pin_model_policy
 from benchmark.public.data import Conversation, MemoryDataset, Question
 from benchmark.public.judge import anscheck_prompt, generate_answer, judge_once
 from benchmark.public.metrics import grouped_judge_summary, locomo_score, stemmer_name
 from benchmark.retrieval import TABLES, _pct, _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
-from memory_service.config.settings import LLMUse, Settings
+from memory_service.config.settings import LLMUse
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import MessageRole
 from memory_service.domain.errors import DependencyUnavailable, ProviderNotConfigured
@@ -39,23 +40,22 @@ from memory_service.modules.llm.cost import LLMTokens, llm_accounting
 TENANT = "public"
 NATIVE_CONFIGS = ("native", "bifrost")
 LLM_DISABLED = (
-    "models.llm.enabled=false: answers are generated and judged through the Bifrost gateway "
-    "(set MEMORY__MODELS__LLM__ENABLED=true, MEMORY__MODELS__LLM__BASE_URL and "
-    "MEMORY__MODELS__LLM__API_KEY)"
+    "no model endpoint: answers are generated and judged by the model (set BENCH_LLM=on, "
+    "LLM_BASE_URL and LLM_API_KEY)"
 )
 
 
-def config_settings(base: Settings, config: str) -> Settings:
-    data = base.model_dump()
-    llm = dict(data["models"]["llm"])
+def config_uses(config: str) -> tuple[str, ...]:
+    """What the bench tenant's policy lets the model do at ingestion, per configuration (the
+    answerer and the judge aside). The settings carry no allow-list: the tenant policy is the
+    one place a use is turned on or off (``benchmark.env.pin_model_policy``)."""
     if config == "native":
-        llm["uses"] = []
-    elif config == "bifrost":
-        llm["uses"] = list(get_args(LLMUse))
-    else:
-        raise ValueError(f"unknown configuration {config!r}")
-    data["models"] = {**data["models"], "llm": llm}
-    return Settings(**data)
+        return ()
+    if config == "extraction":
+        return ("contextual_extraction",)
+    if config == "bifrost":
+        return tuple(u for u in get_args(LLMUse) if u not in JUDGE_USES)
+    raise ValueError(f"unknown configuration {config!r}")
 
 
 @contextmanager
@@ -177,8 +177,9 @@ async def run_config(
     token_budget: int = 6000,
     keep_answers: bool = False,
 ) -> dict[str, Any]:
-    settings = config_settings(_settings(), config)
-    if not settings.models.llm.enabled:
+    uses = config_uses(config)
+    settings = _settings()
+    if settings.llm.endpoint is None:
         return {"skipped": LLM_DISABLED, "config": config}
     try:
         container = await build_container(settings, __version__, overrides=bench_overrides())
@@ -189,6 +190,7 @@ async def run_config(
         async with container.database.engine.begin() as conn:
             await conn.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
         register_handlers(container)
+        await pin_model_policy(container, TENANT, (*JUDGE_USES, *uses))
         ingest = {"sessions": 0, "messages": 0}
         t0 = time.perf_counter()
         with _accounting(costs, "ingest"):
@@ -217,7 +219,7 @@ async def run_config(
                 scores = await _judge_longmemeval(container, items, runs=judge_runs)
             judge: dict[str, Any] = {
                 "runs": judge_runs,
-                "model": container.llm.model,
+                "model": container.tuning.llm.model,
                 "grader": "LongMemEval evaluate_qa.py prompts (yes/no), repeated",
             }
         else:
@@ -226,7 +228,7 @@ async def run_config(
         costs["total"] = sum(v["total"] for v in costs.values() if isinstance(v, dict))
         row: dict[str, Any] = {
             "config": config,
-            "llm_uses": list(settings.models.llm.uses),
+            "llm_uses": list(uses),
             "memory_provider": "native",
             "ingest": {**ingest, "seconds": ingest_seconds, "memories": memories},
             "questions": len(items),
@@ -240,7 +242,7 @@ async def run_config(
                 else 0.0,
             },
             "llm_tokens": costs,
-            "answer_model": container.llm.model,
+            "answer_model": container.tuning.llm.model,
         }
         if keep_answers:
             row["answers"] = [

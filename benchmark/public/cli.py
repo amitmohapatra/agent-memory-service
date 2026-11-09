@@ -5,7 +5,7 @@
     uv run python -m benchmark.public --suite longmemeval --configs native,bifrost --judge-runs 5 --max-questions 100
 
 Results carry provenance and ``representative`` (real embedding weights AND an LLM behind
-Bifrost); with the hash embedding or ``models.llm.enabled=false`` every number is a
+Bifrost); with the hash embedding or no model endpoint every number is a
 pipeline smoke result, never a quality claim.
 """
 
@@ -36,12 +36,12 @@ SUITES = ("beir", "longmemeval", "locomo")
 
 def representative(settings: Any) -> dict[str, Any]:
     embedding_ok = bench_overrides().embedding != "hash"
-    llm_ok = bool(settings.models.llm.enabled)
+    llm_ok = settings.llm.endpoint is not None
     reasons = []
     if not embedding_ok:
         reasons.append("embedding provider is the hash stand-in")
     if not llm_ok:
-        reasons.append("models.llm.enabled=false")
+        reasons.append("no model endpoint")
     return {
         "representative": embedding_ok and llm_ok,
         "embedding_representative": embedding_ok,
@@ -157,7 +157,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         else:
             loader = load_longmemeval if suite == "longmemeval" else load_locomo
             file = args.longmemeval_file if suite == "longmemeval" else args.locomo_file
-            if not _settings().models.llm.enabled:
+            if _settings().llm.endpoint is None:
                 print(f"{suite}: {memory_qa.LLM_DISABLED}")
             payload = asyncio.run(run_memory(args, loader(file)))
             out = args.out_longmemeval if suite == "longmemeval" else args.out_locomo

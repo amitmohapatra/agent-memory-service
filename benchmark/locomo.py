@@ -38,6 +38,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import text as sql
 from sqlalchemy.engine import make_url
 
 from benchmark.common import provenance, reset_store, submit_observation, write_result
@@ -53,6 +54,7 @@ from memory_service.domain.enums import Visibility
 from memory_service.domain.ids import new_id
 from memory_service.domain.observation import ProcessingHints
 from memory_service.modules.jobs.registry import register_handlers
+from memory_service.modules.llm.cost import llm_accounting
 
 ROOT = Path(__file__).resolve().parents[1]
 DATASET = ROOT / "benchmark" / "data" / "locomo10.json"
@@ -650,6 +652,39 @@ JUDGE_RULERS = {
     ),
 }
 
+#: The LLM-as-a-Judge "J" of the Mem0 paper (Chhikara et al. 2025, arXiv:2504.19413, table 1),
+#: verbatim from mem0ai/mem0 evaluation/metrics/llm_judge.py (tag v0.1.100): the prompt is the
+#: user message and the label is the JSON "label". Their judge was gpt-4o-mini; ours is the
+#: run's model, which a comparison has to say.
+MEM0_J_PROMPT = """
+Your task is to label an answer to a question as ’CORRECT’ or ’WRONG’. You will be given the following data:
+    (1) a question (posed by one user to another user), 
+    (2) a ’gold’ (ground truth) answer, 
+    (3) a generated answer
+which you will score as CORRECT/WRONG.
+
+The point of the question is to ask about something one user should know about the other user based on their prior conversations.
+The gold answer will usually be a concise and short answer that includes the referenced topic, for example:
+Question: Do you remember what I got the last time I went to Hawaii?
+Gold answer: A shell necklace
+The generated answer might be much longer, but you should be generous with your grading - as long as it touches on the same topic as the gold answer, it should be counted as CORRECT. 
+
+For time related questions, the gold answer will be a specific date, month, year, etc. The generated answer might be much longer or use relative time references (like "last Tuesday" or "next month"), but you should be generous with your grading - as long as it refers to the same date or time period as the gold answer, it should be counted as CORRECT. Even if the format differs (e.g., "May 7th" vs "7 May"), consider it CORRECT if it's the same date.
+
+Now it’s time for the real question:
+Question: {question}
+Gold answer: {gold_answer}
+Generated answer: {generated_answer}
+
+First, provide a short (one sentence) explanation of your reasoning, then finish with CORRECT or WRONG. 
+Do NOT include both CORRECT and WRONG in your response, or it will break the evaluation script.
+
+Just return the label CORRECT or WRONG in a json format with the key as "label".
+"""  # noqa: RUF001, W291 - verbatim
+JUDGE_RULERS["mem0"] = "verbatim Mem0 J (MEM0_J_PROMPT)"
+_MEM0_LABEL = re.compile(r'"label"\s*:\s*"(CORRECT|WRONG)"')
+
+
 JUDGE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -789,6 +824,17 @@ async def _judge(llm, question: str, gold: str, got: str, *, ruler: str = "stric
     """
     from memory_service.ports.models import LLMMessage
 
+    if ruler == "mem0":
+        prompt = MEM0_J_PROMPT.format(question=question, gold_answer=gold, generated_answer=got)
+        reply = await llm.complete(
+            [LLMMessage(role="user", content=prompt)], max_tokens=1024, use="grounding_judge"
+        )
+        found = _MEM0_LABEL.findall(reply.text or "")
+        return {
+            "correct": bool(found) and found[-1] == "CORRECT",
+            "abstained": bool(_ABSTAIN.search(got)),
+            "reason": (reply.text or "").strip()[:300],
+        }
     messages = [
         LLMMessage(role="system", content=JUDGE_RULERS[ruler]),
         LLMMessage(
@@ -857,6 +903,7 @@ async def run(
     judge: bool = False,
     calls_per_minute: float = 10.0,
     ruler: str = "strict",
+    only_conversation: int | None = None,
     reuse_corpus: bool = False,
     reask: bool = False,
     llm_ingestion: bool = False,
@@ -866,6 +913,9 @@ async def run(
         raise SystemExit(f"{DATASET} is missing — run `make bench-locomo-prepare`")
     raw = DATASET.read_bytes()
     data = json.loads(raw)[:conversations] if conversations else json.loads(raw)
+    if only_conversation is not None:
+        # one conversation of the set per process: arms ingest in parallel, scored together
+        data = [json.loads(raw)[only_conversation]]
 
     settings = _settings()
     if llm_ingestion and settings.llm.endpoint is None:
@@ -906,6 +956,9 @@ async def run(
         ingestion_sha256=CorpusKey.ingestion_digest(_ingestion_settings(settings, uses)),
     )
     reused_conversations = 0
+    ingest_seconds, ingested_messages = 0.0, 0
+    answer_tokens = llm_accounting()
+    spent = answer_tokens.__enter__()
     try:
         if reuse_corpus and not ledger.matches(key):
             # a fresh corpus: every conversation's tenant is cleared once, up front
@@ -938,7 +991,10 @@ async def run(
                 reused_conversations += reused
             else:
                 await reset_store(container, TENANT)
+                ingest_started = time.perf_counter()
                 turns = await _ingest_conversation(container, ctx, conversation["conversation"])
+                ingest_seconds += time.perf_counter() - ingest_started
+                ingested_messages += len(turns)
             sessions = _sessions(conversation["conversation"])
             reference_date = (
                 conversation["conversation"].get(f"{sessions[-1][0]}_date_time", "")
@@ -1169,6 +1225,18 @@ async def run(
         aborted = f"{type(exc).__name__}: {str(exc)[:300]}"
         print(f"[locomo] ABORTED after {len(records)} questions: {aborted}", file=sys.stderr)
     finally:
+        answer_tokens.__exit__(None, None, None)
+        # what the model cost at ingestion: each job counts its own calls in the ledger
+        async with container.database.engine.connect() as conn:
+            usage = {
+                row.use: {"tokens": int(row.tokens), "calls": int(row.calls)}
+                for row in await conn.execute(
+                    sql(
+                        "SELECT use, sum(tokens) AS tokens, sum(calls) AS calls "
+                        "FROM llm_usage_daily GROUP BY use"
+                    )
+                )
+            }
         await container.close()
 
     latencies.sort()
@@ -1323,6 +1391,15 @@ async def run(
         if latencies
         else 0.0,
         "total_seconds": round(time.perf_counter() - started, 1),
+        "ingest_seconds": round(ingest_seconds, 1),
+        "ingested_messages": ingested_messages,
+        "messages_per_second": round(ingested_messages / ingest_seconds, 3)
+        if ingest_seconds
+        else None,
+        "llm_usage": {
+            "ingest_ledger": usage,
+            "answer_judge": {"input": spent.input, "output": spent.output},
+        },
         "ablation": ablate or {},
         "embedding_provider": embedding,
         "encoders": {
@@ -1335,7 +1412,7 @@ async def run(
         "reused_conversations": reused_conversations,
         "reask": reask,
         "reasked": sum(1 for r in records if (r.get("judged") or {}).get("reasked")),
-        "query_scripts": dict(Counter(r.get("query_script") for r in records)),
+        "query_scripts": dict(Counter(r.get("query_script") or "none" for r in records)),
         "representative": embedding != "hash",
         "provenance": provenance(),
     }
@@ -1460,7 +1537,7 @@ def main() -> int:
         "--judge-ruler",
         choices=sorted(JUDGE_RULERS),
         default="strict",
-        help="grading rules for --judge: strict (ours) or lenient (Mem0's published ruler)",
+        help="grading rules for --judge: strict (ours), lenient (mem0ai/memory-benchmarks), refined, or mem0 (the Mem0 paper's J, verbatim)",
     )
     parser.add_argument(
         "--rejudge",
@@ -1494,6 +1571,9 @@ def main() -> int:
         help="comma-separated model uses to run at ingestion as well (e.g. memory_restatement); "
         "needs the gateway, and is part of the corpus key",
     )
+    parser.add_argument(
+        "--conversation", type=int, default=None, help="only this conversation (0-based)"
+    )
     parser.add_argument("--out", default="locomo.json", help="result filename")
     args = parser.parse_args()
     if args.rejudge:
@@ -1515,6 +1595,7 @@ def main() -> int:
             judge=args.judge,
             calls_per_minute=args.calls_per_minute,
             ruler=args.judge_ruler,
+            only_conversation=args.conversation,
             reuse_corpus=args.reuse_corpus,
             reask=args.reask,
             llm_ingestion=args.llm_ingestion,
