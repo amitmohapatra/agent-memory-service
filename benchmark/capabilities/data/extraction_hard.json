@@ -2066,6 +2066,141 @@
    "negative": false
   },
   {
+   "id": "ar-coref-2",
+   "kind": "multilingual",
+   "turns": [
+    {
+     "role": "user",
+     "text": "أخي عمر مهندس.",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "يعمل الآن في أرامكو في الظهران.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "عمر",
+     "أرامكو"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "ar-coref-3",
+   "kind": "multilingual",
+   "turns": [
+    {
+     "role": "user",
+     "text": "أختي سارة طبيبة.",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "هي انتقلت إلى دبي الشهر الماضي.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "سارة",
+     "دبي"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "hi-coref",
+   "kind": "multilingual",
+   "turns": [
+    {
+     "role": "user",
+     "text": "मेरी बहन प्रिया डॉक्टर है।",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "वह पिछले महीने दुबई चली गई।",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "प्रिया",
+     "दुबई"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "es-coref",
+   "kind": "multilingual",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Mi hermana Lucía es abogada.",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Ahora trabaja en Madrid para Garrigues.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Lucía",
+     "Garrigues"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "de-coref-2",
+   "kind": "multilingual",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Meine Schwester Anna ist Ärztin.",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Sie ist letzten Monat nach Wien gezogen.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "Anna",
+     "Wien"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
    "id": "chat-1",
    "kind": "chitchat",
    "turns": [
