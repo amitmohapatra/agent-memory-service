@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any, Final, Literal
 
+from memory_service.config.constants import MEMORY_INTELLIGENCE
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import Lifetime, MemoryType, ObservationKind
 from memory_service.domain.evidence import EvidenceRef
@@ -61,9 +62,10 @@ MAX_INPUT_CHARS: Final = 8000
 #: a fact this close to one the rules read or a memory holds says nothing new
 DUPLICATE_COSINE: Final = 0.92
 #: closer than this, the NLI head decides: a fact each entails the other way says nothing new
-#: (a negation or a changed value is close too, and is not a duplicate)
-NEAR_COSINE: Final = 0.75
-SAME_ENTAILMENT: Final = 0.9
+#: (a negation or a changed value is close too, and is not a duplicate) - the bar the rules'
+#: consolidation applies to a restatement in other words
+NEAR_COSINE: Final = MEMORY_INTELLIGENCE.dedup_paraphrase_cosine
+SAME_ENTAILMENT: Final = MEMORY_INTELLIGENCE.dedup_paraphrase_entailment
 #: a message no longer than this ("Thanks!", "ok, sure") is a reply, not a statement
 SHORT_REPLY_CHARS: Final = 15
 #: model calls in flight per tenant
