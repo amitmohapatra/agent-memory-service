@@ -469,7 +469,10 @@ class ObservationPipeline:
                         c.model_copy(update={"preceding_turn": preceding}) for c in candidates
                     ]
                 candidates = await self._restated(observation, candidates, preceding)
-                candidates = [*candidates, *referred_turn(observation, candidates, prior)]
+                candidates = [
+                    *candidates,
+                    *await self._referred(observation, candidates, prior, gaps),
+                ]
                 outcomes: list[ConsolidationOutcome] = []
                 hinted = (
                     observation.hints.memory_type is not None
@@ -529,6 +532,25 @@ class ObservationPipeline:
             )
             for c in candidates
         ]
+
+    async def _referred(
+        self,
+        observation: Observation,
+        candidates: list[MemoryCandidate],
+        prior: Observation | None,
+        gaps: Gaps,
+    ) -> list[MemoryCandidate]:
+        """The referred turn (``referred_turn``), unless one of the model's facts alone says
+        all of it: that fact, with "it" resolved, is the one memory of the reply, and the
+        turn with the answer it follows stays searchable by the turn's own second key
+        (``memory_context_text``). A reply the model split over two facts keeps it: it is the
+        one memory holding both (spread-2 of the hard eval)."""
+        referred = referred_turn(observation, candidates, prior)
+        if referred and self.gapfill is not None:
+            facts = [c.content for c, _ in gaps.fills]
+            if await self.gapfill.says(facts, referred[0].content):
+                return []
+        return referred
 
     async def _gaps(
         self,

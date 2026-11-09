@@ -13,8 +13,10 @@ by turn through the conversation API in process, then read back from the memory 
 * ``negative``: chit-chat - nothing may be read from it.
 
 Metrics: recall (expected facts held), false-fact rate (forbidden facts held, and negative
-cases that stored a reading), duplicate rate (expected facts held by more than one memory),
-wrong-update rate (stale values still current, kept values closed), ask recall.
+cases that stored a reading), duplicate rate (expected facts held twice: by a memory another
+memory holding them says all of, as the NLI head reads it - two facts that only share the
+expected words are two), wrong-update rate (stale values still current, kept values closed),
+ask recall.
 
     BENCH_LLM=on ... python -m benchmark.extraction --uses contextual_extraction --out b.json
 """
@@ -28,6 +30,7 @@ import re
 import sys
 import time
 from datetime import UTC, datetime, timedelta
+from itertools import permutations
 from pathlib import Path
 from typing import Any
 
@@ -38,11 +41,13 @@ from benchmark.env import JUDGE_USES, bench_overrides, pin_model_policy
 from benchmark.retrieval import _settings
 from memory_service.__about__ import __version__
 from memory_service.application.container import build_container
+from memory_service.config.constants import MEMORY_INTELLIGENCE
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import MessageRole
 from memory_service.domain.ids import new_id
 from memory_service.modules.jobs.registry import register_handlers
 from memory_service.modules.llm.cost import llm_accounting
+from memory_service.ports.models import NLIProvider
 
 DATA = Path(__file__).parent / "capabilities" / "data" / "extraction_hard.json"
 TENANT = "extract-eval"
@@ -97,16 +102,35 @@ async def _memories(container: Any, user_id: str) -> list[dict[str, Any]]:
         return [dict(r._mapping) for r in rows]
 
 
-def score_case(case: dict[str, Any], mems: list[dict[str, Any]], asked: list[bool]) -> dict:
+async def _held_twice(readings: list[str], nli: NLIProvider) -> bool:
+    """Whether one of ``readings`` (each holding one expected fact's words) says all another
+    says - the same fact held twice, in other words or with more beside it. Two that each say
+    something the other does not ("Pimienta es una gata siamesa." / "El gato adoptado se llama
+    Pimienta."; "Arjun moved to Toronto." / "Arjun has a job at SickKids in Toronto.", 0.82)
+    are two facts that share the words. The bar is the one consolidation calls a restatement
+    by."""
+    pairs = list(permutations(readings, 2))
+    if not pairs:
+        return False
+    rows = await nli.entail_groups([([a], b) for a, b in pairs])
+    return any(s.entailment >= MEMORY_INTELLIGENCE.dedup_paraphrase_entailment for (s,) in rows)
+
+
+async def score_case(
+    case: dict[str, Any], mems: list[dict[str, Any]], asked: list[bool], nli: NLIProvider
+) -> dict:
     current = [m for m in mems if m["temporal_status"] == "CURRENT" and not m["marked"]]
     read = [m for m in current if m["category"] != "verbatim_turn"]
-    held = [sum(_holds(m["content"], words) for m in read) for words in case.get("expect", [])]
+    holding = [
+        [m["content"] for m in read if _holds(m["content"], words)]
+        for words in case.get("expect", [])
+    ]
     return {
         "id": case["id"],
         "kind": case["kind"],
-        "expected": len(held),
-        "held": sum(1 for h in held if h),
-        "duplicated": sum(1 for h in held if h > 1),
+        "expected": len(holding),
+        "held": sum(1 for h in holding if h),
+        "duplicated": sum([await _held_twice(h, nli) for h in holding]),
         "forbidden": len(case.get("forbid", [])),
         "false": sum(
             1 for words in case.get("forbid", []) if any(_holds(m["content"], words) for m in read)
@@ -180,7 +204,8 @@ async def run(uses: list[str], only: list[str] | None) -> dict[str, Any]:
                 for ask in case.get("ask", []):
                     bundle = await builder.build(ctx, ask["q"], token_budget=ASK_BUDGET)
                     asked.append(_holds(bundle.render() or "", ask["expect"]))
-                rows.append(score_case(case, await _memories(container, case["id"]), asked))
+                mems = await _memories(container, case["id"])
+                rows.append(await score_case(case, mems, asked, container.nli))
                 print(f"[extraction] {case['id']}", file=sys.stderr, flush=True)
     finally:
         await container.close()

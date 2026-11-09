@@ -247,6 +247,78 @@ async def test_an_add_of_the_words_an_update_rests_on_is_the_update():
 
 
 @pytest.mark.parametrize(
+    ("other", "contradiction", "kept"),
+    [
+        # the move contradicts where the speaker lived: the change told again
+        ("hi-update अगस्त 2026 में बेंगलुरु चला गया।", 0.93, 1),
+        # a fact of the same words that leaves where they lived open stays
+        ("hi-update को बेंगलुरु में नई नौकरी मिली।", 0.39, 2),
+    ],
+)
+async def test_an_add_that_contradicts_what_a_change_of_its_words_replaces_is_the_change(
+    other, contradiction, kept
+):
+    """hi-update: "मैं पिछले महीने बेंगलुरु चला गया।" read as what holds now (contradict: lives
+    in Bengaluru, not Pune) and again as the move (add) was two memories of one change, in
+    every model run. The head does not read the move as saying where the speaker lives
+    (entailment 0.04, as the frozen head scores it; 0.99 for the English), but it does read it
+    as contradicting the memory the change replaces (0.93) - the prompt's own rule: a change
+    of a KNOWN memory is an update or a contradict, never an add."""
+    quote = "मैं पिछले महीने बेंगलुरु चला गया"
+    pune = "hi-update पुणे में रहता है।"
+    now = op(op="contradict", fact="hi-update अब बेंगलुरु में रहता है।", quote=quote, target=1)
+    add = op(fact=other, quote=quote, subject="")
+    with mocked_gateway([{"ops": [now, add]}]) as gateway:
+        filler = GapFill(
+            gateway.assist(uses=["contextual_extraction"]),
+            nli=_Entails({}, {(other, pune): (0.01, contradiction)}),
+        )
+        out = await filler.fill(
+            "t1",
+            message=f"{quote}।",
+            speaker="hi-update",
+            said_at=SAID,
+            recent=[],
+            rules=[],
+            known=[_known(pune)],
+        )
+    assert len(out) == kept, out
+    assert out[0].op == "contradict" and out[0].target is not None
+    assert out[0].target.content == pune
+    assert out[0].fact == (other if kept == 1 else now["fact"])
+
+
+@pytest.mark.parametrize(("entailment", "folded"), [(0.8951, True), (0.30, False)])
+async def test_an_add_the_head_reads_as_saying_a_change_of_its_words_is_the_change(
+    entailment, folded
+):
+    """update-6: "Priya handed the on-call duty over to Marcus in the week of 2026-09-30."
+    says "Our on-call lead is Marcus." at 0.895 as the frozen head reads it - entailment its
+    reading, but just under the bar for dropping a fact. The change takes the add's words, so
+    nothing is dropped: the head's reading is enough; below it both stay."""
+    quote = "Priya handed on-call over to Marcus this week"
+    update = op(op="update", fact="Our on-call lead is Marcus.", quote=quote, target=1)
+    event = op(fact="Priya handed the on-call duty over to Marcus.", quote=quote)
+    scored = {(event["fact"], update["fact"]): (entailment, 0.21)}
+    with mocked_gateway([{"ops": [update, event]}]) as gateway:
+        filler = GapFill(gateway.assist(uses=["contextual_extraction"]), nli=_Entails({}, scored))
+        out = await filler.fill(
+            "t1",
+            message=f"{quote}.",
+            speaker="Ana",
+            said_at=SAID,
+            recent=[],
+            rules=[],
+            known=[_known("Our on-call lead is Priya.")],
+        )
+    facts = [(f.op, f.fact) for f in out]
+    if folded:
+        assert facts == [("update", event["fact"])]
+    else:
+        assert facts == [("update", update["fact"]), ("add", event["fact"])]
+
+
+@pytest.mark.parametrize(
     ("reading", "quotes", "covered"),
     [
         # vdate-4: the model read the same words and resolved the day
@@ -281,23 +353,32 @@ def test_a_rule_reading_whose_words_the_model_read_is_the_model_s(reading, quote
 
 
 class _Entails:
-    """The NLI head as the frozen one reads these pairs: premise -> hypotheses it entails."""
+    """The NLI head as the frozen one reads these pairs: premise -> hypotheses it entails,
+    and the (entailment, contradiction) it gives the pairs scored."""
 
     representative = True
 
-    def __init__(self, entails: dict[str, set[str]]) -> None:
+    def __init__(
+        self,
+        entails: dict[str, set[str]],
+        scored: dict[tuple[str, str], tuple[float, float]] | None = None,
+    ) -> None:
         self.entails = entails
+        self.scored = scored or {}
 
     async def entail_groups(self, groups):
         from memory_service.ports.models import NLIScore
 
-        return [
-            [
-                NLIScore(entailment=e, neutral=1 - e, contradiction=0.0)
-                for e in (0.98 if hyp in self.entails.get(p, set()) else 0.01 for p in premises)
-            ]
-            for premises, hyp in groups
-        ]
+        out = []
+        for premises, hyp in groups:
+            row = []
+            for p in premises:
+                e, c = self.scored.get(
+                    (p, hyp), (0.98 if hyp in self.entails.get(p, set()) else 0.01, 0.0)
+                )
+                row.append(NLIScore(entailment=e, neutral=max(0.0, 1 - e - c), contradiction=c))
+            out.append(row)
+        return out
 
 
 @pytest.mark.parametrize(
