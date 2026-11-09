@@ -1270,8 +1270,8 @@ class NativeMemoryIntelligence:
         #: sequentially too - so the most expensive component in the service was being driven
         #: at batch size one. The port has exposed ``embed_documents`` all along.
         dense_band: list[CanonicalMemory] = []
-        #: memories sharing a word with the candidate below the dense band's overlap: the
-        #: encoder and the NLI head decide whether one restates the other (``_paraphrase``)
+        #: memories below the dense band's overlap: the encoder and the NLI head decide
+        #: whether one restates the other (``_paraphrase``)
         paraphrase_band: list[CanonicalMemory] = []
         # a principal's own memories are matched first: "actually, X is now Y" corrects the
         # writer's own earlier finding before it is compared with anyone else's
@@ -1414,10 +1414,12 @@ class NativeMemoryIntelligence:
                 self.nli is not None
                 and self.embedding is not None
                 and not self.embedding.fingerprint().startswith("hash-")
-                and c_tokens & m_tokens
                 and not apart
             ):
-                # 4. a restatement in other words: too few shared words for the rules above
+                # 4. a restatement in other words: too few shared words for the rules above,
+                #    or none they can read (the words above are Latin-script only; "थाई खाना",
+                #    "Lieblingsessen" / "Essen") - the multilingual encoder and the NLI head
+                #    decide in any language
                 paraphrase_band.append(mem)
         # 3. dense similarity, in one pass (only with a real embedding provider; the hash
         #    stand-in is excluded because it would merge unrelated sentences sharing a few

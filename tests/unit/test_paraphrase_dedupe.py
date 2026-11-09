@@ -47,6 +47,26 @@ SAME = [
         1.0,
         0.0,
     ),
+    # the same restatements in Hindi, Arabic, German and Spanish, as the multilingual encoder
+    # and NLI head read them
+    ("मेरा पसंदीदा खाना थाई है।", "थाई खाना मुझे सबसे ज़्यादा पसंद है।", 0.85, 0.99, 0.98, 0.0),
+    ("أنا أعمل مهندس بيانات في شوبيفاي.", "وظيفتي مهندس بيانات لدى شوبيفاي.", 0.90, 0.99, 1.0, 0.0),
+    (
+        "Mein Lieblingsessen ist Thai.",
+        "Thailändisches Essen mag ich am liebsten.",
+        0.77,
+        1.0,
+        0.98,
+        0.0,
+    ),
+    (
+        "Trabajo como ingeniera de datos en Shopify.",
+        "Soy ingeniera de datos en Shopify.",
+        0.89,
+        0.96,
+        0.99,
+        0.0,
+    ),
 ]
 APART = [
     ("My favourite cuisine is Thai.", "My favourite cuisine is Italian.", 0.74, 0.0, 0.0, 0.71),
@@ -77,6 +97,18 @@ APART = [
         0.0,
         0.0,
     ),
+    # two facts about one sister, in Hindi, Arabic, German and Spanish
+    ("मेरी बहन प्रिया डॉक्टर है।", "मेरी बहन प्रिया दुबई चली गई।", 0.55, 0.0, 0.0, 0.0),
+    ("أختي سارة طبيبة.", "أختي سارة انتقلت إلى دبي.", 0.66, 0.0, 0.01, 0.01),
+    (
+        "Meine Schwester Anna ist Ärztin.",
+        "Meine Schwester Anna ist nach Wien gezogen.",
+        0.64,
+        0.01,
+        0.0,
+        0.01,
+    ),
+    ("Mi hermana Lucía es abogada.", "Mi hermana Lucía trabaja en Madrid.", 0.70, 0.02, 0.0, 0.0),
     # entailed both ways but below the cosine bar: the head alone never merges
     ("I adopted a dog.", "A dog was adopted by me last spring.", 0.60, 0.95, 0.95, 0.0),
 ]
@@ -133,7 +165,7 @@ async def _decide(pair: tuple) -> DedupDecision:
     return (await native.consolidate(_reading(new), [stored], CTX)).decision
 
 
-@pytest.mark.parametrize("pair", SAME, ids=["dup-1", "dup-2"])
+@pytest.mark.parametrize("pair", SAME, ids=["dup-1", "dup-2", "hi", "ar", "de", "es"])
 async def test_a_restatement_in_other_words_is_the_memory_already_held(pair) -> None:
     assert await _decide(pair) in (DedupDecision.REINFORCE, DedupDecision.MERGE)
 

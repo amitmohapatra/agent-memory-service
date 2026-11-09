@@ -48,6 +48,7 @@ from memory_service.domain.observation import Observation
 from memory_service.domain.script import Script
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.native import is_question, tokens
+from memory_service.modules.memory.replacement import EARLIER_CONTRADICTION
 from memory_service.modules.memory.temporal import dated_mentions
 from memory_service.ports.intelligence import MemoryCandidate
 from memory_service.ports.models import EmbeddingProvider, NLIProvider
@@ -290,6 +291,14 @@ class GapFill:
         ]
         return await self._new(fills, rules, known, speaker)
 
+    async def says(self, facts: Sequence[str], text: str) -> bool:
+        """Whether one of ``facts`` alone says ``text`` (the NLI head at ``SAME_ENTAILMENT``):
+        that fact holds everything ``text`` does, so ``text`` kept beside it is the same
+        statement twice."""
+        if not facts or self.nli is None:
+            return False
+        return _over(await self.nli.entail_groups([([f], text) for f in facts]))
+
     async def nearest(
         self, message: str, memories: Sequence[CanonicalMemory]
     ) -> list[CanonicalMemory]:
@@ -339,8 +348,13 @@ class GapFill:
         each other). An add resting on the words of an update or contradict is that change
         told again: when the add says the op's fact ("Priya handed on-call over to Marcus" /
         "Our on-call lead is now Marcus"; "moved to Bengaluru in August" / "no longer lives in
-        Pune") the op keeps its target and takes the add's fuller words; when the op says the
-        add, the add goes. Two facts neither of which says the other both stay."""
+        Pune") the op keeps its target and takes the add's fuller words - entailment the
+        head's reading is enough there, nothing being dropped (0.895 for update-6) - and so
+        when the add contradicts the memory the op replaces (at ``EARLIER_CONTRADICTION``,
+        the bar that marks an earlier value): "मैं बेंगलुरु चला गया" read as the move and as
+        "अब बेंगलुरु में रहता है", which the head reads as contradicting "पुणे में रहता है"
+        but not as saying each other. When the op says the add, the add goes. Two facts
+        neither of which says the other both stay."""
         adds = [f for f in fills if f.op == "add"]
         changes = [f for f in fills if f.op != "add"]
         pairs = [(a, b) for a in adds for b in adds if a is not b]
@@ -364,11 +378,24 @@ class GapFill:
         """Which fill of ``pairs`` says which (by id), and the adds a rules reading says, in
         one pass of the NLI head."""
         assert self.nli is not None
+        #: an add beside a change of its words, with the memory the change replaces
+        replacing = [(a, b, b.target) for a, b in pairs if a.op == "add" and b.target is not None]
         scores = await self.nli.entail_groups(
-            [([a.fact], b.fact) for a, b in pairs] + [([r], a.fact) for a in adds for r in rules]
+            [([a.fact], b.fact) for a, b in pairs]
+            + [([a.fact], target.content) for a, _, target in replacing]
+            + [([r], a.fact) for a in adds for r in rules]
         )
-        says = {(id(a), id(b)) for (a, b), row in zip(pairs, scores, strict=False) if _over([row])}
-        ruled = scores[len(pairs) :]
+        rows = dict(zip(((id(a), id(b)) for a, b in pairs), scores, strict=False))
+        says = {pair for pair, row in rows.items() if _over([row])}
+        replaced = scores[len(pairs) : len(pairs) + len(replacing)]
+        # the change takes the add's words, so no fact is dropped: the head's reading that the
+        # add says the change is enough, below the bar for dropping one
+        says |= {
+            (id(a), id(b))
+            for (a, b, _), row in zip(replacing, replaced, strict=True)
+            if row[0].contradiction >= EARLIER_CONTRADICTION or _reads(rows[(id(a), id(b))][0])
+        }
+        ruled = scores[len(pairs) + len(replacing) :]
         k = len(rules)
         return says, {id(a) for n, a in enumerate(adds) if _over(ruled[n * k : (n + 1) * k])}
 
@@ -511,6 +538,11 @@ def _day(quote: str, given: str, said_at: datetime) -> date | None:
 def _over(rows: Sequence[Sequence[Any]]) -> bool:
     """Whether any of ``rows`` (NLI scores) is entailed at ``SAME_ENTAILMENT``."""
     return any(row[0].entailment >= SAME_ENTAILMENT for row in rows)
+
+
+def _reads(score: Any) -> bool:
+    """Whether entailment is the head's reading of a pair (its highest score)."""
+    return bool(score.entailment > max(score.neutral, score.contradiction))
 
 
 def _told_again(

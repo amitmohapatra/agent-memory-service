@@ -114,3 +114,79 @@ async def test_a_rule_reading_the_model_read_again_is_held_once(container, uow_f
         if m.system_metadata.get("category") != "verbatim_turn" and "audit" in m.content
     ]
     assert readings == [resolved]
+
+
+class _Says:
+    """The NLI head as the frozen one reads spread-2: the one fact holding both sentences
+    entails the reply kept with its question (0.97); either half alone does not."""
+
+    representative = True
+
+    def __init__(self, whole: str) -> None:  # "" when no fact holds both
+        self.whole = whole
+
+    async def entail_groups(self, groups):
+        from memory_service.ports.models import NLIScore
+
+        return [
+            [
+                NLIScore(entailment=e, neutral=1 - e, contradiction=0.0)
+                for e in (0.97 if p == self.whole and "(in reply to:" in h else 0.01 for p in ps)
+            ]
+            for ps, h in groups
+        ]
+
+
+@pytest.mark.parametrize(
+    ("facts", "referred"),
+    [
+        # the model wrote one fact with both sentences and "it" resolved: that one memory
+        (("Ada's second warehouse, in Tacoma, handles all the West Coast returns.",), False),
+        # the model split the reply: the turn kept with its question is the one holding both
+        (("Ada's second warehouse is in Tacoma.", "The warehouse handles returns."), True),
+    ],
+    ids=["whole", "split"],
+)
+async def test_a_reply_the_model_read_whole_is_not_kept_again_with_its_question(
+    container, uow_factory, facts, referred
+):
+    """spread-2 of the hard eval: "In Tacoma. It handles all the West Coast returns." after
+    "Where is it?" was kept with the question beside it, and in the runs where the model read
+    both sentences as one fact with "it" resolved, the same fact was held twice. Skipping it
+    whenever the model read the reply cost recall in every run where the model split it (five
+    of five), so it is skipped only when one fact alone says it; the turn with the question
+    stays searchable by the turn's own second key (``memory_context_text``)."""
+    from datetime import UTC, datetime, timedelta
+
+    from tests.integration.test_referred_turn import _contents, _turn
+
+    reply = "In Tacoma. It handles all the West Coast returns."
+    ops = {
+        "ops": [
+            {
+                "op": "add",
+                "fact": fact,
+                "quote": reply,
+                "type": "fact",
+                "subject": "",
+                "date": "",
+                "confidence": 0.9,
+                "target": 0,
+            }
+            for fact in facts
+        ]
+    }
+    at = datetime(2026, 10, 30, 9, tzinfo=UTC)
+    pipeline = container.services["observation_pipeline"]
+    with mocked_gateway([{"ops": []}, ops]) as gateway:
+        pipeline.gapfill = GapFill(
+            gateway.assist(uses=["contextual_extraction"]), nli=_Says("" if referred else facts[0])
+        )
+        await _turn(container, uow_factory, "We opened a second warehouse.", at=at, role="user")
+        await _turn(
+            container, uow_factory, "Where is it?", at=at + timedelta(minutes=1), role="assistant"
+        )
+        await _turn(container, uow_factory, reply, at=at + timedelta(minutes=2), role="user")
+    kept = await _contents(container, uow_factory)
+    assert any("(in reply to: Where is it?)" in m for m in kept) is referred, kept
+    assert all(f in kept for f in facts), kept

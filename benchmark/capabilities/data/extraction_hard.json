@@ -1178,6 +1178,266 @@
    "negative": false
   },
   {
+   "id": "dup-hi",
+   "kind": "duplicate",
+   "turns": [
+    {
+     "role": "user",
+     "text": "मेरा पसंदीदा खाना थाई है।",
+     "day": -10
+    },
+    {
+     "role": "user",
+     "text": "थाई खाना मुझे सबसे ज़्यादा पसंद है, वैसे।",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "थाई"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "थाई"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "dup-ar",
+   "kind": "duplicate",
+   "turns": [
+    {
+     "role": "user",
+     "text": "أعمل مهندس بيانات في شوبيفاي.",
+     "day": -10
+    },
+    {
+     "role": "user",
+     "text": "كما قلت، وظيفتي مهندس بيانات لدى شوبيفاي.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "شوبيفاي"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "شوبيفاي"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "dup-de",
+   "kind": "duplicate",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Mein Lieblingsessen ist Thai.",
+     "day": -10
+    },
+    {
+     "role": "user",
+     "text": "Thailändisches Essen mag ich übrigens am liebsten.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "Thai"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "Thai"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "dup-es",
+   "kind": "duplicate",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Trabajo como ingeniera de datos en Shopify.",
+     "day": -10
+    },
+    {
+     "role": "user",
+     "text": "Como te dije, soy ingeniera de datos en Shopify.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "Shopify"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "Shopify"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "apart-hi",
+   "kind": "duplicate",
+   "turns": [
+    {
+     "role": "user",
+     "text": "मेरी बहन प्रिया डॉक्टर है।",
+     "day": -10
+    },
+    {
+     "role": "user",
+     "text": "प्रिया अब दुबई में रहती है।",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "प्रिया",
+     "डॉक्टर"
+    ],
+    [
+     "प्रिया",
+     "दुबई"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "डॉक्टर"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "apart-ar",
+   "kind": "duplicate",
+   "turns": [
+    {
+     "role": "user",
+     "text": "أختي سارة طبيبة.",
+     "day": -10
+    },
+    {
+     "role": "user",
+     "text": "سارة تعيش الآن في دبي.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "سارة",
+     "طبيبة"
+    ],
+    [
+     "سارة",
+     "دبي"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "طبيبة"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "apart-de",
+   "kind": "duplicate",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Meine Schwester Anna ist Ärztin.",
+     "day": -10
+    },
+    {
+     "role": "user",
+     "text": "Anna wohnt jetzt in Wien.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "Anna",
+     "Ärztin"
+    ],
+    [
+     "Anna",
+     "Wien"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "Ärztin"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "apart-es",
+   "kind": "duplicate",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Mi hermana Lucía es abogada.",
+     "day": -10
+    },
+    {
+     "role": "user",
+     "text": "Lucía vive ahora en Madrid.",
+     "day": -1
+    }
+   ],
+   "expect": [
+    [
+     "Lucía",
+     "abogada"
+    ],
+    [
+     "Lucía",
+     "Madrid"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "abogada"
+    ]
+   ],
+   "ask": [],
+   "negative": false
+  },
+  {
    "id": "contra-1",
    "kind": "contradiction",
    "turns": [
