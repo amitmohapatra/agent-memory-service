@@ -385,9 +385,8 @@ class Gaps:
 
     fills: list[tuple[MemoryCandidate, CanonicalMemory | None]] = field(default_factory=list)
     known: list[CanonicalMemory] = field(default_factory=list)
-    #: the rules' sentence readings, and the message itself, the model read again
-    #: (``gapfill.covered``): held by the model's facts, which say them with who, when and
-    #: what "it" is resolved
+    #: the rules' sentence readings the model read again (``gapfill.covered``): held by the
+    #: model's facts, which say them with who and when resolved
     covered: frozenset[str] = frozenset()
 
     def uncovered(self, candidates: list[MemoryCandidate]) -> list[MemoryCandidate]:
@@ -397,18 +396,6 @@ class Gaps:
             for c in candidates
             if c.content not in self.covered or c.category not in SENTENCE_READINGS
         ]
-
-    def referred(
-        self,
-        observation: Observation,
-        candidates: list[MemoryCandidate],
-        prior: Observation | None,
-    ) -> list[MemoryCandidate]:
-        """The referred turn (``referred_turn``), unless the model read the reply whole: its
-        facts hold what the reply refers to already."""
-        if observation.content.strip() in self.covered:
-            return []
-        return referred_turn(observation, candidates, prior)
 
 
 class ObservationPipeline:
@@ -482,7 +469,7 @@ class ObservationPipeline:
                         c.model_copy(update={"preceding_turn": preceding}) for c in candidates
                     ]
                 candidates = await self._restated(observation, candidates, preceding)
-                candidates = [*candidates, *gaps.referred(observation, candidates, prior)]
+                candidates = [*candidates, *referred_turn(observation, candidates, prior)]
                 outcomes: list[ConsolidationOutcome] = []
                 hinted = (
                     observation.hints.memory_type is not None
@@ -595,10 +582,7 @@ class ObservationPipeline:
             known,
             frozenset(
                 gap_covered(
-                    [
-                        *(c.content for c in candidates if c.category in SENTENCE_READINGS),
-                        observation.content.strip(),
-                    ],
+                    [c.content for c in candidates if c.category in SENTENCE_READINGS],
                     fills,
                 )
             ),
