@@ -1,0 +1,327 @@
+{
+ "A rules only": {
+  "messages_per_second": 4.158,
+  "summary": {
+   "ask_recall": 0.9286,
+   "by_kind": {
+    "chitchat": {
+     "ask_recall": null,
+     "recall": null
+    },
+    "confirm": {
+     "ask_recall": null,
+     "recall": 0.0
+    },
+    "contradiction": {
+     "ask_recall": null,
+     "recall": 0.3333
+    },
+    "coref": {
+     "ask_recall": null,
+     "recall": 0.0
+    },
+    "duplicate": {
+     "ask_recall": null,
+     "recall": 0.7143
+    },
+    "implied": {
+     "ask_recall": null,
+     "recall": 0.25
+    },
+    "multihop": {
+     "ask_recall": 0.8333,
+     "recall": 0.0
+    },
+    "multilingual": {
+     "ask_recall": null,
+     "recall": 0.0
+    },
+    "opinion": {
+     "ask_recall": null,
+     "recall": 0.6
+    },
+    "spread": {
+     "ask_recall": null,
+     "recall": 0.1429
+    },
+    "temporal": {
+     "ask_recall": 1.0,
+     "recall": 0.5
+    },
+    "update": {
+     "ask_recall": null,
+     "recall": 0.1667
+    },
+    "vague_date": {
+     "ask_recall": 1.0,
+     "recall": 0.1667
+    }
+   },
+   "cases": 80,
+   "duplicate_rate": 0.1333,
+   "false_fact_rate": 0.0,
+   "recall": 0.2344,
+   "wrong_update_rate": 0.0
+  }
+ },
+ "B + #92": {
+  "messages_per_second": 0.533,
+  "summary": {
+   "ask_recall": 0.9286,
+   "by_kind": {
+    "chitchat": {
+     "ask_recall": null,
+     "recall": null
+    },
+    "confirm": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "contradiction": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "coref": {
+     "ask_recall": null,
+     "recall": 0.8333
+    },
+    "duplicate": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "implied": {
+     "ask_recall": null,
+     "recall": 0.875
+    },
+    "multihop": {
+     "ask_recall": 0.8333,
+     "recall": 1.0
+    },
+    "multilingual": {
+     "ask_recall": null,
+     "recall": 0.75
+    },
+    "opinion": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "spread": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "temporal": {
+     "ask_recall": 1.0,
+     "recall": 1.0
+    },
+    "update": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "vague_date": {
+     "ask_recall": 1.0,
+     "recall": 1.0
+    }
+   },
+   "cases": 80,
+   "duplicate_rate": 0.1167,
+   "false_fact_rate": 0.0,
+   "recall": 0.9375,
+   "wrong_update_rate": 0.05
+  }
+ },
+ "B gap-fill (earlier run)": {
+  "messages_per_second": 0.537,
+  "summary": {
+   "ask_recall": 0.9286,
+   "by_kind": {
+    "chitchat": {
+     "ask_recall": null,
+     "recall": null
+    },
+    "confirm": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "contradiction": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "coref": {
+     "ask_recall": null,
+     "recall": 0.8333
+    },
+    "duplicate": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "implied": {
+     "ask_recall": null,
+     "recall": 0.875
+    },
+    "multihop": {
+     "ask_recall": 0.8333,
+     "recall": 1.0
+    },
+    "multilingual": {
+     "ask_recall": null,
+     "recall": 0.75
+    },
+    "opinion": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "spread": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "temporal": {
+     "ask_recall": 1.0,
+     "recall": 1.0
+    },
+    "update": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "vague_date": {
+     "ask_recall": 1.0,
+     "recall": 1.0
+    }
+   },
+   "cases": 80,
+   "duplicate_rate": 0.1167,
+   "false_fact_rate": 0.0,
+   "recall": 0.9375,
+   "wrong_update_rate": 0.0
+  }
+ },
+ "B gap-fill (final)": {
+  "messages_per_second": 0.532,
+  "summary": {
+   "ask_recall": 0.9286,
+   "by_kind": {
+    "chitchat": {
+     "ask_recall": null,
+     "recall": null
+    },
+    "confirm": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "contradiction": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "coref": {
+     "ask_recall": null,
+     "recall": 0.8333
+    },
+    "duplicate": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "implied": {
+     "ask_recall": null,
+     "recall": 0.875
+    },
+    "multihop": {
+     "ask_recall": 0.8333,
+     "recall": 1.0
+    },
+    "multilingual": {
+     "ask_recall": null,
+     "recall": 0.875
+    },
+    "opinion": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "spread": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "temporal": {
+     "ask_recall": 1.0,
+     "recall": 1.0
+    },
+    "update": {
+     "ask_recall": null,
+     "recall": 1.0
+    },
+    "vague_date": {
+     "ask_recall": 1.0,
+     "recall": 1.0
+    }
+   },
+   "cases": 80,
+   "duplicate_rate": 0.1967,
+   "false_fact_rate": 0.0,
+   "recall": 0.9531,
+   "wrong_update_rate": 0.05
+  }
+ },
+ "C model-first #93": {
+  "messages_per_second": 0.516,
+  "summary": {
+   "ask_recall": 0.9286,
+   "by_kind": {
+    "chitchat": {
+     "ask_recall": null,
+     "recall": null
+    },
+    "confirm": {
+     "ask_recall": null,
+     "recall": 0.0
+    },
+    "contradiction": {
+     "ask_recall": null,
+     "recall": 0.3333
+    },
+    "coref": {
+     "ask_recall": null,
+     "recall": 0.0
+    },
+    "duplicate": {
+     "ask_recall": null,
+     "recall": 0.7143
+    },
+    "implied": {
+     "ask_recall": null,
+     "recall": 0.375
+    },
+    "multihop": {
+     "ask_recall": 0.8333,
+     "recall": 0.0
+    },
+    "multilingual": {
+     "ask_recall": null,
+     "recall": 0.125
+    },
+    "opinion": {
+     "ask_recall": null,
+     "recall": 0.6
+    },
+    "spread": {
+     "ask_recall": null,
+     "recall": 0.1429
+    },
+    "temporal": {
+     "ask_recall": 1.0,
+     "recall": 0.5
+    },
+    "update": {
+     "ask_recall": null,
+     "recall": 0.1667
+    },
+    "vague_date": {
+     "ask_recall": 1.0,
+     "recall": 0.1667
+    }
+   },
+   "cases": 80,
+   "duplicate_rate": 0.1176,
+   "false_fact_rate": 0.0,
+   "recall": 0.2656,
+   "wrong_update_rate": 0.0
+  }
+ }
+}

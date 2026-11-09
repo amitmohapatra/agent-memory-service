@@ -11,8 +11,9 @@ from typing import Any
 
 from memory_service.ports.models import LLMMessage
 
-ANSWER_USE = "benchmark_answer"
-JUDGE_USE = "benchmark_judge"
+#: the use the bench tenant's policy allows the instrument (``benchmark.env.JUDGE_USES``)
+ANSWER_USE = "grounding_judge"
+JUDGE_USE = "grounding_judge"
 
 _STANDARD = (
     "I will give you a question, a correct answer, and a response from a model. Please "
