@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import sys
 import time
 from datetime import UTC, datetime, timedelta
@@ -51,8 +52,10 @@ ASK_BUDGET = 2000
 
 
 def _holds(content: str, words: list[str]) -> bool:
+    """Every word starts a word of ``content`` (a stem matches its forms: "renew" in
+    "renewal"; "art" is not in "started")."""
     folded = content.casefold()
-    return all(w.casefold() in folded for w in words)
+    return all(re.search(r"(?<!\w)" + re.escape(w.casefold()), folded) for w in words)
 
 
 async def _write(container: Any, case: dict[str, Any]) -> MemoryExecutionContext:
