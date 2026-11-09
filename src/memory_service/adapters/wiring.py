@@ -591,6 +591,8 @@ def _wire_memory(container: Container) -> None:
         # what the head leaves open the model reads in the gap-fill call (``gapfill``)
         labeller=StatementLabeller(nli=container.nli),
         subjects=subjects,
+        # the same head reads a restatement in other words as the memory already held
+        nli=container.nli,
     )
     container.services["memory_provider"] = provider
     container.services["observation_pipeline"] = ObservationPipeline(

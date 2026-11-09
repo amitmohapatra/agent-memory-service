@@ -686,6 +686,12 @@ class MemoryIntelligenceSettings(BaseModel):
 
     dedup_lexical_threshold: float = 0.92
     dedup_dense_threshold: float = 0.90
+    #: a restatement in other words ("My favourite cuisine is Thai." / "Thai food is my
+    #: favourite") shares too few words for the lexical rule and sits below the dense one:
+    #: at least this cosine, and the NLI head reading each as entailing the other at
+    #: ``dedup_paraphrase_entailment``, it is the memory already held
+    dedup_paraphrase_cosine: float = Field(default=0.75, ge=0.0, le=1.0)
+    dedup_paraphrase_entailment: float = Field(default=0.9, ge=0.0, le=1.0)
     dedup_candidate_k: int = 20
     # admission gate (worthiness x novelty x confidence x expected utility -> admit/defer/reject)
     admission_worthiness_min: float = Field(default=0.35, ge=0.0, le=1.0)

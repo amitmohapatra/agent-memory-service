@@ -54,7 +54,7 @@ from memory_service.ports.intelligence import (
     ContextualExtractor,
     MemoryCandidate,
 )
-from memory_service.ports.models import EmbeddingProvider, ProviderInfo
+from memory_service.ports.models import EmbeddingProvider, NLIProvider, ProviderInfo
 
 # --------------------------------------------------------------------------- text utils
 
@@ -628,9 +628,13 @@ class NativeMemoryIntelligence:
         contextual_extractor: ContextualExtractor | None = None,
         labeller: StatementLabeller | None = None,
         subjects: SubjectMatcher | None = None,
+        nli: NLIProvider | None = None,
     ) -> None:
         self.cfg = settings
         self.embedding = embedding
+        #: reads a restatement in other words as the memory already held (``_paraphrase``);
+        #: a stand-in head (``LexicalNLI``) reads no meaning, so it is not used
+        self.nli = nli if nli is not None and getattr(nli, "representative", False) else None
         self.assist = assist or LLMAssist.disabled()
         self.contextual_extractor = contextual_extractor
         #: what each user sentence does (ADR 0037); the lexicon alone unless the wiring gives
@@ -1266,6 +1270,9 @@ class NativeMemoryIntelligence:
         #: sequentially too - so the most expensive component in the service was being driven
         #: at batch size one. The port has exposed ``embed_documents`` all along.
         dense_band: list[CanonicalMemory] = []
+        #: memories sharing a word with the candidate below the dense band's overlap: the
+        #: encoder and the NLI head decide whether one restates the other (``_paraphrase``)
+        paraphrase_band: list[CanonicalMemory] = []
         # a principal's own memories are matched first: "actually, X is now Y" corrects the
         # writer's own earlier finding before it is compared with anyone else's
         ordered = sorted(existing, key=lambda m: m.owner_principal != ctx.principal_id)
@@ -1403,17 +1410,27 @@ class NativeMemoryIntelligence:
                 and not apart
             ):
                 dense_band.append(mem)
+            elif (
+                self.nli is not None
+                and self.embedding is not None
+                and not self.embedding.fingerprint().startswith("hash-")
+                and c_tokens & m_tokens
+                and not apart
+            ):
+                # 4. a restatement in other words: too few shared words for the rules above
+                paraphrase_band.append(mem)
         # 3. dense similarity, in one pass (only with a real embedding provider; the hash
         #    stand-in is excluded because it would merge unrelated sentences sharing a few
         #    tokens). Deferred to here so an early return above - a single-valued slot being
         #    superseded - never pays for an embedding, and so the whole band is one batch.
-        if dense_band and self.embedding is not None:
+        if (dense_band or paraphrase_band) and self.embedding is not None:
             vectors = await self.embedding.embed_documents(
-                [candidate.content, *(mem.content for mem in dense_band)]
+                [candidate.content, *(mem.content for mem in [*dense_band, *paraphrase_band])]
             )
             dense, others = vectors[0], vectors[1:]
-            for mem, other in zip(dense_band, others, strict=True):
-                cos = sum(a * b for a, b in zip(dense, other, strict=True))
+            band = [*dense_band, *paraphrase_band]
+            cosines = [sum(a * b for a, b in zip(dense, other, strict=True)) for other in others]
+            for mem, cos in zip(dense_band, cosines, strict=False):
                 if cos >= self.cfg.dedup_dense_threshold and (
                     figures(mem.content) == c_numbers and has_negation(mem.content) == c_neg
                 ):
@@ -1426,6 +1443,15 @@ class NativeMemoryIntelligence:
                     )
                     if best is None or outcome.score > best.score:
                         best = outcome
+            if best is None:
+                best = await self._paraphrase(
+                    candidate,
+                    [
+                        (mem, cos)
+                        for mem, cos in zip(band, cosines, strict=True)
+                        if figures(mem.content) == c_numbers and has_negation(mem.content) == c_neg
+                    ],
+                )
         create = ConsolidationOutcome(
             decision=DedupDecision.CREATE, candidate=candidate, reason="no match"
         )
@@ -1446,6 +1472,41 @@ class NativeMemoryIntelligence:
             )
             return await self._adjudicate(candidate, mem, ctx, native=create, same=same)
         return best or create
+
+    async def _paraphrase(
+        self, candidate: MemoryCandidate, scored: list[tuple[CanonicalMemory, float]]
+    ) -> ConsolidationOutcome | None:
+        """The held memory ``candidate`` restates in other words: at least
+        ``dedup_paraphrase_cosine`` from it, and the NLI head reading each as entailing the
+        other. One-way entailment is a different fact ("loves contemporary dance" says more
+        than "loves dance"; "is learning Portuguese since moving to Lisbon" is not the move),
+        and so is a contradiction ("Thai" / "Italian", "I" / "my sister")."""
+        close = [(m, cos) for m, cos in scored if cos >= self.cfg.dedup_paraphrase_cosine]
+        if not close or self.nli is None:
+            return None
+        scores = await self.nli.entail_groups(
+            [
+                g
+                for m, _ in close
+                for g in (([m.content], candidate.content), ([candidate.content], m.content))
+            ]
+        )
+        same = [
+            (cos, m)
+            for n, (m, cos) in enumerate(close)
+            if min(scores[2 * n][0].entailment, scores[2 * n + 1][0].entailment)
+            >= self.cfg.dedup_paraphrase_entailment
+        ]
+        if not same:
+            return None
+        cos, mem = max(same, key=lambda pair: pair[0])
+        return ConsolidationOutcome(
+            decision=DedupDecision.REINFORCE,
+            candidate=candidate,
+            target_memory_id=mem.memory_id,
+            score=cos,
+            reason=f"paraphrase: entailed both ways, dense similarity {cos:.2f}",
+        )
 
     async def _uncertain(
         self,

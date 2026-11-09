@@ -337,12 +337,11 @@ def _collection_vectors(
 def _arm_prefetches(
     dense: Mapping[VectorName, Sequence[float]],
     sparse: Mapping[VectorName, SparseVector],
-    late: Sequence[Sequence[float]] | None,
     qf: models.Filter,
     limit: int,
 ) -> list[tuple[VectorName, models.Prefetch]]:
-    """One prefetch per arm ``search_arms`` reads: each dense space, each non-empty sparse
-    space, then the late-interaction arm over the union of the others."""
+    """One prefetch per searched arm ``search_arms`` reads: each dense space, then each
+    non-empty sparse space."""
     arms: list[tuple[VectorName, models.Prefetch]] = [
         (name, models.Prefetch(query=list(vector), using=name.value, limit=limit, filter=qf))
         for name, vector in dense.items()
@@ -355,18 +354,36 @@ def _arm_prefetches(
             arms.append(
                 (name, models.Prefetch(query=query, using=name.value, limit=limit, filter=qf))
             )
-    if late and arms:
-        inner = [prefetch for _, prefetch in arms]
-        arms.append((VectorName.COLBERT, _late_prefetch(late, inner, qf, limit)))
-        # a search over the contextual keys reads the context key's late vectors too
-        if any(name.value.endswith("_ctx") for name, _ in arms):
-            arms.append(
-                (
-                    VectorName.COLBERT_CTX,
-                    _late_prefetch(late, inner, qf, limit, VectorName.COLBERT_CTX),
-                )
-            )
     return arms
+
+
+def _late_rescoring(
+    late: Sequence[Sequence[float]] | None,
+    arms: Sequence[VectorName],
+    found: Sequence[Any],
+    limit: int,
+) -> list[tuple[VectorName, models.QueryRequest]]:
+    """The late-interaction arms of ``search_arms``: MaxSim over the points the searched
+    ``arms`` ``found``, by id - the union ``_late_prefetch`` rescores, without searching the
+    arms a second time to rebuild it. A search over the contextual keys reads the context
+    key's late vectors too."""
+    if not late or not found:
+        return []
+    names = [VectorName.COLBERT]
+    if any(name.value.endswith("_ctx") for name in arms):
+        names.append(VectorName.COLBERT_CTX)
+    only = models.Filter(must=[models.HasIdCondition(has_id=list(found))])
+    query = [list(row) for row in late]
+    return [
+        (
+            name,
+            # ids and scores only: see _payloads
+            models.QueryRequest(
+                query=query, using=name.value, filter=only, limit=limit, with_payload=False
+            ),
+        )
+        for name in names
+    ]
 
 
 class QdrantSearchStore:
@@ -731,12 +748,11 @@ class QdrantSearchStore:
         limit: int,
     ) -> dict[VectorName, list[SearchHit]]:
         qf = _filter(flt)
-        arms = _arm_prefetches(dense, sparse, late, qf, limit)
+        arms = _arm_prefetches(dense, sparse, qf, limit)
         if not arms:
             return {}
         requests = [
             models.QueryRequest(
-                prefetch=prefetch.prefetch,
                 query=prefetch.query,
                 using=prefetch.using,
                 filter=qf,
@@ -754,11 +770,25 @@ class QdrantSearchStore:
                         collection_name=self._name(collection), requests=requests
                     ),
                 )
+                found = list(dict.fromkeys(p.id for response in responses for p in response.points))
+                rescoring = _late_rescoring(late, [name for name, _ in arms], found, limit)
+                if rescoring:
+                    responses = [
+                        *responses,
+                        *await _read(
+                            "arms",
+                            lambda: self._client.query_batch_points(
+                                collection_name=self._name(collection),
+                                requests=[request for _, request in rescoring],
+                            ),
+                        ),
+                    ]
             except Exception as exc:
                 raise _unavailable("arms query", exc) from exc
             payloads = await self._payloads(collection, responses)
+        names = [name for name, _ in arms] + [name for name, _ in rescoring]
         out: dict[VectorName, list[SearchHit]] = {}
-        for (name, _), response in zip(arms, responses, strict=True):
+        for name, response in zip(names, responses, strict=True):
             retriever = Retriever.for_vector(name)
             hits = [
                 SearchHit(
