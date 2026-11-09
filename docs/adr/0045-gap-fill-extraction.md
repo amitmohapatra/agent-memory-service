@@ -56,13 +56,16 @@ paper's J prompt, verbatim.
 | arm | recall | false facts | duplicates | wrong updates | LoCoMo J | $ / 1k messages | messages/s |
 |---|---|---|---|---|---|---|---|
 | A rules only (main) | 0.23 | 0 | 0.13 | 0 | 0.896, 0.873 (two runs) | 0 | 4.2 |
-| B rules + gap-fill | **0.94** | 0 | **0.12** | 0 | 0.862 | 0.37 | 0.54 |
+| B rules + gap-fill | **0.94-0.95** (two runs) | 0 | 0.10-0.20 | 0-0.05 | 0.862, 0.883 (two runs) | 0.37 | 0.53 |
 | C model-first (#93) | 0.27 | 0 | 0.12 | 0 | 0.870 | 0.23 | 0.52 |
 | B + #92 neighbours | 0.94 | 0 | 0.12 | 0.05 | 0.860 | 0.37 | 0.53 |
 
-B is the winner on what is stored: four times the facts the rules keep, no false fact, fewer
-duplicates, no wrong update. LoCoMo does not separate the arms: the two runs of A alone differ
-by 2.3 points, and every arm is within that (the verbatim turns already carry LoCoMo's answers).
+B is the winner on what is stored: four times the facts the rules keep, no false fact, as few
+duplicates as the rules' own restatements make, and a wrong update in one run of two (a phone
+number the model added instead of updating, whose two values the replacement path keeps apart).
+LoCoMo does not separate the arms: two runs of A differ by 2.3 points and two of B by 2.1
+(28 questions flip), and the means (A 0.884, B 0.873) are within that; the verbatim turns already
+carry LoCoMo's answers.
 C stores nothing new (its facts ride on the turn's key), and #92 added a wrong update and no
 recall; both stay closed. Throughput is the model's latency on the in-process benchmark's
 sequential queue (one message at a time); the worker runs messages concurrently, up to four
