@@ -105,3 +105,16 @@ def test_each_public_qa_configuration_pins_its_ingestion_uses():
     assert "contextual_extraction" in config_uses("bifrost")
     with pytest.raises(ValueError, match="unknown configuration"):
         config_uses("other")
+
+
+def test_a_word_is_held_where_a_word_starts_not_inside_another():
+    """coref-4 was counted a duplicate: "art" (the art corner) inside "started"
+    (kindergarten). A stem still matches its forms ("gat" in "gata", "renew" in
+    "renewal"), in any script."""
+    from benchmark.extraction import _holds
+
+    assert not _holds("Zoe started kindergarten.", ["Zoe", "art"])
+    assert _holds("Zoe loves the art corner.", ["Zoe", "art"])
+    assert _holds("Pimienta es una gata siamesa.", ["Pimienta", "gat"])
+    assert _holds("The Halvorsen Foods renewal is for three years.", ["Halvorsen", "renew"])
+    assert _holds("hi-update अब बेंगलुरु में रहता है।", ["बेंगलुरु"])

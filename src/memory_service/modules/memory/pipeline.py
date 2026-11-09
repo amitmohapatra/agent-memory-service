@@ -128,6 +128,22 @@ def scope_for(candidate: MemoryCandidate, ctx: MemoryExecutionContext) -> Scope:
     )
 
 
+def _dedup_scopes(candidate: MemoryCandidate, ctx: MemoryExecutionContext) -> list[Scope]:
+    """Where a candidate's duplicates can be: its own anchor, and for a statement whose
+    audience is the user (``Visibility.USER``) anchored in a conversation, the user's anchor
+    too - "Thai food is my favourite" (a fact, in the conversation) restates "My favourite
+    cuisine is Thai" (a preference, the user's) to the same audience."""
+    scope = scope_for(candidate, ctx)
+    if (
+        candidate.visibility is not Visibility.USER
+        or scope.level is ScopeLevel.USER
+        or not ctx.user_id
+    ):
+        return [scope]
+    mine = scope_for(candidate.model_copy(update={"memory_type": MemoryType.USER}), ctx)
+    return [scope, mine]
+
+
 def keys_for(scope: Scope, visibility: Visibility, ctx: MemoryExecutionContext) -> list[str]:
     """Audience keys for a memory, from this write's execution context.
 
@@ -599,14 +615,17 @@ class ObservationPipeline:
                     )
                 )
                 continue
-            scope = scope_for(cand, ctx)
-            existing = await uow.memories.candidates(
-                ctx.tenant_id,
-                scope_key=scope.key(),
-                normalized_hash=normalized_hash(cand.content),
-                subjects=self.subjects.spellings(cand.subject),
-                limit=self.cfg.dedup_candidate_k,
-            )
+            existing = [
+                m
+                for scope in _dedup_scopes(cand, ctx)
+                for m in await uow.memories.candidates(
+                    ctx.tenant_id,
+                    scope_key=scope.key(),
+                    normalized_hash=normalized_hash(cand.content),
+                    subjects=self.subjects.spellings(cand.subject),
+                    limit=self.cfg.dedup_candidate_k,
+                )
+            ]
             outcome = await self.provider.consolidate(cand, existing, ctx)
             admission: AdmissionDecision | None = None
             if gate is not None:

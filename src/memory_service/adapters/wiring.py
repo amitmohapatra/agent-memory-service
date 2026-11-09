@@ -590,6 +590,8 @@ def _wire_memory(container: Container) -> None:
         # the grounding cascade's NLI head decides what the lexicon leaves open (ADR 0037)
         labeller=StatementLabeller(nli=container.nli, assist=container.services["llm_assist"]),
         subjects=subjects,
+        # the same head reads a restatement in other words as the memory already held
+        nli=container.nli,
     )
     container.services["memory_provider"] = provider
     container.services["observation_pipeline"] = ObservationPipeline(
