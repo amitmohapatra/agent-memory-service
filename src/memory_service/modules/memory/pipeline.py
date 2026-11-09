@@ -374,6 +374,26 @@ class Gaps:
     #: what "it" is resolved
     covered: frozenset[str] = frozenset()
 
+    def uncovered(self, candidates: list[MemoryCandidate]) -> list[MemoryCandidate]:
+        """``candidates`` without the sentence readings the model's facts hold."""
+        return [
+            c
+            for c in candidates
+            if c.content not in self.covered or c.category not in SENTENCE_READINGS
+        ]
+
+    def referred(
+        self,
+        observation: Observation,
+        candidates: list[MemoryCandidate],
+        prior: Observation | None,
+    ) -> list[MemoryCandidate]:
+        """The referred turn (``referred_turn``), unless the model read the reply whole: its
+        facts hold what the reply refers to already."""
+        if observation.content.strip() in self.covered:
+            return []
+        return referred_turn(observation, candidates, prior)
+
 
 class ObservationPipeline:
     def __init__(
@@ -439,20 +459,14 @@ class ObservationPipeline:
                     await self.provider.extract(observation, ctx), observation, ctx
                 )
                 gaps = await self._gaps(observation, ctx, candidates, prior)
-                candidates = [
-                    c
-                    for c in candidates
-                    if c.content not in gaps.covered or c.category not in SENTENCE_READINGS
-                ]
+                candidates = gaps.uncovered(candidates)
                 candidates += await self._classified([c for c, _ in gaps.fills], observation, ctx)
                 if preceding is not None:
                     candidates = [
                         c.model_copy(update={"preceding_turn": preceding}) for c in candidates
                     ]
                 candidates = await self._restated(observation, candidates, preceding)
-                if observation.content.strip() not in gaps.covered:
-                    # a reply the model read whole holds what it refers to already
-                    candidates = [*candidates, *referred_turn(observation, candidates, prior)]
+                candidates = [*candidates, *gaps.referred(observation, candidates, prior)]
                 outcomes: list[ConsolidationOutcome] = []
                 hinted = (
                     observation.hints.memory_type is not None
