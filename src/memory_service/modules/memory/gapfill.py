@@ -321,15 +321,18 @@ class GapFill:
                 continue
             seen.add(_norm(f.fact))
             out.append(f)
-        out = await self._entailed(out)
+        out = await self._entailed(out, rules)
         adds = [f for f in out if f.op == "add"]
         if not adds or not held or self.embedding is None:
             return out
         repeats = await self._repeats(adds, held, self.embedding)
         return [f for f in out if id(f) not in repeats]
 
-    async def _entailed(self, fills: list[Fill]) -> list[Fill]:
+    async def _entailed(self, fills: list[Fill], rules: Sequence[str] = ()) -> list[Fill]:
         """``fills`` with each fact once, read by the NLI head against the message's others.
+
+        An add a rules reading of the message says adds nothing ("I'll have to skip the wine
+        tasting, I'm eight months pregnant." says "The speaker is eight months pregnant.").
 
         An add another add entails is dropped, the fuller kept ("Arjun moved to Toronto for a
         job at SickKids" says "Arjun works at SickKids in Toronto"; the first of two that say
@@ -348,18 +351,26 @@ class GapFill:
             if _overlaps(a.quote, [_norm(c.quote)])
             for pair in ((a, c), (c, a))
         ]
-        if not pairs or self.nli is None:
+        if (not pairs and not (adds and rules)) or self.nli is None:
             return fills
-        scores = await self.nli.entail_groups([([a.fact], b.fact) for a, b in pairs])
-        says = {
-            (id(a), id(b))
-            for (a, b), row in zip(pairs, scores, strict=True)
-            if row[0].entailment >= SAME_ENTAILMENT
-        }
-        dropped: set[int] = set()
+        says, dropped = await self._says(pairs, adds, rules)
         fuller = _told_again(changes, adds, says, dropped)
         _said_by_another(adds, says, dropped)
         return [fuller.get(id(f), f) for f in fills if id(f) not in dropped]
+
+    async def _says(
+        self, pairs: list[tuple[Fill, Fill]], adds: list[Fill], rules: Sequence[str]
+    ) -> tuple[set[tuple[int, int]], set[int]]:
+        """Which fill of ``pairs`` says which (by id), and the adds a rules reading says, in
+        one pass of the NLI head."""
+        assert self.nli is not None
+        scores = await self.nli.entail_groups(
+            [([a.fact], b.fact) for a, b in pairs] + [([r], a.fact) for a in adds for r in rules]
+        )
+        says = {(id(a), id(b)) for (a, b), row in zip(pairs, scores, strict=False) if _over([row])}
+        ruled = scores[len(pairs) :]
+        k = len(rules)
+        return says, {id(a) for n, a in enumerate(adds) if _over(ruled[n * k : (n + 1) * k])}
 
     async def _repeats(
         self, adds: list[Fill], held: list[str], embedding: EmbeddingProvider
@@ -495,6 +506,11 @@ def _day(quote: str, given: str, said_at: datetime) -> date | None:
     except ValueError:
         return None
     return day if abs(day.year - said_at.year) <= MAX_DATE_YEARS else None
+
+
+def _over(rows: Sequence[Sequence[Any]]) -> bool:
+    """Whether any of ``rows`` (NLI scores) is entailed at ``SAME_ENTAILMENT``."""
+    return any(row[0].entailment >= SAME_ENTAILMENT for row in rows)
 
 
 def _told_again(

@@ -339,3 +339,21 @@ async def test_a_fact_another_fact_of_the_message_says_is_not_added_too(facts, e
             "t1", message=message, speaker="Ana", said_at=SAID, recent=[], rules=[], known=[]
         )
     assert [f.fact for f in out] == kept
+
+
+async def test_a_fact_the_rules_reading_of_the_message_says_is_not_added():
+    """implied-1 and opinion-1 of the hard eval: the rules kept "I'll have to skip the wine
+    tasting, I'm eight months pregnant." and the model added "The speaker is eight months
+    pregnant.", which that reading says; a fact it does not say is added."""
+    said = "I'll have to skip the wine tasting, I'm eight months pregnant."
+    pregnant = op(fact="The speaker is eight months pregnant.", quote="I'm eight months pregnant")
+    due = op(fact="Ana's baby is due in November.", quote="I'm eight months pregnant")
+    with mocked_gateway([{"ops": [pregnant, due]}]) as gateway:
+        filler = GapFill(
+            gateway.assist(uses=["contextual_extraction"]),
+            nli=_Entails({said: {"The speaker is eight months pregnant."}}),
+        )
+        out = await filler.fill(
+            "t1", message=said, speaker="Ana", said_at=SAID, recent=[], rules=[said], known=[]
+        )
+    assert [f.fact for f in out] == ["Ana's baby is due in November."]
