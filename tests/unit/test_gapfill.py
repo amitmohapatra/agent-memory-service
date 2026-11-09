@@ -220,21 +220,30 @@ async def test_a_change_the_rules_already_read_is_not_stored_again():
 
 async def test_an_add_of_the_words_an_update_rests_on_is_the_update():
     """update-6 / hi-update: "Priya handed on-call over to Marcus this week." read as the new
-    value of the lead (update) and again as an event (add) was two memories of one change; an
-    add resting on other words of the message is kept."""
+    value of the lead (update) and again as an event (add) was two memories of one change.
+    The event says the update, so the update keeps its target and takes the event's words;
+    an add of other words, or one neither says, stays."""
     quote = "Priya handed on-call over to Marcus this week"
     update = op(op="update", fact="Our on-call lead is now Marcus.", quote=quote, target=1)
     event = op(fact="Priya handed on-call duty over to Marcus.", quote=quote)
     other = op(fact="Ana's team has a new pager.", quote="We also got a new pager")
-    out, _ = await fill(
-        [{"ops": [update, event, other]}],
-        message=f"{quote}. We also got a new pager.",
-        known=[_known("Our on-call lead is Priya.")],
-    )
-    assert [f.fact for f in out] == [
-        "Our on-call lead is now Marcus.",
-        "Ana's team has a new pager.",
+    entails = {"Priya handed on-call duty over to Marcus.": {"Our on-call lead is now Marcus."}}
+    with mocked_gateway([{"ops": [update, event, other]}]) as gateway:
+        filler = GapFill(gateway.assist(uses=["contextual_extraction"]), nli=_Entails(entails))
+        out = await filler.fill(
+            "t1",
+            message=f"{quote}. We also got a new pager.",
+            speaker="Ana",
+            said_at=SAID,
+            recent=[],
+            rules=[],
+            known=[_known("Our on-call lead is Priya.")],
+        )
+    assert [(f.op, f.fact) for f in out] == [
+        ("update", "Priya handed on-call duty over to Marcus."),
+        ("add", "Ana's team has a new pager."),
     ]
+    assert out[0].target is not None and out[0].target.content == "Our on-call lead is Priya."
 
 
 @pytest.mark.parametrize(

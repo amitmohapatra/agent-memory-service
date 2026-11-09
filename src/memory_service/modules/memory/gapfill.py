@@ -29,7 +29,7 @@ import json
 import math
 import re
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from typing import Any, Final, Literal
 
@@ -316,13 +316,8 @@ class GapFill:
         held = [*rules, *(m.content for m in known)]
         seen = {_norm(t) for t in held}
         out: list[Fill] = []
-        # what an update or contradict rests on is that change: an add of the same words
-        # ("Priya handed on-call over to Marcus") is the change told again, as an event
-        changes = [_norm(f.quote) for f in fills if f.op != "add"]
         for f in fills:
-            if (f.op == "add" and (_norm(f.fact) in seen or _overlaps(f.quote, changes))) or (
-                _restates(f, rules, speaker)
-            ):
+            if (f.op == "add" and _norm(f.fact) in seen) or _restates(f, rules, speaker):
                 continue
             seen.add(_norm(f.fact))
             out.append(f)
@@ -334,14 +329,27 @@ class GapFill:
         return [f for f in out if id(f) not in repeats]
 
     async def _entailed(self, fills: list[Fill]) -> list[Fill]:
-        """``fills`` without an add another add of the message entails: "Arjun moved to
-        Toronto for a job at SickKids" says "Arjun works at SickKids in Toronto"; "learning
-        Portuguese since moving to Lisbon" says the move. The fuller fact is kept (the first
-        of two that say each other); two facts neither of which says the other both are."""
+        """``fills`` with each fact once, read by the NLI head against the message's others.
+
+        An add another add entails is dropped, the fuller kept ("Arjun moved to Toronto for a
+        job at SickKids" says "Arjun works at SickKids in Toronto"; the first of two that say
+        each other). An add resting on the words of an update or contradict is that change
+        told again: when the add says the op's fact ("Priya handed on-call over to Marcus" /
+        "Our on-call lead is now Marcus"; "moved to Bengaluru in August" / "no longer lives in
+        Pune") the op keeps its target and takes the add's fuller words; when the op says the
+        add, the add goes. Two facts neither of which says the other both stay."""
         adds = [f for f in fills if f.op == "add"]
-        if len(adds) < 2 or self.nli is None:
-            return fills
+        changes = [f for f in fills if f.op != "add"]
         pairs = [(a, b) for a in adds for b in adds if a is not b]
+        pairs += [
+            pair
+            for c in changes
+            for a in adds
+            if _overlaps(a.quote, [_norm(c.quote)])
+            for pair in ((a, c), (c, a))
+        ]
+        if not pairs or self.nli is None:
+            return fills
         scores = await self.nli.entail_groups([([a.fact], b.fact) for a, b in pairs])
         says = {
             (id(a), id(b))
@@ -349,15 +357,9 @@ class GapFill:
             if row[0].entailment >= SAME_ENTAILMENT
         }
         dropped: set[int] = set()
-        for n, a in enumerate(adds):
-            for b in adds[n + 1 :]:
-                if id(a) in dropped or id(b) in dropped:
-                    continue
-                if (id(a), id(b)) in says:
-                    dropped.add(id(b))
-                elif (id(b), id(a)) in says:
-                    dropped.add(id(a))
-        return [f for f in fills if id(f) not in dropped]
+        fuller = _told_again(changes, adds, says, dropped)
+        _said_by_another(adds, says, dropped)
+        return [fuller.get(id(f), f) for f in fills if id(f) not in dropped]
 
     async def _repeats(
         self, adds: list[Fill], held: list[str], embedding: EmbeddingProvider
@@ -493,6 +495,37 @@ def _day(quote: str, given: str, said_at: datetime) -> date | None:
     except ValueError:
         return None
     return day if abs(day.year - said_at.year) <= MAX_DATE_YEARS else None
+
+
+def _told_again(
+    changes: Sequence[Fill], adds: Sequence[Fill], says: set[tuple[int, int]], dropped: set[int]
+) -> dict[int, Fill]:
+    """Each change an add of its words says, with the add's fuller words; the adds it
+    replaces, and those the change says, go into ``dropped``."""
+    fuller: dict[int, Fill] = {}
+    for c in changes:
+        for a in adds:
+            if id(a) in dropped:
+                continue
+            if (id(a), id(c)) in says:
+                fuller[id(c)] = replace(c, fact=a.fact, day=a.day or c.day)
+                dropped.add(id(a))
+            elif (id(c), id(a)) in says:
+                dropped.add(id(a))
+    return fuller
+
+
+def _said_by_another(adds: Sequence[Fill], says: set[tuple[int, int]], dropped: set[int]) -> None:
+    """Into ``dropped``, each add another add says (the first of two that say each other
+    stays)."""
+    for n, a in enumerate(adds):
+        for b in adds[n + 1 :]:
+            if id(a) in dropped or id(b) in dropped:
+                continue
+            if (id(a), id(b)) in says:
+                dropped.add(id(b))
+            elif (id(b), id(a)) in says:
+                dropped.add(id(a))
 
 
 def covered(readings: Sequence[str], fills: Sequence[Fill]) -> list[str]:
