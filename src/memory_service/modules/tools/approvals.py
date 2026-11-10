@@ -50,11 +50,14 @@ def _decode(identifier: str) -> tuple[str, str, str]:
     return str(agent_id), str(tool), str(shape)
 
 
-def compose(existing: str | None, risk: SideEffects, suggestion: Suggestion, shape: str) -> str:
+def compose(
+    existing: str | None, risk: SideEffects | None, suggestion: Suggestion, shape: str
+) -> str:
     """The tool's ``approve_when`` with the rule for calls of ``shape`` added: always ask for
-    them, or stop asking for them. Without an expression the tier is the base: irreversible
-    tools ask for every call, the others for none."""
-    base = existing or ("true" if risk == "irreversible" else "false")
+    them, or stop asking for them. Without an expression the tier is the base: an
+    irreversible tool, and one whose risk nobody declared (the harness asks about it), ask for
+    every call; the others for none."""
+    base = existing or ("true" if risk in ("irreversible", None) else "false")
     clause = when_shape(shape)
     if suggestion == "always_ask":
         return clause if base == "false" else f"({base}) or ({clause})"

@@ -20,6 +20,17 @@ each entry says which one moved. Decisions behind each change are in the
   asking call.
 
 ### Changed
+- **A tool whose risk nobody declared has no risk in the catalog** (service; trellis-memory
+  0.6.6). Its risk was `write` when it had no `side_effects` and no `destructiveHint`: a tool
+  the catalog first saw in a recorded call, or an entry written with a description only, was a
+  `write` to the harness, whose catalog word wins over the tool's own. The catalog no longer
+  invents one: `risk` is `side_effects` when set, else `readOnlyHint` (`read`) or
+  `destructiveHint` (`irreversible`, or `write` when false), else `null`, and the harness
+  decides by its own rule (a tool that declares nothing asks, with allow once, for this
+  conversation, deny; agent-harness #217, #220). A learned rule for such a tool starts from
+  asking: "approve automatically" stops asking for its shape only. The SDK's `CatalogTool.risk`
+  is `SideEffects | None` (default `None`). A harness that reads the catalog needs this SDK: an
+  older one refuses a `null` risk.
 - **With a model, one call per message fills what the rules missed** (ADR 0045). The rules read
   a person's message first, as before; then one `contextual_extraction` call reads it with the
   four turns before it, what the rules read and the speaker's eight closest memories, and

@@ -18,7 +18,7 @@ from memory_service.domain.feedback import (
     ProjectionAction,
 )
 from memory_service.domain.learning import ApprovalCounts
-from memory_service.domain.tools import ToolAnnotations, ToolDescriptor
+from memory_service.domain.tools import ToolAnnotations, ToolDescriptor, risk_tier
 from memory_service.modules.tools import approvals
 from trellis.memory.approval import arg_shape, evaluate
 
@@ -43,8 +43,10 @@ def _tool(side_effects: Any = None, **annotations: bool) -> ToolDescriptor:
         # read and write tools: whatever the decisions support
         (_tool("read"), AUTO, "auto_approve"),
         (_tool("write"), AUTO, "auto_approve"),
-        (_tool(), AUTO, "auto_approve"),  # no tier declared: write
-        (None, AUTO, "auto_approve"),  # not in the catalog yet: its tier is unknown
+        (_tool(destructive=False), AUTO, "auto_approve"),  # MCP: not destructive, a write
+        # no tier declared, or not in the catalog yet: the harness asks as for a write
+        (_tool(), AUTO, "auto_approve"),
+        (None, AUTO, "auto_approve"),
         # irreversible, declared or from the MCP destructive hint: never auto-approve
         (_tool("irreversible"), AUTO, None),
         (_tool(destructive=True), AUTO, None),
@@ -60,6 +62,36 @@ def test_what_may_be_offered(
     entry: ToolDescriptor | None, counts: ApprovalCounts, expected: str | None
 ) -> None:
     assert approvals.offered(counts, entry) == expected
+
+
+@pytest.mark.parametrize(
+    ("side_effects", "annotations", "risk"),
+    [
+        # what someone said: the catalog's side_effects, else a hint that names a tier
+        ("write", {"destructive": True}, "write"),
+        ("read", {}, "read"),
+        (None, {"read_only": True}, "read"),
+        (None, {"read_only": True, "destructive": True}, "read"),
+        (None, {"destructive": True}, "irreversible"),
+        (None, {"destructive": False}, "write"),
+        # nobody said: no risk, so the harness decides by its own rule (harness #217, #220)
+        (None, {}, None),
+        (None, {"read_only": False}, None),
+        (None, {"idempotent": True, "open_world": False}, None),
+    ],
+)
+def test_a_risk_nobody_declared_is_none(
+    side_effects: Any, annotations: dict[str, bool], risk: str | None
+) -> None:
+    assert risk_tier(side_effects, ToolAnnotations(**annotations)) == risk
+
+
+def test_an_undeclared_tools_learned_rule_starts_from_asking() -> None:
+    """With no risk, the base a learned rule is composed on asks (the harness asks about such
+    a tool): "approve automatically" stops asking for that shape only, never for every other."""
+    clause = 'shape == "path:str"'
+    assert approvals.compose(None, None, "auto_approve", SHAPE) == f"not ({clause})"
+    assert approvals.compose(None, "write", "auto_approve", SHAPE) == f"(false) and not ({clause})"
 
 
 class _Tools:

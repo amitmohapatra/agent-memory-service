@@ -125,7 +125,7 @@
     "input_schema": "dict[str, Any] = ...",
     "name": "str (required)",
     "required": "list[str] = ...",
-    "risk": "Literal['read', 'write', 'irreversible'] = 'write'",
+    "risk": "Optional[Literal['read', 'write', 'irreversible']] = None",
     "schema_hash": "str = ''",
     "server": "str | None = None",
     "side_effects": "Optional[Literal['read', 'write', 'irreversible']] = None",
@@ -1490,5 +1490,5 @@
    "signature": "() -> 'MemoryContext | None'"
   }
  },
- "version": "0.6.5"
+ "version": "0.6.6"
 }

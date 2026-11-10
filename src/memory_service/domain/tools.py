@@ -184,16 +184,18 @@ def bounded_text(parts: Sequence[str], limit: int = INDEX_TEXT_MAX_CHARS) -> str
     return " ".join(kept)
 
 
-def risk_tier(side_effects: SideEffects | None, annotations: ToolAnnotations) -> SideEffects:
-    """What calling the tool risks: the catalog's ``side_effects`` when set, else the MCP
-    annotations (``readOnlyHint`` -> read, ``destructiveHint`` -> irreversible), else write."""
+def risk_tier(side_effects: SideEffects | None, annotations: ToolAnnotations) -> SideEffects | None:
+    """What calling the tool risks, as someone said it: the catalog's ``side_effects`` when
+    set, else an MCP hint that names a tier (``readOnlyHint`` -> read, ``destructiveHint`` ->
+    irreversible, ``destructiveHint: false`` -> write); ``None`` when nobody said, so the
+    harness decides by its own rule for a tool that declares nothing (it asks)."""
     if side_effects is not None:
         return side_effects
     if annotations.read_only:
         return "read"
-    if annotations.destructive:
-        return "irreversible"
-    return "write"
+    if annotations.destructive is None:
+        return None
+    return "irreversible" if annotations.destructive else "write"
 
 
 def stable_hash(value: Any) -> str:
@@ -269,7 +271,7 @@ class ToolDescriptor(BaseModel):
         )
 
     @property
-    def risk(self) -> SideEffects:
+    def risk(self) -> SideEffects | None:
         return risk_tier(self.side_effects, self.annotations)
 
     def index_text(self) -> str:
