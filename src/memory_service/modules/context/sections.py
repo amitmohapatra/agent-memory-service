@@ -1,7 +1,8 @@
 """The pinned sections of a pushed context: the profile blocks, the thread's durable summary,
 the procedures learned for the task and the tool hints (both only for an agent with tools).
 
-Each is one indexed read (the procedures a bounded one) and they run concurrently with
+Each is one indexed read (the procedures a bounded one; the people's pages, from their
+beliefs, one more) and they run concurrently with
 retrieval, so they add a round trip, not a stage. The pinned sections are budgeted first: they
 may take at most ``PINNED_SHARE`` of the token budget, in priority order, each costed as the
 text it renders to. The thread summary is truncated to what is left rather than dropped.
@@ -10,12 +11,14 @@ text it renders to. The thread summary is truncated to what is left rather than 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from memory_service.domain.beliefs import Belief
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import (
     ContextItem,
@@ -30,6 +33,7 @@ from memory_service.domain.context_bundle import (
 from memory_service.domain.tools import StoredProcedure, ToolHints
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
+from memory_service.modules.profile.service import PersonPage
 from memory_service.modules.retrieval.engine import QueryVectors
 from memory_service.modules.tools.matching import TaskVectors
 from memory_service.modules.tools.skills import skill_view
@@ -92,6 +96,8 @@ class ToolsRequest(BaseModel):
 @dataclass
 class Pinned:
     profile: list[ProfileBlockView] = field(default_factory=list)
+    #: a page per person with beliefs, pinned after everything else within the share left
+    people: list[PersonPage] = field(default_factory=list)
     thread_summary: ThreadSummaryView | None = None
     procedures: list[SkillView] = field(default_factory=list)
     tools: ToolHints | None = None
@@ -127,7 +133,9 @@ def _profile_that_fits(
     return [], 0
 
 
-def within_budget(pinned: Pinned, budget: int) -> tuple[Pinned, int]:
+def within_budget(
+    pinned: Pinned, budget: int, relevance: Mapping[str, int] | None = None
+) -> tuple[Pinned, int]:
     """The pinned sections that fit ``PINNED_SHARE`` of the budget, in priority order, and
     the tokens they take. A section is costed as the text it renders to; one that does not
     fit is dropped, except the thread summary, which keeps its newest part."""
@@ -150,7 +158,69 @@ def within_budget(pinned: Pinned, budget: int) -> tuple[Pinned, int]:
     elif pinned.tools is not None:
         # the candidates still narrow the caller's tools; only the rendered section is cut
         kept.tools = pinned.tools.model_copy(update={"next": None, "prefill": {}, "missing": []})
+    before = kept.profile
+    kept.profile = _people_that_fit(before, pinned.people, allowed - used, relevance or {})
+    used += _profile_cost(kept.profile) - _profile_cost(before)
     return kept, used
+
+
+def _profile_cost(profile: Sequence[ProfileBlockView]) -> int:
+    text = profile_section(profile)
+    return estimate_tokens(text) if text else 0
+
+
+def _people_that_fit(
+    profile: list[ProfileBlockView],
+    people: Sequence[PersonPage],
+    spare: int,
+    relevance: Mapping[str, int],
+) -> list[ProfileBlockView]:
+    """The profile with every person's whole page after it when that fits the ``spare``
+    tokens of the pinned share; else with the lines worth most to this question
+    (``_chosen``), every facet kept while any line can go instead. Never a cut at the end
+    and never a character cap: a page holds as many lines as the budget does."""
+    room = _profile_cost(profile) + spare
+    pages = [v for p in people if (v := p.view()) is not None]
+    if not pages or _profile_cost([*profile, *pages]) <= room:
+        return [*profile, *pages]
+    # the people's own share: what the section may cost, less what it costs without them
+    share = room - (_profile_cost(profile) if profile else estimate_tokens("## Profile"))
+    for _ in range(3):  # per-line estimates against the section's: a token or two off
+        pages = [v for p in people if (v := p.view(_chosen(people, share, relevance)))]
+        over = _profile_cost([*profile, *pages]) - room
+        if over <= 0:
+            return [*profile, *pages]
+        share -= over
+    return profile
+
+
+def _worth(b: Belief, relevance: Mapping[str, int]) -> tuple[bool, int, int, datetime, str]:
+    """How much a line is worth to this question: a hit of its search first (by rank), then
+    the most sources, then the newest."""
+    hit = b.belief_id in relevance
+    return hit, -relevance.get(b.belief_id, 0), b.proof_count, b.last_seen_at, b.belief_id
+
+
+def _chosen(people: Sequence[PersonPage], room: int, relevance: Mapping[str, int]) -> set[str]:
+    """The current lines to show in ``room`` tokens: earlier values go first, then the line
+    worth least (``_worth``) - a facet's last line only once no other line can go."""
+    lines = [(p.name, b) for p in people for b in p.current]
+    cost = {b.belief_id: estimate_tokens(f"- {b.text}") + 1 for _, b in lines}
+    left: dict[tuple[str, str], int] = {}
+    for name, b in lines:
+        left[(name, b.facet)] = left.get((name, b.facet), 0) + 1
+    total = sum(estimate_tokens(f"### {p.name}") + 1 for p in people) + sum(cost.values())
+    keep = set(cost)
+    order = sorted(lines, key=lambda nb: _worth(nb[1], relevance))
+    for protect in (True, False):
+        for name, b in order:
+            if total <= room:
+                return keep
+            if b.belief_id in keep and not (protect and left[(name, b.facet)] == 1):
+                keep.discard(b.belief_id)
+                left[(name, b.facet)] -= 1
+                total -= cost[b.belief_id]
+    return keep
 
 
 class ContextSections:
@@ -172,8 +242,9 @@ class ContextSections:
         its own history keeps the recent messages, not what was said before them.
         ``vectors``: the query's, as the retrieval running beside this encodes them - read
         only for a procedure the query's words miss."""
-        found_profile, found_summary, found_procedures = await asyncio.gather(
+        found_profile, found_people, found_summary, found_procedures = await asyncio.gather(
             self._profile(ctx),
+            self._people(ctx, visibility),
             self._summary(ctx),
             self.services["tool_hints"].procedures(
                 ctx, query, list(visibility.keys), k=CONTEXT_PROCEDURES, vectors=vectors
@@ -183,6 +254,7 @@ class ContextSections:
         )
         return Pinned(
             profile=found_profile,
+            people=found_people,
             thread_summary=found_summary,
             procedures=[skill_view(p) for p in found_procedures],
         )
@@ -213,6 +285,16 @@ class ContextSections:
         async with self.uow_factory() as uow:
             blocks = await self.services["profile"].blocks(uow, ctx)
         return [ProfileBlockView(block=b.block, text=b.text, version=b.version) for b in blocks]
+
+    async def _people(
+        self, ctx: MemoryExecutionContext, visibility: VisibilitySpecification
+    ) -> list[PersonPage]:
+        """The people's pages, where a model can be reached (beliefs are written nowhere
+        else): without one the read is today's, round trip for round trip."""
+        if not self.services["llm_assist"].available:
+            return []
+        async with self.uow_factory() as uow:
+            return await self.services["profile"].people(uow, ctx, sorted(visibility.keys))
 
     async def _summary(self, ctx: MemoryExecutionContext) -> ThreadSummaryView | None:
         if not ctx.thread_id:

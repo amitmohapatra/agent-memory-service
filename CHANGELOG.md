@@ -7,6 +7,22 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added
+- **With a model, each person's facts are kept as beliefs** (service). After a message's
+  memories are stored, each person they touch is queued once (`memory.consolidate`, 60 s
+  debounced, at most 4 of a tenant's at once). One model call folds the new facts into that
+  person's beliefs as keep / update / retire / add / skip, and the code, not the model,
+  decides which date wins. Every new or changed line is checked against only the memories it
+  cites, and only supported lines are stored. Each person with beliefs is pinned into
+  `/v1/context` as a `### <name>` profile block (current lines by facet, then earlier
+  values), and beliefs are found as summaries. Forgetting a memory removes it from its
+  beliefs, deletes a belief left without a source, and rebuilds the person. The use is
+  `reflection`, whose ceiling rises to 4096 output tokens. A tenant past its daily
+  consolidation tokens waits for the next day. `tools/consolidate.py` consolidates a corpus
+  ingested before. New: tables `beliefs`, `belief_sources`, `belief_progress` (migration
+  0035), the metric `memory_consolidation_lag_seconds`. No route, field or SDK call changed;
+  without a model the context is byte-for-byte what it was.
+
 ### Changed
 - **With a model, one call per message fills what the rules missed** (ADR 0045). The rules read
   a person's message first, as before; then one `contextual_extraction` call reads it with the

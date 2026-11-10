@@ -191,6 +191,7 @@ PAYLOAD_FIELDS: tuple[str, ...] = (
     "object",
     "observed_at",
     "owner_principal",
+    "source_memory_ids",
     "page",
     "predicate",
     "record_id",

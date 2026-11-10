@@ -6,3 +6,7 @@ TASK_MEMORY_INDEX = "memory.index"
 #: GRAPH queue, in a pool of its own, so the LLM calls it makes never hold back indexing
 TASK_GRAPH_ENRICH_MEMORIES = "graph.enrich_memories"
 TASK_GRAPH_ENRICH_DOCUMENT = "graph.enrich_document"
+#: One person's new facts folded into their beliefs (``modules.memory.consolidation``), and
+#: the beliefs it changed indexed for recall (``Indexer.index_beliefs``)
+TASK_CONSOLIDATE = "memory.consolidate"
+TASK_BELIEF_INDEX = "belief.index"

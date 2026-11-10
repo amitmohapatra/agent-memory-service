@@ -46,6 +46,7 @@ PREFIXES: Final[dict[str, str]] = {
     "tenant": "tnt",
     "workspace": "wsp",
     "feedback": "fb",
+    "belief": "blf",
 }
 
 

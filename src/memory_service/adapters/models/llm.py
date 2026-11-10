@@ -368,7 +368,7 @@ class EndpointLLM:
         return await self._chat(
             [m.model_dump() for m in messages],
             use=use,
-            max_tokens=min(max_tokens, self.tuning.max_tokens),
+            max_tokens=min(max_tokens, self.tuning.ceiling(use)),
             temperature=temperature,
             source=messages,
         )
@@ -413,7 +413,7 @@ class EndpointLLM:
                     turns,
                     use=use,
                     selected=selection,
-                    max_tokens=min(max_tokens, self.tuning.max_tokens),
+                    max_tokens=min(max_tokens, self.tuning.ceiling(use)),
                     source=messages,
                     **envelope,
                 )

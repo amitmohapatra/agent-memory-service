@@ -41,6 +41,7 @@ from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import identity_of
 from memory_service.modules.memory.admission import AdmissionGate
+from memory_service.modules.memory.consolidation import CONSOLIDATION_USE, schedule_for
 from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.memory.gapfill import POOL, RECENT_TURNS, GapFill, Turn, worth_asking
 from memory_service.modules.memory.gapfill import TYPES as GAP_TYPES
@@ -501,9 +502,9 @@ class ObservationPipeline:
                                 tenant_id=tenant_id,
                             )
                         )
-                        await bump_memory_revisions(
-                            uow, await uow.memories.get_many(tenant_id, sorted(affected))
-                        )
+                        stored = await uow.memories.get_many(tenant_id, sorted(affected))
+                        await bump_memory_revisions(uow, stored)
+                        await self._consolidate(uow, stored)
                     status = "PROCESSED" if candidates else "NO_MEMORY"
                     await uow.observations.mark_processed(tenant_id, observation_id, status=status)
                     await uow.commit()
@@ -517,6 +518,12 @@ class ObservationPipeline:
             decisions={o.decision.value: 1 for o in outcomes},
         )
         return outcomes
+
+    async def _consolidate(self, uow: UnitOfWork, stored: list[CanonicalMemory]) -> None:
+        """Each person these facts touch, queued to fold them into their beliefs, when the
+        owner may use the model for it (``modules.memory.consolidation``)."""
+        if self.assist.wants(CONSOLIDATION_USE):
+            await schedule_for(uow, stored, now=datetime.now(UTC))
 
     async def _classified(
         self,

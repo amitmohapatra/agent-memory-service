@@ -609,6 +609,56 @@ class Indexer:
         log.info("index.memories_done", tenant_id=tenant_id, upserted=n, removed=len(gone))
         return n
 
+    async def index_beliefs(self, tenant_id: str, belief_ids: Sequence[str]) -> int:
+        """Upsert current beliefs into the memories collection as ``kind=belief`` (one text
+        each, its readers its sources' common audience) and remove every other state:
+        replaced, retired, deleted. Nothing reads beliefs unless a search names the kind."""
+        await self.ensure_collections()
+        async with self.uow_factory() as uow:
+            beliefs = await uow.beliefs.get_many(tenant_id, belief_ids)
+        live = [b for b in beliefs if b.current]
+        current = {b.belief_id for b in live}
+        collection = self.collection(MEMORIES)
+        if gone := [i for i in belief_ids if i not in current]:
+            await self.store.delete(collection, gone)
+        if live:
+            texts = [b.text for b in live]
+            dense = await self.embed_cached(texts, [f"{b.content_hash}:blf1" for b in live])
+            sparse = self.sparse.encode_documents(texts)
+            late = await self.embed_late(texts)
+            await self.store.upsert(
+                [
+                    SearchRecord(
+                        record_id=b.belief_id,
+                        collection=collection,
+                        tenant_id=tenant_id,
+                        dense={
+                            **_vectors_at(dense, i),
+                            **{name.context: v for name, v in _vectors_at(dense, i).items()},
+                        },
+                        sparse=sparse[i],
+                        sparse_context=sparse[i],
+                        late=late[i] if late else None,
+                        late_context=late[i] if late else None,
+                        payload={
+                            "kind": "belief",
+                            "visibility_keys": list(b.visibility_keys),
+                            "current": True,
+                            "observed_at": b.last_seen_at.isoformat(),
+                            "source_memory_ids": b.source_ids[:20],
+                            "script": detect_script(b.text).value,
+                            "text": b.text,
+                            "text_hash": content_hash(b.text),
+                        },
+                    )
+                    for i, b in enumerate(live)
+                ]
+            )
+        async with self.uow_factory() as uow:
+            await uow.beliefs.mark_indexed(sorted(current), fingerprint=self.fingerprint)
+            await uow.commit()
+        return len(live)
+
     async def index_episode(self, tenant_id: str, thread_id: str) -> bool:
         """Upsert a thread's one searchable episode (its latest summary, then a digest of
         the messages after it), or remove the episode when the thread is gone or has no

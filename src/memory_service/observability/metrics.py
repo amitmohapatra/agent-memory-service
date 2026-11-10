@@ -194,6 +194,11 @@ queue_oldest_lag_seconds = Gauge(
     ["queue"],
     registry=REGISTRY,
 )
+consolidation_lag_seconds = Gauge(
+    "memory_consolidation_lag_seconds",
+    "How long the oldest person with facts not yet consolidated into beliefs has waited",
+    registry=REGISTRY,
+)
 outbox_backlog = Gauge(
     "memory_outbox_backlog",
     "Outbox rows committed but not yet dispatched to the queue",

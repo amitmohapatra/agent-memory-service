@@ -3,7 +3,8 @@
 What an operator needs to see from a worker is not in the worker's memory: how many jobs
 wait per queue, how long the oldest due one has waited, how much of the outbox is committed
 but not yet handed to the queue, and how many jobs gave up. Each is one grouped statement
-over the queue's own tables, run every ``SAMPLE_SECONDS`` and set on the gauges the
+over the queue's own tables (and the consolidation lag, over ``belief_progress``), run
+every ``SAMPLE_SECONDS`` and set on the gauges the
 worker's metrics port serves (``observability.metrics``). A failed read is logged and leaves
 the previous values, and ``memory_worker_last_sample_timestamp_seconds`` stops moving -
 which is the healthcheck's signal that the worker cannot reach its database.
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import (
+    consolidation_lag_seconds,
     jobs_failed_terminal,
     outbox_backlog,
     queue_depth,
@@ -51,6 +53,11 @@ _FAILED: Final = text(
     "GROUP BY queue_name"
 )
 _OUTBOX: Final = text("SELECT count(*) FROM job_outbox WHERE dispatched_at IS NULL AND NOT dead")
+#: the person waiting longest for consolidation (``belief_progress.pending_since``)
+_CONSOLIDATION_LAG: Final = text(
+    "SELECT coalesce(extract(epoch FROM now() - min(pending_since)), 0) FROM belief_progress "
+    "WHERE pending_since IS NOT NULL"
+)
 
 
 async def sample_once(engine: AsyncEngine) -> None:
@@ -58,12 +65,14 @@ async def sample_once(engine: AsyncEngine) -> None:
         waiting = {str(row[0]): (int(row[1]), float(row[2])) for row in await conn.execute(_QUEUES)}
         failed = {str(row[0]): int(row[1]) for row in await conn.execute(_FAILED)}
         backlog = int((await conn.execute(_OUTBOX)).scalar_one())
+        waited = float((await conn.execute(_CONSOLIDATION_LAG)).scalar_one())
     for name in {q.value for q in Queue} | set(waiting) | set(failed):
         depth, lag = waiting.get(name, (0, 0.0))
         queue_depth.labels(name).set(depth)
         queue_oldest_lag_seconds.labels(name).set(round(lag, 3))
         jobs_failed_terminal.labels(name).set(failed.get(name, 0))
     outbox_backlog.set(backlog)
+    consolidation_lag_seconds.set(round(waited, 3))
     worker_last_sample_timestamp.set(time.time())
 
 

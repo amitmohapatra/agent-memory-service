@@ -74,6 +74,7 @@ class Candidate:
             "memory": Representation.MEMORY,
             "fact": Representation.RELATION,
             "summary": Representation.SUMMARY,
+            "belief": Representation.SUMMARY,
         }.get(self.kind, Representation.CHUNK)
 
 
@@ -226,6 +227,7 @@ class QueryVectors:
 _COLLECTION_OF_KIND = {
     "memory": MEMORIES,
     "episode": MEMORIES,
+    "belief": MEMORIES,
     "chunk": KNOWLEDGE,
     "summary": KNOWLEDGE,
 }
@@ -363,7 +365,7 @@ class RetrievalEngine:
                     kind
                     for kind in wanted
                     if (kind != "chunk" or routed.needs_knowledge)
-                    and (kind not in ("memory", "episode") or routed.needs_memories)
+                    and (kind not in ("memory", "episode", "belief") or routed.needs_memories)
                 ]
                 with timings.stage("encode"):
                     encoded = await encode_task
@@ -1072,7 +1074,7 @@ class RetrievalEngine:
             flt = point_in_time_filter(flt, at or PointInTime())
             if subject is not None:
                 flt = flt.model_copy(update={"must": {**flt.must, "subject": subject}})
-        elif kind == "episode":
+        elif kind in ("episode", "belief"):
             flt = flt.model_copy(update={"must": {**flt.must, "current": True}})
         if document_ids:
             flt = flt.model_copy(

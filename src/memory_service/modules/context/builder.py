@@ -156,7 +156,24 @@ _EVIDENCE_SOURCE = {
     "chunk": EvidenceSource.DOCUMENT_CHUNK,
     "memory": EvidenceSource.MEMORY,
     "fact": EvidenceSource.GRAPH_FACT,
+    "belief": EvidenceSource.MEMORY,
 }
+#: what a context build searches where a model can be reached: beliefs too, as summaries
+RECALLED: Final = ("chunk", "memory", "belief")
+
+
+def _belief_ranks(candidates: list[Candidate]) -> dict[str, int]:
+    """The beliefs this question's search found, best first: what a person's page over the
+    pinned share keeps."""
+    return {c.record_id: rank for rank, c in enumerate(c for c in candidates if c.kind == "belief")}
+
+
+def _not_pinned(
+    candidates: list[Candidate], profile: Sequence[ProfileBlockView]
+) -> list[Candidate]:
+    """A recalled belief a pinned person page already shows is not shown twice."""
+    shown = "\n".join(block.text for block in profile)
+    return [c for c in candidates if c.kind != "belief" or c.text not in shown]
 
 
 def candidate_to_item(c: Candidate) -> ContextItem:
@@ -183,6 +200,12 @@ def candidate_to_item(c: Candidate) -> ContextItem:
     # pointer remains valid until the index is rebuilt.
     if c.kind == "memory" and (source_refs := p.get("source_refs")):
         evidence = [EvidenceRef.model_validate(ref) for ref in source_refs]
+    if c.kind == "belief":  # a belief's evidence is the memories it cites
+        said = datetime.fromisoformat(str(p["observed_at"]))
+        evidence = [
+            EvidenceRef(source_type=EvidenceSource.MEMORY, source_id=str(m), observed_at=said)
+            for m in p.get("source_memory_ids") or []
+        ]
     # _relevance existed, was correct, and was called by nothing but its own test, so every
     # item on the wire carried relevance=0.0 and score_kind="fusion" regardless of what
     # produced it — the incomparable-scale problem its docstring describes was still live.
@@ -649,6 +672,7 @@ class ContextBuilder:
                     visibility=visibility,
                     query_embedding=(query, embedding) if embedding is not None else None,
                     on_encoded=encoded,
+                    kinds=self._recalled(),
                 )
             encoded.settle(result.query_vectors)
             with timings.stage("sections"):
@@ -677,7 +701,8 @@ class ContextBuilder:
         await self._add_extras(ctx, query, tools, visibility, result, pinned, timings)
         # the engine's own stage split, plus what happened around it
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
-        pinned, pinned_tokens = within_budget(pinned, budget)
+        pinned, pinned_tokens = within_budget(pinned, budget, _belief_ranks(result.candidates))
+        result.candidates = _not_pinned(result.candidates, pinned.profile)
         said_before, said_tokens = _within(said_before, budget - pinned_tokens)
         bundle = self._assemble(
             query, result, conversation, budget - pinned_tokens - said_tokens, found.revision_fp
@@ -697,6 +722,11 @@ class ContextBuilder:
                 "tools": pinned.tools,
             }
         )
+
+    def _recalled(self) -> tuple[str, ...]:
+        """What a build searches: beliefs too where a model can be reached (they exist
+        nowhere else), so elsewhere the search is today's, round trip for round trip."""
+        return RECALLED if self.assist.available else ("chunk", "memory")
 
     async def _similarity_and_standing(
         self,
@@ -1263,7 +1293,7 @@ class ContextBuilder:
                     primary_memories += 1
             elif c.kind == "fact" and len(graph_facts) < self.cfg.graph_facts_max:
                 graph_facts.append(item)
-            elif c.kind == "summary" and len(summaries) < self.cfg.summaries_max:
+            elif c.kind in ("summary", "belief") and len(summaries) < self.cfg.summaries_max:
                 summaries.append(item)
             else:
                 continue

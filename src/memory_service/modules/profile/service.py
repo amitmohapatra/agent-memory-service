@@ -11,6 +11,9 @@ available, a line per memory otherwise), and only ever appended to once a person
 has edited it (``edited``) - with the facts learned since the edit - so an edit is never
 lost or undone.
 
+Each person whose beliefs (``modules.memory.consolidation``) the reader may read gets a page,
+``people``: their current beliefs grouped by facet, then their earlier values.
+
 A block with a ``source_query`` is that question's answer: the ``profile.query`` job builds a
 context for it in the scope that set it, and writes the answer (by the tenant's model when one
 is available, the best evidence line by line otherwise) - on setting and every
@@ -20,11 +23,14 @@ batches.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
+from memory_service.domain.beliefs import FACETS, Belief, person_name
 from memory_service.domain.context import MemoryExecutionContext
+from memory_service.domain.context_bundle import ProfileBlockView
 from memory_service.domain.enums import Lifetime
 from memory_service.domain.errors import Conflict, NotFound, ValidationFailed
 from memory_service.domain.memory import CanonicalMemory
@@ -40,6 +46,7 @@ from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import identity_of
+from memory_service.modules.memory.consolidation import reader_units
 from memory_service.modules.tenancy.gate import require_workspace_member
 from memory_service.observability.logging import get_logger
 from memory_service.ports.context import ContextReader
@@ -135,6 +142,59 @@ def appended(text: str, memories: Sequence[CanonicalMemory], since: datetime) ->
     return _bounded([*text.splitlines(), *dict.fromkeys(new)]) if new else text
 
 
+#: People a context pins a page for, most cited first (the token budget decides how many fit).
+PEOPLE_MAX: Final = 20
+#: Earlier values a person's page lists, newest first.
+EARLIER_MAX: Final = 10
+EARLIER_HEADING: Final = "Earlier values (since replaced):"
+
+
+def person_page(current: Sequence[Belief], earlier: Sequence[Belief]) -> str:
+    """One person's page from their beliefs (no model): every current line, by facet in
+    ``FACETS`` order (who they are, then what they value, then the rest) and each facet in
+    date order, then the earlier values, newest first (not those a current line still says
+    whole). Nothing is cut here: which lines a context shows is the token budget's choice
+    (``modules.context.sections``), never a character cap."""
+    lines = [f"- {b.text}" for b in sorted(current, key=_page_order)]
+    now = " ".join(b.text.casefold() for b in current)
+    replaced = sorted(
+        (b for b in earlier if b.text.casefold() not in now),
+        key=lambda b: b.valid_to or b.updated_at,
+        reverse=True,
+    )
+    old = [
+        f"- {b.text}" + (f" (until {b.valid_to.date().isoformat()})" if b.valid_to else "")
+        for b in replaced
+    ]
+    return "\n".join([*dict.fromkeys(lines), *([EARLIER_HEADING, *old] if old else [])])
+
+
+def _page_order(b: Belief) -> tuple[int, str, datetime, str]:
+    rank = FACETS.index(b.facet) if b.facet in FACETS else len(FACETS)
+    return rank, b.facet, b.first_seen_at, b.belief_id
+
+
+@dataclass(frozen=True)
+class PersonPage:
+    """One person's beliefs a reader may read, rendered into a profile block on demand."""
+
+    name: str
+    current: tuple[Belief, ...]
+    earlier: tuple[Belief, ...]
+
+    def view(self, keep: Collection[str] | None = None) -> ProfileBlockView | None:
+        """The block with every line, or with only the beliefs ``keep`` names (None when no
+        current line is kept)."""
+        current = [b for b in self.current if keep is None or b.belief_id in keep]
+        if not current:
+            return None
+        earlier = [b for b in self.earlier if keep is None or b.belief_id in keep]
+        version = max(b.revision for b in (*self.current, *self.earlier))
+        return ProfileBlockView(
+            block=self.name, text=person_page(current, earlier), version=version
+        )
+
+
 class ProfileService:
     def __init__(
         self,
@@ -152,6 +212,33 @@ class ProfileService:
     async def blocks(self, uow: UnitOfWork, ctx: MemoryExecutionContext) -> list[ProfileBlock]:
         """Every block of the caller's user, agent and workspace."""
         return await uow.profiles.blocks(ctx.tenant_id, list(profile_scopes(ctx).values()))
+
+    async def people(
+        self, uow: UnitOfWork, ctx: MemoryExecutionContext, keys: Sequence[str]
+    ) -> list[PersonPage]:
+        """A page per person of the reader's units (``reader_units``) whose beliefs a
+        reader with ``keys`` may read, most cited first: the built-in page, one indexed read
+        and no model."""
+        found = await uow.beliefs.visible(
+            ctx.tenant_id,
+            keys,
+            scope_keys=reader_units(ctx),
+            people=PEOPLE_MAX,
+            history=EARLIER_MAX,
+        )
+        by_person: dict[str, list[Belief]] = {}
+        for b in found:
+            by_person.setdefault(b.person_key, []).append(b)
+        cited = {p: sum(b.proof_count for b in bs if b.current) for p, bs in by_person.items()}
+        return [
+            PersonPage(
+                person_name(person),
+                tuple(b for b in by_person[person] if b.current),
+                tuple(b for b in by_person[person] if not b.current)[:EARLIER_MAX],
+            )
+            for person in sorted(by_person, key=lambda p: (-cited[p], p))
+            if cited[person]
+        ]
 
     async def edit(
         self,

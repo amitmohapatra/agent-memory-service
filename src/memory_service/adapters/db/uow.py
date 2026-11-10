@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import TracebackType
-from typing import Self
+from typing import TYPE_CHECKING, Self, cast
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from memory_service.adapters.db.belief_repository import SqlBeliefRepository
 from memory_service.adapters.db.credential_repository import SqlCredentialRepository
 from memory_service.adapters.db.document_repository import SqlDocumentRepository
 from memory_service.adapters.db.feedback_repository import SqlFeedbackRepository
@@ -36,11 +38,15 @@ from memory_service.adapters.db.tenancy_repository import (
     SqlWorkspaceRepository,
 )
 from memory_service.adapters.db.tool_repository import SqlProcedureRepository, SqlToolRepository
+from memory_service.modules.memory.consolidation import sources_forgotten
 from memory_service.modules.memory.revisions import touched_revisions
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
 from memory_service.ports.tasks import JobSpec, Queue
+
+if TYPE_CHECKING:
+    from memory_service.ports.uow import UnitOfWork
 
 log = get_logger(__name__)
 
@@ -120,6 +126,7 @@ class SqlUnitOfWork:
         self.archive = SqlArchiveRepository(s)
         self.documents = SqlDocumentRepository(s)
         self.memories = SqlMemoryRepository(s)
+        self.beliefs = SqlBeliefRepository(s)
         self.tools = SqlToolRepository(s)
         self.procedures = SqlProcedureRepository(s)
         self.profiles = SqlProfileRepository(s)
@@ -187,6 +194,12 @@ class SqlUnitOfWork:
                     )
                 )
         self.memories.invalidated.clear()
+        # what a forgotten memory supported goes with it, in this commit (its words included)
+        for tenant_id, forgotten in self.memories.forgotten.items():
+            await sources_forgotten(
+                cast("UnitOfWork", self), tenant_id, sorted(forgotten), now=datetime.now(UTC)
+            )
+        self.memories.forgotten.clear()
         with span("db.commit"), stage_seconds.labels("db.commit").time():
             await self._session.commit()
         self._committed = True

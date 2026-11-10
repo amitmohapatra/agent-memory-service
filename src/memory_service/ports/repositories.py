@@ -465,6 +465,24 @@ class MemoryRepository(Protocol):
         agent's private notes about them), newest first."""
         ...
 
+    async def consolidation_facts(
+        self,
+        tenant_id: str,
+        *,
+        scope_keys: Sequence[str],
+        person_key: str,
+        name: str,
+        after: datetime | None,
+        limit: int,
+    ) -> list[CanonicalMemory]:
+        """A person's lasting asserted facts in these scopes written after ``after``, oldest
+        write first: said by them, about them, or naming them (``name``)."""
+        ...
+
+    async def existing_subjects(self, tenant_id: str, subjects: Sequence[str]) -> set[str]:
+        """Which of ``subjects`` some memory of the tenant is about."""
+        ...
+
     async def list_scope(
         self,
         tenant_id: str,

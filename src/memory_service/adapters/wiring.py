@@ -558,6 +558,7 @@ def _wire_memory(container: Container) -> None:
     from memory_service.modules.feedback.service import FeedbackService
     from memory_service.modules.memory.admission import AdmissionGate
     from memory_service.modules.memory.connections import ConnectionService
+    from memory_service.modules.memory.consolidation import ConsolidationService
     from memory_service.modules.memory.forgetting import ForgettingService
     from memory_service.modules.memory.gapfill import GapFill
     from memory_service.modules.memory.native import NativeMemoryIntelligence
@@ -633,6 +634,9 @@ def _wire_memory(container: Container) -> None:
         working_ttl_seconds=constants.CACHE.working_memory_ttl_seconds,
     )
     container.services["reflection"] = ReflectionService(
+        container.services["uow_factory"], assist=container.services["llm_assist"]
+    )
+    container.services["consolidation"] = ConsolidationService(
         container.services["uow_factory"], assist=container.services["llm_assist"]
     )
     container.services["connections"] = ConnectionService(
