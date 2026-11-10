@@ -1,5 +1,6 @@
-"""HTTP read policy with actual retrieval and a mocked, never paid, Bifrost adapter: a read
-follows the tenant policy's read_assist."""
+"""HTTP read policy with actual retrieval and a mocked, never paid, Bifrost adapter: the read that
+consults a model (graph entity resolution) follows the tenant policy's read_assist; context and
+recall consult none."""
 
 import pytest
 
@@ -37,28 +38,24 @@ def _configure(client, configured) -> None:
 
 
 @pytest.mark.parametrize("route", ["context", "recall"])
-def test_a_read_follows_read_assist(client, route):
+def test_a_context_or_recall_read_calls_no_model_whatever_the_read_policy(client, route):
+    """``query_expansion`` in a policy is accepted and ignored: with reads assisted or not, a
+    context or recall read asks the model nothing. The graph route below is the read that
+    follows read_assist."""
     with mocked_gateway(
         [{"query_type": "GENERAL_SEMANTIC", "terms": ["telescope"], "identifiers": []}]
     ) as gw:
         configured = gw.assist(["query_expansion"])
         _configure(client, configured)
-        _read_assist(client, False)
-        payload = {"query": "astronomical instrumentation"}
         try:
-            native = client.post(f"/v1/{route}", headers=HEADERS, json=payload)
-            assert native.status_code == 200, native.text
+            for enabled, query in (
+                (False, "astronomical instrumentation"),
+                (True, "optical instruments"),
+            ):
+                _read_assist(client, enabled)
+                response = client.post(f"/v1/{route}", headers=HEADERS, json={"query": query})
+                assert response.status_code == 200, response.text
             assert gw.route.call_count == 0
-            repeat = client.post(f"/v1/{route}", headers=HEADERS, json=payload)
-            assert repeat.status_code == 200, repeat.text
-            assert gw.route.call_count == 0
-            # the policy flips: the same kind of read, with nothing set, is now assisted
-            _read_assist(client, True)
-            followed = client.post(
-                f"/v1/{route}", headers=HEADERS, json={**payload, "query": "optical instruments"}
-            )
-            assert followed.status_code == 200, followed.text
-            assert gw.route.call_count == 1
         finally:
             client.portal.call(configured.provider.close)
 

@@ -269,18 +269,16 @@ note db_created "$DB"
 URL="postgresql+psycopg://$PGUSER_:$PGPASSWORD_@$PGHOST_:5432/$DB"
 # the model gateway only when asked for (llm mode): its URL and key from the caller's env, and
 # a model-call timeout and a query-expansion deadline the gateway's model can meet
-# (benchmark/capabilities/stack_service.py: the 30 s and 250 ms constants are sized for a hosted
+# (benchmark/capabilities/stack_service.py: the 30 s constant is sized for a hosted
 # model; Granite 2B on this CPU writes ~8 tokens/s)
 ENTRY="from memory_service.__main__ import run_api; run_api()"
 WORKER_ENTRY="from memory_service.__main__ import run_worker; run_worker()"
 if [ "${CAPEVAL_GATEWAY:-0}" = 1 ]; then
   LLM_TIMEOUT="${CAPEVAL_LLM_TIMEOUT_SECONDS:-600}"
   [[ "$LLM_TIMEOUT" =~ ^[0-9]+$ ]] || refuse "CAPEVAL_LLM_TIMEOUT_SECONDS '$LLM_TIMEOUT' is not a number"
-  EXPANSION_MS="${CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS:-60000}"
-  [[ "$EXPANSION_MS" =~ ^[0-9]+$ ]] || refuse "CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS '$EXPANSION_MS' is not a number"
   ENTRY="from benchmark.capabilities.stack_service import main; main('api')"
   WORKER_ENTRY="from benchmark.capabilities.stack_service import main; main('worker')"
-  export CAPEVAL_LLM_TIMEOUT_SECONDS="$LLM_TIMEOUT" CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS="$EXPANSION_MS"
+  export CAPEVAL_LLM_TIMEOUT_SECONDS="$LLM_TIMEOUT"
 fi
 service_env() {  # root: the service's clean environment, serving that checkout's src/
   SERVICE_ENV=(
@@ -298,7 +296,7 @@ service_env() {  # root: the service's clean environment, serving that checkout'
   if [ "${CAPEVAL_GATEWAY:-0}" = 1 ]; then
     SERVICE_ENV+=(LLM_BASE_URL="$LLM_BASE_URL" LLM_API_KEY="$LLM_API_KEY"
       LLM_GATEWAY="${LLM_GATEWAY:-openai-compatible}" LLM_AUTH="${LLM_AUTH:-bearer}"
-      CAPEVAL_LLM_TIMEOUT_SECONDS="$LLM_TIMEOUT" CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS="$EXPANSION_MS")
+      CAPEVAL_LLM_TIMEOUT_SECONDS="$LLM_TIMEOUT")
     [ -n "${CAPEVAL_WORKER_CONCURRENCY:-}" ] && SERVICE_ENV+=(MEMORY__TASKS__WORKER_CONCURRENCY="$CAPEVAL_WORKER_CONCURRENCY")
   fi
   return 0

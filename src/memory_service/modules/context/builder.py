@@ -18,7 +18,6 @@ from typing import Any, Final, Literal
 import orjson
 
 from memory_service.config.constants import ContextSettings, RetrievalSettings
-from memory_service.config.settings import LLMUse
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import (
     ContextBundle,
@@ -125,9 +124,6 @@ def _cacheable(bundle: ContextBundle) -> bool:
 #: was it before", never enough to crowd the current evidence's budget.
 HISTORY_MAX = 4
 
-#: The model uses a cached bundle's content depends on. A deployment that expands queries
-#: assembles a different bundle from the same query, so it must not read another's cache.
-CACHED_MODEL_USES: tuple[LLMUse, ...] = ("query_expansion",)
 #: What a ``format=prompt`` response carries of the bundle.
 
 ContextFormat = Literal["prompt", "full"]
@@ -404,10 +400,6 @@ class ContextBuilder:
             revision_fp,
             self._fingerprint,
             str(model_calls_allowed()),
-            # per request, not per process: which uses are active depends on the bound
-            # identity's key and policy, and a bundle built with model assistance must not
-            # be served to a caller without it (or the reverse)
-            self.assist.cache_fingerprint(CACHED_MODEL_USES),
             str(budget),
             ",".join(document_ids or []),
             tools.fingerprint() if tools else "",
@@ -482,8 +474,6 @@ class ContextBuilder:
         tools: ToolsRequest | None = None,
     ) -> str | None:
         if self.semantic_cache is None or not self.retrieval_cfg.dense:
-            return None
-        if self.assist.wants("query_expansion"):
             return None
         route = self._cache_router.route(query, has_thread=ctx.thread_id is not None)
         if route.query_type not in {QueryType.USER_MEMORY, QueryType.GENERAL_SEMANTIC}:

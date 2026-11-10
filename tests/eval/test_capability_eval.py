@@ -598,20 +598,15 @@ async def test_the_llm_stack_starts_the_service_with_the_eval_timeout(
 
     from benchmark.capabilities import stack_service
 
-    from memory_service.config.constants import LLM, RETRIEVAL
+    from memory_service.config.constants import LLM
 
     monkeypatch.delenv("CAPEVAL_LLM_TIMEOUT_SECONDS", raising=False)
-    monkeypatch.delenv("CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS", raising=False)
     assert stack_service.overrides() is None
     monkeypatch.setenv("CAPEVAL_LLM_TIMEOUT_SECONDS", "600")
-    assert stack_service.overrides().retrieval is None, "the shipped retrieval tuning"
-    monkeypatch.setenv("CAPEVAL_QUERY_EXPANSION_TIMEOUT_MS", "60000")
     tuned = stack_service.overrides()
+    assert tuned.retrieval is None, "the shipped retrieval tuning"
     assert tuned.llm.timeout_seconds == 600.0
     assert dataclasses.replace(tuned.llm, timeout_seconds=LLM.timeout_seconds) == LLM
-    # past the setting's production bound (5 s): a CPU model needs seconds per expansion
-    assert tuned.retrieval.query_expansion_timeout_ms == 60000
-    assert tuned.retrieval.model_copy(update={"query_expansion_timeout_ms": 250}) == RETRIEVAL
 
     seen: list[object] = []
 

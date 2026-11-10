@@ -14,15 +14,13 @@ service's own (``modules.llm.endpoints`` resolves which, per call).
 from __future__ import annotations
 
 import time
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from memory_service.config.constants import LLM
 from memory_service.config.settings import LLMSettings, LLMUse
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.errors import ProviderNotConfigured
-from memory_service.domain.ids import stable_key
 from memory_service.modules.llm.cost import llm_tokens_used
 from memory_service.modules.llm.policies import ModelPolicies
 from memory_service.modules.llm.policy import (
@@ -120,24 +118,6 @@ class LLMAssist:
             return self.settings.operator_pays
         registered = binding.access.has_key and self.settings.accept_agent_endpoints
         return use in binding.access.uses and (registered or self.settings.operator_pays)
-
-    def cache_fingerprint(self, uses: Sequence[LLMUse]) -> str:
-        """Bind cached assisted output to the service's endpoint and model policy without
-        exposing keys. A registered endpoint's rotation bumps the tenant's revision, which
-        invalidates the cache on its own."""
-        active = sorted(use for use in uses if self.wants(use))
-        if not active:
-            return ""
-        own = self.settings.endpoint
-        tuning = getattr(self.provider, "tuning", LLM)
-        return stable_key(
-            "llm-output-v3",
-            own.model_dump_json(exclude={"api_key"}) if own is not None else "",
-            str(self.settings.accept_agent_endpoints),
-            ",".join(f"{use}={model_for(use, tuning)}" for use in active),
-            str(tuning.max_tokens),
-            own.api_key.get_secret_value() if own is not None and own.api_key else "",
-        )
 
     async def model(self, use: LLMUse) -> str:
         """The model ``use`` calls under the current binding: the policy's, the resolved

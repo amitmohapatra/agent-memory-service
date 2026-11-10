@@ -200,7 +200,11 @@ def test_agent_key_http_does_not_return_secrets_and_is_owner_scoped(client):
     assert missing_agent.status_code == 422
 
 
-def test_http_read_policy_and_rotation_route_only_the_owners_key(client):
+def test_an_agent_s_key_rotates_and_a_context_read_calls_no_model(client):
+    """An agent's key is registered, rotated and revoked over HTTP; a context read in its
+    scope, with the tenant's reads assisted, calls no model under any of them: no read use
+    shapes a context (``query_expansion`` is accepted and ignored). The owner's key on the
+    paths that do call a model is the job test's below."""
     container = client.app.state.container
     credentials = service(container.services["uow_factory"])
     container.services["model_credentials"] = credentials
@@ -242,12 +246,10 @@ def test_http_read_policy_and_rotation_route_only_the_owners_key(client):
                     ).status_code
                     == 200
                 )
-                # a new question each time: the assisted read is not served from the cache
                 asked = {**query, "query": f"{query['query']} {index}"}
                 response = client.post("/v1/context", headers=headers, json=asked)
                 assert response.status_code == 200, response.text
-                assert gateway.route.call_count == index
-                assert bearer(gateway.route.calls.last) == key
+                assert gateway.route.call_count == 0, key
             assert (
                 client.delete("/v1/agents/model-key?agent_id=research", headers=headers).status_code
                 == 204
@@ -258,7 +260,7 @@ def test_http_read_policy_and_rotation_route_only_the_owners_key(client):
                 ).status_code
                 == 200
             )
-            assert gateway.route.call_count == 2
+            assert gateway.route.call_count == 0
         finally:
             client.portal.call(configured.provider.close)
 
