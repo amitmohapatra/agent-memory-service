@@ -470,8 +470,6 @@ class SqlMemoryRepository:
             MemoryRow.temporal_status == TemporalStatus.CURRENT.value,
         ]
         any_of = []
-        if normalized_hash:
-            any_of.append(MemoryRow.normalized_hash == normalized_hash)
         if subjects:
             # Three kinds of spelling. An identity as written ("user:Alice") is an id: it
             # matches exactly. A named subject matches whatever its case on either side
@@ -497,8 +495,20 @@ class SqlMemoryRepository:
         turn = MemoryRow.system_metadata["category"].astext == "verbatim_turn"
         kinds = (turn.is_(False) | turn.is_(None), turn.is_(True))
         exact: list[MemoryRow] = []
-        # the exact matches of each kind too: every turn of a user is about "user:<id>", so
-        # one limit over both let a user's newest turns crowd out their older facts
+        if normalized_hash:
+            # the same words, in a query of their own: everything a person says is about
+            # "user:<id>", so one limit over words-or-subject let their newest memories crowd
+            # out the one that says the same thing, and it was stored a second time
+            exact += (
+                await self.s.scalars(
+                    select(MemoryRow)
+                    .where(*conds, MemoryRow.normalized_hash == normalized_hash)
+                    .order_by(MemoryRow.updated_at.desc())
+                    .limit(limit)
+                )
+            ).all()
+        # the subject's matches of each kind too: every turn of a user is about "user:<id>",
+        # so one limit over both let a user's newest turns crowd out their older facts
         for kind in kinds if any_of else ():
             exact += (
                 await self.s.scalars(
