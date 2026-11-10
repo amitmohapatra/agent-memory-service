@@ -8,6 +8,7 @@ graph edges) belong to the learning job and read the unlearned rows through a pa
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
@@ -180,3 +181,33 @@ class ProcedureRepository(Protocol):
         """The procedures that are or were offered (active, retired, rejected), best
         supported first; one agent's when ``agent_id`` is given."""
         ...
+
+
+@dataclass(frozen=True)
+class ToolPermission:
+    """A person's "Always allow" for a tool: its calls asked of ``assignee`` (``None``: an
+    approval anyone may answer) run without asking in every conversation of ``user_id``."""
+
+    permission_id: str
+    tenant_id: str
+    user_id: str
+    tool: str
+    assignee: str | None
+    allowed_by: str
+    created_at: datetime
+
+
+@runtime_checkable
+class ToolPermissionRepository(Protocol):
+    async def of_user(self, tenant_id: str, user_id: str) -> list[ToolPermission]:
+        """The user's permissions, oldest first."""
+        ...
+
+    async def allow(self, permission: ToolPermission) -> ToolPermission:
+        """Store ``permission``, or return the one already stored for its (tenant, user,
+        tool, assignee): allowing twice keeps one."""
+        ...
+
+    async def get(self, tenant_id: str, permission_id: str) -> ToolPermission | None: ...
+
+    async def revoke(self, tenant_id: str, permission_id: str) -> None: ...

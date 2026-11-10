@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Text, and_, func, literal, or_, select, tuple_, update
+from sqlalchemy import Text, and_, delete, func, literal, or_, select, tuple_, update
 from sqlalchemy import false as sa_false
 from sqlalchemy.dialects.postgresql import array, insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +23,7 @@ from memory_service.adapters.db.orm import (
     ProcedureRow,
     RunOutcomeRow,
     ToolInvocationRow,
+    ToolPermissionRow,
     ToolRow,
     ToolStatsRow,
 )
@@ -38,6 +39,7 @@ from memory_service.domain.tools import (
     ToolStats,
     agent_audience,
 )
+from memory_service.ports.tools import ToolPermission
 
 _TENANT_WIDE = ""
 _VERDICT_COLUMNS = ("approvals", "rejections", "edits")
@@ -673,3 +675,68 @@ class SqlProcedureRepository:
             .values(status="active", updated_at=datetime.now(UTC))
         )
         return bool(getattr(result, "rowcount", 0))
+
+
+def _permission(row: ToolPermissionRow) -> ToolPermission:
+    return ToolPermission(
+        permission_id=row.permission_id,
+        tenant_id=row.tenant_id,
+        user_id=row.user_id,
+        tool=row.tool,
+        assignee=row.assignee,
+        allowed_by=row.allowed_by,
+        created_at=row.created_at,
+    )
+
+
+class SqlToolPermissionRepository:
+    """A person's tool permissions; the listing reads the unique index's (tenant, user)
+    prefix."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def of_user(self, tenant_id: str, user_id: str) -> list[ToolPermission]:
+        rows = await self.session.scalars(
+            select(ToolPermissionRow)
+            .where(ToolPermissionRow.tenant_id == tenant_id, ToolPermissionRow.user_id == user_id)
+            .order_by(ToolPermissionRow.created_at, ToolPermissionRow.permission_id)
+        )
+        return [_permission(r) for r in rows]
+
+    async def allow(self, permission: ToolPermission) -> ToolPermission:
+        values = {
+            "permission_id": permission.permission_id,
+            "tenant_id": permission.tenant_id,
+            "user_id": permission.user_id,
+            "tool": permission.tool,
+            "assignee": permission.assignee,
+            "allowed_by": permission.allowed_by,
+            "created_at": permission.created_at,
+        }
+        await self.session.execute(
+            insert(ToolPermissionRow).values(**values).on_conflict_do_nothing()
+        )
+        stored = (
+            await self.session.scalars(
+                select(ToolPermissionRow).where(
+                    ToolPermissionRow.tenant_id == permission.tenant_id,
+                    ToolPermissionRow.user_id == permission.user_id,
+                    ToolPermissionRow.tool == permission.tool,
+                    ToolPermissionRow.assignee.is_not_distinct_from(permission.assignee),
+                )
+            )
+        ).one()
+        return _permission(stored)
+
+    async def get(self, tenant_id: str, permission_id: str) -> ToolPermission | None:
+        row = await self.session.get(ToolPermissionRow, permission_id)
+        return _permission(row) if row is not None and row.tenant_id == tenant_id else None
+
+    async def revoke(self, tenant_id: str, permission_id: str) -> None:
+        await self.session.execute(
+            delete(ToolPermissionRow).where(
+                ToolPermissionRow.tenant_id == tenant_id,
+                ToolPermissionRow.permission_id == permission_id,
+            )
+        )

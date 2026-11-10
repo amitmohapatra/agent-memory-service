@@ -35,7 +35,11 @@ from memory_service.ports.tenancy import (
     TenantRepository,
     WorkspaceRepository,
 )
-from memory_service.ports.tools import ProcedureRepository, ToolRepository
+from memory_service.ports.tools import (
+    ProcedureRepository,
+    ToolPermissionRepository,
+    ToolRepository,
+)
 
 
 @runtime_checkable
@@ -56,6 +60,7 @@ class UnitOfWork(Protocol):
     documents: DocumentRepository
     memories: MemoryRepository
     tools: ToolRepository
+    tool_permissions: ToolPermissionRepository
     procedures: ProcedureRepository
     profiles: ProfileRepository
     summaries: ThreadSummaryRepository

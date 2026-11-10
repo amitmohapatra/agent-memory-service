@@ -1338,6 +1338,33 @@
     "next": "property"
    }
   },
+  "ToolPermission": {
+   "bases": [
+    "BaseModel"
+   ],
+   "fields": {
+    "allowed_by": "str (required)",
+    "assignee": "str | None = None",
+    "created_at": "datetime (required)",
+    "permission_id": "str (required)",
+    "tool": "str (required)",
+    "user": "str (required)"
+   },
+   "kind": "model",
+   "members": {}
+  },
+  "ToolPermissionsAPI": {
+   "bases": [
+    "object"
+   ],
+   "kind": "class",
+   "members": {
+    "__init__": "(self, ctx: 'MemoryContext') -> 'None'",
+    "allow": "(self, tool: 'str', *, assignee: 'str | None' = None, allowed_by: 'str | None' = None, idempotency_key: 'str | None' = None) -> 'ToolPermission'",
+    "list": "(self) -> 'list[ToolPermission]'",
+    "revoke": "(self, permission_id: 'str', *, idempotency_key: 'str | None' = None) -> 'None'"
+   }
+  },
   "ToolResult": {
    "bases": [
     "BaseModel"
@@ -1463,5 +1490,5 @@
    "signature": "() -> 'MemoryContext | None'"
   }
  },
- "version": "0.6.4"
+ "version": "0.6.5"
 }

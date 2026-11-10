@@ -831,6 +831,21 @@ class ApprovalSuggestion(BaseModel):
     agent_id: str | None = None
 
 
+class ToolPermission(BaseModel):
+    """A person's "Always allow" for a tool (``advanced.tool_permissions``): its calls asked of
+    ``assignee`` (``None``: anyone) run without asking in every conversation of ``user`` until
+    it is revoked."""
+
+    model_config = ConfigDict(frozen=True, extra="allow")
+
+    permission_id: str
+    user: str
+    tool: str
+    assignee: str | None = None
+    allowed_by: str
+    created_at: datetime
+
+
 class LearnedSkill(BaseModel):
     """What one agent learned for one kind of task (``advanced.skills.list``): its steps, what
     fixed a failing step, its track record and its state."""
