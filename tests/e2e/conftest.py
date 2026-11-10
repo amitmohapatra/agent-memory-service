@@ -27,6 +27,8 @@ TABLES = [
     "workspaces",
     "api_keys",
     "tenants",
+    # a person's tool permissions: no foreign key either
+    "tool_permissions",
     "tool_invocations",
     "tool_stats",
     "approval_patterns",

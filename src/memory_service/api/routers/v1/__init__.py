@@ -20,6 +20,7 @@ def routers() -> list[APIRouter]:
         retrieval,
         skills,
         tenancy,
+        tool_permissions,
         tools,
     )
 
@@ -35,6 +36,7 @@ def routers() -> list[APIRouter]:
         profile.router,
         graph.router,
         tools.router,
+        tool_permissions.router,
         skills.router,
         agent_tools.router,
         feedback.router,

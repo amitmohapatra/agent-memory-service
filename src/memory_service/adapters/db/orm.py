@@ -853,6 +853,31 @@ class ToolRow(Base):
     )
 
 
+class ToolPermissionRow(Base):
+    """A person's "Always allow" for a tool (asked of ``assignee``, or of anyone: null)."""
+
+    __tablename__ = "tool_permissions"
+
+    permission_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    tool: Mapped[str] = mapped_column(String(200), nullable=False)
+    assignee: Mapped[str | None] = mapped_column(String(200))
+    allowed_by: Mapped[str] = mapped_column(String(512), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(server_default=_now())
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "user_id",
+            "tool",
+            "assignee",
+            name="uq_tool_permissions",
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
+
+
 class ToolStatsRow(Base):
     """Running counts per tool: one upsert per recorded call or tool-call verdict."""
 

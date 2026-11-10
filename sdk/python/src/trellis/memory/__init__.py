@@ -9,6 +9,7 @@ from trellis.memory.advanced import (
     ModelKeysAPI,
     SkillsAPI,
     ToolCatalogAPI,
+    ToolPermissionsAPI,
 )
 from trellis.memory.breaker import CircuitBreaker
 from trellis.memory.client import (
@@ -110,6 +111,7 @@ from trellis.memory.models import (
     ToolChoice,
     ToolChoiceBrief,
     ToolHints,
+    ToolPermission,
     ToolResult,
     ToolStats,
     ToolStatus,
@@ -226,6 +228,8 @@ __all__ = [
     "ToolChoice",
     "ToolChoiceBrief",
     "ToolHints",
+    "ToolPermission",
+    "ToolPermissionsAPI",
     "ToolResult",
     "ToolStats",
     "ToolStatus",

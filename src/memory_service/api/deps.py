@@ -468,6 +468,17 @@ def _has_role(principal: ServicePrincipal, roles: tuple[KeyRole, ...]) -> bool:
     return role in {r.value for r in roles}
 
 
+def acts_for_anyone(principal: ServicePrincipal) -> bool:
+    """Whether the credential is the service's own that acts for every user and agent of its
+    tenant: a ``service`` key whose ``may_act_as`` is unrestricted (what a harness holds), or
+    a development key. A key restricted to some principals - an agent's, a user's - is not,
+    and neither is an administrator's or an issuer's token (which names a person)."""
+    if not _has_role(principal, (KeyRole.SERVICE,)):
+        return False
+    allowed = principal.claims.get("may_act_as") if principal.mode == "api_key" else None
+    return allowed is None or ANY_PRINCIPAL in allowed
+
+
 def is_tenant_administrator(principal: ServicePrincipal) -> bool:
     """Whether the credential is a tenant's administrator (or the platform's)."""
     return _has_role(principal, (KeyRole.ADMIN, KeyRole.PLATFORM))

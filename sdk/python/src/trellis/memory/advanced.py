@@ -31,6 +31,7 @@ from trellis.memory.models import (
     MemoryResult,
     MemoryType,
     Page,
+    ToolPermission,
     Visibility,
     endpoint_json,
 )
@@ -46,6 +47,7 @@ class AdvancedAPI:
         self.documents = DocumentsAPI(ctx)
         self.graph = GraphAPI(ctx)
         self.tools = ToolCatalogAPI(ctx)
+        self.tool_permissions = ToolPermissionsAPI(ctx)
         self.skills = SkillsAPI(ctx)
         self.model_keys = ModelKeysAPI(ctx)
         self.memories = MemoriesAPI(ctx)
@@ -252,6 +254,51 @@ class ToolCatalogAPI:
             "POST", f"/v1/tools/approval-suggestions/{suggestion_id}/accept"
         )
         return CatalogTool.model_validate(data)
+
+
+class ToolPermissionsAPI:
+    """The tools a person allowed always ("Always allow"), for the context's user. The service
+    credential that acts for everyone in the tenant (the harness's) allows one; anyone acting
+    for the user lists and revokes them."""
+
+    def __init__(self, ctx: MemoryContext) -> None:
+        self._ctx = ctx
+
+    def _user(self) -> str:
+        user = self._ctx.scope.user_id
+        if user is None:
+            raise ValueError("tool permissions are a user's: bind(user_id=...) first")
+        return user
+
+    async def list(self) -> list[ToolPermission]:
+        """The user's permissions, oldest first."""
+        data = await self._ctx._request(
+            "GET", "/v1/tool-permissions", params={"user": self._user()}
+        )
+        return [ToolPermission.model_validate(p) for p in data.get("permissions", [])]
+
+    async def allow(
+        self,
+        tool: str,
+        *,
+        assignee: str | None = None,
+        allowed_by: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> ToolPermission:
+        """Allow ``tool`` for the user always (its approvals asked of ``assignee``; ``None``:
+        anyone): stored, or the permission already stored. The service credential only
+        (``AuthorizationError`` for any other)."""
+        body = {"user": self._user(), "tool": tool, "assignee": assignee, "allowed_by": allowed_by}
+        data = await self._ctx._request(
+            "PUT", "/v1/tool-permissions", json=body, idempotency_key=idempotency_key
+        )
+        return ToolPermission.model_validate(data)
+
+    async def revoke(self, permission_id: str, *, idempotency_key: str | None = None) -> None:
+        """Revoke a permission: the tool asks again from the user's next run."""
+        await self._ctx._request(
+            "DELETE", f"/v1/tool-permissions/{permission_id}", idempotency_key=idempotency_key
+        )
 
 
 class SkillsAPI:

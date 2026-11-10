@@ -28,6 +28,7 @@ TABLES = [
     "agent_credentials",
     "llm_policies",
     "llm_usage_daily",
+    "tool_permissions",
     "tool_invocations",
     "tool_stats",
     "approval_patterns",

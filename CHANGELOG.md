@@ -7,6 +7,18 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added
+- **A person's "Always allow" for a tool is kept per user** (service; trellis-memory 0.6.5).
+  `GET /v1/tool-permissions?user=`, `PUT /v1/tool-permissions` and
+  `DELETE /v1/tool-permissions/{permission_id}` (table `tool_permissions`, migration 0034): one
+  permission per tenant, user, tool and assignee. Only the service credential that acts for
+  everyone in the tenant (a `service` key with `may_act_as: ["*"]`, or a development key)
+  grants one; an agent's or a user's own key gets `403`, so no agent allows itself a tool. Anyone
+  acting for the user lists and revokes; another tenant's permission is a `404`. The SDK's
+  `ctx.advanced.tool_permissions` (`list`, `allow`, `revoke`; `ToolPermission`). The harness
+  writes one when a person answers an approval with Always allow and reads them at a run's first
+  asking call.
+
 ### Changed
 - **With a model, one call per message fills what the rules missed** (ADR 0045). The rules read
   a person's message first, as before; then one `contextual_extraction` call reads it with the

@@ -102,6 +102,9 @@ TenantIdPath = Annotated[str, _path(f"The tenant. {ID_RULE}")]
 SuggestionIdPath = Annotated[
     str, _path("The approval suggestion's id, as GET /v1/tools/approval-suggestions lists it.")
 ]
+PermissionIdPath = Annotated[
+    str, _path("The tool permission's id (tpm_...), as GET /v1/tool-permissions lists it.")
+]
 SkillIdPath = Annotated[str, _path("The learned skill's id (prc_...), as GET /v1/skills lists it.")]
 AgentToolNamePath = Annotated[
     str, _path("The memory tool to call, as GET /v1/agent-tools lists it (e.g. memory_search).")
