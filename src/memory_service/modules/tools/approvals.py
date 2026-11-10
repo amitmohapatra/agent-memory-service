@@ -64,12 +64,13 @@ def compose(existing: str | None, risk: SideEffects, suggestion: Suggestion, sha
 def offered(counts: ApprovalCounts, entry: ToolDescriptor | None) -> Suggestion | None:
     """The rule these decisions support that may be offered for this tool. Never "approve
     automatically" for an irreversible tool: however often a deletion or a payment was
-    approved, the next one is still asked about; and never for a tool that has an
+    approved, the next one is still asked about (nor for a tool not in the catalog yet: what it
+    does is unknown, so it asks every call); and never for a tool that has an
     ``approve_when`` already (an administrator's rule, or one accepted before): what the
     decisions learned may make it ask more, never less. "Always ask" is offered for any tier."""
     suggestion = counts.suggestion()
-    if suggestion == "auto_approve" and entry is not None:
-        if entry.risk == "irreversible":
+    if suggestion == "auto_approve":
+        if entry is None or entry.risk == "irreversible":
             return None
         if entry.approve_when and not accepted(entry, counts.arg_shape):
             return None

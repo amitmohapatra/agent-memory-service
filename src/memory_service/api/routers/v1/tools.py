@@ -359,8 +359,9 @@ class CatalogTool(BaseModel):
         "(trellis.memory.approval); null: none."
     )
     risk: SideEffects = Field(
-        description="read (run), write (run and notify) or irreversible (ask): side_effects "
-        "when set, else the annotations"
+        description="read (runs), write (asks once a conversation) or irreversible (asks every "
+        "call): side_effects when set, else the annotations, whose MCP defaults make a tool "
+        "that says nothing irreversible"
     )
     schema_hash: str = Field(description="Digest of the input schema: equal hashes, equal schemas.")
     workspace_id: str | None = Field(

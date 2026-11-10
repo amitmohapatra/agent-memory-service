@@ -805,7 +805,8 @@ class CatalogTool(BaseModel):
     annotations: dict[str, bool] = Field(default_factory=dict)
     #: ask a person before a call when this is true (``trellis.memory.approval``)
     approve_when: str | None = None
-    #: read (run), write (run and notify) or irreversible (ask)
+    #: read (runs), write (asks once a conversation) or irreversible (asks every call), as the
+    #: service derives it (a tool that says nothing of what it does is irreversible)
     risk: SideEffects = "write"
     schema_hash: str = ""
     workspace_id: str | None = None

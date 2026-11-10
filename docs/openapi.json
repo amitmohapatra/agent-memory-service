@@ -1022,7 +1022,7 @@
             "type": "array"
           },
           "risk": {
-            "description": "read (run), write (run and notify) or irreversible (ask): side_effects when set, else the annotations",
+            "description": "read (runs), write (asks once a conversation) or irreversible (asks every call): side_effects when set, else the annotations, whose MCP defaults make a tool that says nothing irreversible",
             "enum": [
               "read",
               "write",

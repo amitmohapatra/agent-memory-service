@@ -18,7 +18,7 @@ from memory_service.domain.feedback import (
     ProjectionAction,
 )
 from memory_service.domain.learning import ApprovalCounts
-from memory_service.domain.tools import ToolAnnotations, ToolDescriptor
+from memory_service.domain.tools import ToolAnnotations, ToolDescriptor, risk_tier
 from memory_service.modules.tools import approvals
 from trellis.memory.approval import arg_shape, evaluate
 
@@ -43,8 +43,11 @@ def _tool(side_effects: Any = None, **annotations: bool) -> ToolDescriptor:
         # read and write tools: whatever the decisions support
         (_tool("read"), AUTO, "auto_approve"),
         (_tool("write"), AUTO, "auto_approve"),
-        (_tool(), AUTO, "auto_approve"),  # no tier declared: write
-        (None, AUTO, "auto_approve"),  # not in the catalog yet: its tier is unknown
+        (_tool(destructive=False), AUTO, "auto_approve"),  # MCP: not destructive, a write
+        # no tier declared, or not in the catalog yet: it asks every call, as in the harness
+        (_tool(), AUTO, None),
+        (_tool(idempotent=True), AUTO, None),
+        (None, AUTO, None),
         # irreversible, declared or from the MCP destructive hint: never auto-approve
         (_tool("irreversible"), AUTO, None),
         (_tool(destructive=True), AUTO, None),
@@ -60,6 +63,29 @@ def test_what_may_be_offered(
     entry: ToolDescriptor | None, counts: ApprovalCounts, expected: str | None
 ) -> None:
     assert approvals.offered(counts, entry) == expected
+
+
+@pytest.mark.parametrize(
+    ("side_effects", "annotations", "risk"),
+    [
+        # nothing said, or no destructiveHint: the MCP defaults (readOnlyHint false,
+        # destructiveHint true) - a tool that does not say what it does asks (harness #217)
+        (None, {}, "irreversible"),
+        (None, {"read_only": False}, "irreversible"),
+        (None, {"idempotent": True, "open_world": False}, "irreversible"),
+        (None, {"destructive": True}, "irreversible"),
+        (None, {"destructive": False}, "write"),
+        (None, {"read_only": True}, "read"),
+        (None, {"read_only": True, "destructive": True}, "read"),
+        # what the catalog says wins over the hints
+        ("write", {"destructive": True}, "write"),
+        ("read", {}, "read"),
+    ],
+)
+def test_the_risk_of_a_tool_that_declares_nothing_asks(
+    side_effects: Any, annotations: dict[str, bool], risk: str
+) -> None:
+    assert risk_tier(side_effects, ToolAnnotations(**annotations)) == risk
 
 
 class _Tools:
