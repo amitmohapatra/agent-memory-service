@@ -168,11 +168,9 @@ def _belief_ranks(candidates: list[Candidate]) -> dict[str, int]:
     return {c.record_id: rank for rank, c in enumerate(c for c in candidates if c.kind == "belief")}
 
 
-def _not_pinned(
-    candidates: list[Candidate], profile: Sequence[ProfileBlockView]
-) -> list[Candidate]:
+def _not_pinned(candidates: list[Candidate], pages: Sequence[ProfileBlockView]) -> list[Candidate]:
     """A recalled belief a pinned person page already shows is not shown twice."""
-    shown = "\n".join(block.text for block in profile)
+    shown = "\n".join(page.text for page in pages)
     return [c for c in candidates if c.kind != "belief" or c.text not in shown]
 
 
@@ -702,7 +700,7 @@ class ContextBuilder:
         # the engine's own stage split, plus what happened around it
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
         pinned, pinned_tokens = within_budget(pinned, budget, _belief_ranks(result.candidates))
-        result.candidates = _not_pinned(result.candidates, pinned.profile)
+        result.candidates = _not_pinned(result.candidates, pinned.pages)
         said_before, said_tokens = _within(said_before, budget - pinned_tokens)
         bundle = self._assemble(
             query, result, conversation, budget - pinned_tokens - said_tokens, found.revision_fp
@@ -717,6 +715,7 @@ class ContextBuilder:
                 "token_estimate": bundle.token_estimate + pinned_tokens + said_tokens,
                 "earlier_chats": said_before,
                 "profile": pinned.profile,
+                "people": pinned.pages,
                 "thread_summary": pinned.thread_summary,
                 "procedures": pinned.procedures,
                 "tools": pinned.tools,

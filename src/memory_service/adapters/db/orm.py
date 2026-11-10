@@ -767,6 +767,8 @@ class BeliefRow(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=_now())
     updated_at: Mapped[datetime] = mapped_column(server_default=_now())
     deleted_at: Mapped[datetime | None]
+    #: when a memory it cites was superseded: hidden until the person's next run
+    stale_since: Mapped[datetime | None]
 
     __table_args__ = (
         # one person's beliefs in one scope: what consolidation reads and rewrites
@@ -783,6 +785,12 @@ class BeliefRow(Base):
             "visibility_keys",
             postgresql_using="gin",
             postgresql_where=sql_text("deleted_at IS NULL"),
+        ),
+        # a belief's earlier versions: what the retention sweep prunes
+        Index(
+            "ix_beliefs_superseded_by",
+            "superseded_by",
+            postgresql_where=sql_text("superseded_by IS NOT NULL"),
         ),
     )
 

@@ -442,6 +442,7 @@ class RetrievalEngine:
                     candidates = current_first(candidates)
                 candidates = candidates[:pool_limit]
                 candidates = await self._validate_derived(ctx, candidates, visibility)
+                candidates = await self._validate_beliefs(ctx, candidates, visibility)
                 checked_derived = {c.record_id for c in candidates if is_derived(c)}
                 if before != len(candidates):
                     diagnostics["duplicates_collapsed"] = before - len(candidates)
@@ -753,6 +754,26 @@ class RetrievalEngine:
             for h in hits
         ]
         return candidates
+
+    async def _validate_beliefs(
+        self,
+        ctx: MemoryExecutionContext,
+        candidates: list[Candidate],
+        visibility: VisibilitySpecification,
+    ) -> list[Candidate]:
+        """The recalled beliefs a reader may be shown (``Belief.shown``): one a forget deleted
+        or a newer value made stale, in that write's commit, is never found, though its point
+        waits for the index job."""
+        ids = sorted({c.record_id for c in candidates if c.kind == "belief"})
+        if not ids:
+            return candidates
+        async with self.uow_factory() as uow:
+            live = {
+                b.belief_id
+                for b in await uow.beliefs.get_many(ctx.tenant_id, ids)
+                if b.shown and visibility.allows(b.tenant_id, b.visibility_keys)
+            }
+        return [c for c in candidates if c.kind != "belief" or c.record_id in live]
 
     async def _memories(
         self,

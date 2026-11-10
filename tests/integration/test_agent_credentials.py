@@ -327,20 +327,18 @@ async def test_document_indexing_uses_recorded_agent_owner_after_key_rotation(
 
 async def test_user_scoped_reflection_preserves_bound_agent_and_current_key(container, uow_factory):
     from memory_service.modules.memory.reflection import ReflectionService
-    from tests.integration.test_reflection import _memories
-    from tests.integration.test_reflection import _observe as observe
+    from tests.integration.test_reflection import atlas_facts
 
     credentials = service(uow_factory)
     await save(credentials, uow_factory, ALICE, "vk-reflect-test")
-    await observe(container, uow_factory, ALICE, "I prefer concise answers with code samples.")
-    await observe(container, uow_factory, ALICE, "I prefer bullet points over long paragraphs.")
-    sources = await _memories(container, uow_factory, ALICE)
+    # the agent's facts about a project (a person's are consolidated, not reflected on)
+    sources = await atlas_facts(container, uow_factory, ALICE)
     assert len(sources) == 2
     reply = {
         "insights": [
             {
-                "content": "User prefers concise answers and bullet points.",
-                "memory_type": "PREFERENCE",
+                "content": "Atlas runs Postgres 16 on Kubernetes.",
+                "memory_type": "SEMANTIC",
                 "source_memory_ids": [m.memory_id for m in sources],
             }
         ]

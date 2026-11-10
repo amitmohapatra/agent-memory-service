@@ -50,8 +50,23 @@ class BeliefRepository(Protocol):
     async def forget_sources(
         self, tenant_id: str, memory_ids: Sequence[str], at: datetime
     ) -> list[Belief]:
-        """Remove these memories as sources; a belief left without one is deleted with its
-        words. Returns the beliefs that changed, as they are now."""
+        """Remove these memories as sources; every belief that cited one is deleted with its
+        words, whatever else it cites (its text may still say what was forgotten). Returns
+        those beliefs, as they are now."""
+        ...
+
+    async def mark_stale(
+        self, tenant_id: str, memory_ids: Sequence[str], at: datetime
+    ) -> list[Belief]:
+        """Hide the current beliefs that cite these (just superseded) memories until their
+        person's next run; returns them, as they are now."""
+        ...
+
+    async def clear_stale(
+        self, tenant_id: str, scope_key: str, person_key: str, *, before: datetime
+    ) -> list[Belief]:
+        """Show again the unit's beliefs made stale before ``before`` (a run that started
+        then has weighed the newer values); returns them."""
         ...
 
     async def visible(
@@ -71,3 +86,8 @@ class BeliefRepository(Protocol):
     async def get_many(self, tenant_id: str, belief_ids: Sequence[str]) -> list[Belief]: ...
 
     async def mark_indexed(self, belief_ids: Sequence[str], *, fingerprint: str) -> None: ...
+
+    async def prune_history(self, *, keep: int, limit: int) -> int:
+        """Delete superseded versions past the newest ``keep`` of each belief (every tenant),
+        at most ``limit``; returns how many went."""
+        ...

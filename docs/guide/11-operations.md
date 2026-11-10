@@ -224,10 +224,10 @@ flowchart TB
     IP["periodic.idempotency_purge (:43)"]
     OP["periodic.outbox_purge (:53): dispatched rows over 24 h"]
     RA["periodic.read_audit_purge (:07): rows over 400 days"]
-    CP["periodic.consolidate_pending (:41): people waiting over an hour, with a gateway"]
+    CP["periodic.consolidate_pending (:41): people waiting over an hour, with a gateway; belief history past 3 versions"]
   end
   subgraph six[Every 6 hours, only with a gateway configured]
-    RF["periodic.memory_reflect (:53)"]
+    RF["periodic.memory_reflect (:53): groups not about a person"]
     CN["periodic.memory_connect (:19)"]
   end
   subgraph daily[Daily]

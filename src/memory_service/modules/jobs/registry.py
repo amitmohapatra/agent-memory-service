@@ -126,6 +126,7 @@ def _register_consolidation(queue: _AccountedQueue, container: Container) -> Non
 
     async def consolidate_pending(payload: dict[str, Any]) -> None:
         await container.services["consolidation"].sweep_pending()
+        await container.services["consolidation"].prune()
 
     async def belief_index(payload: dict[str, Any]) -> None:
         await container.services["indexer"].index_beliefs(

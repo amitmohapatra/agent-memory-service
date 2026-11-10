@@ -24,6 +24,9 @@ from memory_service.domain.ids import content_hash, new_id
 
 #: The kind of principal a person is: phase 1 consolidates people the service knows as users.
 PERSON_PREFIX: Final = "user:"
+#: Superseded versions kept per belief beyond the current one (design note §5); the hourly
+#: consolidation sweep deletes older ones.
+VERSIONS_KEPT: Final = 3
 #: The facets a belief is filed under, in the order a person's page shows them: who they are,
 #: then what they like, value and believe, then the rest. The one place the order lives (the
 #: consolidation prompt offers these labels, the page sorts by them). Put last, values were
@@ -71,6 +74,9 @@ class Belief(BaseModel):
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None = None
+    #: when a memory it cites was superseded (a newer value said): hidden from every reader
+    #: until the person's next run has weighed the newer value against it
+    stale_since: datetime | None = None
     source_ids: list[str] = Field(default_factory=list)
 
     @property
@@ -80,6 +86,11 @@ class Belief(BaseModel):
     @property
     def current(self) -> bool:
         return self.superseded_by is None and self.valid_to is None and self.deleted_at is None
+
+    @property
+    def shown(self) -> bool:
+        """Current and not waiting on a newer value: what a reader may be shown."""
+        return self.current and self.stale_since is None
 
     @classmethod
     def new(

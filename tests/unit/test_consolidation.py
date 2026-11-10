@@ -6,8 +6,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from memory_service.domain.beliefs import FACETS, Belief, person_name
-from memory_service.domain.context_bundle import ProfileBlockView, profile_section
+from memory_service.domain.context_bundle import (
+    ProfileBlockView,
+    people_section,
+    pinned_sections,
+    profile_section,
+)
 from memory_service.domain.enums import Lifetime, MemoryType, ScopeLevel, Visibility
 from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.memory import CanonicalMemory, Scope, TemporalState
@@ -15,7 +22,6 @@ from memory_service.domain.profile import PROFILE_BLOCK_MAX_CHARS
 from memory_service.modules.context.sections import Pinned, within_budget
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.memory.consolidation import (
-    MAX_BELIEFS,
     checked,
     fact_scopes,
     plan,
@@ -176,11 +182,23 @@ def test_add_cites_only_facts_of_the_batch_and_skip_writes_nothing() -> None:
     assert not p.keeps and not p.retires
 
 
-def test_adds_stop_at_the_bound_on_current_beliefs() -> None:
-    current = [belief(f"Line {i}.") for i in range(MAX_BELIEFS)]
+def test_a_person_with_many_beliefs_still_gets_new_ones() -> None:
+    """No working bound: 200 current beliefs (past the old 60) take another add."""
+    current = [belief(f"Line {i}.") for i in range(200)]
+    add = {"op": "add", "facts": ["F1"], "belief": "", "text": "Likes tea.", "facet": "values"}
+    found = plan([add], current, [fact("I like tea.", day=1)])
+    assert [x.text for x in found.lines] == ["Likes tea."] and found.over_ceiling == 0
+
+
+def test_only_the_safety_ceiling_stops_an_add_and_says_how_many(monkeypatch) -> None:
+    from memory_service.modules.memory import consolidation
+
+    monkeypatch.setattr(consolidation, "BELIEFS_CEILING", 3)
+    current = [belief(f"Line {i}.") for i in range(3)]
     f = fact("I like tea.", day=1)
-    add = {"op": "add", "facts": ["F1"], "belief": "", "text": "Likes tea.", "facet": "likes"}
-    assert plan([add], current, [f]).lines == []
+    add = {"op": "add", "facts": ["F1"], "belief": "", "text": "Likes tea.", "facet": "values"}
+    found = plan([add], current, [f])
+    assert found.lines == [] and found.over_ceiling == 1  # counted, and logged by the run
     retire = {"op": "retire", "facts": ["F1"], "belief": "B1", "text": "", "facet": ""}
     assert [x.text for x in plan([retire, add], current, [f]).lines] == ["Likes tea."]
 
@@ -256,11 +274,11 @@ def test_a_page_over_4000_characters_is_shown_whole_when_the_budget_allows() -> 
     lines = _many(40)
     assert sum(len(b.text) for b in lines) > PROFILE_BLOCK_MAX_CHARS
     kept, used = within_budget(Pinned(people=[_page("caroline", lines)]), 8000)
-    [page] = kept.profile
+    [page] = kept.pages
     assert len(page.text.splitlines()) == 40 and len(page.text) > PROFILE_BLOCK_MAX_CHARS
     facets = [line.split()[1] for line in page.text.splitlines()]
     assert list(dict.fromkeys(facets)) == list(FACETS)  # identity, values, then the rest
-    assert used == estimate_tokens(profile_section(kept.profile) or "")
+    assert used == 0  # not charged to the memories (``PEOPLE_CHARGED``)
 
 
 def test_over_the_budget_the_lines_relevant_to_the_question_stay_and_every_facet_keeps_one() -> (
@@ -274,7 +292,7 @@ def test_over_the_budget_the_lines_relevant_to_the_question_stay_and_every_facet
         3000,
         relevance={b.belief_id: rank for rank, b in enumerate(relevant)},
     )
-    [page] = kept.profile
+    [page] = kept.pages
     shown = page.text.splitlines()
     assert used <= 1500 and len(shown) < 60
     assert all(f"- {b.text}" in shown for b in relevant)
@@ -297,9 +315,55 @@ def test_people_come_after_the_profile_and_only_while_they_fit() -> None:
     big = _page("caroline", [belief("y" * 380, facet="work") for _ in range(8)])
     small = _page("melanie", [belief("paints", facet="hobbies")])
     kept, used = within_budget(Pinned(profile=list(profile), people=[big, small]), 1000)
-    names = [b.block for b in kept.profile]
-    assert names[0] == "user" and "melanie" in names
-    assert used <= 500 and used == estimate_tokens(profile_section(kept.profile) or "")
+    assert kept.profile == profile and "melanie" in [b.block for b in kept.pages]
+    assert used == estimate_tokens(profile_section(profile) or "")  # the pages ride on top
+    assert estimate_tokens(people_section(kept.pages) or "") <= 500  # within their own share
+
+
+@pytest.mark.parametrize("charged", [False, True])
+def test_a_big_page_never_displaces_or_trims_the_explicit_blocks_or_the_standing_ones(
+    monkeypatch, charged: bool
+) -> None:
+    """Personalisation as before: every hand-written block and every implicit preference or
+    rule the profile holds stays whole; the pages get what is left of the pinned share after
+    them when charged, else a share of their own."""
+    from memory_service.modules.context import sections
+
+    monkeypatch.setattr(sections, "PEOPLE_CHARGED", charged)
+    profile = [
+        ProfileBlockView(block=name, text=f"- {name} " + "w" * 900, version=1)
+        for name in ("user", "agent", "workspace", "standing_rules", "preferences", "about_user")
+    ]
+    alone, cost = within_budget(Pinned(profile=list(profile)), 4000)
+    assert alone.profile == profile  # the whole profile fits the share on its own
+    page = _page("caroline", _many(60))
+    kept, used = within_budget(Pinned(profile=list(profile), people=[page]), 4000)
+    assert kept.profile == profile  # nothing displaced, nothing trimmed
+    assert kept.pages and len(kept.pages[0].text.splitlines()) < 60  # the page gave way
+    pages = estimate_tokens(people_section(kept.pages) or "")
+    if charged:
+        assert used == cost + pages <= 2000  # the page in what the profile left of the share
+    else:
+        assert used == cost and pages <= 2000  # the page in a share of its own
+    # a share the whole profile does not fit: the standing blocks, exactly as without a page
+    squeezed, _ = within_budget(Pinned(profile=list(profile), people=[page]), 1600)
+    standing = [b for b in profile if b.block in ("standing_rules", "preferences", "about_user")]
+    assert (
+        squeezed.profile
+        == standing
+        == within_budget(Pinned(profile=list(profile)), 1600)[0].profile
+    )
+
+
+def test_a_context_with_only_pages_has_no_profile_heading() -> None:
+    """The harness adds its note on remembered rules when the context has ``## Profile``:
+    a person's page alone must not switch it on."""
+    kept, _ = within_budget(Pinned(people=[_page("caroline", _many(3))]), 8000)
+    rendered = "\n\n".join(pinned_sections(kept.profile, None, [], None, kept.pages))
+    assert rendered.startswith("## People\n### caroline\n") and "## Profile\n" not in rendered
+    profile = [ProfileBlockView(block="user", text="- likes tea", version=1)]
+    both = "\n\n".join(pinned_sections(profile, None, [], None, kept.pages))
+    assert both.index("## Profile\n") < both.index("## People\n")
 
 
 # -- the answer's room ----------------------------------------------------------------------
@@ -327,9 +391,10 @@ def test_the_people_pages_cost_is_decided_in_one_place(monkeypatch) -> None:
 
     profile = [ProfileBlockView(block="user", text="- likes tea", version=1)]
     page = _page("caroline", _many(10))
-    charged, used = within_budget(Pinned(profile=list(profile), people=[page]), 8000)
-    assert used == estimate_tokens(profile_section(charged.profile) or "")  # memories pay
-    monkeypatch.setattr(sections, "PEOPLE_CHARGED", False)
     on_top, free = within_budget(Pinned(profile=list(profile), people=[page]), 8000)
-    assert on_top.profile == charged.profile  # the same page, shown whole
-    assert free == estimate_tokens(profile_section(profile) or "")  # memories keep the rest
+    shown = estimate_tokens(profile_section(profile) or "")
+    assert free == shown  # the default: the memories keep the rest of the budget
+    monkeypatch.setattr(sections, "PEOPLE_CHARGED", True)
+    charged, used = within_budget(Pinned(profile=list(profile), people=[page]), 8000)
+    assert charged.pages == on_top.pages  # the same page, shown whole
+    assert used == shown + estimate_tokens(people_section(charged.pages) or "")  # memories pay

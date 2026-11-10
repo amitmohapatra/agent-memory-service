@@ -133,6 +133,19 @@ class SqlMemoryRepository:
         #: memories forgotten in this transaction: the unit of work removes them from the
         #: beliefs they support when it commits
         self.forgotten: dict[str, set[str]] = {}
+        #: memories superseded in this transaction: the unit of work hides the beliefs that
+        #: cite them until their people's next run
+        self.replaced: dict[str, set[str]] = {}
+
+    def _moved(self, tenant_id: str, memory_id: str, before: str, after: str) -> None:
+        """Note a status change the beliefs citing the memory must follow: retracted (taken
+        back, the reject verdict) is as forgotten; superseded makes them stale."""
+        if after == before:
+            return
+        if after == TemporalStatus.RETRACTED.value:
+            self.forgotten.setdefault(tenant_id, set()).add(memory_id)
+        elif after == TemporalStatus.SUPERSEDED.value:
+            self.replaced.setdefault(tenant_id, set()).add(memory_id)
 
     async def _invalidate_dependents(self, tenant_id: str, source_ids: Sequence[str]) -> None:
         if not source_ids:
@@ -319,6 +332,7 @@ class SqlMemoryRepository:
         r.subject = memory.subject
         r.predicate = memory.predicate
         r.object = memory.object
+        self._moved(r.tenant_id, r.memory_id, r.temporal_status, memory.temporal.status.value)
         r.temporal_status = memory.temporal.status.value
         r.valid_from = memory.temporal.valid_from
         r.valid_to = memory.temporal.valid_to
@@ -901,6 +915,7 @@ class SqlMemoryRepository:
             return False
         if r.temporal_status == status.value:
             return True
+        self._moved(tenant_id, memory_id, r.temporal_status, status.value)
         r.temporal_status = status.value
         r.updated_at = now
         r.indexed_at = None

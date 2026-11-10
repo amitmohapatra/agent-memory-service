@@ -21,10 +21,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from memory_service.domain.beliefs import Belief
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import (
+    PEOPLE_HEADING,
     ContextItem,
     ProfileBlockView,
     SkillView,
     ThreadSummaryView,
+    people_section,
     profile_section,
     skills_section,
     summary_section,
@@ -51,7 +53,10 @@ PINNED_SHARE: Final = 0.5
 #: §3.7). True: out of the context's token budget, after every other pinned section within
 #: ``PINNED_SHARE``, so the memories get what is left. False: on top of it - the pages still
 #: fit ``PINNED_SHARE`` of the budget on their own, and the memories keep their whole budget.
-PEOPLE_CHARGED: Final = True
+#: False, accuracy first: measured on LoCoMo, the memories stop at a count (about 100), not
+#: at the token budget, so charging the pages pushed no memory out, and it would once the
+#: memories reach the budget.
+PEOPLE_CHARGED: Final = False
 #: the profile sections ``modules.context.standing`` writes (kept first when the whole
 #: profile does not fit)
 STANDING_BLOCKS: Final = frozenset({"standing_rules", "preferences", "about_user"})
@@ -103,6 +108,8 @@ class Pinned:
     profile: list[ProfileBlockView] = field(default_factory=list)
     #: a page per person with beliefs, pinned after everything else within the share left
     people: list[PersonPage] = field(default_factory=list)
+    #: the pages of ``people`` that fit (``within_budget``)
+    pages: list[ProfileBlockView] = field(default_factory=list)
     thread_summary: ThreadSummaryView | None = None
     procedures: list[SkillView] = field(default_factory=list)
     tools: ToolHints | None = None
@@ -164,42 +171,36 @@ def within_budget(
     elif pinned.tools is not None:
         # the candidates still narrow the caller's tools; only the rendered section is cut
         kept.tools = pinned.tools.model_copy(update={"next": None, "prefill": {}, "missing": []})
-    before = kept.profile
     spare = allowed - used if PEOPLE_CHARGED else allowed
-    kept.profile = _people_that_fit(before, pinned.people, spare, relevance or {})
+    kept.pages = _people_that_fit(pinned.people, spare, relevance or {})
     if PEOPLE_CHARGED:
-        used += _profile_cost(kept.profile) - _profile_cost(before)
+        used += _people_cost(kept.pages)
     return kept, used
 
 
-def _profile_cost(profile: Sequence[ProfileBlockView]) -> int:
-    text = profile_section(profile)
+def _people_cost(pages: Sequence[ProfileBlockView]) -> int:
+    text = people_section(pages)
     return estimate_tokens(text) if text else 0
 
 
 def _people_that_fit(
-    profile: list[ProfileBlockView],
-    people: Sequence[PersonPage],
-    spare: int,
-    relevance: Mapping[str, int],
+    people: Sequence[PersonPage], spare: int, relevance: Mapping[str, int]
 ) -> list[ProfileBlockView]:
-    """The profile with every person's whole page after it when that fits the ``spare``
-    tokens of the pinned share; else with the lines worth most to this question
-    (``_chosen``), every facet kept while any line can go instead. Never a cut at the end
-    and never a character cap: a page holds as many lines as the budget does."""
-    room = _profile_cost(profile) + spare
+    """Every person's whole page when the pages fit the ``spare`` tokens of the pinned share
+    the rest left; else the lines worth most to this question (``_chosen``), every facet kept
+    while any line can go instead. Never a cut at the end and never a character cap: a page
+    holds as many lines as the budget does."""
     pages = [v for p in people if (v := p.view()) is not None]
-    if not pages or _profile_cost([*profile, *pages]) <= room:
-        return [*profile, *pages]
-    # the people's own share: what the section may cost, less what it costs without them
-    share = room - (_profile_cost(profile) if profile else estimate_tokens("## Profile"))
+    if _people_cost(pages) <= spare:
+        return pages
+    share = spare - estimate_tokens(f"## {PEOPLE_HEADING}")
     for _ in range(3):  # per-line estimates against the section's: a token or two off
         pages = [v for p in people if (v := p.view(_chosen(people, share, relevance)))]
-        over = _profile_cost([*profile, *pages]) - room
+        over = _people_cost(pages) - spare
         if over <= 0:
-            return [*profile, *pages]
+            return pages
         share -= over
-    return profile
+    return []
 
 
 def _worth(b: Belief, relevance: Mapping[str, int]) -> tuple[bool, int, int, datetime, str]:

@@ -6,11 +6,20 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import Text, delete, func, or_, select, update
+from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import array, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_service.adapters.db.orm import BeliefProgressRow, BeliefRow, BeliefSourceRow
 from memory_service.domain.beliefs import Belief, BeliefProgress
+
+#: a current belief no newer value has made stale yet
+_UNSTALE_CURRENT = (
+    BeliefRow.superseded_by.is_(None),
+    BeliefRow.valid_to.is_(None),
+    BeliefRow.deleted_at.is_(None),
+    BeliefRow.stale_since.is_(None),
+)
 
 
 def _belief(row: BeliefRow, sources: Sequence[str]) -> Belief:
@@ -34,6 +43,7 @@ def _belief(row: BeliefRow, sources: Sequence[str]) -> Belief:
         created_at=row.created_at,
         updated_at=row.updated_at,
         deleted_at=row.deleted_at,
+        stale_since=row.stale_since,
         source_ids=list(sources),
     )
 
@@ -70,6 +80,8 @@ def _fields(b: Belief) -> dict[str, object]:
         "index_fingerprint": b.index_fingerprint,
         "updated_at": b.updated_at,
         "deleted_at": b.deleted_at,
+        # stale_since is never written from a belief read earlier: only mark_stale and
+        # clear_stale move it, so a run cannot show again what went stale while it ran
     }
 
 
@@ -255,31 +267,48 @@ class SqlBeliefRepository:
         ids = sorted(set(removed.scalars()))
         if not ids:
             return []
-        left = dict(
-            list(
-                (
-                    await self.s.execute(
-                        select(BeliefSourceRow.belief_id, func.count())
-                        .where(BeliefSourceRow.belief_id.in_(ids))
-                        .group_by(BeliefSourceRow.belief_id)
-                    )
-                ).tuples()
-            )
-        )
-        if empty := [i for i in ids if not left.get(i)]:
-            await self._drop(empty, at)
-        for belief_id, n in left.items():
-            await self.s.execute(
-                update(BeliefRow)
-                .where(BeliefRow.belief_id == belief_id)
-                .values(
-                    proof_count=n,
-                    index_fingerprint=None,
-                    updated_at=at,
-                    revision=BeliefRow.revision + 1,
-                )
-            )
+        # a belief that lost any source may still say what it said: dropped at once, words
+        # and all; the person's rebuild writes again what the sources left still support
+        await self._drop(ids, at)
         return await self.get_many(tenant_id, ids)
+
+    async def mark_stale(
+        self, tenant_id: str, memory_ids: Sequence[str], at: datetime
+    ) -> list[Belief]:
+        if not memory_ids:
+            return []
+        cites = select(BeliefSourceRow.belief_id).where(
+            BeliefSourceRow.tenant_id == tenant_id,
+            BeliefSourceRow.memory_id.in_(list(memory_ids)),
+        )
+        marked = await self.s.execute(
+            update(BeliefRow)
+            .where(
+                BeliefRow.tenant_id == tenant_id,
+                BeliefRow.belief_id.in_(cites),
+                *_UNSTALE_CURRENT,
+            )
+            .values(stale_since=at, index_fingerprint=None, revision=BeliefRow.revision + 1)
+            .returning(BeliefRow.belief_id)
+        )
+        return await self.get_many(tenant_id, sorted(marked.scalars()))
+
+    async def clear_stale(
+        self, tenant_id: str, scope_key: str, person_key: str, *, before: datetime
+    ) -> list[Belief]:
+        cleared = await self.s.execute(
+            update(BeliefRow)
+            .where(
+                BeliefRow.tenant_id == tenant_id,
+                BeliefRow.scope_key == scope_key,
+                BeliefRow.person_key == person_key,
+                BeliefRow.deleted_at.is_(None),
+                BeliefRow.stale_since <= before,
+            )
+            .values(stale_since=None, index_fingerprint=None, revision=BeliefRow.revision + 1)
+            .returning(BeliefRow.belief_id)
+        )
+        return await self.get_many(tenant_id, sorted(cleared.scalars()))
 
     async def visible(
         self,
@@ -296,7 +325,11 @@ class SqlBeliefRepository:
             BeliefRow.deleted_at.is_(None),
             BeliefRow.visibility_keys.op("?|")(array(list(keys), type_=Text)),
         )
-        current = (BeliefRow.superseded_by.is_(None), BeliefRow.valid_to.is_(None))
+        current = (
+            BeliefRow.superseded_by.is_(None),
+            BeliefRow.valid_to.is_(None),
+            BeliefRow.stale_since.is_(None),
+        )
         ranked = (
             select(BeliefRow.person_key)
             .where(*readable, *current)
@@ -353,3 +386,32 @@ class SqlBeliefRepository:
                 .where(BeliefRow.belief_id.in_(list(belief_ids)))
                 .values(index_fingerprint=fingerprint)
             )
+
+    async def prune_history(self, *, keep: int, limit: int) -> int:
+        removed = await self.s.execute(_PRUNE, {"keep": keep, "limit": limit})
+        return len(removed.all())
+
+
+#: A belief's versions are the rows that lead to it through ``superseded_by``, the newest
+#: (fewest steps away) first; past the newest ``keep`` they go, sources with them (cascade).
+_PRUNE = sql_text(
+    """
+    WITH RECURSIVE chain(head, belief_id, depth) AS (
+        SELECT b.belief_id, b.belief_id, 0 FROM beliefs b
+        WHERE b.superseded_by IS NULL
+          AND EXISTS (SELECT 1 FROM beliefs c WHERE c.superseded_by = b.belief_id)
+        UNION ALL
+        SELECT chain.head, c.belief_id, chain.depth + 1
+        FROM beliefs c JOIN chain ON c.superseded_by = chain.belief_id
+    ), ranked AS (
+        SELECT chain.belief_id, row_number() OVER (
+            PARTITION BY chain.head ORDER BY chain.depth, b.created_at DESC, b.belief_id DESC
+        ) AS n
+        FROM chain JOIN beliefs b ON b.belief_id = chain.belief_id
+        WHERE chain.depth > 0
+    )
+    DELETE FROM beliefs
+    WHERE belief_id IN (SELECT belief_id FROM ranked WHERE n > :keep LIMIT :limit)
+    RETURNING belief_id
+    """
+)

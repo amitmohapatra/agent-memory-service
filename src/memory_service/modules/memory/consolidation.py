@@ -47,6 +47,7 @@ from memory_service.config.settings import LLMUse
 from memory_service.domain.beliefs import (
     FACETS,
     PERSON_PREFIX,
+    VERSIONS_KEPT,
     Belief,
     BeliefProgress,
     person_name,
@@ -67,8 +68,11 @@ from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 log = get_logger(__name__)
 
 CONSOLIDATION_USE: Final[LLMUse] = "reflection"
-#: Current beliefs per person and scope; past it the model must merge or retire to add.
-MAX_BELIEFS: Final = 60
+#: A safety ceiling on current beliefs per person and scope, never a working bound: far
+#: past what any person's facts make, it only stops a model gone wrong from growing a unit
+#: without end. An add past it is logged (``consolidation.ceiling_reached``), never dropped
+#: silently.
+BELIEFS_CEILING: Final = 1000
 #: New facts one call reads; the rest are the next job's. Its answer must fit the use's
 #: ceiling (``constants.LLM.long_max_tokens``) with the model's hidden reasoning: about 60
 #: tokens an add, and a cut-off answer is a failed run.
@@ -109,8 +113,6 @@ SYSTEM: Final = (
     "- Keep names, numbers, titles and places exactly. Keep negations.\n"
     "- Prefer keeping or updating a belief to adding a near-duplicate; list the instances "
     "of one facet (activities, places, people, with their dates) in its one line.\n"
-    f"- At most {MAX_BELIEFS} current beliefs: when they are full, merge or retire before "
-    "you add.\n"
     f"- A line is at most {MAX_LINE_CHARS} characters. facet is one of: {', '.join(FACETS)} "
     "(identity: who they are, background; values: likes, values, beliefs, personality).\n"
     "- Cite facts by their ids (F1) and a belief by its id (B1) only; a field an entry does "
@@ -216,6 +218,12 @@ def _named(text: str) -> set[str]:
 def _people(memory: CanonicalMemory, known: Iterable[str]) -> set[str]:
     own = {p for p in (memory.owner_principal, memory.subject or "") if p.startswith(PERSON_PREFIX)}
     return own | (_named(memory.content) & set(known))
+
+
+def about_a_person(memory: CanonicalMemory) -> bool:
+    """Whether consolidation keeps this memory as beliefs: a lasting fact a person said or
+    one about a person. Reflection leaves these to it (one synthesis per fact, not two)."""
+    return _consolidated(memory) and bool(_people(memory, ()))
 
 
 def units_touched(memories: Sequence[CanonicalMemory], known: Iterable[str]) -> set[Unit]:
@@ -340,9 +348,11 @@ async def beliefs_changed(uow: UnitOfWork, beliefs: Sequence[Belief]) -> None:
 async def sources_forgotten(
     uow: UnitOfWork, tenant_id: str, memory_ids: Sequence[str], *, now: datetime
 ) -> None:
-    """The delete cascade: forgotten memories leave the beliefs they supported (a belief
-    left without a source is deleted, words and all), and each person whose beliefs lost a
-    source is rebuilt from what is left (``BeliefProgress.last_consolidated_at`` None)."""
+    """The delete cascade: every belief a forgotten memory supported is deleted, words and
+    all, in the forget's own commit - hidden from the page and the search at once, though it
+    cites other memories too - and each person whose beliefs lost a source is rebuilt from
+    what is left (``BeliefProgress.last_consolidated_at`` None). Without a model the rebuild
+    never runs, and the beliefs stay deleted."""
     changed = await uow.beliefs.forget_sources(tenant_id, memory_ids, now)
     await beliefs_changed(uow, changed)
     for scope_key, person_key in sorted({(b.scope_key, b.person_key) for b in changed}):
@@ -351,6 +361,20 @@ async def sources_forgotten(
             await uow.beliefs.save_progress(
                 progress.model_copy(update={"last_consolidated_at": None, "source_fingerprint": ""})
             )
+        await schedule(uow, tenant_id, scope_key, person_key, now=now)
+
+
+async def sources_replaced(
+    uow: UnitOfWork, tenant_id: str, memory_ids: Sequence[str], *, now: datetime
+) -> None:
+    """A newer value superseded memories some beliefs cite: those beliefs are hidden from
+    every reader in this commit (``Belief.stale_since``) - the memories show the newer value
+    at once, and a page must not still say the old one - until the person's next run has
+    weighed the newer value against them (``clear_stale``). The run is queued by the newer
+    value's own write."""
+    changed = await uow.beliefs.mark_stale(tenant_id, memory_ids, now)
+    await beliefs_changed(uow, changed)
+    for scope_key, person_key in sorted({(b.scope_key, b.person_key) for b in changed}):
         await schedule(uow, tenant_id, scope_key, person_key, now=now)
 
 
@@ -376,6 +400,8 @@ class Plan:
     keeps: dict[str, list[str]] = field(default_factory=dict)
     #: belief id -> (when it stopped holding, the facts that say so)
     retires: dict[str, tuple[datetime, list[str]]] = field(default_factory=dict)
+    #: adds past ``BELIEFS_CEILING``, not made
+    over_ceiling: int = 0
 
 
 def _said(memories: Iterable[CanonicalMemory]) -> datetime:
@@ -409,7 +435,8 @@ def plan(
 ) -> Plan:
     """The changes the model's entries make, by the short ids the prompt gave. A fact older
     than the belief it would change makes an earlier value (``Line.history_of``) instead,
-    and cannot end it; adds stop at ``MAX_BELIEFS`` current beliefs."""
+    and cannot end it; adds stop at ``BELIEFS_CEILING`` current beliefs (``over_ceiling``
+    counts the rest)."""
     by_belief = {f"B{i}": b for i, b in enumerate(beliefs, start=1)}
     by_fact = {f"F{i}": m for i, m in enumerate(facts, start=1)}
     out, adds, touched = Plan(), [], set[str]()
@@ -422,8 +449,9 @@ def plan(
             adds.append(Line(text, facet or "other", tuple(m.memory_id for m in cited)))
         elif target is not None and op != "skip" and target.belief_id not in touched:
             _changed(out, touched, op, cited, target, text, facet)
-    room = max(0, MAX_BELIEFS - len(beliefs) + len(out.retires))
+    room = max(0, BELIEFS_CEILING - len(beliefs) + len(out.retires))
     out.lines.extend(adds[:room])
+    out.over_ceiling = len(adds[room:])
     return out
 
 
@@ -634,6 +662,14 @@ class ConsolidationService:
         if out is None:
             return None
         found = plan(out.get("entries") or [], work.beliefs, work.shown)
+        if found.over_ceiling:
+            log.warning(
+                "consolidation.ceiling_reached",
+                tenant_id=work.tenant_id,
+                person_key=work.person_key,
+                ceiling=BELIEFS_CEILING,
+                not_added=found.over_ceiling,
+            )
         lines = await self._checked_lines(work, found.lines)
         return None if lines is None else replace(found, lines=lines)
 
@@ -709,6 +745,8 @@ class ConsolidationService:
                 after=work.watermark,
                 limit=1,
             )
+            if not more:  # every newer value said before this run started is weighed
+                changed += await uow.beliefs.clear_stale(*work.unit, before=now)
             waiting = progress.pending_since if progress is not None and more else None
             await uow.beliefs.save_progress(
                 BeliefProgress(
@@ -773,6 +811,21 @@ class ConsolidationService:
                 )
             await uow.commit()
         return len(waiting)
+
+    async def prune(self, *, batches: int = 20) -> int:
+        """The same hourly sweep's pruning (design note §5): every belief keeps its newest
+        ``VERSIONS_KEPT`` superseded versions, older ones are deleted, a batch at a time."""
+        pruned = 0
+        for _ in range(batches):
+            async with self.uow_factory() as uow:
+                n = await uow.beliefs.prune_history(keep=VERSIONS_KEPT, limit=SWEEP_BATCH)
+                await uow.commit()
+            pruned += n
+            if n < SWEEP_BATCH:
+                break
+        if pruned:
+            log.info("consolidation.pruned", pruned=pruned)
+        return pruned
 
 
 def _moved(now: BeliefProgress | None, then: BeliefProgress | None) -> bool:

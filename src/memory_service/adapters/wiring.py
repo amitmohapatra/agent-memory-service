@@ -622,7 +622,9 @@ def _wire_memory(container: Container) -> None:
         ),
     )
     container.services["memory"] = MemoryService(
-        container.services["authz"], fiscal=container.tuning.memory_intelligence.fiscal_calendar
+        container.services["authz"],
+        fiscal=container.tuning.memory_intelligence.fiscal_calendar,
+        assist=container.services["llm_assist"],
     )
     container.services["feedback"] = FeedbackService(
         container.services["uow_factory"], container.services["authz"], container.services["memory"]

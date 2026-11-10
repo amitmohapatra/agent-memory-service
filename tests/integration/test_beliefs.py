@@ -18,6 +18,7 @@ from sqlalchemy import text
 
 from memory_service.adapters.models.llm import EndpointLLM
 from memory_service.domain.context import MemoryExecutionContext
+from memory_service.domain.context_bundle import people_section
 from memory_service.domain.enums import Visibility
 from memory_service.domain.observation import ProcessingHints
 from memory_service.domain.revisions import RevisionKind
@@ -135,6 +136,7 @@ def wired(container):
                 StaticPolicies([consolidation.CONSOLIDATION_USE]),  # type: ignore[arg-type]
             )
             container.services["observation_pipeline"].assist = assist
+            container.services["memory"].assist = assist  # remember, supersede, forget
             container.services["llm_assist"] = assist  # a deployment that reaches a model
             container.services["context_builder"].assist = assist
             service = ConsolidationService(container.services["uow_factory"], assist=assist)
@@ -257,7 +259,7 @@ async def test_keep_update_retire_add_skip_and_the_page_with_earlier_values(
     painted = {x.text: x for x in await beliefs(uow_factory, current=False)}["Paints sunsets."]
     assert painted.valid_to == DAY + timedelta(days=90)
     bundle = await container.services["context_builder"].build(ASKER, "Where does Caroline work?")
-    page = next(b.text for b in bundle.profile if b.block == "caroline")
+    page = next(b.text for b in bundle.people if b.block == "caroline")
     current, _, earlier = page.partition("Earlier values (since replaced):")
     assert "Works at Google" in current and "Microsoft" not in current
     assert "Microsoft" in earlier and "Paints sunsets." in earlier
@@ -356,10 +358,10 @@ async def test_the_context_pins_the_page_and_recalls_beliefs_without_a_model_cal
     builder = container.services["context_builder"]
     calls = sum(gw_stub.calls.values())
     pinned = await builder.build(ASKER, "What does Caroline do on Saturdays?")
-    assert any(b.block == "caroline" for b in pinned.profile)
+    assert any(b.block == "caroline" for b in pinned.people)
     assert not pinned.summaries  # pinned already: not repeated as a recall hit
     small = await builder.build(ASKER, "animal shelter Saturday volunteers", token_budget=200)
-    assert not any(b.block == "caroline" for b in small.profile)  # over the pinned share
+    assert not any(b.block == "caroline" for b in small.people)  # over the pinned share
     assert [s.text for s in small.summaries] == [long.strip()]
     assert "[s1]" in small.render()
     assert sum(gw_stub.calls.values()) == calls  # the read path never calls the model
@@ -368,36 +370,45 @@ async def test_the_context_pins_the_page_and_recalls_beliefs_without_a_model_cal
 # -- 8. the delete cascade ------------------------------------------------------------------
 
 
-async def test_forgetting_sources_drops_proof_retires_at_zero_and_removes_the_point(
+def _cats(prompt: str) -> list[dict]:
+    """A line from whichever cat facts are left, and one from Ohio."""
+    f = ids(prompt)
+    cats = [f[t] for t in ("I have two cats.", "My cats are named Luna and Sol.") if t in f]
+    out = []
+    if cats:
+        out.append(
+            entry("add", cats, "Has two cats, Luna and Sol." if len(cats) == 2 else "Has two cats.")
+        )
+    if "I grew up in Ohio." in f:
+        out.append(entry("add", [f["I grew up in Ohio."]], "Grew up in Ohio."))
+    return out
+
+
+async def _three_facts(container, uow_factory) -> dict[str, str]:
+    """Caroline's three facts, consolidated; their memory ids by text."""
+    for said in ("I have two cats.", "My cats are named Luna and Sol.", "I grew up in Ohio."):
+        await say(container, uow_factory, "caroline", said)
+    await settle(container)
+    async with uow_factory() as uow:
+        mine = await container.services["memory"].list_memories(uow, MINE)
+    return {m.content: m.memory_id for m in mine}
+
+
+MINE = ASKER.model_copy(update={"user_id": "caroline"})
+
+
+async def test_a_belief_that_loses_one_of_its_sources_is_hidden_at_once_and_rebuilt(
     container, uow_factory, wired
 ) -> None:
-    def answer(prompt: str) -> list[dict]:
-        f = ids(prompt)
-        if "I have two cats." in f:
-            return [
-                entry(
-                    "add",
-                    [f["I have two cats."], f["My cats are named Luna and Sol."]],
-                    "Has two cats, Luna and Sol.",
-                ),
-                entry("add", [f["I grew up in Ohio."]], "Grew up in Ohio."),
-            ]
-        return []
-
-    wired(StubModel(answer))
-    await say(container, uow_factory, "caroline", "I have two cats.")
-    await say(container, uow_factory, "caroline", "My cats are named Luna and Sol.")
-    await say(container, uow_factory, "caroline", "I grew up in Ohio.")
-    await settle(container)
+    service = wired(StubModel(_cats))
+    said = await _three_facts(container, uow_factory)
     by_text = {x.text: x for x in await beliefs(uow_factory)}
     cats, ohio = by_text["Has two cats, Luna and Sol."], by_text["Grew up in Ohio."]
     async with uow_factory() as uow:
         before = await uow.revisions.get_many(T, [(RevisionKind.TENANT, "")])
-    mine = ASKER.model_copy(update={"user_id": "caroline"})
     memory = container.services["memory"]
     async with uow_factory() as uow:
-        await memory.forget(uow, mine, ohio.source_ids[0])
-        await memory.forget(uow, mine, cats.source_ids[0])
+        await memory.forget(uow, MINE, said["My cats are named Luna and Sol."])
         await uow.commit()
     [unit] = await units(uow_factory)
     async with uow_factory() as uow:  # in the forget's own commit, before any job runs
@@ -406,20 +417,82 @@ async def test_forgetting_sources_drops_proof_retires_at_zero_and_removes_the_po
         }
         after = await uow.revisions.get_many(T, [(RevisionKind.TENANT, "")])
         progress = await uow.beliefs.progress(*unit)
-    assert left[cats.belief_id].proof_count == 1 and left[cats.belief_id].current
-    gone = left[ohio.belief_id]
-    assert gone.deleted_at is not None and gone.text == ""  # retired, its words deleted
+    gone = left[cats.belief_id]  # it still cites "I have two cats.", and is hidden all the same
+    assert gone.deleted_at is not None and gone.text == "" and not gone.source_ids
+    assert left[ohio.belief_id].current  # a belief the forget did not touch stays
     assert after != before
     assert progress is not None and progress.last_consolidated_at is None  # rebuilt next
+    # before any job runs (its point still in the index): not on the page, not found
+    builder = container.services["context_builder"]
+    bundle = await builder.build(ASKER, "What are Caroline's cats called?")
+    page = people_section(bundle.people) or ""
+    assert "Luna" not in page and "Grew up in Ohio." in page
+    assert not any("Luna" in s.text for s in bundle.summaries)
+    found = await container.services["retrieval"].retrieve(
+        ASKER, "cats Luna Sol", kinds=("belief",)
+    )
+    assert cats.belief_id not in {c.record_id for c in found.candidates}
+    # the index jobs run (the memory's own point goes, as on main), the rebuild not yet
+    container.services["consolidation"] = ConsolidationService(uow_factory)
     await settle(container)
-    found = await container.services["retrieval"].retrieve(ASKER, "grew up Ohio", kinds=("belief",))
-    assert ohio.belief_id not in {c.record_id for c in found.candidates}
+    assert "Luna" not in (await builder.build(ASKER, "Caroline's cats Luna?")).render()
+    container.services["consolidation"] = service
+    await consolidate_all(service, uow_factory)  # the rebuild: what the sources left support
+    assert sorted(x.text for x in await beliefs(uow_factory)) == [
+        "Grew up in Ohio.",
+        "Has two cats.",
+    ]
     async with uow_factory() as uow:
-        for m in await memory.list_memories(uow, mine):
-            await memory.forget(uow, mine, m.memory_id)
+        for m in await memory.list_memories(uow, MINE):
+            await memory.forget(uow, MINE, m.memory_id)
         await uow.commit()
     await settle(container)
     assert await beliefs(uow_factory) == []  # the user's memories gone: no belief left
+
+
+async def test_without_a_model_a_belief_that_lost_a_source_stays_deleted(
+    container, uow_factory, wired
+) -> None:
+    wired(StubModel(_cats))
+    said = await _three_facts(container, uow_factory)
+    cats = next(x for x in await beliefs(uow_factory) if "Luna" in x.text)
+    container.services["consolidation"] = ConsolidationService(uow_factory)  # no model now
+    async with uow_factory() as uow:
+        await container.services["memory"].forget(uow, MINE, said["I grew up in Ohio."])
+        await container.services["memory"].forget(uow, MINE, said["I have two cats."])
+        await uow.commit()
+    await settle(container)  # the rebuild finds no model: nothing written again
+    assert await beliefs(uow_factory) == []
+    async with uow_factory() as uow:
+        [dropped] = await uow.beliefs.get_many(T, [cats.belief_id])
+    assert dropped.deleted_at is not None and dropped.text == ""
+    bundle = await container.services["context_builder"].build(ASKER, "Caroline's cats?")
+    assert not bundle.people and "Luna" not in "".join(s.text for s in bundle.summaries)
+
+
+# -- pruning: the newest superseded versions of a belief stay -------------------------------
+
+
+async def test_the_hourly_sweep_keeps_the_newest_superseded_versions_of_a_belief(
+    container, uow_factory, wired
+) -> None:
+    def answer(prompt: str) -> list[dict]:
+        f, b = ids(prompt), ids(prompt, _BELIEF)
+        [(said, short)] = f.items()
+        line = "Works at " + said.removeprefix("I work at ").rstrip(".") + "."
+        current = next(iter(b.values()), "")
+        return [entry("update" if current else "add", [short], line, current, "work")]
+
+    wired(StubModel(answer))
+    for n in range(6):
+        await say(container, uow_factory, "caroline", f"I work at Company{n}.", day=10 * n)
+        await settle(container)
+    history = await beliefs(uow_factory, current=False)
+    assert len(history) == 6 and [b.text for b in history if b.current] == ["Works at Company5."]
+    assert await container.services["consolidation"].prune() == 2
+    kept = sorted(b.text for b in await beliefs(uow_factory, current=False))
+    assert kept == [f"Works at Company{n}." for n in (2, 3, 4, 5)]  # the current and 3 before
+    assert await container.services["consolidation"].prune() == 0
 
 
 # -- 9. reader visibility -------------------------------------------------------------------
@@ -438,11 +511,11 @@ async def test_a_reader_who_cannot_see_a_cited_memory_does_not_see_the_belief(
     await settle(container)
     builder = container.services["context_builder"]
     theirs = await builder.build(ASKER, "Is Caroline allergic to anything?")
-    assert not any(b.block == "caroline" for b in theirs.profile)
+    assert not any(b.block == "caroline" for b in theirs.people)
     own = await builder.build(
         ASKER.model_copy(update={"user_id": "caroline"}), "What am I allergic to?"
     )
-    assert any("peanuts" in b.text for b in own.profile if b.block == "caroline")
+    assert any("peanuts" in b.text for b in own.people if b.block == "caroline")
 
 
 # -- 10. two workers, and a retry after a crash ---------------------------------------------
@@ -523,8 +596,8 @@ async def test_over_the_pinned_share_a_page_keeps_the_lines_the_question_finds(
     assert len(await beliefs(uow_factory)) == 13
     builder = container.services["context_builder"]
     whole = await builder.build(ASKER, "What does Caroline do?")
-    assert len(next(b for b in whole.profile if b.block == "caroline").text.splitlines()) == 13
+    assert len(next(b for b in whole.people if b.block == "caroline").text.splitlines()) == 13
     small = await builder.build(ASKER, "theremin Tuesday evening", token_budget=600)
-    page = next(b.text for b in small.profile if b.block == "caroline").splitlines()
+    page = next(b.text for b in small.people if b.block == "caroline").splitlines()
     assert 0 < len(page) < 13  # over the share: trimmed, not dropped
     assert any("theremin" in line for line in page)  # the line the question is about stays

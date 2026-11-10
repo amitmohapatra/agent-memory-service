@@ -15,7 +15,7 @@ from memory_service.modules.memory.reflection import ReflectionService
 from memory_service.ports.credentials import ModelIdentity, tenant_identity
 from tests.integration.test_agent_credentials import endpoint
 from tests.integration.test_agent_credentials import service as credentials_service
-from tests.integration.test_reflection import _memories, _observe
+from tests.integration.test_reflection import _observe, atlas_facts
 from tests.support_llm import mocked_gateway
 
 pytestmark = pytest.mark.integration
@@ -104,18 +104,18 @@ async def test_reflection_runs_only_where_a_key_pays_and_the_policy_allows(
     """Automatic mode, no operator key: the acme tenant registers a key, globex does not.
     The job reflects for acme only; once acme's policy drops reflection, its pending sources
     are acknowledged without a model call."""
-    for ctx in (U1, G1):
-        await _observe(container, uow_factory, ctx, "I prefer concise answers with code samples.")
-        await _observe(container, uow_factory, ctx, "I prefer bullet points over long paragraphs.")
-    sources = await _memories(container, uow_factory, U1)
+    # an agent's facts about a project (a person's are consolidated, not reflected on)
+    agent = U1.model_copy(update={"agent_id": "scout"})
+    sources = await atlas_facts(container, uow_factory, agent)
+    await atlas_facts(container, uow_factory, G1.model_copy(update={"agent_id": "scout"}))
     credentials = credentials_service(uow_factory)
     policies = ModelPolicies(uow_factory)
     await _set_key(credentials, uow_factory, tenant_identity("acme"), "vk-acme-test")
     reply = {
         "insights": [
             {
-                "content": "User prefers terse, skimmable answers",
-                "memory_type": "PREFERENCE",
+                "content": "Atlas runs Postgres 16 on Kubernetes",
+                "memory_type": "SEMANTIC",
                 "source_memory_ids": sorted(m.memory_id for m in sources),
             }
         ]
@@ -132,7 +132,7 @@ async def test_reflection_runs_only_where_a_key_pays_and_the_policy_allows(
         assert await service.reflect_all() == [], "globex has no key: never scanned"
         assert gw.route.call_count == 1
 
-        await _observe(container, uow_factory, U1, "I prefer dark mode in every editor.")
+        await _observe(container, uow_factory, agent, "The Atlas project has a staging cluster.")
         await _set_policy(policies, uow_factory, "acme", ["summaries"], True)
         assert await service.reflect_all() == []
         assert gw.route.call_count == 1, "the policy no longer allows reflection"

@@ -7,8 +7,10 @@ and the owner's policy decides; a group whose owner may not reflect is acknowled
 model call. For every group with pending source revisions the model is asked for a few
 insights; each one becomes a memory of its own with evidence pointing at
 the source memories, and is indexed through the same ``memory.index`` job as any other
-memory. An unchanged source revision is not reconsidered by the periodic worker, and an
-insight whose normalized content already exists in the scope is not stored twice.
+memory. A person's facts are left to consolidation (``about_a_person``): reflection runs
+for the other groups only (an agent's, a workspace's). An unchanged source revision is not
+reconsidered by the periodic worker, and an insight whose normalized content already exists
+in the scope is not stored twice.
 Revision receipts survive restarts and also record successful empty consolidations.
 """
 
@@ -25,6 +27,7 @@ from memory_service.domain.enums import MemoryType
 from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.memory import CanonicalMemory, unverified_representation
 from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.memory.consolidation import about_a_person
 from memory_service.modules.memory.derived import _derived
 from memory_service.modules.memory.pipeline import TASK_MEMORY_INDEX
 from memory_service.modules.memory.revisions import bump_memory_revisions
@@ -112,7 +115,12 @@ class ReflectionService:
                 recent = await uow.memories.reflection_pending(
                     limit=self.scan_limit, tenant_id=tenant
                 )
-            for key, mems in _groups(recent).items():
+                # a person's facts are consolidated into beliefs: acknowledged, never also
+                # reflected on
+                if people := [m for m in recent if about_a_person(m)]:
+                    await uow.memories.mark_reflected(people, at=now)
+                    await uow.commit()
+            for key, mems in _groups([m for m in recent if not about_a_person(m)]).items():
                 if batches >= self.max_batches:
                     return created
                 async with self.assist.bound(_owner(key[0], key[1])):

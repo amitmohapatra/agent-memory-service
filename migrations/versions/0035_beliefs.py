@@ -6,8 +6,9 @@ consolidation in a scope stands). Derived data: rebuildable from the memories, s
 backfilled.
 
 Indexes: a unit's live beliefs (consolidation's read), a reader's beliefs by audience,
-current and earlier (the context's read, GIN like ``graph_entities``), the sources of a memory (the delete
-cascade), and the waiting units (the lag metric and the retry sweep).
+current and earlier (the context's read, GIN like ``graph_entities``), a belief's earlier
+versions (the retention sweep's pruning), the sources of a memory (the delete cascade), and
+the waiting units (the lag metric and the retry sweep).
 """
 
 import sqlalchemy as sa
@@ -46,6 +47,7 @@ def upgrade() -> None:
         sa.Column("created_at", _TS, server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", _TS, server_default=sa.func.now(), nullable=False),
         sa.Column("deleted_at", _TS),
+        sa.Column("stale_since", _TS),
     )
     op.create_index(
         "ix_beliefs_unit",
@@ -59,6 +61,12 @@ def upgrade() -> None:
         ["visibility_keys"],
         postgresql_using="gin",
         postgresql_where=sa.text("deleted_at IS NULL"),
+    )
+    op.create_index(
+        "ix_beliefs_superseded_by",
+        "beliefs",
+        ["superseded_by"],
+        postgresql_where=sa.text("superseded_by IS NOT NULL"),
     )
     op.create_table(
         "belief_sources",

@@ -42,7 +42,7 @@ from memory_service.adapters.db.tool_repository import (
     SqlToolPermissionRepository,
     SqlToolRepository,
 )
-from memory_service.modules.memory.consolidation import sources_forgotten
+from memory_service.modules.memory.consolidation import sources_forgotten, sources_replaced
 from memory_service.modules.memory.revisions import touched_revisions
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
@@ -205,6 +205,12 @@ class SqlUnitOfWork:
                 cast("UnitOfWork", self), tenant_id, sorted(forgotten), now=datetime.now(UTC)
             )
         self.memories.forgotten.clear()
+        # what a superseded memory supported waits, hidden, for its person's next run
+        for tenant_id, replaced in self.memories.replaced.items():
+            await sources_replaced(
+                cast("UnitOfWork", self), tenant_id, sorted(replaced), now=datetime.now(UTC)
+            )
+        self.memories.replaced.clear()
         with span("db.commit"), stage_seconds.labels("db.commit").time():
             await self._session.commit()
         self._committed = True
