@@ -47,6 +47,11 @@ CONTEXT_PROCEDURES: Final = 3
 TOOL_HINTS_MIN: Final = 5
 #: The share of the token budget the pinned sections may take, all together.
 PINNED_SHARE: Final = 0.5
+#: How the people's pages (beliefs) are paid for, the one place it is decided (design note
+#: §3.7). True: out of the context's token budget, after every other pinned section within
+#: ``PINNED_SHARE``, so the memories get what is left. False: on top of it - the pages still
+#: fit ``PINNED_SHARE`` of the budget on their own, and the memories keep their whole budget.
+PEOPLE_CHARGED: Final = True
 #: the profile sections ``modules.context.standing`` writes (kept first when the whole
 #: profile does not fit)
 STANDING_BLOCKS: Final = frozenset({"standing_rules", "preferences", "about_user"})
@@ -137,8 +142,9 @@ def within_budget(
     pinned: Pinned, budget: int, relevance: Mapping[str, int] | None = None
 ) -> tuple[Pinned, int]:
     """The pinned sections that fit ``PINNED_SHARE`` of the budget, in priority order, and
-    the tokens they take. A section is costed as the text it renders to; one that does not
-    fit is dropped, except the thread summary, which keeps its newest part."""
+    the tokens they take from it (the people's pages only while ``PEOPLE_CHARGED``). A
+    section is costed as the text it renders to; one that does not fit is dropped, except
+    the thread summary, which keeps its newest part."""
     allowed, used = int(budget * PINNED_SHARE), 0
     kept = Pinned()
     kept.profile, cost = _profile_that_fits(pinned.profile, allowed)
@@ -159,8 +165,10 @@ def within_budget(
         # the candidates still narrow the caller's tools; only the rendered section is cut
         kept.tools = pinned.tools.model_copy(update={"next": None, "prefill": {}, "missing": []})
     before = kept.profile
-    kept.profile = _people_that_fit(before, pinned.people, allowed - used, relevance or {})
-    used += _profile_cost(kept.profile) - _profile_cost(before)
+    spare = allowed - used if PEOPLE_CHARGED else allowed
+    kept.profile = _people_that_fit(before, pinned.people, spare, relevance or {})
+    if PEOPLE_CHARGED:
+        used += _profile_cost(kept.profile) - _profile_cost(before)
     return kept, used
 
 

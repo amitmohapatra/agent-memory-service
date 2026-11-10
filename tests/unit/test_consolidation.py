@@ -320,3 +320,16 @@ async def test_the_consolidation_use_gets_room_for_its_answer_and_others_keep_th
         sent = [p.get("max_tokens") or p.get("max_completion_tokens") for p in gw.prompts()]
     assert sent == [LLM.long_max_tokens, LLM.max_tokens]
     assert LLM.long_max_tokens > LLM.max_tokens
+
+
+def test_the_people_pages_cost_is_decided_in_one_place(monkeypatch) -> None:
+    from memory_service.modules.context import sections
+
+    profile = [ProfileBlockView(block="user", text="- likes tea", version=1)]
+    page = _page("caroline", _many(10))
+    charged, used = within_budget(Pinned(profile=list(profile), people=[page]), 8000)
+    assert used == estimate_tokens(profile_section(charged.profile) or "")  # memories pay
+    monkeypatch.setattr(sections, "PEOPLE_CHARGED", False)
+    on_top, free = within_budget(Pinned(profile=list(profile), people=[page]), 8000)
+    assert on_top.profile == charged.profile  # the same page, shown whole
+    assert free == estimate_tokens(profile_section(profile) or "")  # memories keep the rest
