@@ -196,6 +196,48 @@ async def test_a_mixed_case_subject_is_found_past_the_window_whatever_the_case(
             assert not await found(other), other
 
 
+async def test_the_same_words_are_found_past_a_subject_s_newer_memories(
+    container, uow_factory
+) -> None:
+    """Everything a person says is about that person (``user:<id>``), so their newest
+    memories all match the subject lookup: the one that says the same words (its normalized
+    hash) is found however many of them are newer, and the statement told again reinforces
+    it instead of being stored twice. Measured on LoCoMo: 15 statements held twice, said by
+    the same person on two days."""
+    memory = container.services["memory"]
+    k = container.tuning.memory_intelligence.dedup_candidate_k
+    said = "Mara is lactose intolerant."
+
+    async def remember(content: str) -> str:
+        async with uow_factory() as uow:
+            ack = await memory.remember(
+                uow,
+                OPS,
+                content=content,
+                memory_type=MemoryType.SEMANTIC,
+                lifetime=Lifetime.LONG_TERM,
+                subject="user:mara",
+            )
+            await uow.commit()
+        return ack.memory_id
+
+    first = await remember(said)
+    for i in range(k + 2):
+        await remember(f"Mara walked trail {i + 1} of the coast path.")
+    async with uow_factory() as uow:
+        stored = await uow.memories.get("acme", first)
+        assert stored is not None
+        got = await uow.memories.candidates(
+            "acme",
+            scope_key=stored.scope.key(),
+            normalized_hash=stored.normalized_hash,
+            subjects=spellings("user:mara"),
+            limit=k,
+        )
+    assert first in {m.memory_id for m in got}
+    assert await remember(said) == first
+
+
 async def test_subjects_are_folded_by_the_database_and_identities_never_are(
     container, uow_factory
 ) -> None:
