@@ -806,8 +806,8 @@ class CatalogTool(BaseModel):
     #: ask a person before a call when this is true (``trellis.memory.approval``)
     approve_when: str | None = None
     #: read (runs), write (asks once a conversation) or irreversible (asks every call), as the
-    #: service derives it (a tool that says nothing of what it does is irreversible)
-    risk: SideEffects = "write"
+    #: service derives it; None: nobody declared it (the harness's own rule decides)
+    risk: SideEffects | None = None
     schema_hash: str = ""
     workspace_id: str | None = None
     stats: ToolStats = Field(default_factory=ToolStats)

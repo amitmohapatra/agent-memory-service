@@ -1022,14 +1022,21 @@
             "type": "array"
           },
           "risk": {
-            "description": "read (runs), write (asks once a conversation) or irreversible (asks every call): side_effects when set, else the annotations, whose MCP defaults make a tool that says nothing irreversible",
-            "enum": [
-              "read",
-              "write",
-              "irreversible"
+            "anyOf": [
+              {
+                "enum": [
+                  "read",
+                  "write",
+                  "irreversible"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Risk",
-            "type": "string"
+            "description": "read (runs), write (asks once a conversation) or irreversible (asks every call): side_effects when set, else readOnlyHint or destructiveHint; null when nobody declared it, and the harness decides by its own rule (a tool that says nothing asks)",
+            "title": "Risk"
           },
           "schema_hash": {
             "description": "Digest of the input schema: equal hashes, equal schemas.",

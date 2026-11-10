@@ -50,11 +50,14 @@ def _decode(identifier: str) -> tuple[str, str, str]:
     return str(agent_id), str(tool), str(shape)
 
 
-def compose(existing: str | None, risk: SideEffects, suggestion: Suggestion, shape: str) -> str:
+def compose(
+    existing: str | None, risk: SideEffects | None, suggestion: Suggestion, shape: str
+) -> str:
     """The tool's ``approve_when`` with the rule for calls of ``shape`` added: always ask for
-    them, or stop asking for them. Without an expression the tier is the base: irreversible
-    tools ask for every call, the others for none."""
-    base = existing or ("true" if risk == "irreversible" else "false")
+    them, or stop asking for them. Without an expression the tier is the base: an
+    irreversible tool, and one whose risk nobody declared (the harness asks about it), ask for
+    every call; the others for none."""
+    base = existing or ("true" if risk in ("irreversible", None) else "false")
     clause = when_shape(shape)
     if suggestion == "always_ask":
         return clause if base == "false" else f"({base}) or ({clause})"
@@ -64,13 +67,12 @@ def compose(existing: str | None, risk: SideEffects, suggestion: Suggestion, sha
 def offered(counts: ApprovalCounts, entry: ToolDescriptor | None) -> Suggestion | None:
     """The rule these decisions support that may be offered for this tool. Never "approve
     automatically" for an irreversible tool: however often a deletion or a payment was
-    approved, the next one is still asked about (nor for a tool not in the catalog yet: what it
-    does is unknown, so it asks every call); and never for a tool that has an
+    approved, the next one is still asked about; and never for a tool that has an
     ``approve_when`` already (an administrator's rule, or one accepted before): what the
     decisions learned may make it ask more, never less. "Always ask" is offered for any tier."""
     suggestion = counts.suggestion()
-    if suggestion == "auto_approve":
-        if entry is None or entry.risk == "irreversible":
+    if suggestion == "auto_approve" and entry is not None:
+        if entry.risk == "irreversible":
             return None
         if entry.approve_when and not accepted(entry, counts.arg_shape):
             return None

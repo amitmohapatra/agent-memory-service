@@ -358,10 +358,10 @@ class CatalogTool(BaseModel):
         description="The expression over the arguments that asks a person before a call "
         "(trellis.memory.approval); null: none."
     )
-    risk: SideEffects = Field(
+    risk: SideEffects | None = Field(
         description="read (runs), write (asks once a conversation) or irreversible (asks every "
-        "call): side_effects when set, else the annotations, whose MCP defaults make a tool "
-        "that says nothing irreversible"
+        "call): side_effects when set, else readOnlyHint or destructiveHint; null when nobody "
+        "declared it, and the harness decides by its own rule (a tool that says nothing asks)"
     )
     schema_hash: str = Field(description="Digest of the input schema: equal hashes, equal schemas.")
     workspace_id: str | None = Field(
