@@ -207,9 +207,10 @@ is one prompt-injection away from a problem.
 
 Whether a read consults a model is the tenant's model policy, `read_assist`
 (`PUT /v1/model-key/policy`); a request cannot override it — there is no per-request
-`use_llm`. Even then only the read uses the policy's `uses` name run (`query_expansion` for a
-question no rule classified, `entity_resolution` on the graph route, `grounding_judge` for
-borderline claims in `/v1/verify`), and only when a model key can pay
+`use_llm`. Even then only the read uses the policy's `uses` name run (`entity_resolution` on
+the graph route, `grounding_judge` for borderline claims in `/v1/verify`); `query_expansion`
+is still accepted in a policy and ignored (a warning is logged once), and goes with the next
+contract version, and only when a model key can pay
 ([tenancy.md](tenancy.md)); the response header `X-Trellis-LLM-Tokens` says what the request
 spent. Query decomposition was removed in 0.3.0. The pinned sections never call a
 model: summaries, profiles and learned-skill titles are written in the background. With no key,

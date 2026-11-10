@@ -11,6 +11,7 @@ use calls) and its usage ledger are read and set here too."""
 
 import hashlib
 from datetime import UTC, date, datetime, timedelta
+from functools import cache
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Query, Request
@@ -34,6 +35,7 @@ from memory_service.modules.llm.credentials import ModelCredentials, agent_ident
 from memory_service.modules.llm.endpoints import EndpointResolver, EndpointSource
 from memory_service.modules.llm.policies import LLMUsage, ModelPolicies
 from memory_service.modules.llm.policy import DEFAULT_ACCESS
+from memory_service.observability.logging import get_logger
 from memory_service.ports.credentials import (
     EndpointProbe,
     ModelIdentity,
@@ -371,6 +373,22 @@ async def revoke_tenant_key(
 
 # --------------------------------------------------------------------------- policies
 
+log = get_logger(__name__)
+
+#: Uses a policy may still name that the service no longer calls the model for. Accepted (the
+#: contract) and ignored; removed with the next contract version.
+IGNORED_USES: frozenset[LLMUse] = frozenset({"query_expansion"})
+
+
+@cache
+def ignored_use_warned(use: LLMUse) -> None:
+    """One warning per process for a policy that names an ignored use."""
+    log.warning(
+        "model_policy.use_ignored",
+        use=use,
+        message="accepted and ignored: retrieval no longer asks the model about a query",
+    )
+
 
 class ModelPolicyRequest(BaseModel):
     model_config = ConfigDict(
@@ -404,6 +422,13 @@ class ModelPolicyRequest(BaseModel):
     def _permitted(cls, value: dict[LLMUse, str]) -> dict[LLMUse, str]:
         for model in value.values():
             require_permitted_model(model)
+        return value
+
+    @field_validator("uses")
+    @classmethod
+    def _ignored(cls, value: list[LLMUse]) -> list[LLMUse]:
+        for use in IGNORED_USES.intersection(value):
+            ignored_use_warned(use)
         return value
 
 

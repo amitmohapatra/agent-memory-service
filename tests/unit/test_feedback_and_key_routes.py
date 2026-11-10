@@ -355,6 +355,26 @@ async def test_the_sdk_body_is_what_the_service_accepts(app_client: TestClient) 
         assert page.items[0].feedback_id == record.feedback_id
 
 
+def test_a_policy_naming_query_expansion_is_accepted_and_warned_about_once(
+    app_client: TestClient,
+) -> None:
+    """``query_expansion`` stays a value the policy accepts (the contract), is stored as sent,
+    and is ignored: one warning per process says so, not one per request."""
+    from structlog.testing import capture_logs
+
+    from memory_service.api.routers.v1 import model_keys
+
+    model_keys.ignored_use_warned.cache_clear()
+    body = {"uses": ["query_expansion", "summaries"], "read_assist": True, "models": {}}
+    with capture_logs() as events:
+        for _ in range(2):
+            stored = app_client.put("/v1/model-key/policy", headers=ADMIN, json=body)
+            assert stored.status_code == 200, stored.text
+    assert "query_expansion" in stored.json()["uses"]
+    warned = [e for e in events if e["event"] == "model_policy.use_ignored"]
+    assert len(warned) == 1 and warned[0]["use"] == "query_expansion"
+
+
 def test_every_public_route_refuses_a_missing_credential(app_client: TestClient) -> None:
     """Authentication is a dependency each route declares; a route that forgets it is open.
     Dependencies are solved before the body is validated, so no body is needed here."""

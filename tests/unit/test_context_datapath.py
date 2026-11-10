@@ -180,9 +180,10 @@ def _builder(
         ({}, {"query_expansion": "gemini/gemini-3.8-pro"}),
     ],
 )
-async def test_assisted_context_cache_is_not_reused_after_model_policy_changes(change, models):
-    """A bundle built with query expansion depends on the gateway, the key and the model the
-    tenant's policy names for the use: any of them changing is a different bundle."""
+async def test_a_policy_allowing_query_expansion_still_reads_the_context_cache(change, models):
+    """No read use shapes a bundle any more (``query_expansion`` is accepted and ignored), so
+    the cache serves it whatever the gateway, the key or the model the policy names: the
+    engine runs once. It used to be skipped for every tenant that allowed the use."""
     from types import SimpleNamespace
 
     from tests.support_llm import bound_to, llm_settings
@@ -190,20 +191,17 @@ async def test_assisted_context_cache_is_not_reused_after_model_policy_changes(c
     cache = MemoryCache()
     provider = SimpleNamespace(enabled=True)
     first = _builder(cache, assist=LLMAssist(provider, llm_settings()))
-    unchanged = _builder(cache, assist=LLMAssist(provider, llm_settings()))
     changed = _builder(cache, assist=LLMAssist(provider, llm_settings(**change)))
     try:
         with bound_to("acme", "user:u1", uses=["query_expansion"]):
             await first.build_api(CTX, QUERY, output="full")
             await first.drain()
-            assert (await unchanged.build(CTX, QUERY)).cache_hit
         with bound_to("acme", "user:u1", uses=["query_expansion"], models=models):
-            assert not (await changed.build(CTX, QUERY)).cache_hit
-        assert changed.engine.calls == 1 and unchanged.engine.calls == 0
+            assert (await changed.build(CTX, QUERY)).cache_hit
+        assert first.engine.calls == 1 and changed.engine.calls == 0
         assert "operator-key" not in changed._fingerprint
     finally:
         await first.close()
-        await unchanged.close()
         await changed.close()
 
 

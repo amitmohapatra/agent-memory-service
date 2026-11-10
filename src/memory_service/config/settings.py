@@ -421,6 +421,9 @@ LLMUse = Literal[
     #: relates). Separate from ``reflection``, which writes a new insight instead of an edge,
     #: so an operator can run one without the other.
     "memory_connections",
+    #: Accepted in a policy and ignored: retrieval no longer asks the model about a query
+    #: (it missed its deadline on nearly every question and changed no answer when given
+    #: time). Removed with the next contract version.
     "query_expansion",
     "chunk_context",
     #: Restate a conversation turn so it stands on its own, appended to its index key

@@ -149,7 +149,7 @@ async def test_fast_model_is_used_for_fast_uses() -> None:
         return_value=httpx.Response(200, json=_chat("x", model="openai/gpt-4.1-mini"))
     )
     llm = EndpointLLM(_settings())
-    await llm.complete(_messages(), use="query_expansion")
+    await llm.complete(_messages(), use="contextual_extraction")
     assert json.loads(route.calls.last.request.content)["model"] == "openai/gpt-4.1-mini"
     await llm.complete(_messages(), use="summaries")
     assert json.loads(route.calls.last.request.content)["model"] == "openai/gpt-4.1"
