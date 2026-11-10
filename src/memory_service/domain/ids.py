@@ -47,6 +47,7 @@ PREFIXES: Final[dict[str, str]] = {
     "workspace": "wsp",
     "feedback": "fb",
     "belief": "blf",
+    "tool_permission": "tpm",
 }
 
 

@@ -230,6 +230,66 @@
         "title": "AgentToolsResponse",
         "type": "object"
       },
+      "AllowToolRequest": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "allowed_by": "alice",
+            "tool": "crm-update_quote",
+            "user": "alice"
+          }
+        ],
+        "properties": {
+          "allowed_by": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who answered the approval with Always allow; null: the user.",
+            "title": "Allowed By"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The person or role the tool's approvals are asked of; null: an approval anyone may answer. A call asked of someone else still asks.",
+            "title": "Assignee"
+          },
+          "tool": {
+            "description": "The tool, as its calls name it.",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Tool",
+            "type": "string"
+          },
+          "user": {
+            "description": "The user the tool is allowed for; when X-Trellis-User is sent, it must name the same user.",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "User",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user",
+          "tool"
+        ],
+        "title": "AllowToolRequest",
+        "type": "object"
+      },
       "ApiKeyResponse": {
         "properties": {
           "created_at": {
@@ -7572,6 +7632,75 @@
           "tools"
         ],
         "title": "ToolHintsResponse",
+        "type": "object"
+      },
+      "ToolPermissionOut": {
+        "properties": {
+          "allowed_by": {
+            "description": "Who allowed it.",
+            "title": "Allowed By",
+            "type": "string"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The person or role its approvals are asked of; null: anyone.",
+            "title": "Assignee"
+          },
+          "created_at": {
+            "description": "When it was allowed (UTC).",
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "permission_id": {
+            "description": "The permission's id (tpm_...).",
+            "title": "Permission Id",
+            "type": "string"
+          },
+          "tool": {
+            "description": "The tool allowed.",
+            "title": "Tool",
+            "type": "string"
+          },
+          "user": {
+            "description": "The user the tool is allowed for.",
+            "title": "User",
+            "type": "string"
+          }
+        },
+        "required": [
+          "permission_id",
+          "user",
+          "tool",
+          "assignee",
+          "allowed_by",
+          "created_at"
+        ],
+        "title": "ToolPermissionOut",
+        "type": "object"
+      },
+      "ToolPermissionsResponse": {
+        "properties": {
+          "permissions": {
+            "description": "The user's permissions, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/ToolPermissionOut"
+            },
+            "title": "Permissions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "permissions"
+        ],
+        "title": "ToolPermissionsResponse",
         "type": "object"
       },
       "ToolStatsBody": {
@@ -35731,6 +35860,1557 @@
         "summary": "List messages (newest page last; page backwards with before_sequence)",
         "tags": [
           "messages"
+        ]
+      }
+    },
+    "/v1/tool-permissions": {
+      "get": {
+        "operationId": "tools.list_tool_permissions",
+        "parameters": [
+          {
+            "description": "The user whose permissions to list; when X-Trellis-User is sent, it must name the same user.",
+            "in": "query",
+            "name": "user",
+            "required": true,
+            "schema": {
+              "description": "The user whose permissions to list; when X-Trellis-User is sent, it must name the same user.",
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "User",
+              "type": "string"
+            }
+          },
+          {
+            "description": "W3C Trace Context to continue (00-<trace>-<span>-<flags>).",
+            "in": "header",
+            "name": "traceparent",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client request id; generated when absent or not an id (a letter or digit, then letters, digits and ._:-, at most 200 characters).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests; echoed when it is an id (a letter or digit, then letters, digits and ._:-, at most 200 characters), else replaced.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
+            "in": "header",
+            "name": "X-Trellis-Tenant",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The workspace (team) acted in; membership is checked.",
+            "in": "header",
+            "name": "X-Trellis-Workspace",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The end user acted for.",
+            "in": "header",
+            "name": "X-Trellis-User",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolPermissionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "AUTHENTICATION",
+                  "detail": "Missing or invalid credentials",
+                  "details": {},
+                  "instance": "/v1/tool-permissions",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 401,
+                  "title": "Authentication required",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:authentication"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials",
+            "headers": {
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "SCOPE_DENIED",
+                  "detail": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+                  "details": {},
+                  "instance": "/v1/tool-permissions",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 403,
+                  "title": "Outside the caller's scope",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:scope-denied"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+            "headers": {
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "PAYLOAD_TOO_LARGE",
+                  "detail": "Body exceeds 26214400 bytes",
+                  "details": {},
+                  "instance": "/v1/tool-permissions",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 413,
+                  "title": "Payload too large",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:payload-too-large"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body exceeds 26214400 bytes",
+            "headers": {
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "VALIDATION",
+                  "detail": "Request validation failed",
+                  "details": {},
+                  "instance": "/v1/tool-permissions",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 422,
+                  "title": "Invalid request",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:validation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request validation failed",
+            "headers": {
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "RATE_LIMIT",
+                  "detail": "Too many requests",
+                  "details": {},
+                  "instance": "/v1/tool-permissions",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 429,
+                  "title": "Too many requests",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:rate-limit"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests",
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "DEPENDENCY_UNAVAILABLE",
+                  "detail": "PostgreSQL unavailable",
+                  "details": {},
+                  "instance": "/v1/tool-permissions",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 503,
+                  "title": "A dependency is unavailable",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:dependency-unavailable"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable",
+            "headers": {
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          }
+        },
+        "summary": "List the tools a user allowed always (Always allow)",
+        "tags": [
+          "tools"
+        ]
+      },
+      "put": {
+        "description": "The harness's service credential (a service key that may act for anyone, or a development key) grants it; any other credential - an agent's or a user's own key, an administrator's - is refused with 403. Allowing a tool already allowed returns the stored permission.",
+        "operationId": "tools.allow_tool",
+        "parameters": [
+          {
+            "description": "W3C Trace Context to continue (00-<trace>-<span>-<flags>).",
+            "in": "header",
+            "name": "traceparent",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client request id; generated when absent or not an id (a letter or digit, then letters, digits and ._:-, at most 200 characters).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests; echoed when it is an id (a letter or digit, then letters, digits and ._:-, at most 200 characters), else replaced.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
+            "in": "header",
+            "name": "X-Trellis-Tenant",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The workspace (team) acted in; membership is checked.",
+            "in": "header",
+            "name": "X-Trellis-Workspace",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The end user acted for.",
+            "in": "header",
+            "name": "X-Trellis-User",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllowToolRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolPermissionOut"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "AUTHENTICATION",
+                  "detail": "Missing or invalid credentials",
+                  "details": {},
+                  "instance": "/v1/tool-permissions",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 401,
+                  "title": "Authentication required",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:authentication"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "SCOPE_DENIED",
+                  "detail": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+                  "details": {},
+                  "instance": "/v1/tool-permissions",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 403,
+                  "title": "Outside the caller's scope",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:scope-denied"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "NOT_FOUND",
+                  "detail": "Thread not found",
+                  "details": {},
+                  "instance": "/v1/tool-permissions",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 404,
+                  "title": "Not found",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:not-found"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Thread not found",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "CONFLICT",
+                  "detail": "Idempotency key reused with a different payload",
+                  "details": {},
+                  "instance": "/v1/tool-permissions",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 409,
+                  "title": "Conflict",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:conflict"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "PAYLOAD_TOO_LARGE",
+                  "detail": "Body exceeds 26214400 bytes",
+                  "details": {},
+                  "instance": "/v1/tool-permissions",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 413,
+                  "title": "Payload too large",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:payload-too-large"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body exceeds 26214400 bytes",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "VALIDATION",
+                  "detail": "Request validation failed",
+                  "details": {},
+                  "instance": "/v1/tool-permissions",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 422,
+                  "title": "Invalid request",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:validation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request validation failed",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "RATE_LIMIT",
+                  "detail": "Too many requests",
+                  "details": {},
+                  "instance": "/v1/tool-permissions",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 429,
+                  "title": "Too many requests",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:rate-limit"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "DEPENDENCY_UNAVAILABLE",
+                  "detail": "PostgreSQL unavailable",
+                  "details": {},
+                  "instance": "/v1/tool-permissions",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 503,
+                  "title": "A dependency is unavailable",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:dependency-unavailable"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          }
+        },
+        "summary": "Allow a tool for a user always (idempotent; the service credential only)",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/v1/tool-permissions/{permission_id}": {
+      "delete": {
+        "description": "By anyone acting for the permission's user. 404 when the tenant has no such permission, or X-Trellis-User names another user.",
+        "operationId": "tools.revoke_tool_permission",
+        "parameters": [
+          {
+            "description": "The tool permission's id (tpm_...), as GET /v1/tool-permissions lists it.",
+            "in": "path",
+            "name": "permission_id",
+            "required": true,
+            "schema": {
+              "description": "The tool permission's id (tpm_...), as GET /v1/tool-permissions lists it.",
+              "title": "Permission Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The conversation thread the call acts in: THREAD-visible records of this thread are readable, and writes are anchored to it. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Thread Id"
+            }
+          },
+          {
+            "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The open session within the thread (one sitting of a conversation). An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Session Id"
+            }
+          },
+          {
+            "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "work_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The unit of work spanning several agents and turns: WORK-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Work Id"
+            }
+          },
+          {
+            "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "task_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The task inside the unit of work. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Task Id"
+            }
+          },
+          {
+            "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The logical agent acting (e.g. research): the call acts as agent:<id> for the user, so the agent's own memories and keys apply. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Agent Id"
+            }
+          },
+          {
+            "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "agent_group_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The group of cooperating agents: AGENT_GROUP-visible records of it are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Agent Group Id"
+            }
+          },
+          {
+            "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "This execution of the agent (requires agent_id): RUN-visible records written by the run, and by the run that spawned it, are readable. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Agent Run Id"
+            }
+          },
+          {
+            "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+            "in": "query",
+            "name": "parent_agent_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The run that spawned this one, whose RUN-visible records this run may read. An id: a letter or digit, then letters, digits and ._:-, at most 200 characters.",
+              "title": "Parent Agent Run Id"
+            }
+          },
+          {
+            "description": "W3C Trace Context to continue (00-<trace>-<span>-<flags>).",
+            "in": "header",
+            "name": "traceparent",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Client request id; generated when absent or not an id (a letter or digit, then letters, digits and ._:-, at most 200 characters).",
+            "in": "header",
+            "name": "X-Request-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Correlation id shared by related requests; echoed when it is an id (a letter or digit, then letters, digits and ._:-, at most 200 characters), else replaced.",
+            "in": "header",
+            "name": "X-Correlation-ID",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The tenant acted for. In api_key mode the key names it and this must agree with the key; a development key acts in the development tenant without it.",
+            "in": "header",
+            "name": "X-Trellis-Tenant",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The workspace (team) acted in; membership is checked.",
+            "in": "header",
+            "name": "X-Trellis-Workspace",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "The end user acted for.",
+            "in": "header",
+            "name": "X-Trellis-User",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Makes a retry of this write safe for 24 hours: the same key with the same body gets the first response (status, body, Location) with Idempotent-Replayed: true, never a second effect; the same key with a different body is a 409. Any string of at most 255 characters, unique per logical write (a UUID).",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "AUTHENTICATION",
+                  "detail": "Missing or invalid credentials",
+                  "details": {},
+                  "instance": "/v1/tool-permissions/{permission_id}",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 401,
+                  "title": "Authentication required",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:authentication"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Missing or invalid credentials",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "SCOPE_DENIED",
+                  "detail": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+                  "details": {},
+                  "instance": "/v1/tool-permissions/{permission_id}",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 403,
+                  "title": "Outside the caller's scope",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:scope-denied"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Access denied (SCOPE_DENIED for an object outside the caller's scope, AUTHORIZATION for a refused role)",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "NOT_FOUND",
+                  "detail": "Thread not found",
+                  "details": {},
+                  "instance": "/v1/tool-permissions/{permission_id}",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 404,
+                  "title": "Not found",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:not-found"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Thread not found",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "CONFLICT",
+                  "detail": "Idempotency key reused with a different payload",
+                  "details": {},
+                  "instance": "/v1/tool-permissions/{permission_id}",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 409,
+                  "title": "Conflict",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:conflict"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Idempotency key reused with a different payload",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "PAYLOAD_TOO_LARGE",
+                  "detail": "Body exceeds 26214400 bytes",
+                  "details": {},
+                  "instance": "/v1/tool-permissions/{permission_id}",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 413,
+                  "title": "Payload too large",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:payload-too-large"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Body exceeds 26214400 bytes",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "VALIDATION",
+                  "detail": "Request validation failed",
+                  "details": {},
+                  "instance": "/v1/tool-permissions/{permission_id}",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": false,
+                  "status": 422,
+                  "title": "Invalid request",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:validation"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Request validation failed",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "RATE_LIMIT",
+                  "detail": "Too many requests",
+                  "details": {},
+                  "instance": "/v1/tool-permissions/{permission_id}",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 429,
+                  "title": "Too many requests",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:rate-limit"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Too many requests",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "example": {
+                  "code": "DEPENDENCY_UNAVAILABLE",
+                  "detail": "PostgreSQL unavailable",
+                  "details": {},
+                  "instance": "/v1/tool-permissions/{permission_id}",
+                  "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
+                  "retryable": true,
+                  "status": 503,
+                  "title": "A dependency is unavailable",
+                  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+                  "type": "urn:trellis:problem:dependency-unavailable"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "PostgreSQL unavailable",
+            "headers": {
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/Idempotent-Replayed"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/Retry-After"
+              },
+              "X-Correlation-ID": {
+                "$ref": "#/components/headers/X-Correlation-ID"
+              },
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-Request-ID": {
+                "$ref": "#/components/headers/X-Request-ID"
+              },
+              "X-Trace-ID": {
+                "$ref": "#/components/headers/X-Trace-ID"
+              },
+              "X-Trellis-LLM-Tokens": {
+                "$ref": "#/components/headers/X-Trellis-LLM-Tokens"
+              },
+              "traceparent": {
+                "$ref": "#/components/headers/traceparent"
+              }
+            }
+          }
+        },
+        "summary": "Revoke a permission: the tool asks again from the user's next run",
+        "tags": [
+          "tools"
         ]
       }
     },

@@ -37,7 +37,11 @@ from memory_service.adapters.db.tenancy_repository import (
     SqlTenantRepository,
     SqlWorkspaceRepository,
 )
-from memory_service.adapters.db.tool_repository import SqlProcedureRepository, SqlToolRepository
+from memory_service.adapters.db.tool_repository import (
+    SqlProcedureRepository,
+    SqlToolPermissionRepository,
+    SqlToolRepository,
+)
 from memory_service.modules.memory.consolidation import sources_forgotten
 from memory_service.modules.memory.revisions import touched_revisions
 from memory_service.observability.logging import get_logger
@@ -128,6 +132,7 @@ class SqlUnitOfWork:
         self.memories = SqlMemoryRepository(s)
         self.beliefs = SqlBeliefRepository(s)
         self.tools = SqlToolRepository(s)
+        self.tool_permissions = SqlToolPermissionRepository(s)
         self.procedures = SqlProcedureRepository(s)
         self.profiles = SqlProfileRepository(s)
         self.summaries = SqlThreadSummaryRepository(s)

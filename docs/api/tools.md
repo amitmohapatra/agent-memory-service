@@ -47,6 +47,9 @@ failed, not its procedure.
 | `POST /v1/tools/hints` | the tools that fit, best first: confidence, success rate, next step, the arguments found and the ones missing, the user's standing rule that forbids one; the plan | `ctx.tool_hints(task, available=…, k=…)` |
 | `GET /v1/tools/approval-suggestions?tool=…` | approval rules this agent's reviewed calls support, most supported first (cursor paged) | `ctx.advanced.tools.approval_suggestions(tool=…)` |
 | `POST /v1/tools/approval-suggestions/{suggestion_id}/accept` | accept one: its rule is written into the tool's `approve_when` | `ctx.advanced.tools.accept_suggestion(id)` |
+| `GET /v1/tool-permissions?user=…` | the tools a user allowed always ("Always allow"), oldest first | `ctx.advanced.tool_permissions.list()` (the bound `user_id`) |
+| `PUT /v1/tool-permissions` | allow a tool for a user always (idempotent; the service credential only, `403` for any other) | `ctx.advanced.tool_permissions.allow(tool, assignee=…, allowed_by=…)` |
+| `DELETE /v1/tool-permissions/{permission_id}` | revoke one: the tool asks again from the user's next run | `ctx.advanced.tool_permissions.revoke(id)` |
 
 `POST /v1/context` answers the same hints inline when asked (`tools: {available, k}`; the SDK's
 `ctx.context(query, tools=[...names])`), and
@@ -246,6 +249,32 @@ rules of the route:
   `irreversible` tool (those calls are always asked about; `always_ask` may be accepted for any
   tool);
 * accepting one already part of `approve_when` returns the entry unchanged.
+
+## Tool permissions ("Always allow")
+
+When a person answers a tool's approval with **Always allow**, the harness keeps it here: one
+permission per (tenant, user, tool, assignee — the person or role the approval was asked of;
+none for an approval anyone answers). The harness lists the user's permissions once per run, when
+a call first asks, and lets a call of an allowed tool asked of the same person or role run
+without asking, in any conversation of that user, until the permission is revoked. A revoke takes
+effect from the user's next run. The harness still asks for an `irreversible` tool (it never
+offers Always allow for one) and wherever the tool's `approve_when` decides; the service only
+keeps the permissions.
+
+* **Who grants:** only the service credential that acts for everyone in the tenant — a `service`
+  key with `may_act_as: ["*"]` (what the harness holds), or a development key. An agent's or a
+  user's own key (one whose `may_act_as` names principals), an administrator's key and an
+  issuer's token get `403`: no agent allows itself a tool.
+* **Who lists and revokes:** any credential that may act for the user. A permission of another
+  tenant, or of another user than `X-Trellis-User` names, is a `404`.
+* Allowing a tool already allowed returns the stored permission (`200`).
+
+```python
+alice = memory.bind(user_id="alice").advanced.tool_permissions
+granted = await alice.allow("crm-update_quote", allowed_by="alice")
+print([(p.tool, p.assignee) for p in await alice.list()])
+await alice.revoke(granted.permission_id)
+```
 
 ## Learned skills
 
