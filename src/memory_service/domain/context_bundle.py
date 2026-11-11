@@ -42,6 +42,12 @@ TOOL_ANSWERS_CONFIDENCE = 0.5
 #: from" to a model whose own conversation held the answer (a follow-up asking where the
 #: previous answer came from was answered "I do not know").
 EVIDENCE_HEADING = "Evidence status (long-term memory)"
+#: The heading of the user's pinned profile (rules, preferences, about the user). A caller
+#: keys on it: the harness adds its note on using remembered rules only under it.
+PROFILE_HEADING = "Profile"
+#: The heading of the people's pages (beliefs). Apart from the profile, so a page never makes
+#: a context without one look as if it had a profile.
+PEOPLE_HEADING = "People"
 #: How a tool hint or a learned skill's step says a standing rule of the user forbids it.
 _FORBIDDEN = "a standing rule of the user forbids {tool} here"
 
@@ -536,6 +542,9 @@ class ContextBundle(BaseModel):
     built_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     diagnostics: dict[str, Any] = Field(default_factory=dict)
     profile: list[ProfileBlockView] = Field(default_factory=list)
+    #: a page per person, from their beliefs: rendered under its own heading after the
+    #: profile, never as part of it (a caller keys on the profile being there)
+    people: list[ProfileBlockView] = Field(default_factory=list)
     thread_summary: ThreadSummaryView | None = None
     procedures: list[SkillView] = Field(default_factory=list)
     tools: ToolHints | None = None
@@ -583,7 +592,9 @@ class ContextBundle(BaseModel):
         """Plain-text rendering suitable for a system prompt, citing by handle. Nothing is
         shown twice: what ``redundant`` names is left out."""
         refs = {item_id: handle for handle, item_id in self.handles().items()}
-        parts = pinned_sections(self.profile, self.thread_summary, self.procedures, self.tools)
+        parts = pinned_sections(
+            self.profile, self.thread_summary, self.procedures, self.tools, self.people
+        )
         if self.conversation.shown:
             parts.append(f"## Recent conversation\n{self.conversation.rendered}")
         parts += record_section(self.conversation)
@@ -678,9 +689,17 @@ def record_section(window: ConversationWindow) -> list[str]:
 
 
 def profile_section(profile: Sequence[ProfileBlockView]) -> str | None:
-    if not profile:
+    return _blocks(PROFILE_HEADING, profile)
+
+
+def people_section(people: Sequence[ProfileBlockView]) -> str | None:
+    return _blocks(PEOPLE_HEADING, people)
+
+
+def _blocks(heading: str, blocks: Sequence[ProfileBlockView]) -> str | None:
+    if not blocks:
         return None
-    return "## Profile\n" + "\n".join(f"### {b.block}\n{b.text}" for b in profile)
+    return f"## {heading}\n" + "\n".join(f"### {b.block}\n{b.text}" for b in blocks)
 
 
 def summary_section(summary: ThreadSummaryView | None) -> str | None:
@@ -762,11 +781,13 @@ def pinned_sections(
     summary: ThreadSummaryView | None,
     procedures: Sequence[SkillView],
     tools: ToolHints | None,
+    people: Sequence[ProfileBlockView] = (),
 ) -> list[str]:
-    """What every prompt starts from: the profile, the thread summary, the learned skills and
-    the tool hints, in that order."""
+    """What every prompt starts from: the profile, the people's pages, the thread summary,
+    the learned skills and the tool hints, in that order."""
     sections = (
         profile_section(profile),
+        people_section(people),
         summary_section(summary),
         skills_section(procedures, tools),
         tools_section(tools),

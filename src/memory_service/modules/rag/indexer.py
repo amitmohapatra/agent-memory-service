@@ -52,6 +52,9 @@ log = get_logger(__name__)
 
 KNOWLEDGE = "knowledge"
 MEMORIES = "memories"
+#: Beliefs in a collection of their own: in the memories' one they took part in its scoring
+#: (the sparse IDF is the collection's), so a memory ranked differently once beliefs existed.
+BELIEFS = "beliefs"
 #: The open ends of a memory's valid and knowledge time, written as instants so a range
 #: filter can read them: a store range filter never matches a field that is absent.
 TIME_MIN = datetime(1900, 1, 1, tzinfo=UTC)
@@ -191,7 +194,7 @@ class Indexer:
     async def ensure_collections(self) -> None:
         sparse_idf = getattr(self.sparse, "server_side_idf", True)
         dims = self.spaces.dimensions
-        for base in (KNOWLEDGE, MEMORIES):
+        for base in (KNOWLEDGE, MEMORIES, BELIEFS):
             memories = base == MEMORIES
             await self.store.ensure_collection(
                 CollectionSpec(
@@ -206,7 +209,7 @@ class Indexer:
                     # in RAM costs a few MB and saves a page-cache read per returned hit on
                     # the remote store. Knowledge chunks are the bulk of the index and stay
                     # on disk.
-                    on_disk_payload=base != MEMORIES,
+                    on_disk_payload=base == KNOWLEDGE,
                 )
             )
 
@@ -608,6 +611,51 @@ class Indexer:
             await uow.commit()
         log.info("index.memories_done", tenant_id=tenant_id, upserted=n, removed=len(gone))
         return n
+
+    async def index_beliefs(self, tenant_id: str, belief_ids: Sequence[str]) -> int:
+        """Upsert current beliefs into their own collection as ``kind=belief`` (one text
+        each, its readers its sources' common audience) and remove every other state:
+        replaced, retired, deleted. Nothing reads beliefs unless a search names the kind."""
+        await self.ensure_collections()
+        async with self.uow_factory() as uow:
+            beliefs = await uow.beliefs.get_many(tenant_id, belief_ids)
+        live = [b for b in beliefs if b.current]
+        current = {b.belief_id for b in live}
+        collection = self.collection(BELIEFS)
+        if gone := [i for i in belief_ids if i not in current]:
+            await self.store.delete(collection, gone)
+        if live:
+            texts = [b.text for b in live]
+            dense = await self.embed_cached(texts, [f"{b.content_hash}:blf1" for b in live])
+            sparse = self.sparse.encode_documents(texts)
+            late = await self.embed_late(texts)
+            await self.store.upsert(
+                [
+                    SearchRecord(
+                        record_id=b.belief_id,
+                        collection=collection,
+                        tenant_id=tenant_id,
+                        dense=_vectors_at(dense, i),
+                        sparse=sparse[i],
+                        late=late[i] if late else None,
+                        payload={
+                            "kind": "belief",
+                            "visibility_keys": list(b.visibility_keys),
+                            "current": True,
+                            "observed_at": b.last_seen_at.isoformat(),
+                            "source_memory_ids": b.source_ids[:20],
+                            "script": detect_script(b.text).value,
+                            "text": b.text,
+                            "text_hash": content_hash(b.text),
+                        },
+                    )
+                    for i, b in enumerate(live)
+                ]
+            )
+        async with self.uow_factory() as uow:
+            await uow.beliefs.mark_indexed(sorted(current), fingerprint=self.fingerprint)
+            await uow.commit()
+        return len(live)
 
     async def index_episode(self, tenant_id: str, thread_id: str) -> bool:
         """Upsert a thread's one searchable episode (its latest summary, then a digest of

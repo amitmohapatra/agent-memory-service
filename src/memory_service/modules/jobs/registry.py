@@ -13,6 +13,8 @@ from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.conversation.summary import TASK_EPISODE_INDEX, TASK_SUMMARY_REFRESH
 from memory_service.modules.feedback.service import TASK_FEEDBACK_PROJECT
 from memory_service.modules.jobs.names import (
+    TASK_BELIEF_INDEX,
+    TASK_CONSOLIDATE,
     TASK_GRAPH_ENRICH_DOCUMENT,
     TASK_GRAPH_ENRICH_MEMORIES,
     TASK_MEMORY_INDEX,
@@ -109,6 +111,34 @@ def _register_tools_refresh(queue: _AccountedQueue, container: Container) -> Non
     queue.register_periodic(
         "periodic.tools_refresh", Queue.EMBEDDING, tools_refresh, cron="*/5 * * * *"
     )
+
+
+def _register_consolidation(queue: _AccountedQueue, container: Container) -> None:
+    """Beliefs (``modules.memory.consolidation``). The jobs are always registered: one is
+    queued only for an owner who may use the model, and the delete cascade (index removal,
+    a person's rebuild) must run whatever the deployment has. The sweep of people still
+    waiting runs only where a model may be reached."""
+
+    async def memory_consolidate(payload: dict[str, Any]) -> None:
+        await container.services["consolidation"].consolidate(
+            payload["tenant_id"], payload["scope_key"], payload["person_key"]
+        )
+
+    async def consolidate_pending(payload: dict[str, Any]) -> None:
+        await container.services["consolidation"].sweep_pending()
+        await container.services["consolidation"].prune()
+
+    async def belief_index(payload: dict[str, Any]) -> None:
+        await container.services["indexer"].index_beliefs(
+            payload["tenant_id"], list(payload["belief_ids"])
+        )
+
+    queue.register(TASK_CONSOLIDATE, Queue.GRAPH, memory_consolidate, retries=3)
+    queue.register(TASK_BELIEF_INDEX, Queue.EMBEDDING, belief_index, retries=5)
+    if container.settings.llm.enabled:
+        queue.register_periodic(
+            "periodic.consolidate_pending", Queue.RECONCILE, consolidate_pending, cron="41 * * * *"
+        )
 
 
 def register_handlers(container: Container) -> None:
@@ -460,6 +490,7 @@ def register_handlers(container: Container) -> None:
         queue.register_periodic(
             "periodic.memory_connect", Queue.RECONCILE, memory_connect, cron="19 */6 * * *"
         )
+    _register_consolidation(queue, container)
     queue.register(TASK_SUMMARY_REFRESH, Queue.SUMMARY, summary_refresh, retries=3)
     queue.register(TASK_EPISODE_INDEX, Queue.SUMMARY, episode_index, retries=3)
     queue.register(TASK_PROFILE_REFRESH, Queue.SUMMARY, profile_refresh, retries=3)

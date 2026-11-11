@@ -30,6 +30,8 @@ from memory_service.domain.observation import ProcessingHints
 from memory_service.domain.text import sanitise
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import validate_requested_visibility
+from memory_service.modules.llm.assist import LLMAssist
+from memory_service.modules.memory.consolidation import CONSOLIDATION_USE, schedule_for
 from memory_service.modules.memory.native import default_visibility, normalized_hash
 from memory_service.modules.memory.pipeline import (
     TASK_MEMORY_INDEX,
@@ -100,11 +102,17 @@ def _authorship(ctx: MemoryExecutionContext, old: CanonicalMemory) -> dict[str, 
 
 class MemoryService:
     def __init__(
-        self, authz: AuthorizationService, *, fiscal: FiscalCalendar | None = None
+        self,
+        authz: AuthorizationService,
+        *,
+        fiscal: FiscalCalendar | None = None,
+        assist: LLMAssist | None = None,
     ) -> None:
         self.authz = authz
         #: the deployment's retail calendar, which a stated memory's fiscal phrases resolve in
         self.fiscal = fiscal
+        #: whether a written memory's people are queued for consolidation, as a chat's are
+        self.assist = assist or LLMAssist.disabled()
 
     async def remember(
         self,
@@ -241,8 +249,9 @@ class MemoryService:
         *,
         key: str,
     ) -> list[str]:
-        """Queue the search index and graph enrichment for written memories and move the
-        revisions their readers' caches are keyed on."""
+        """Queue the search index and graph enrichment for written memories, and their people
+        for consolidation where a model may do it, and move the revisions their readers'
+        caches are keyed on."""
         outbox_id = await uow.enqueue(
             JobSpec(
                 task_name=TASK_MEMORY_INDEX,
@@ -256,6 +265,8 @@ class MemoryService:
             )
         )
         await bump_memory_revisions(uow, memories)
+        if self.assist.wants(CONSOLIDATION_USE):
+            await schedule_for(uow, memories, now=datetime.now(UTC))
         return [f"obx_{outbox_id}"] if outbox_id is not None else []
 
     async def _require_owner(

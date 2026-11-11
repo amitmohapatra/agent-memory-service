@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -129,6 +130,22 @@ class SqlMemoryRepository:
         #: The dependents retracted in this transaction, as they now are: the unit of work
         #: moves the revisions their readers' caches are keyed on when it commits.
         self.invalidated_memories: list[CanonicalMemory] = []
+        #: memories forgotten in this transaction: the unit of work removes them from the
+        #: beliefs they support when it commits
+        self.forgotten: dict[str, set[str]] = {}
+        #: memories superseded in this transaction: the unit of work hides the beliefs that
+        #: cite them until their people's next run
+        self.replaced: dict[str, set[str]] = {}
+
+    def _moved(self, tenant_id: str, memory_id: str, before: str, after: str) -> None:
+        """Note a status change the beliefs citing the memory must follow: retracted (taken
+        back, the reject verdict) is as forgotten; superseded makes them stale."""
+        if after == before:
+            return
+        if after == TemporalStatus.RETRACTED.value:
+            self.forgotten.setdefault(tenant_id, set()).add(memory_id)
+        elif after == TemporalStatus.SUPERSEDED.value:
+            self.replaced.setdefault(tenant_id, set()).add(memory_id)
 
     async def _invalidate_dependents(self, tenant_id: str, source_ids: Sequence[str]) -> None:
         if not source_ids:
@@ -315,6 +332,7 @@ class SqlMemoryRepository:
         r.subject = memory.subject
         r.predicate = memory.predicate
         r.object = memory.object
+        self._moved(r.tenant_id, r.memory_id, r.temporal_status, memory.temporal.status.value)
         r.temporal_status = memory.temporal.status.value
         r.valid_from = memory.temporal.valid_from
         r.valid_to = memory.temporal.valid_to
@@ -560,6 +578,51 @@ class SqlMemoryRepository:
         ).all()
         return [_to_domain(r) for r in rows]
 
+    async def consolidation_facts(
+        self,
+        tenant_id: str,
+        *,
+        scope_keys: Sequence[str],
+        person_key: str,
+        name: str,
+        after: datetime | None,
+        limit: int,
+    ) -> list[CanonicalMemory]:
+        """A person's facts in these scopes written after ``after``, oldest write first: what they
+        said, what is said about them, and what names them (``name``, as a word). Asserted
+        lasting facts only: no derived memory, no SHORT_TERM one."""
+        about = [MemoryRow.owner_principal == person_key, MemoryRow.subject == person_key]
+        if name:
+            about.append(MemoryRow.content.op("~*")(rf"\m{re.escape(name)}\M"))
+        stmt = select(MemoryRow).where(
+            MemoryRow.tenant_id == tenant_id,
+            MemoryRow.scope_key.in_(list(scope_keys)),
+            MemoryRow.temporal_status.in_(
+                [TemporalStatus.CURRENT.value, TemporalStatus.SUPERSEDED.value]
+            ),
+            MemoryRow.deleted_at.is_(None),
+            MemoryRow.derived_slot.is_(None),
+            MemoryRow.lifetime != Lifetime.SHORT_TERM.value,
+            or_(*about),
+        )
+        if after is not None:
+            stmt = stmt.where(MemoryRow.updated_at > after)
+        rows = await self.s.scalars(
+            stmt.order_by(MemoryRow.updated_at, MemoryRow.memory_id).limit(limit)
+        )
+        return [_to_domain(r) for r in rows]
+
+    async def existing_subjects(self, tenant_id: str, subjects: Sequence[str]) -> set[str]:
+        """Which of ``subjects`` some memory of the tenant is about."""
+        if not subjects:
+            return set()
+        found = await self.s.scalars(
+            select(MemoryRow.subject)
+            .where(MemoryRow.tenant_id == tenant_id, MemoryRow.subject.in_(list(subjects)))
+            .distinct()
+        )
+        return {s for s in found if s}
+
     async def list_scope(
         self,
         tenant_id: str,
@@ -610,6 +673,7 @@ class SqlMemoryRepository:
         r.indexed_at = None
         await self.s.flush()
         await self._invalidate_dependents(tenant_id, [memory_id])
+        self.forgotten.setdefault(tenant_id, set()).add(memory_id)
         return True
 
     async def lock(self, tenant_id: str, memory_ids: Sequence[str]) -> None:
@@ -851,6 +915,7 @@ class SqlMemoryRepository:
             return False
         if r.temporal_status == status.value:
             return True
+        self._moved(tenant_id, memory_id, r.temporal_status, status.value)
         r.temporal_status = status.value
         r.updated_at = now
         r.indexed_at = None

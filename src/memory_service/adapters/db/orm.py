@@ -734,6 +734,106 @@ class MemoryDependencyRow(Base):
 
 
 # --------------------------------------------------------------------------
+# Beliefs: what is held about one person, consolidated from their memories (rebuildable)
+# --------------------------------------------------------------------------
+
+#: a belief that is neither replaced nor deleted (a retired one, ``valid_to`` set, stays
+#: here: it is the person's history)
+_LIVE_BELIEF = "superseded_by IS NULL AND deleted_at IS NULL"
+
+
+class BeliefRow(Base):
+    __tablename__ = "beliefs"
+
+    belief_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    scope_key: Mapped[str] = mapped_column(String(600), nullable=False)
+    visibility_keys: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
+    person_key: Mapped[str] = mapped_column(String(300), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    facet: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    first_seen_at: Mapped[datetime]
+    last_seen_at: Mapped[datetime]
+    proof_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    supersedes: Mapped[str | None] = mapped_column(String(200))
+    superseded_by: Mapped[str | None] = mapped_column(String(200))
+    valid_from: Mapped[datetime | None]
+    valid_to: Mapped[datetime | None]
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    index_fingerprint: Mapped[str | None] = mapped_column(String(200))
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(server_default=_now())
+    updated_at: Mapped[datetime] = mapped_column(server_default=_now())
+    deleted_at: Mapped[datetime | None]
+    #: when a memory it cites was superseded: hidden until the person's next run
+    stale_since: Mapped[datetime | None]
+
+    __table_args__ = (
+        # one person's beliefs in one scope: what consolidation reads and rewrites
+        Index(
+            "ix_beliefs_unit",
+            "tenant_id",
+            "scope_key",
+            "person_key",
+            postgresql_where=sql_text(_LIVE_BELIEF),
+        ),
+        # a reader's beliefs, by audience, current and earlier: what the context reads
+        Index(
+            "ix_beliefs_keys",
+            "visibility_keys",
+            postgresql_using="gin",
+            postgresql_where=sql_text("deleted_at IS NULL"),
+        ),
+        # a belief's earlier versions: what the retention sweep prunes
+        Index(
+            "ix_beliefs_superseded_by",
+            "superseded_by",
+            postgresql_where=sql_text("superseded_by IS NOT NULL"),
+        ),
+    )
+
+
+class BeliefSourceRow(Base):
+    __tablename__ = "belief_sources"
+
+    belief_id: Mapped[str] = mapped_column(
+        ForeignKey("beliefs.belief_id", ondelete="CASCADE"), primary_key=True
+    )
+    memory_id: Mapped[str] = mapped_column(
+        ForeignKey("memories.memory_id", ondelete="CASCADE"), primary_key=True
+    )
+    tenant_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    added_at: Mapped[datetime] = mapped_column(server_default=_now())
+
+    #: the delete cascade: the beliefs a forgotten memory supported
+    __table_args__ = (Index("ix_belief_sources_memory", "tenant_id", "memory_id"),)
+
+
+class BeliefProgressRow(Base):
+    __tablename__ = "belief_progress"
+
+    tenant_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    scope_key: Mapped[str] = mapped_column(String(600), primary_key=True)
+    person_key: Mapped[str] = mapped_column(String(300), primary_key=True)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    last_consolidated_at: Mapped[datetime | None]
+    pending_since: Mapped[datetime | None]
+    failures: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    paused_at: Mapped[datetime | None]
+
+    #: the oldest waiting unit (the lag metric, the retry sweep)
+    __table_args__ = (
+        Index(
+            "ix_belief_progress_pending",
+            "pending_since",
+            postgresql_where=text("pending_since IS NOT NULL"),
+        ),
+    )
+
+
+# --------------------------------------------------------------------------
 # Knowledge graph (M8): entities and temporal relations, rebuildable from memories/chunks
 # --------------------------------------------------------------------------
 

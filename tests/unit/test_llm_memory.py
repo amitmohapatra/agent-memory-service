@@ -306,15 +306,19 @@ async def _sources(*texts: str, ctx=CTX, age=timedelta(hours=1)):
     return memories
 
 
+#: an agent's facts about a project: no person's (a person's are consolidated into beliefs)
+ATLAS = ("The Atlas project uses Postgres 16.", "The Atlas project runs on Kubernetes.")
+
+
 async def test_reflection_stores_validated_insights_with_provenance() -> None:
-    sources = await _sources("I prefer concise answers.", "I prefer bullet points.")
+    sources = await _sources(*ATLAS, ctx=SCOUT)
     ids = [m.memory_id for m in sources]
     uow = _UoW(_Memories(sources))
     reply = {
         "insights": [
             {
-                "content": "User prefers terse, structured answers",
-                "memory_type": "PREFERENCE",
+                "content": "Atlas runs Postgres 16 on Kubernetes",
+                "memory_type": "SEMANTIC",
                 "source_memory_ids": ids,
             },
             {"content": "Unfounded", "memory_type": "SEMANTIC", "source_memory_ids": ["nope"]},
@@ -329,18 +333,19 @@ async def test_reflection_stores_validated_insights_with_provenance() -> None:
         assert schema["additionalProperties"] is False
         assert schema["properties"]["insights"]["items"]["additionalProperties"] is False
         prompt = gw.prompts()[0]["messages"][1]["content"]
-        assert all(i in prompt for i in ids) and "user:u1" in prompt
+        assert all(i in prompt for i in ids) and "agent:u1/scout" in prompt
         assert len(created) == 1 and uow.memories.added[0].memory_id == created[0]
         insight = uow.memories.added[0]
-        assert insight.content == "User prefers terse, structured answers"
-        assert insight.memory_type is MemoryType.PREFERENCE and insight.confidence == 0.6
-        assert insight.owner_principal == "user:u1" and insight.visibility is sources[0].visibility
-        assert insight.scope.level.value == "USER" and insight.scope.user_id == "u1"
+        assert insight.content == "Atlas runs Postgres 16 on Kubernetes"
+        assert insight.memory_type is MemoryType.SEMANTIC and insight.confidence == 0.6
+        assert insight.owner_principal == "agent:u1/scout"
+        assert insight.visibility is sources[0].visibility
+        assert insight.scope == sources[0].scope
         assert sorted(e.source_id for e in insight.evidence) == sorted(ids)
         assert all(e.source_type == "memory" for e in insight.evidence)
         assert insight.system_metadata["category"] == "reflection"
         assert insight.system_metadata["source_memory_ids"] == sorted(ids)
-        assert insight.system_metadata["contributors"] == ["user:u1"]
+        assert insight.system_metadata["contributors"] == ["agent:u1/scout"]
         assert insight.system_metadata["visibility_keys"] == sorted(
             sources[0].system_metadata["visibility_keys"]
         )
@@ -351,13 +356,13 @@ async def test_reflection_stores_validated_insights_with_provenance() -> None:
         assert await service.reflect_all() == []
         assert gw.route.call_count == 1
         # an identical insight for the same scope is not stored twice
-        assert await service.reflect("acme", "user:u1", sources) == []
+        assert await service.reflect("acme", "agent:u1/scout", sources) == []
         assert gw.route.call_count == 2 and len(uow.memories.added) == 1
 
 
 async def test_reflection_bounds_batches_and_processes_older_pending_sources() -> None:
-    fresh = await _sources(*[f"The widget {i} costs {i} USD." for i in range(45)])
-    old = await _sources("I prefer tabs.", age=timedelta(days=3))
+    fresh = await _sources(*[f"The widget {i} costs {i} USD." for i in range(45)], ctx=SCOUT)
+    old = await _sources("Tabs are the team's indentation style.", ctx=SCOUT, age=timedelta(days=3))
     uow = _UoW(_Memories(fresh + old))
     with mocked_gateway(['{"insights": []}'] * 4) as gw:
         service = ReflectionService(lambda: uow, assist=gw.assist(uses=["reflection"]))
@@ -371,7 +376,7 @@ async def test_reflection_bounds_batches_and_processes_older_pending_sources() -
 
 
 async def test_reflection_is_a_no_op_when_gateway_fails_or_flag_off() -> None:
-    sources = await _sources("I prefer concise answers.", "I prefer bullet points.")
+    sources = await _sources(*ATLAS, ctx=SCOUT)
     uow = _UoW(_Memories(sources))
     with mocked_gateway(failing=True) as gw:
         service = ReflectionService(lambda: uow, assist=gw.assist(uses=["reflection"]))
@@ -380,9 +385,33 @@ async def test_reflection_is_a_no_op_when_gateway_fails_or_flag_off() -> None:
     with mocked_gateway(['{"insights": []}']) as gw:
         service = ReflectionService(lambda: uow, assist=gw.assist(uses=["summaries"]))
         assert await service.reflect_all() == []
-        assert await service.reflect("acme", "user:u1", sources) == []
+        assert await service.reflect("acme", "agent:u1/scout", sources) == []
     assert gw.route.call_count == 0
     assert await ReflectionService(lambda: uow).reflect_all() == []
+
+
+async def test_a_persons_facts_are_left_to_consolidation_and_the_rest_reflected() -> None:
+    """Reflection does not also synthesise what consolidation keeps as a person's beliefs:
+    the user's own facts, and an agent's about the user, are acknowledged without a model
+    call; an agent's facts about a project are still reflected on."""
+    mine = await _sources("I prefer concise answers.", "I prefer bullet points.")
+    about_me = await _sources("I prefer dark mode.", ctx=SCOUT)  # the agent's, about u1
+    atlas = await _sources(*ATLAS, ctx=SCOUT)
+    uow = _UoW(_Memories(mine + about_me + atlas))
+    with mocked_gateway([{"insights": []}]) as gw:
+        service = ReflectionService(lambda: uow, assist=gw.assist(uses=["reflection"]))
+        assert await service.reflect_all() == []
+        assert gw.route.call_count == 1
+    prompt = gw.prompts()[0]["messages"][1]["content"]
+    assert all(m.memory_id in prompt for m in atlas)
+    assert not any(m.memory_id in prompt for m in mine + about_me)
+    assert set(uow.memories.reflected) == {m.memory_id for m in mine + about_me + atlas}
+    uow = _UoW(_Memories(await _sources("I prefer tabs.", "I prefer short replies.")))
+    with mocked_gateway([{"insights": []}]) as gw:
+        service = ReflectionService(lambda: uow, assist=gw.assist(uses=["reflection"]))
+        assert await service.reflect_all() == []
+        assert gw.route.call_count == 0  # a person's facts only: no call at all
+    assert len(uow.memories.reflected) == 2
 
 
 def test_model_jobs_are_registered_whenever_a_model_may_be_reached(make_settings) -> None:

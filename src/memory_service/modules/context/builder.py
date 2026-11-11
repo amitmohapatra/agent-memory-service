@@ -48,9 +48,11 @@ from memory_service.modules.context.coverage import unanswered
 from memory_service.modules.context.evidence import NO_SHARED_TERM
 from memory_service.modules.context.handles import BundleRecords, record_of
 from memory_service.modules.context.sections import (
+    PEOPLE_CHARGED,
     ContextSections,
     Pinned,
     ToolsRequest,
+    people_tokens,
     within_budget,
 )
 from memory_service.modules.context.semantic_cache import SemanticBundleCache, semantic_key
@@ -156,7 +158,49 @@ _EVIDENCE_SOURCE = {
     "chunk": EvidenceSource.DOCUMENT_CHUNK,
     "memory": EvidenceSource.MEMORY,
     "fact": EvidenceSource.GRAPH_FACT,
+    "belief": EvidenceSource.MEMORY,
 }
+#: Recalled beliefs a context shows as summaries besides the pages: those no page shows (a
+#: person the reader has no page for, a line a page left out).
+BELIEF_HITS_MAX: Final = 4
+
+
+def _belief_ranks(beliefs: list[Candidate]) -> dict[str, int]:
+    """The beliefs this question's search found, best first: what a person's page over the
+    pinned share keeps."""
+    return {c.record_id: rank for rank, c in enumerate(beliefs)}
+
+
+def _not_pinned(beliefs: list[Candidate], pages: Sequence[ProfileBlockView]) -> list[Candidate]:
+    """A recalled belief a pinned person page already shows is not shown twice."""
+    shown = "\n".join(page.text for page in pages)
+    return [c for c in beliefs if c.text not in shown]
+
+
+def _with_beliefs(
+    bundle: ContextBundle,
+    beliefs: list[Candidate],
+    pages: Sequence[ProfileBlockView],
+    left: int,
+) -> tuple[ContextBundle, int]:
+    """``bundle`` with the recalled beliefs no page shows after its summaries, and the tokens
+    the beliefs add to the prompt beyond what the budget already counts: on top of
+    everything else, pages included, or within the ``left`` tokens of the budget (less what
+    the bundle took) when the people's pages are charged (``PEOPLE_CHARGED``). Never in a
+    memory's place."""
+    room = left - bundle.token_estimate if PEOPLE_CHARGED else None
+    items: list[ContextItem] = []
+    cost = 0
+    for item in (candidate_to_item(c) for c in beliefs[:BELIEF_HITS_MAX]):
+        if room is not None and cost + item.token_estimate > room:
+            break
+        items.append(item)
+        cost += item.token_estimate
+    if not PEOPLE_CHARGED:
+        cost += people_tokens(pages)  # on top of the budget, still in the prompt
+    if items:
+        bundle = bundle.model_copy(update={"summaries": [*bundle.summaries, *items]})
+    return bundle, cost
 
 
 def candidate_to_item(c: Candidate) -> ContextItem:
@@ -183,6 +227,12 @@ def candidate_to_item(c: Candidate) -> ContextItem:
     # pointer remains valid until the index is rebuilt.
     if c.kind == "memory" and (source_refs := p.get("source_refs")):
         evidence = [EvidenceRef.model_validate(ref) for ref in source_refs]
+    if c.kind == "belief":  # a belief's evidence is the memories it cites
+        said = datetime.fromisoformat(str(p["observed_at"]))
+        evidence = [
+            EvidenceRef(source_type=EvidenceSource.MEMORY, source_id=str(m), observed_at=said)
+            for m in p.get("source_memory_ids") or []
+        ]
     # _relevance existed, was correct, and was called by nothing but its own test, so every
     # item on the wire carried relevance=0.0 and score_kind="fusion" regardless of what
     # produced it — the incomparable-scale problem its docstring describes was still live.
@@ -677,11 +727,20 @@ class ContextBuilder:
         await self._add_extras(ctx, query, tools, visibility, result, pinned, timings)
         # the engine's own stage split, plus what happened around it
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
-        pinned, pinned_tokens = within_budget(pinned, budget)
+        beliefs = await self._beliefs(ctx, query, visibility, result)
+        pinned, pinned_tokens = within_budget(pinned, budget, _belief_ranks(beliefs))
         said_before, said_tokens = _within(said_before, budget - pinned_tokens)
         bundle = self._assemble(
             query, result, conversation, budget - pinned_tokens - said_tokens, found.revision_fp
         )
+        # the beliefs come after everything the context had without them, never in its place
+        bundle, shown = _with_beliefs(
+            bundle,
+            _not_pinned(beliefs, pinned.pages),
+            pinned.pages,
+            budget - pinned_tokens - said_tokens,
+        )
+        shown += pinned_tokens + said_tokens
         self._remember_semantic(found, result, bundle)
         spent = self.assist.tokens_used() - tokens_before
         return bundle.model_copy(
@@ -689,13 +748,27 @@ class ContextBuilder:
                 "bundle_id": found.bundle_id,
                 "evidence": bundle.evidence.model_copy(update={"llm_tokens": spent}),
                 "token_budget": budget,
-                "token_estimate": bundle.token_estimate + pinned_tokens + said_tokens,
+                "token_estimate": bundle.token_estimate + shown,
                 "earlier_chats": said_before,
                 "profile": pinned.profile,
+                "people": pinned.pages,
                 "thread_summary": pinned.thread_summary,
                 "procedures": pinned.procedures,
                 "tools": pinned.tools,
             }
+        )
+
+    async def _beliefs(
+        self, ctx: MemoryExecutionContext, query: str, visibility: Any, result: RetrievalResult
+    ) -> list[Candidate]:
+        """The beliefs the question finds, best first, where a model can be reached (they
+        exist nowhere else): a search of their own on the query's vectors, so a belief never
+        takes a memory's place in the ranking, and the memories are what they are without
+        beliefs."""
+        if not (self.assist.available and result.query_vectors and result.routed.needs_memories):
+            return []
+        return await self.engine.search_beliefs(
+            ctx, result.routed, query, visibility, result.query_vectors
         )
 
     async def _similarity_and_standing(

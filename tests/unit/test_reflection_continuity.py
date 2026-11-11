@@ -4,19 +4,26 @@ from datetime import timedelta
 
 import pytest
 
-from memory_service.domain.enums import Visibility
+from memory_service.domain.enums import ScopeLevel, Visibility
+from memory_service.domain.memory import Scope
 from memory_service.modules.memory.reflection import ReflectionService
 from tests.support_llm import mocked_gateway
-from tests.unit.test_llm_memory import CTX, _Memories, _sources, _UoW
+from tests.unit.test_llm_memory import ATLAS, CTX, SCOUT, _Memories, _sources, _UoW
 
 pytestmark = pytest.mark.unit
 
 
-async def test_new_user_fact_recovers_older_same_user_fact_across_threads():
-    old = await _sources("I prefer concise answers.", age=timedelta(days=10))
+async def test_a_new_fact_recovers_an_older_fact_of_the_same_owner_across_threads():
+    # an agent's facts about a project (a person's are consolidated, not reflected on)
+    old = await _sources("The Atlas project uses Postgres 16.", ctx=SCOUT, age=timedelta(days=10))
     fresh = await _sources(
-        "I prefer bullet points.", ctx=CTX.model_copy(update={"thread_id": "thread-two"})
+        "The Atlas project runs on Kubernetes.",
+        ctx=SCOUT.model_copy(update={"thread_id": "thread-two"}),
     )
+    # kept for the workspace, not the thread: what a conversation's facts share with another
+    shared = Scope(level=ScopeLevel.WORKSPACE, tenant_id="acme", workspace_id="ws1")
+    for memory in old + fresh:
+        memory.scope = shared
     uow = _UoW(_Memories(fresh + old))
     with mocked_gateway([{"insights": []}]) as gateway:
         service = ReflectionService(lambda: uow, assist=gateway.assist(uses=["reflection"]))
@@ -65,7 +72,9 @@ async def test_reflection_retains_exact_source_audience(visibility):
 
 
 async def test_empty_success_is_not_repeated_and_bounded_backlog_advances():
-    sources = await _sources(*[f"I prefer format number {i}." for i in range(45)])
+    sources = await _sources(
+        *[f"Reports are formatted in style number {i}." for i in range(45)], ctx=SCOUT
+    )
     uow = _UoW(_Memories(sources))
     with mocked_gateway([{"insights": []}] * 3) as gateway:
         for _ in range(3):
@@ -79,7 +88,7 @@ async def test_empty_success_is_not_repeated_and_bounded_backlog_advances():
 
 
 async def test_changed_revision_is_reconsidered_after_a_successful_empty_batch():
-    sources = await _sources("I prefer concise answers.", "I prefer bullet points.")
+    sources = await _sources(*ATLAS, ctx=SCOUT)
     uow = _UoW(_Memories(sources))
     with mocked_gateway([{"insights": []}] * 2) as gateway:
         service = ReflectionService(lambda: uow, assist=gateway.assist(uses=["reflection"]))

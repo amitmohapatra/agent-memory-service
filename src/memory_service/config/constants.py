@@ -522,6 +522,11 @@ class LLMTuning:
     #: A reasoning model spends its output budget thinking before it emits anything, so too
     #: small a ceiling returns 200 OK with an empty string.
     max_tokens: int = 1024
+    #: The ceiling of the uses whose answer is long: ``reflection``, under which consolidation
+    #: writes a person's beliefs. A model that reasons before it answers spent ~750 hidden
+    #: tokens on ~300 of answer (Haiku, measured), so 1024 cut those answers off.
+    long_uses: tuple[str, ...] = ("reflection",)
+    long_max_tokens: int = 4096
     timeout_seconds: float = 30.0
     #: retries on 429/5xx/timeouts; the sleeps sit outside the request timeout
     max_retries: int = 2
@@ -531,6 +536,10 @@ class LLMTuning:
     #: ``borderline``, which is what they are without a judge; it sits inside
     #: ``OVERLOAD.verify_deadline_seconds`` so the request answers rather than timing out.
     judge_deadline_seconds: float = 8.0
+
+    def ceiling(self, use: str) -> int:
+        """The most output a call of ``use`` may ask for."""
+        return self.long_max_tokens if use in self.long_uses else self.max_tokens
 
 
 LLM = LLMTuning()

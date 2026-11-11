@@ -10,6 +10,7 @@ from __future__ import annotations
 from types import TracebackType
 from typing import Protocol, Self, runtime_checkable
 
+from memory_service.ports.beliefs import BeliefRepository
 from memory_service.ports.credentials import CredentialRepository
 from memory_service.ports.feedback import FeedbackRepository
 from memory_service.ports.llm import LLMPolicyRepository, LLMUsageRepository
@@ -59,6 +60,7 @@ class UnitOfWork(Protocol):
     archive: ArchiveRepository
     documents: DocumentRepository
     memories: MemoryRepository
+    beliefs: BeliefRepository
     tools: ToolRepository
     tool_permissions: ToolPermissionRepository
     procedures: ProcedureRepository

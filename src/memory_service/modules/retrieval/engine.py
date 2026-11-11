@@ -31,7 +31,7 @@ from memory_service.domain.script import Script, detect_script
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer
+from memory_service.modules.rag.indexer import BELIEFS, KNOWLEDGE, MEMORIES, Indexer
 from memory_service.modules.retrieval import memory_ranking, slots
 from memory_service.modules.retrieval.memory_queries import plan_memory_queries
 from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
@@ -74,6 +74,7 @@ class Candidate:
             "memory": Representation.MEMORY,
             "fact": Representation.RELATION,
             "summary": Representation.SUMMARY,
+            "belief": Representation.SUMMARY,
         }.get(self.kind, Representation.CHUNK)
 
 
@@ -226,6 +227,7 @@ class QueryVectors:
 _COLLECTION_OF_KIND = {
     "memory": MEMORIES,
     "episode": MEMORIES,
+    "belief": BELIEFS,
     "chunk": KNOWLEDGE,
     "summary": KNOWLEDGE,
 }
@@ -363,7 +365,7 @@ class RetrievalEngine:
                     kind
                     for kind in wanted
                     if (kind != "chunk" or routed.needs_knowledge)
-                    and (kind not in ("memory", "episode") or routed.needs_memories)
+                    and (kind not in ("memory", "episode", "belief") or routed.needs_memories)
                 ]
                 with timings.stage("encode"):
                     encoded = await encode_task
@@ -440,6 +442,7 @@ class RetrievalEngine:
                     candidates = current_first(candidates)
                 candidates = candidates[:pool_limit]
                 candidates = await self._validate_derived(ctx, candidates, visibility)
+                candidates = await self._validate_beliefs(ctx, candidates, visibility)
                 checked_derived = {c.record_id for c in candidates if is_derived(c)}
                 if before != len(candidates):
                     diagnostics["duplicates_collapsed"] = before - len(candidates)
@@ -751,6 +754,49 @@ class RetrievalEngine:
             for h in hits
         ]
         return candidates
+
+    async def search_beliefs(
+        self,
+        ctx: MemoryExecutionContext,
+        routed: RoutedQuery,
+        query: str,
+        visibility: VisibilitySpecification,
+        vectors: QueryVectors,
+    ) -> list[Candidate]:
+        """The beliefs ``query`` finds, best first, on vectors a retrieval already encoded:
+        a search of their own, so they never take a place in that retrieval's ranking
+        (``ContextBuilder``), and only those a reader may be shown (``_validate_beliefs``)."""
+        found = await self._search_kind(
+            ctx,
+            routed,
+            query,
+            visibility,
+            kind="belief",
+            document_ids=None,
+            encoded=vectors,
+            diagnostics={},
+        )
+        return await self._validate_beliefs(ctx, found, visibility)
+
+    async def _validate_beliefs(
+        self,
+        ctx: MemoryExecutionContext,
+        candidates: list[Candidate],
+        visibility: VisibilitySpecification,
+    ) -> list[Candidate]:
+        """The recalled beliefs a reader may be shown (``Belief.shown``): one a forget deleted
+        or a newer value made stale, in that write's commit, is never found, though its point
+        waits for the index job."""
+        ids = sorted({c.record_id for c in candidates if c.kind == "belief"})
+        if not ids:
+            return candidates
+        async with self.uow_factory() as uow:
+            live = {
+                b.belief_id
+                for b in await uow.beliefs.get_many(ctx.tenant_id, ids)
+                if b.shown and visibility.allows(b.tenant_id, b.visibility_keys)
+            }
+        return [c for c in candidates if c.kind != "belief" or c.record_id in live]
 
     async def _memories(
         self,
@@ -1072,7 +1118,7 @@ class RetrievalEngine:
             flt = point_in_time_filter(flt, at or PointInTime())
             if subject is not None:
                 flt = flt.model_copy(update={"must": {**flt.must, "subject": subject}})
-        elif kind == "episode":
+        elif kind in ("episode", "belief"):
             flt = flt.model_copy(update={"must": {**flt.must, "current": True}})
         if document_ids:
             flt = flt.model_copy(

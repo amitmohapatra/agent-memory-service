@@ -8,6 +8,27 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- **With a model, each person's facts are kept as beliefs** (service). After a message's
+  memories are stored, each person they touch is queued once (`memory.consolidate`, 60 s
+  debounced, at most 4 of a tenant's at once). One model call folds the new facts into that
+  person's beliefs as keep / update / retire / add / skip, and the code, not the model,
+  decides which date wins. Every new or changed line is checked against only the memories it
+  cites, and only supported lines are stored. A memory written through the API (remember,
+  supersede) queues its person too. Each person with beliefs is pinned into `/v1/context`
+  as a `### <name>` page under its own `## People` heading, after the profile and never in
+  it (current lines by facet, then earlier values; on top of the memories' budget), and
+  beliefs are found as summaries. Beliefs are searched apart from the memories, in a
+  collection of their own, so the memories a context holds are the same with or without
+  them. Forgetting or rejecting a memory deletes every belief that
+  cites it, in that commit, and rebuilds the person; a newer value hides the beliefs citing
+  the old one until the person's next run. The hourly consolidation sweep keeps the 3
+  newest superseded versions of a belief. Reflection no longer runs on a person's facts
+  (they are consolidated). The use is `reflection`, whose ceiling rises to 4096 output
+  tokens (the service's own limit for that use). A tenant past its daily consolidation
+  tokens waits for the next day. `tools/consolidate.py` consolidates a corpus
+  ingested before. New: tables `beliefs`, `belief_sources`, `belief_progress` (migration
+  0035), the metric `memory_consolidation_lag_seconds`. No route, field or SDK call changed;
+  without a model the context is byte-for-byte what it was.
 - **A person's "Always allow" for a tool is kept per user** (service; trellis-memory 0.6.5).
   `GET /v1/tool-permissions?user=`, `PUT /v1/tool-permissions` and
   `DELETE /v1/tool-permissions/{permission_id}` (table `tool_permissions`, migration 0034): one

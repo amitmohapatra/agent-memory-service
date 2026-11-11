@@ -204,6 +204,8 @@ the queue pool.
 | `episode.index` | `summary` | a message's window closing; a thread deleted | 3 | re-index the episode, or remove it once the thread is gone |
 | `profile.refresh`, `profile.query` | `summary` | user facts; due standing questions | 3, 1 | the pinned profile blocks |
 | `tools.index` | `embedding` | catalog upsert | 5 | the tools search collection |
+| `memory.consolidate` | `graph` (the model-waiting pool) | new facts about a person, 60 s debounced, one job per person while they wait; at most 4 of a tenant's at once | 3 | fold the person's new facts into their beliefs: one model call (use `reflection`), then the citation check; queues itself again for facts it left (`modules/memory/consolidation.py`) |
+| `belief.index` | `embedding` | a belief change; a forgotten source | 5 | index current beliefs for recall (`kind=belief`), remove the rest |
 
 ```mermaid
 flowchart TB
@@ -222,9 +224,10 @@ flowchart TB
     IP["periodic.idempotency_purge (:43)"]
     OP["periodic.outbox_purge (:53): dispatched rows over 24 h"]
     RA["periodic.read_audit_purge (:07): rows over 400 days"]
+    CP["periodic.consolidate_pending (:41): people waiting over an hour, with a gateway; belief history past 3 versions"]
   end
   subgraph six[Every 6 hours, only with a gateway configured]
-    RF["periodic.memory_reflect (:53)"]
+    RF["periodic.memory_reflect (:53): groups not about a person"]
     CN["periodic.memory_connect (:19)"]
   end
   subgraph daily[Daily]
@@ -305,7 +308,9 @@ way with several workers, the banner says the series are one worker's share
 
 **The job worker** serves its own series on `MEMORY__TASKS__METRICS_PORT` (9464):
 `memory_queue_depth` and `memory_queue_oldest_lag_seconds` per queue,
-`memory_outbox_backlog`, `memory_jobs_failed_terminal` per queue, `memory_worker_running_jobs`
+`memory_outbox_backlog`, `memory_consolidation_lag_seconds` (how long the person waiting
+longest for consolidation has waited), `memory_jobs_failed_terminal` per queue,
+`memory_worker_running_jobs`
 and `memory_worker_last_sample_timestamp_seconds` (sampled every 15 s; a stale value is a
 worker that cannot reach its database), `memory_worker_db_retries_total` per operation
 (`query`, `listen`) and `memory_worker_db_unavailable_seconds`. The compose healthcheck reads
