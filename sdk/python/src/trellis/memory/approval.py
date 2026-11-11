@@ -2,10 +2,10 @@
 
 A catalog entry's ``approve_when`` is a small boolean expression over the call's arguments;
 the caller asks for approval when it is true. Without one, the tool's risk tier decides
-(``irreversible`` asks, ``read`` and ``write`` do not). The memory service writes these
-expressions when an approval suggestion is accepted and refuses one that does not parse; a
-harness evaluates them with :func:`evaluate`. This module is the one implementation of both
-sides, and of :func:`arg_shape`, the argument shape approval decisions are pooled by.
+(``read`` runs; ``write``, ``irreversible`` and a tool with no risk ask). The memory service
+writes these expressions when an approval suggestion is accepted and refuses one that does not
+parse; a harness evaluates them with :func:`evaluate`. This module is the one implementation
+of both sides, and of :func:`arg_shape`, the argument shape approval decisions are pooled by.
 
 Grammar (whitespace-insensitive)::
 

@@ -246,8 +246,10 @@ async def test_approvals_become_a_rule_that_applies_once_accepted(app, running) 
 
     entry = await agent.advanced.tools.accept_suggestion(suggestion.id)
     assert entry.name == UPDATE and entry.approve_when
-    # calls of the learned shape stop asking; any other shape still follows the tool's tier
+    # calls of the learned shape stop asking; any other shape still asks, as a write does
     assert evaluate(entry.approve_when, {"quote": "Q-9", "price": 1500}) is False
+    assert evaluate(entry.approve_when, {"quote": "Q-9", "price": 15000}) is True
+    assert evaluate(entry.approve_when, {"quote": "Q-9"}) is True
     assert (await agent.advanced.tools.approval_suggestions())[0].accepted is True
     # accepting again is the same rule, not a second clause
     assert (await agent.advanced.tools.accept_suggestion(suggestion.id)).approve_when == (

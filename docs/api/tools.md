@@ -241,7 +241,12 @@ print(entry.approve_when)
 
 Accepting composes the suggestion into the tool's catalog `approve_when` expression (the
 harness evaluates it before a call; `trellis.memory.approval.evaluate` is the reference). The
-rules of the route:
+harness asks exactly when the expression holds, so a tool with no `approve_when` yet starts
+from what its risk does: a `read` runs, and every other tool asks. For a tool that asks,
+`auto_approve` writes `not (shape == "…")`: calls of that shape stop asking and every other
+call still asks; `always_ask` writes `(true) or (shape == "…")`: every call still asks. For a
+`read`, `always_ask` writes `shape == "…"`: only calls of that shape ask. The rules of the
+route:
 
 * only the agent whose decisions the suggestion was learned from may accept it (bind the same
   `agent_id`); any other caller gets `404`;

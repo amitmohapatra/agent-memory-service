@@ -54,10 +54,10 @@ def compose(
     existing: str | None, risk: SideEffects | None, suggestion: Suggestion, shape: str
 ) -> str:
     """The tool's ``approve_when`` with the rule for calls of ``shape`` added: always ask for
-    them, or stop asking for them. Without an expression the tier is the base: an
-    irreversible tool, and one whose risk nobody declared (the harness asks about it), ask for
-    every call; the others for none."""
-    base = existing or ("true" if risk in ("irreversible", None) else "false")
+    them, or stop asking for them. Without an expression the base is what the harness does
+    with the risk, since the accepted rule replaces it: a ``read`` runs unasked, and every
+    other tool asks (a write, an irreversible one, one whose risk nobody declared)."""
+    base = existing or ("false" if risk == "read" else "true")
     clause = when_shape(shape)
     if suggestion == "always_ask":
         return clause if base == "false" else f"({base}) or ({clause})"

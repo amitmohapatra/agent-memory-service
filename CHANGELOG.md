@@ -20,6 +20,16 @@ each entry says which one moved. Decisions behind each change are in the
   asking call.
 
 ### Changed
+- **A learned approval rule for a `write` starts from asking** (service). A `write` asks since
+  agent-harness #220, and the harness asks exactly when an accepted rule holds, but a rule
+  learned for a write was still composed as if it ran unasked: accepting `always_ask` for one
+  argument shape wrote `shape == "…"`, so the write's other shapes stopped asking, and
+  accepting `auto_approve` wrote `(false) and not (shape == "…")`, so no call of it asked.
+  Only a `read` starts from running now. For a write, `auto_approve` writes
+  `not (shape == "…")` (that shape stops asking, every other call still asks) and `always_ask`
+  writes `(true) or (shape == "…")` (every call still asks). A rule accepted before this
+  change stays as written: remove the tool's `approve_when` (an empty string in its catalog
+  entry) and accept the suggestion again to recompose it.
 - **A tool whose risk nobody declared has no risk in the catalog** (service; trellis-memory
   0.6.6). Its risk was `write` when it had no `side_effects` and no `destructiveHint`: a tool
   the catalog first saw in a recorded call, or an entry written with a description only, was a
