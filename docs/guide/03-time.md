@@ -266,14 +266,15 @@ resolved against that calendar first, so "last week" is a fiscal week (`domain/f
 
 The resolved dates are what the read side uses; chapter 4 has the details.
 
-- The router classifies "when did…", "what year…", "since", "last quarter" and similar
-  English cues as `TEMPORAL` (`modules/retrieval/router.py`), which routes the question to the
-  graph as well.
+- A question about time has no route of its own (ADR 0046): "when did…", "what year…" and
+  the same question worded any other way, in any language, get the general search, which
+  reads the graph as well.
 - The memory ranking lifts, for a "when" question, memories that name a time, and for a
   question that names a period ("in June", "last month"), memories said in it or about a day
   in it (`modules/retrieval/memory_ranking.py`, `modules/retrieval/periods.py`).
-- For a `TEMPORAL` question, the graph stage parses a date from the question and asks the
-  graph for relations valid as of it (`modules/graph/retrieval.py`).
+- When a question names a date (`2026-02-01`, "1 February 2026", "Q1 2026"), the graph stage
+  asks the graph for relations valid as of it, whatever the question's wording
+  (`modules/graph/retrieval.py`); a question that names none gets what holds now.
 
 The knowledge graph keeps its own temporal status per relation — `CURRENT`, `SUPERSEDED`,
 `RETRACTED`, `INVALIDATED` — with `as_of` (valid time) and `valid_at` (knowledge time) on the

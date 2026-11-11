@@ -214,9 +214,9 @@ change (`modules/graph/summaries.py`). Without a model it is the facts on one li
 ## The graph at query time
 
 `GraphStage` (`modules/graph/retrieval.py`) runs for the routes that need the graph:
-`ENTITY_RELATION`, `DOCUMENT_MULTI_HOP`, `TEMPORAL`, `DECISION`, `EXACT_IDENTIFIER`, and
-`GENERAL_SEMANTIC` while `semantic_graph` is on — which covers every question not in English
-(chapter 4).
+`DOCUMENT_MULTI_HOP`, `EXACT_IDENTIFIER`, and `GENERAL_SEMANTIC` while `semantic_graph` is on —
+which covers every question the router gives no narrower route, in any wording and any
+language (chapter 4).
 
 ```mermaid
 sequenceDiagram
@@ -226,7 +226,7 @@ sequenceDiagram
   participant S as Qdrant
   E->>G: prefetch(route, audience) as soon as the scope is known
   G->>PG: resolve entities named in the question, then one statement of chained per-hop CTEs
-  Note over PG: statement_timeout = 150 ms#59; 3 hops for multi-hop, entity and unclassified questions, else 1#59; at most 40 nodes visited
+  Note over PG: statement_timeout = 150 ms#59; 3 hops for multi-hop and unclassified questions, 1 for an identifier#59; at most 40 nodes visited
   E->>S: the ranked searches run meanwhile
   S-->>E: ranked candidates
   alt the traversal finished
@@ -271,8 +271,11 @@ it. The chunks the facts cite are inserted right after the ranked evidence and b
 facts; conversation relations point at memories, which are fetched under their own bound.
 Everything pulled in is checked against the same audience specification the store used.
 
-**As of a date.** For a `TEMPORAL` question the stage parses a date from the question and asks
-for the relations valid then.
+**As of a date.** When the question names a date the stage asks for the relations valid then:
+"Who worked for Acme on 2026-02-01?", "Acme staff, 1 February 2026" and the same question in
+German all get the relation that held on that day, replaced since. The date is read from the
+question (`parse_date`: an ISO date, an English month with a year, a quarter with a year), not
+from a wording cue; a question that names no date gets the current relations.
 
 ---
 

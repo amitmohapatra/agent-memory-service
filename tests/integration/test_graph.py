@@ -207,7 +207,8 @@ async def test_memory_facts_supersession_and_as_of(container, uow_factory, monke
     # suite and real-model probes exercise the shipped 150 ms traversal deadline.
     engine.post_stages["graph"].budget_seconds = 2.0
     res = await engine.retrieve(ctx, "who works for Globex?")
-    assert res.routed.query_type is QueryType.ENTITY_RELATION
+    # no route of its own: the graph answers every question
+    assert res.routed.query_type is QueryType.GENERAL_SEMANTIC
     facts = [c for c in res.candidates if c.kind == "fact"]
     assert any(
         c.payload["predicate"] == "works_at" and c.payload["status"] == "CURRENT" for c in facts
@@ -230,3 +231,49 @@ async def test_memory_facts_supersession_and_as_of(container, uow_factory, monke
     await container.tasks.drain()
     after = await graph.query(ctx, entities=["Globex"])
     assert not [r for r in after.relations if r.predicate == "works_at"]
+
+
+async def test_the_graph_answers_as_of_the_date_a_question_names(container, uow_factory) -> None:
+    """A question that names a date gets the relation that held then, however the question is
+    worded and in whatever language: the date is read from the question, not from an English
+    cue ("on", "when", "since") that only one of these wordings has."""
+    ctx = U1.model_copy(
+        update={
+            "thread_id": new_id("thread"),
+            "session_id": new_id("session"),
+            "turn_id": new_id("turn"),
+        }
+    )
+    async with uow_factory() as uow:
+        await container.services["conversation"].append_message(
+            uow, ctx, role=MessageRole.USER, content="hello"
+        )
+        await uow.commit()
+    register_handlers(container)
+    for said, when in (
+        ("I work at ACME Corp.", datetime(2026, 1, 10, tzinfo=UTC)),
+        ("I work at Globex now.", datetime(2026, 3, 1, tzinfo=UTC)),
+    ):
+        async with uow_factory() as uow:
+            await submit_observation(uow, ctx, content=said, occurred_at=when)
+            await uow.commit()
+        await container.tasks.drain()
+        await container.tasks.drain()
+    engine = container.services["retrieval"]
+    engine.post_stages["graph"].budget_seconds = 2.0  # content, not this host's speed
+
+    async def employers(question: str) -> set[tuple[str, str]]:
+        found = await engine.retrieve(ctx, question)
+        return {
+            (c.payload["status"], str(c.payload["object"]).casefold())
+            for c in found.candidates
+            if c.kind == "fact" and c.payload["predicate"] == "works_at"
+        }
+
+    then = {("SUPERSEDED", "acme corp")}
+    assert await employers("Who worked for ACME Corp on 2026-02-01?") == then
+    assert await employers("ACME Corp staff, 1 February 2026") == then
+    assert await employers("Wer arbeitete am 2026-02-01 bei ACME Corp?") == then
+    # no date named: what holds now
+    assert await employers("Who works for Globex?") == {("CURRENT", "globex")}
+    assert await employers("Who works for ACME Corp?") == set()

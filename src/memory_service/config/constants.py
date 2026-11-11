@@ -826,8 +826,10 @@ class RetrievalSettings(BaseModel):
     bm25: bool = True
     dense: bool = True
     graph: bool = True
-    #: Unclassified questions can still name known graph entities in any language.
-    #: Resolve names under the caller's scope, with the same bounded traversal budget.
+    #: A question the router gives no narrower route reads the graph by the entities it
+    #: names, in any language, under the caller's scope and the same bounded traversal
+    #: budget. That is nearly every question (ADR 0046), so off leaves the graph to
+    #: identifiers and multi-fact questions only.
     semantic_graph: bool = True
     #: Outer fusion of hybrid document candidates with optional strategy retrievers.
     rrf_k: int = 60

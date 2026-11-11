@@ -1,5 +1,9 @@
-"""Lever 3 of ADR 0041: a question about now reads a slot's latest value, a question about
-what was keeps the earlier values where they rank."""
+"""What a question's wording may and may not decide.
+
+Lever 3 of ADR 0041: a question about now reads a slot's latest value, a question about
+what was keeps the earlier values where they rank. And the route - which stores are searched -
+does not follow the wording of the need: "when", "who owns" and "why did we decide" get the
+search every other question gets."""
 
 from __future__ import annotations
 
@@ -151,3 +155,42 @@ def test_a_question_that_carries_on_from_something_before_it(
     from memory_service.modules.retrieval.router import continues
 
     assert continues(question) is carries_on
+
+
+@pytest.mark.parametrize(
+    "wordings",
+    [
+        (
+            "When did we ship the exporter?",
+            "The exporter's ship date?",
+            "Wann haben wir den Exporter ausgeliefert?",
+        ),
+        (
+            "Who owns the billing service?",
+            "The billing service's owner?",
+            "¿Quién es el dueño del servicio de facturación?",
+        ),
+        (
+            "Why did we decide to use Postgres?",
+            "What made us go with Postgres?",
+            "Warum haben wir uns für Postgres entschieden?",
+        ),
+    ],
+)
+def test_a_need_gets_the_same_search_however_it_is_worded(wordings: tuple[str, ...]) -> None:
+    """One need worded with an English cue, without one, and in another language: the same
+    route, so the same stores are searched. The cue used to decide (TEMPORAL, ENTITY_RELATION,
+    DECISION for the first wording, GENERAL_SEMANTIC for the other two)."""
+    routes = [QueryRouter().route(question) for question in wordings]
+    searched = {
+        (
+            r.query_type,
+            r.needs_conversation,
+            r.needs_memories,
+            r.needs_knowledge,
+            r.needs_graph,
+            r.needs_summaries,
+        )
+        for r in routes
+    }
+    assert len(searched) == 1, [(r.query, r.query_type.value) for r in routes]

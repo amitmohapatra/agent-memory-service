@@ -186,7 +186,7 @@ def test_an_identifier_is_exact_in_any_language_and_english_still_routes() -> No
     assert QueryRouter().route("Was steht in doc_01J8ZK7Q9V3W?").query_type is (
         QueryType.EXACT_IDENTIFIER
     )
-    assert QueryRouter().route("When did we ship the exporter?").query_type is QueryType.TEMPORAL
+    assert QueryRouter().route("What is my timezone?").query_type is QueryType.USER_MEMORY
 
 
 async def _memory(text: str):

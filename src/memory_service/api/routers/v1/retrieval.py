@@ -51,9 +51,10 @@ _ERRORS = error_responses(401, 403, 422, 503)
 
 _QUERY_TYPE_DESCRIPTION = (
     "How the deterministic router classified the query: EXACT_IDENTIFIER (an id or code was "
-    "looked up), CONVERSATION_HISTORY, USER_MEMORY, DECISION, DOCUMENT_LOCAL (one passage "
-    "answers it), DOCUMENT_MULTI_HOP (several passages must be combined), ENTITY_RELATION "
-    "(graph traversal), TEMPORAL, GLOBAL_SUMMARY or GENERAL_SEMANTIC (the default)."
+    "looked up), CONVERSATION_HISTORY, USER_MEMORY, DOCUMENT_LOCAL (one passage answers it), "
+    "DOCUMENT_MULTI_HOP (several passages must be combined), GLOBAL_SUMMARY or "
+    "GENERAL_SEMANTIC (the default). DECISION, ENTITY_RELATION and TEMPORAL are no longer "
+    "returned: such a question is GENERAL_SEMANTIC."
 )
 
 _SCOPE: dict[str, Any] = {

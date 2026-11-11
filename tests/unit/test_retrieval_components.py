@@ -29,13 +29,14 @@ pytestmark = pytest.mark.unit
         ("what is the status of ACME-1234?", QueryType.EXACT_IDENTIFIER),
         ("what did I say earlier in this thread about pricing?", QueryType.CONVERSATION_HISTORY),
         ("what is my timezone?", QueryType.USER_MEMORY),
-        ("why did we decide to use Postgres?", QueryType.DECISION),
         ("give me a summary of the main risks", QueryType.GLOBAL_SUMMARY),
         ("why did Adjusted EBITDA increase despite lower revenue?", QueryType.DOCUMENT_MULTI_HOP),
-        ("who owns the billing service?", QueryType.ENTITY_RELATION),
-        ("what changed since last quarter?", QueryType.TEMPORAL),
         ("what does table 2 on page 11 say?", QueryType.DOCUMENT_LOCAL),
         ("restructuring savings", QueryType.GENERAL_SEMANTIC),
+        # a need's wording is not a route: these were DECISION, ENTITY_RELATION and TEMPORAL
+        ("why did we decide to use Postgres?", QueryType.GENERAL_SEMANTIC),
+        ("who owns the billing service?", QueryType.GENERAL_SEMANTIC),
+        ("what changed since last quarter?", QueryType.GENERAL_SEMANTIC),
     ],
 )
 def test_router_types(query: str, expected: QueryType) -> None:

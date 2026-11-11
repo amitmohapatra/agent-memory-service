@@ -45,7 +45,7 @@
     {
       "id": "revenue_decline_driver",
       "query": "What drove the decrease in ACME total revenue in FY26?",
-      "query_type": "TEMPORAL",
+      "query_type": "GENERAL_SEMANTIC",
       "critical": true,
       "required_groups": {
         "revenue_text": [
@@ -60,7 +60,7 @@
     {
       "id": "revenue_table",
       "query": "Legacy Services revenue FY25 vs FY26",
-      "query_type": "TEMPORAL",
+      "query_type": "GENERAL_SEMANTIC",
       "critical": true,
       "required_groups": {
         "table": [
@@ -164,7 +164,7 @@
     {
       "id": "distractor_acquisition",
       "query": "When did the Initech acquisition close and for how much?",
-      "query_type": "TEMPORAL",
+      "query_type": "GENERAL_SEMANTIC",
       "critical": true,
       "required_groups": {
         "section9": [
@@ -194,7 +194,7 @@
     {
       "id": "segments_table",
       "query": "Which segments grew and which shrank at ACME in FY26?",
-      "query_type": "ENTITY_RELATION",
+      "query_type": "GENERAL_SEMANTIC",
       "critical": true,
       "required_groups": {
         "table": [
@@ -224,7 +224,7 @@
     {
       "id": "arr_alias",
       "query": "What is ARR and how much was it in FY26?",
-      "query_type": "TEMPORAL",
+      "query_type": "GENERAL_SEMANTIC",
       "critical": true,
       "required_groups": {
         "definition": [
@@ -246,7 +246,7 @@
     {
       "id": "approval",
       "query": "Who approved the restructuring programme and when?",
-      "query_type": "ENTITY_RELATION",
+      "query_type": "GENERAL_SEMANTIC",
       "critical": true,
       "required_groups": {
         "board": [
@@ -276,7 +276,7 @@
     {
       "id": "margin_exclusions",
       "query": "What items does Adjusted Operating Margin exclude?",
-      "query_type": "ENTITY_RELATION",
+      "query_type": "GENERAL_SEMANTIC",
       "critical": true,
       "required_groups": {
         "definition": [
@@ -305,7 +305,7 @@
     {
       "id": "apac_operator",
       "query": "Which company operates in Asia-Pacific?",
-      "query_type": "ENTITY_RELATION",
+      "query_type": "GENERAL_SEMANTIC",
       "critical": true,
       "required_groups": {
         "overview": [
