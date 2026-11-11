@@ -86,12 +86,32 @@ def test_a_risk_nobody_declared_is_none(
     assert risk_tier(side_effects, ToolAnnotations(**annotations)) == risk
 
 
-def test_an_undeclared_tools_learned_rule_starts_from_asking() -> None:
-    """With no risk, the base a learned rule is composed on asks (the harness asks about such
-    a tool): "approve automatically" stops asking for that shape only, never for every other."""
-    clause = 'shape == "path:str"'
-    assert approvals.compose(None, None, "auto_approve", SHAPE) == f"not ({clause})"
-    assert approvals.compose(None, "write", "auto_approve", SHAPE) == f"(false) and not ({clause})"
+#: Calls of the learned shape, and of others the same tool takes.
+LEARNED = {"path": "/p"}
+OTHERS = ({"path": "/p", "force": True}, {"path": 3}, {})
+
+
+@pytest.mark.parametrize("risk", ["write", "irreversible", None])
+def test_a_learned_rule_for_a_tool_that_asks_starts_from_asking(risk: Any) -> None:
+    """Only a ``read`` runs unasked: a write asks (harness #220), as an irreversible tool and
+    one whose risk nobody declared do. The harness asks exactly when the accepted rule holds,
+    so the rule is composed on "asks": "always ask" for one shape leaves every other shape
+    asking, and "approve automatically" stops asking for that shape only."""
+    asks = approvals.compose(None, risk, "always_ask", SHAPE)
+    assert evaluate(asks, LEARNED)
+    assert all(evaluate(asks, other) for other in OTHERS)
+    auto = approvals.compose(None, risk, "auto_approve", SHAPE)
+    assert auto == 'not (shape == "path:str")'
+    assert not evaluate(auto, LEARNED)
+    assert all(evaluate(auto, other) for other in OTHERS)
+
+
+def test_a_learned_rule_for_a_read_starts_from_running() -> None:
+    """A read runs unasked, so "always ask" asks for its shape and no other."""
+    asks = approvals.compose(None, "read", "always_ask", SHAPE)
+    assert asks == 'shape == "path:str"'
+    assert evaluate(asks, LEARNED)
+    assert not any(evaluate(asks, other) for other in OTHERS)
 
 
 class _Tools:
