@@ -33,7 +33,7 @@ VISIBILITY = VisibilitySpecification(tenant_id="acme", keys=frozenset({"tenant:a
 
 def _routed(query: str = "who leads the freight operator used by Acme?"):
     return QueryRouter().routed(
-        query, QueryType.ENTITY_RELATION, identifiers=[], signals={}, has_thread=False
+        query, QueryType.GENERAL_SEMANTIC, identifiers=[], signals={}, has_thread=False
     )
 
 

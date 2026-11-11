@@ -163,6 +163,9 @@ class QueryType(StrEnum):
     EXACT_IDENTIFIER = "EXACT_IDENTIFIER"
     CONVERSATION_HISTORY = "CONVERSATION_HISTORY"
     USER_MEMORY = "USER_MEMORY"
+    #: DECISION, ENTITY_RELATION and TEMPORAL are no longer returned: a route follows what a
+    #: question holds, not how it is worded (ADR 0046), so such a question is
+    #: GENERAL_SEMANTIC. Kept in the published enumeration until the next contract version.
     DECISION = "DECISION"
     DOCUMENT_LOCAL = "DOCUMENT_LOCAL"
     DOCUMENT_MULTI_HOP = "DOCUMENT_MULTI_HOP"

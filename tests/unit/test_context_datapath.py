@@ -293,8 +293,11 @@ async def test_the_scope_and_the_bundle_are_one_cache_read() -> None:
     cache.get = spy_get  # type: ignore[method-assign]
 
     await builder.build(CTX, QUERY)
-    assert len(reads) == 1 and len(reads[0]) == 2, reads
+    # one read: the scope, the bundle, and the near-identical question's bundle (a question
+    # with no route of its own may be answered from one)
+    assert len(reads) == 1 and len(reads[0]) == 3, reads
     assert reads[0][0].startswith("authz:scope:acme:") and reads[0][1].startswith("ctx:acme:")
+    assert reads[0][2].startswith("semantic-context:")
     assert gets == [], "the authorization scope was fetched a second time on its own"
 
 

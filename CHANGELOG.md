@@ -41,6 +41,21 @@ each entry says which one moved. Decisions behind each change are in the
   asking call.
 
 ### Changed
+- **A question gets the same search however it is worded** (service). The router no longer
+  has a route for a question that opens with "when", "who owns" or "why did we decide"
+  (`TEMPORAL`, `ENTITY_RELATION`, `DECISION`): each was an English wording pattern, so the same
+  need asked without the cue words, or in another language, was searched differently. Such a
+  question is `GENERAL_SEMANTIC` now, as it already was in every other language: every dense
+  space, BM25 and the graph by entity name, three hops. What only the `TEMPORAL` route did is
+  read from the question itself: when a question names a date (`2026-02-01`, "February 2026",
+  "Q1 2026") the graph answers with the relations that held then, in any wording; before, only
+  a question with an English time cue got them. The overview route (`GLOBAL_SUMMARY`) and the
+  several-facts route (`DOCUMENT_MULTI_HOP`) stay, because each carries a result the general
+  search does not (ADR 0046 has the measurements). `query_type` (debug only) no longer
+  returns the three labels, which stay in the published enumeration; `diagnostics.signals`
+  no longer has `temporal`, `entity` and `decision`. With `semantic_graph` off (not the
+  default) the graph is read for identifiers and several-facts questions only. No
+  endpoint, field or SDK call changed.
 - **A learned approval rule for a `write` starts from asking** (service). A `write` asks since
   agent-harness #220, and the harness asks exactly when an accepted rule holds, but a rule
   learned for a write was still composed as if it ran unasked: accepting `always_ask` for one

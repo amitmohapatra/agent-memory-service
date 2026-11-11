@@ -1,6 +1,6 @@
 # ADR 0008: Baseline retrieval — hybrid BM25 + dense with store-side isolation
 
-**Status:** accepted · **Date:** 2026-09-15
+**Status:** accepted · **Date:** 2026-09-15 · **Amended by:** ADR 0046 (the router: a route follows what a question holds, not how it is worded)
 
 ## Decision
 - **One index, two named vectors.** Every chunk is stored once in Qdrant with a `dense`

@@ -1,13 +1,18 @@
 """Deterministic query hints with language-independent access to semantic graph evidence.
 
-Rules classify familiar forms. An unclassified question still searches known entities;
-English keyword recognition is not an eligibility requirement for graph traversal.
+A route says which stores a question searches, and only that. It is decided by what the
+question holds, never by how the need is worded: an identifier is looked up exactly, a question
+about this conversation reads the conversation, one about the asker reads their memories, a
+passage reference ("table 2 on page 11") and a request for an overview read the documents
+that way - and everything else is GENERAL_SEMANTIC: every dense space, the lexical arm, and the
+graph by entity name. The same need therefore gets the same search whether it opens with
+"when", "who owns" or "why did we decide", or is asked in another language (what those cues
+used to switch on is now part of the general search, or read from the question itself: the
+graph answers as of a date the question names, whatever its wording - ``graph.retrieval``).
 
-The cue patterns are English. A question in another language (``domain.language``) is never
-routed by them - an incidental "since" or "in 2024" inside a German sentence is not an
-English temporal cue - so only the language-independent signal (an identifier) applies and
-everything else is GENERAL_SEMANTIC: every dense space, the graph by entity name, and, when
-the read may consult the model, query expansion (``RetrievalEngine``).
+The cue patterns that remain are English. A question in another language
+(``domain.language``) is never routed by them, so only the language-independent signals apply
+(an identifier; the earlier-chat and "what was" cues, which carry each language's own words).
 """
 
 from __future__ import annotations
@@ -27,17 +32,6 @@ _CONVERSATION = re.compile(
 )
 _USER_MEMORY = re.compile(
     r"\b(my (?:preference|preferences|favorite|favourite|name|timezone|role|team|settings|setup|usual)|do i (?:like|prefer|use)|what do i|about me|i (?:usually|always|never)|remember (?:that )?i)\b",
-    re.IGNORECASE,
-)
-_DECISION = re.compile(
-    r"\b(why did we (?:decide|choose|pick|go with)|decision|decided|agreed|rationale|trade-?off|chose|why was .* (?:chosen|rejected))\b",
-    re.IGNORECASE,
-)
-#: The bare interrogatives were missing, and they are how people actually ask about time.
-#: Measured on LoCoMo, only 1 of 26 temporal questions routed TEMPORAL, because every one
-#: of them opens "When did ..." and the pattern below had "since|before|after" but no "when".
-_TEMPORAL = re.compile(
-    r"\b(when (?:did|was|were|does|do|is|are|will)|what (?:year|month|date|day|time)|how long (?:ago|did|has|have)|what time|as of|since|before|after|until|between|last (?:week|month|quarter|year)|this (?:week|month|quarter|year)|in (?:19|20)\d{2}|q[1-4]\b|fy\d{2}|\d{4}-\d{2}-\d{2}|yesterday|today|latest|current(?:ly)?|previous|history of|changed over|over time|timeline)\b",
     re.IGNORECASE,
 )
 _GLOBAL = re.compile(
@@ -67,13 +61,6 @@ _MULTI_HOP_NAMED = re.compile(
     r"\b(?:(?:[Ww]hat|[Ww]hich)\s+(?:(?:kinds?|types?|sorts?)\s+of\s+\w+"
     r"|(?!(?:is|was|has|does|this|his|its|as|us|was)\b)[a-z]+s)|[Ww]here\s+(?:has|have)|[Hh]ow\s+many)\b"
     r"[^?]{0,40}?\b(?:has|have|does|do|did)\s+[A-Z][a-z]+(?:'s)?\s+(?=[a-z])"
-)
-_ENTITY = re.compile(
-    r"\b(who (?:is|owns|leads|manages|reports to|approved)|which (?:team|company|person|agent)|related to|connected to|works? (?:with|for)|owner of|members? of|part of|"
-    # relation cues the knowledge graph answers directly (typed facts + their evidence)
-    r"(?:does|do|did|is|are|was|were) .{2,60}? (?:exclude|excludes|include|includes|operate in|provide|provides|serve|serves|acquire|acquired|approve|approved)|"
-    r"(?:what|which) (?:items|costs|charges|segments|regions|products|companies)|how much did .{2,40}? pay|segments? of|excluded from|approved by|acquired by|driven by)\b",
-    re.IGNORECASE,
 )
 _DOC_LOCAL = re.compile(
     r"\b(page \d+|section \d+(?:\.\d+)*|table \d+|figure \d+|appendix [a-z]|footnote|in the (?:report|document|contract|pdf|file|manual|filing)|according to the)\b",
@@ -146,11 +133,8 @@ def points_to_earlier_chat(query: str) -> bool:
 _CUES = {
     "conversation": (_CONVERSATION,),
     "user_memory": (_USER_MEMORY,),
-    "decision": (_DECISION,),
-    "temporal": (_TEMPORAL,),
     "global": (_GLOBAL,),
     "multi_hop": (_MULTI_HOP, _MULTI_HOP_NAMED),
-    "entity": (_ENTITY,),
     "doc_local": (_DOC_LOCAL,),
 }
 
@@ -198,16 +182,10 @@ class QueryRouter:
             qt = QueryType.CONVERSATION_HISTORY
         elif signals["user_memory"]:
             qt = QueryType.USER_MEMORY
-        elif signals["decision"]:
-            qt = QueryType.DECISION
         elif signals["global"]:
             qt = QueryType.GLOBAL_SUMMARY
         elif signals["multi_hop"]:
             qt = QueryType.DOCUMENT_MULTI_HOP
-        elif signals["entity"]:
-            qt = QueryType.ENTITY_RELATION
-        elif signals["temporal"]:
-            qt = QueryType.TEMPORAL
         elif signals["doc_local"]:
             qt = QueryType.DOCUMENT_LOCAL
         else:
@@ -237,22 +215,16 @@ class QueryRouter:
             in (
                 QueryType.CONVERSATION_HISTORY,
                 QueryType.GENERAL_SEMANTIC,
-                QueryType.DECISION,
                 QueryType.USER_MEMORY,
                 QueryType.DOCUMENT_MULTI_HOP,
-                QueryType.TEMPORAL,
                 QueryType.DOCUMENT_LOCAL,
                 QueryType.GLOBAL_SUMMARY,
-                QueryType.ENTITY_RELATION,
             ),
             needs_knowledge=qt not in (QueryType.CONVERSATION_HISTORY, QueryType.USER_MEMORY),
             needs_graph=(qt is QueryType.GENERAL_SEMANTIC and self.semantic_graph)
             or qt
             in (
-                QueryType.ENTITY_RELATION,
                 QueryType.DOCUMENT_MULTI_HOP,
-                QueryType.TEMPORAL,
-                QueryType.DECISION,
                 # an identifier names an entity: what the graph knows about it answers too
                 QueryType.EXACT_IDENTIFIER,
             ),

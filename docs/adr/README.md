@@ -18,7 +18,7 @@ is not finished).
 | [0005](0005-authorization-and-visibility.md) | OpenFGA relationships plus visibility keys, filtered **store-side before** search — never "retrieve globally, filter in memory" | accepted; amended by 0021 (`WORKSPACE`) and 0022 (header names) |
 | [0006](0006-archive-protocol.md) | The chat archive protocol: staged → immutable verified segment → purge, with content-addressed segments and verified uploads | accepted |
 | [0007](0007-document-context-graph.md) | Docling parsing behind a port, natural chunking, and the Document Context Graph that expansion follows | accepted |
-| [0008](0008-baseline-retrieval.md) | Baseline retrieval: one index, two named vectors — client-encoded BM25 with server-side IDF, fused with dense in a single query | accepted |
+| [0008](0008-baseline-retrieval.md) | Baseline retrieval: one index, two named vectors — client-encoded BM25 with server-side IDF, fused with dense in a single query | accepted; amended by 0046 (routes follow what a question holds) |
 | [0009](0009-memory-intelligence.md) | Memory intelligence: native deterministic rules first (extract → classify → consolidate → persist → index), LLM providers as benchmarkable adapters | accepted; amended by 0032 (admission behind a tenant switch) and 0035 (same subject, the adjudicator's gate) |
 | [0010](0010-knowledge-graph.md) | The knowledge graph lives in PostgreSQL next to the canonical rows, carries evidence, and is traversed under bounds | accepted |
 | [0011](0011-context-preservation.md) | Context preservation: expansion follows the document graph rather than similarity, hierarchical summaries, and evidence verification | accepted |
@@ -56,6 +56,7 @@ is not finished).
 | [0043](0043-a-users-events-follow-the-user.md) | An `EVENT` recorded for a user (by them or an agent acting for them) follows that user like their own words (`USER` by default; a system event, explicit `THREAD`, `IMPORT` and `FILE` unchanged), and replaces or is replaced across their conversations as a statement is; no graph fact read from an earlier value is served as current | accepted; amends 0036, 0038 |
 | [0044](0044-earlier-chats-recalled.md) | A later chat recalls what was said in the user's earlier chats, the assistant's answers included: a question that points to one gets the best matching earlier answers in its context (dated, labelled, marked when corrected) and `memory_search` reads messages for it; only the user's own conversations of the request's workspace, never a deleted one; a temporary chat (harness `without=["memory"]`) is never sent | accepted; amends 0036 |
 | [0045](0045-gap-fill-extraction.md) | With a model, one gap-fill call per message reads what the rules missed (ops checked in code; updates through the replacement path); narrative units, non-English typed facts and the labeller's model tier removed | accepted |
+| [0046](0046-a-route-follows-what-the-question-holds.md) | A route follows what the question holds, not how it is worded: the time, entity and decision wording patterns removed (such a question is `GENERAL_SEMANTIC`), the graph answers as of a date the question names in any wording; the overview and several-facts patterns stay, each carrying a measured result | accepted; amends 0008 |
 
 ## Where the numbers behind these decisions are
 

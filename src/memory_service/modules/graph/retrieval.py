@@ -50,7 +50,6 @@ graph_budget_expired_total = Counter(
 
 _MULTI_HOP_TYPES = {
     QueryType.DOCUMENT_MULTI_HOP,
-    QueryType.ENTITY_RELATION,
     QueryType.GENERAL_SEMANTIC,
 }
 # query words that name a relation: "exclude" -> excludes, "drove" -> driven_by, "pay" -> ...
@@ -180,7 +179,11 @@ class GraphStage:
         routed: RoutedQuery,
         visibility: VisibilitySpecification,
     ) -> tuple[datetime | None, GraphAnswer]:
-        as_of = parse_date(routed.query) if routed.query_type is QueryType.TEMPORAL else None
+        # A date the question names is the moment the graph answers for ("who worked for Acme
+        # on 2026-02-01?" gets the relation that held then, replaced since). Read from the
+        # question itself, so it holds whatever the wording or the language; a question that
+        # names no date gets what holds now.
+        as_of = parse_date(routed.query)
         answer = await self.graph.query(
             ctx,
             query=routed.query,

@@ -18,11 +18,8 @@
 
 ```mermaid
 flowchart TB
-  Q["question (cut at 2,048 characters)"] --> RT["route: identifier, English cue rules,<br/>or GENERAL_SEMANTIC"]
-  RT --> EXP{"read may use the model<br/>and no rule classified it?"}
-  EXP -->|yes| QE["query_expansion, 250 ms deadline"]
-  EXP -->|no| ENC
-  QE --> ENC
+  Q["question (cut at 2,048 characters)"] --> RT["route: what the question holds<br/>(an identifier, this chat, the asker, a passage,<br/>an overview, several facts) or GENERAL_SEMANTIC"]
+  RT --> ENC
   subgraph concurrent[started together]
     ENC["encode: dense_en (Latin script only),<br/>dense_ml, BM25, ColBERT token vectors"]
     VIS["visibility: the caller's audience keys"]
@@ -50,31 +47,42 @@ The rest of this chapter takes those boxes in order.
 ## Routing
 
 `QueryRouter` (`modules/retrieval/router.py`) is regular expressions, no model. It returns a
-`QueryType` and what the question needs. The rules are tried in this order, first match wins:
+`QueryType` and what the question needs. A route says which stores a question searches, and it
+is decided by what the question holds, not by how the need is worded (ADR 0046). The rules
+are tried in this order, first match wins:
 
-| Order | Type | Example cue | Also turns on |
+| Order | Type | What the question holds | Also turns on |
 |---|---|---|---|
 | 1 | `EXACT_IDENTIFIER` | `mem_…`, `doc_…`, a UUID, `SKU-22` | exact lookup, graph |
 | 2 | `CONVERSATION_HISTORY` | "what did I say", "earlier in this chat" | window; no documents |
 | 3 | `USER_MEMORY` | "my timezone", "do I prefer" | window; no documents |
-| 4 | `DECISION` | "why did we decide", "rationale" | graph |
-| 5 | `GLOBAL_SUMMARY` | "overall", "key takeaways", "tl;dr" | document and section summaries |
-| 6 | `DOCUMENT_MULTI_HOP` | "despite", "compare", "where has X travelled" | graph (three hops), entity search |
-| 7 | `ENTITY_RELATION` | "who approved", "does X exclude" | graph (three hops) |
-| 8 | `TEMPORAL` | "when did", "what year", "last quarter", "since" | graph, as of the date named |
-| 9 | `DOCUMENT_LOCAL` | "page 4", "section 8", "according to the report" | — |
-| 10 | `GENERAL_SEMANTIC` | anything else | graph by entity name (`semantic_graph`), three hops |
+| 4 | `GLOBAL_SUMMARY` | a request for an overview: "overall", "key takeaways", "tl;dr" | document and section summaries; no graph |
+| 5 | `DOCUMENT_MULTI_HOP` | several facts to gather: "despite", "compare", "where has X travelled" | graph (three hops), per-person search |
+| 6 | `DOCUMENT_LOCAL` | a passage reference: "page 4", "section 8", "according to the report" | — |
+| 7 | `GENERAL_SEMANTIC` | anything else | graph by entity name (`semantic_graph`), three hops |
+
+**The same need gets the same search however it is worded.** "When did we ship the exporter?",
+"The exporter's ship date?" and the same question in German are all `GENERAL_SEMANTIC`: every
+dense space, BM25 and the graph by entity name. There is no route for a question that opens
+with "when", "who owns" or "why did we decide" (`TEMPORAL`, `ENTITY_RELATION` and `DECISION`
+before ADR 0046; the three labels stay in the published enumeration and are no longer
+returned). What those routes switched on is now either part of the general search (the graph,
+three hops) or read from the question itself: a date the question names is the moment the
+graph answers for, in any wording and any language (chapter 5).
+
+Two wording rules remain because each carries a result the general search does not (measured,
+ADR 0046): an overview request is the only question that searches the summaries (searching
+them for every question lowers the golden gate's recall@20 from 1.00 to 0.95), and a
+several-facts question is the only one that runs the per-person search below (running it for
+every question adds about 200 ms and pushes evidence down the ranking).
 
 **The cue patterns are English.** A question in another language (`domain/language.py`
-decides, without a model) is never routed by them — an incidental "since" in a German
-sentence is not an English temporal cue — so only an identifier applies and everything else
-is `GENERAL_SEMANTIC`: every dense space, BM25 and the graph by entity name.
+decides, without a model) is never routed by them, so only an identifier applies and
+everything else is `GENERAL_SEMANTIC`. Two cues are read in each language's own words and
+change no route: whether the question asks about the past (earlier values are kept where they
+rank, ADR 0041) and whether it points to an earlier chat (ADR 0044).
 
-**Query expansion** is the one place a read may call a model: when the tenant's policy has
-`read_assist` on and a key can pay, a question no rule classified (every non-English
-question included) is expanded by `query_expansion` (fast tier). The written query is encoded
-while the model is asked, and past `query_expansion_timeout_ms` (250) it is searched as
-written (`RetrievalSettings`). Separately, a deployment with a retail calendar searches
+Retrieval does not ask a model about a query. A deployment with a retail calendar searches
 planning shorthand with its expansion — "WOS" with "weeks of supply" — from a fixed table
 (`domain/glossary.py`).
 
