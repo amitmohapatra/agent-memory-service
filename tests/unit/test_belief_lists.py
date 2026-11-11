@@ -1,16 +1,18 @@
 """List beliefs, the parts that need no database: one belief per recurring or countable
-thing of a person, every instance named by the model with the fact it comes from and dated
-by the code from that fact. The second instance turns a belief into a list, later ones
-extend it with its sources carried over, a list past a line's size continues in a next part
-of the same title, and the page shows lists first."""
+thing of a person, kept besides the ordinary lines, every instance named by the model with
+the fact it comes from and dated by the code from that fact. A list starts at the second
+instance, later ones extend it with its sources carried over, each instance is checked
+against its own memories, a list past a line's size continues in a next part of the same
+title, and the page shows lists first."""
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from memory_service.domain.beliefs import LIST_FACET, Belief
 from memory_service.domain.memory import CanonicalMemory
-from memory_service.modules.memory.consolidation import MAX_LINE_CHARS, listed, plan
+from memory_service.modules.memory.consolidation import MAX_LINE_CHARS, claims, listed, plan
 from memory_service.modules.profile.service import person_page
 from tests.unit.test_consolidation import DAY, belief, fact
 
@@ -33,15 +35,18 @@ def held(text: str, sources: list[CanonicalMemory], *, facet: str = "places") ->
 
 
 def written(entries: list[dict], beliefs: list[Belief], facts: list[CanonicalMemory], *old):
-    """The lines the entries make, written out with every cited memory at hand."""
+    """The list lines the entries make, written out with every cited memory at hand and
+    every instance supported by the check."""
     sources = {m.memory_id: m for m in (*facts, *old)}
-    return [part for line in plan(entries, beliefs, facts).lines for part in listed(line, sources)]
+    lines = plan(entries, beliefs, facts).lines
+    supported = [claim for line in lines for claim in claims(line, sources)]
+    return [part for line in lines for part in listed(line, supported)]
 
 
 # -- recognised at the second instance, dated by the code ------------------------------------
 
 
-def test_the_second_instance_turns_a_belief_into_a_list_dated_from_its_facts() -> None:
+def test_a_list_starts_at_the_second_instance_dated_from_its_facts() -> None:
     paris = fact("I went to Paris.")
     rome = fact(
         "I flew to Rome last week.",
@@ -49,13 +54,17 @@ def test_the_second_instance_turns_a_belief_into_a_list_dated_from_its_facts() -
         dated_mentions=[{"text": "last week", "date": "2023-06-05..2023-06-11"}],
     )
     was = held("Went to Paris (May 2023).", [paris])
-    turned = entry("update", ["F1"], [item("Paris", "B1"), item("Rome", "F1")], on="B1")
-    [line] = written([turned], [was], [rome], paris)
+    started = entry("add", ["F1"], [item("Paris", "B1"), item("Rome", "F1")])
+    found = plan([started], [was], [rome])
+    [line] = written([started], [was], [rome], paris)
     # the first instance has only the day it was said; the second the date its words resolve to
     assert line.text == "Trips taken: Paris (said 2023-05-08); Rome (2023-06-05..2023-06-11)"
-    assert line.facet == LIST_FACET
+    assert line.facet == LIST_FACET and line.replaces is None
     assert line.source_ids == (paris.memory_id, rome.memory_id)
-    assert line.folds == (was,) and line.replaces is None  # the belief is now an item of it
+    # the list is kept besides the belief it names an instance from: that line stays as it is
+    assert len(found.lines) == 1 and not found.keeps and not found.retires
+    # one instance alone is no list
+    assert written([entry("add", ["F1"], [item("Rome", "F1")])], [was], [rome], paris) == []
 
 
 def test_an_instance_is_dated_by_the_date_its_fact_names_never_by_the_models_words() -> None:
@@ -143,13 +152,59 @@ def test_two_entries_for_one_list_in_a_run_are_one_line() -> None:
 
 
 def test_an_item_that_cites_nothing_known_is_left_out_and_a_list_needs_a_new_fact() -> None:
-    paris, rome = fact("Paris."), fact("Rome.", day=1)
+    paris, rome, oslo = fact("Paris."), fact("Rome.", day=1), fact("Oslo.", day=2)
     was = held("Went to Paris.", [paris])
-    stray = entry("add", ["F1"], [item("Rome", "F1"), item("Mars", "F9"), item("", "F1")])
-    [line] = written([stray], [was], [rome], paris)
-    assert line.text == "Trips taken: Rome (said 2023-05-09)"
-    # only beliefs, no fact of this run: nothing to fold a list from
-    assert written([entry("add", [], [item("Paris", "B1")])], [was], [rome], paris) == []
+    stray = entry(
+        "add",
+        ["F1", "F2"],
+        [item("Rome", "F1"), item("Mars", "F9"), item("", "F1"), item("Oslo", "F2")],
+    )
+    [line] = written([stray], [was], [rome, oslo], paris)
+    assert line.text == "Trips taken: Rome (said 2023-05-09); Oslo (said 2023-05-10)"
+    # only beliefs, no fact of this run: nothing to start a list from
+    other = held("Went to Rome.", [rome])
+    only_held = entry("add", [], [item("Paris", "B1"), item("Rome", "B2")])
+    assert written([only_held], [was, other], [oslo], paris, rome) == []
+
+
+def test_an_instance_the_list_already_holds_is_not_added_again() -> None:
+    paris, rome = fact("I went to Paris."), fact("Back from Rome.", day=40)
+    was = held("Went to Paris.", [paris])
+    trips = held("Trips taken: Paris (said 2023-05-08)", [paris], facet=LIST_FACET)
+    again = entry("update", ["F1"], [item("Paris", "B1"), item("Rome", "F1")], text="", on="B2")
+    [line] = written([again], [was, trips], [rome], paris)
+    assert line.text == trips.text + "; Rome (said 2023-06-17)"  # by its sources, not its words
+
+
+# -- each instance is checked against its own memories ---------------------------------------
+
+
+def test_the_check_reads_each_new_instance_against_only_the_memories_it_cites() -> None:
+    paris, rome = fact("I went to Paris."), fact("Back from Rome.", day=40)
+    oslo = fact("Oslo was cold.", day=41)
+    trips = held("Trips taken: Paris (said 2023-05-08)", [paris], facet=LIST_FACET)
+    more = entry("update", ["F1", "F2"], [item("Rome", "F1"), item("Oslo", "F2")], text="", on="B1")
+    [line] = plan([more], [trips], [rome, oslo]).lines
+    sources = {m.memory_id: m for m in (paris, rome, oslo)}
+    first, second = claims(line, sources)
+    # a claim is the instance under its list's title, as the list will say it
+    assert (first.text, first.source_ids) == (
+        "Trips taken: Rome (said 2023-06-17)",
+        (rome.memory_id,),
+    )
+    assert (second.text, second.source_ids) == (
+        "Trips taken: Oslo (said 2023-06-18)",
+        (oslo.memory_id,),
+    )
+    # an instance the check does not support is left out; the list keeps the others
+    [part] = listed(line, [second])
+    assert part.text == trips.text + "; Oslo (said 2023-06-18)"
+    assert part.source_ids == (paris.memory_id, oslo.memory_id)
+    assert listed(line, []) == []  # nothing supported: the list is left as it is
+    # a rewritten instance joins as rewritten while it is still under the title, else not
+    fixed = [replace(first, text="Trips taken: Rome, Italy (said 2023-06-17)")]
+    assert listed(line, fixed)[0].text == trips.text + "; Rome, Italy (said 2023-06-17)"
+    assert listed(line, [replace(first, text="She went to Rome.")]) == []
 
 
 # -- a list that grows long ------------------------------------------------------------------
