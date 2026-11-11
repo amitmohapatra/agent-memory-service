@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
-from memory_service.domain.beliefs import FACETS, Belief, person_name
+from memory_service.domain.beliefs import FACETS, LIST_FACET, Belief, person_name
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import ProfileBlockView
 from memory_service.domain.enums import Lifetime
@@ -149,12 +149,16 @@ EARLIER_MAX: Final = 10
 EARLIER_HEADING: Final = "Earlier values (since replaced):"
 
 
+#: the lists first, then the facets in their order
+_PAGE_FACETS: Final = (LIST_FACET, *FACETS)
+
+
 def person_page(current: Sequence[Belief], earlier: Sequence[Belief]) -> str:
-    """One person's page from their beliefs (no model): every current line, by facet in
-    ``FACETS`` order (who they are, then what they value, then the rest) and each facet in
-    date order, then the earlier values, newest first (not those a current line still says
-    whole). Nothing is cut here: which lines a context shows is the token budget's choice
-    (``modules.context.sections``), never a character cap."""
+    """One person's page from their beliefs (no model): every current line, the lists first
+    (``LIST_FACET``), then by facet in ``FACETS`` order (who they are, then what they value,
+    then the rest) and each facet in date order, then the earlier values, newest first (not
+    those a current line still says whole). Nothing is cut here: which lines a context shows
+    is the token budget's choice (``modules.context.sections``), never a character cap."""
     lines = [f"- {b.text}" for b in sorted(current, key=_page_order)]
     now = " ".join(b.text.casefold() for b in current)
     replaced = sorted(
@@ -170,7 +174,7 @@ def person_page(current: Sequence[Belief], earlier: Sequence[Belief]) -> str:
 
 
 def _page_order(b: Belief) -> tuple[int, str, datetime, str]:
-    rank = FACETS.index(b.facet) if b.facet in FACETS else len(FACETS)
+    rank = _PAGE_FACETS.index(b.facet) if b.facet in _PAGE_FACETS else len(_PAGE_FACETS)
     return rank, b.facet, b.first_seen_at, b.belief_id
 
 

@@ -54,7 +54,7 @@ def ids(prompt: str, pattern: re.Pattern[str] = _FACT) -> dict[str, str]:
 def entry(
     op: str, facts: list[str], text: str = "", belief: str = "", facet: str = "other"
 ) -> dict:
-    return {"op": op, "facts": facts, "belief": belief, "text": text, "facet": facet}
+    return {"op": op, "facts": facts, "belief": belief, "text": text, "facet": facet, "items": []}
 
 
 class StubModel:
@@ -71,6 +71,8 @@ class StubModel:
         self.answer, self.verdict, self.rewrite = answer, verdict, rewrite
         self.calls = {"consolidate": 0, "check": 0, "rewrite": 0}
         self.prompts: list[str] = []
+        #: the citation check's prompts: each claim with the memories it cites under it
+        self.checked: list[str] = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         messages = json.loads(request.content)["messages"]
@@ -81,6 +83,7 @@ class StubModel:
             out: dict[str, Any] = {"entries": self.answer(user)}
         elif system.startswith(consolidation.CHECK_SYSTEM[:40]):
             self.calls["check"] += 1
+            self.checked.append(user)
             lines = _LINE.findall(user)
             out = {"verdicts": [{"line": n, "label": self.verdict(c)} for n, c in lines]}
         else:

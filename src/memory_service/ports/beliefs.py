@@ -79,8 +79,8 @@ class BeliefRepository(Protocol):
         history: int,
     ) -> list[Belief]:
         """The beliefs of these units a reader with ``keys`` may read, of the ``people``
-        most-cited people: every current one, and the newest ``history`` earlier ones per
-        person."""
+        most-cited people: every current one, and the newest ``history`` earlier values per
+        person (never a list's own history, ``LIST_FACET``)."""
         ...
 
     async def get_many(self, tenant_id: str, belief_ids: Sequence[str]) -> list[Belief]: ...

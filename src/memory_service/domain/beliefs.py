@@ -43,6 +43,12 @@ FACETS: Final = (
     "plans",
     "other",
 )
+#: The facet of a list belief: one recurring or countable thing of the person (trips taken,
+#: things made), a line of its instances, each with its date. The kind lives here, in the
+#: facet: the code files a list under it (the model is never offered it), a person's page
+#: shows these lines first, and a superseded row under it is a list's own history (an
+#: earlier version, or a belief gathered into it as an item), never an earlier value.
+LIST_FACET: Final = "lists"
 
 
 def person_name(person_key: str) -> str:

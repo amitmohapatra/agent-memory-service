@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import array, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_service.adapters.db.orm import BeliefProgressRow, BeliefRow, BeliefSourceRow
-from memory_service.domain.beliefs import Belief, BeliefProgress
+from memory_service.domain.beliefs import LIST_FACET, Belief, BeliefProgress
 
 #: a current belief no newer value has made stale yet
 _UNSTALE_CURRENT = (
@@ -355,6 +355,9 @@ class SqlBeliefRepository:
                 *readable,
                 BeliefRow.person_key.in_(persons),
                 or_(BeliefRow.superseded_by.is_not(None), BeliefRow.valid_to.is_not(None)),
+                # a list's history (its earlier versions, the beliefs gathered into it) is
+                # no earlier value: the list grew, nothing was replaced
+                BeliefRow.facet != LIST_FACET,
             )
             .subquery()
         )
