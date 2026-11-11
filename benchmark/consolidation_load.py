@@ -93,10 +93,12 @@ class Stub:
                 "belief": beliefs[topic],
                 "text": "",
                 "facet": "",
+                "items": [],
             }
         beliefs[topic] = "B0"  # one add per topic per call
         said = rest.split(": ", 1)[-1][:200]
-        return {"op": "add", "facts": [fid], "belief": "", "text": said, "facet": "hobbies"}
+        add = {"op": "add", "facts": [fid], "belief": "", "text": said, "facet": "hobbies"}
+        return {**add, "items": []}
 
 
 def corpus(

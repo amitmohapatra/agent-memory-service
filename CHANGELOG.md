@@ -8,6 +8,15 @@ each entry says which one moved. Decisions behind each change are in the
 ## Unreleased
 
 ### Added
+- **A person's recurring and countable things are kept as lists** (service). The
+  consolidation call also keeps list beliefs: one line per thing (trips taken, things made,
+  events attended) with every instance and its date, besides the ordinary lines. A list
+  starts at the second instance and each later one extends it; the model names an instance
+  and the fact it comes from, and the code writes its date from that fact (the date its
+  words resolve to, else the day it was said). Each new instance is checked against only
+  the memories it cites. A list past a line's size continues in a next part under the same
+  title. A person's page shows lists first, within the same share of the context. No new
+  call, table, column, setting or route.
 - **With a model, each person's facts are kept as beliefs** (service). After a message's
   memories are stored, each person they touch is queued once (`memory.consolidate`, 60 s
   debounced, at most 4 of a tenant's at once). One model call folds the new facts into that
