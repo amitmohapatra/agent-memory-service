@@ -35,11 +35,11 @@ from typing import Any
 from sqlalchemy import and_, or_, select
 
 from memory_service.__about__ import __version__
-from memory_service.adapters.db.orm import DocumentRow, MemoryRow, ThreadRow
+from memory_service.adapters.db.orm import BeliefRow, DocumentRow, MemoryRow, ThreadRow
 from memory_service.application.container import Container, build_container
 from memory_service.config.settings import Settings
 from memory_service.modules.ingestion.service import INDEX_FAILED
-from memory_service.modules.rag.indexer import INDEXED_STATUSES, KNOWLEDGE, MEMORIES
+from memory_service.modules.rag.indexer import BELIEFS, INDEXED_STATUSES, KNOWLEDGE, MEMORIES
 from memory_service.modules.tools.index import TOOLS
 from memory_service.observability.logging import get_logger
 
@@ -140,9 +140,35 @@ async def rebuild_search_index(
             report.episodes += int(await indexer.index_episode(tenant, thread_id))
         except Exception as exc:
             report.failures.append(f"episode {tenant}/{thread_id}: {type(exc).__name__}: {exc}")
+    await _rebuild_beliefs(container, indexer, report, tenant_id)
     await _rebuild_tools(container, report, tenant_id)
     log.info("reindex.done", **report.as_dict())
     return report
+
+
+async def _rebuild_beliefs(
+    container: Container, indexer: Any, report: ReindexReport, tenant_id: str | None
+) -> None:
+    """The current beliefs, indexed again: after a model change their collection is new and
+    empty, and nothing else fills it (a person's next run writes only what changed)."""
+    current = select(BeliefRow.tenant_id, BeliefRow.belief_id).where(
+        BeliefRow.superseded_by.is_(None),
+        BeliefRow.valid_to.is_(None),
+        BeliefRow.deleted_at.is_(None),
+    )
+    if tenant_id:
+        current = current.where(BeliefRow.tenant_id == tenant_id)
+    async with container.database.session_factory() as session:
+        rows = list((await session.execute(current)).all())
+    by_tenant: dict[str, list[str]] = {}
+    for tenant, belief_id in rows:
+        by_tenant.setdefault(tenant, []).append(belief_id)
+    for tenant, ids in by_tenant.items():
+        for start in range(0, len(ids), 200):
+            try:
+                await indexer.index_beliefs(tenant, ids[start : start + 200])
+            except Exception as exc:
+                report.failures.append(f"beliefs {tenant} [{start}:]: {exc}")
 
 
 async def _rebuild_tools(
@@ -173,7 +199,7 @@ async def _drop(container: Container, indexer: Any, tenant_id: str | None) -> li
         # exist yet, and removing a tenant's points from a missing collection raises: create
         # them first, so there is simply nothing to remove.
         await indexer.ensure_collections()
-    for base in (KNOWLEDGE, MEMORIES):
+    for base in (KNOWLEDGE, MEMORIES, BELIEFS):
         name = indexer.collection(base)
         if tenant_id:
             removed = await container.search.delete_by_filter(
@@ -199,7 +225,7 @@ async def prune_retired_collections(container: Container, *, dry_run: bool = Tru
     indexer = container.services["indexer"]
     # every collection this build reads: tool search's too, which was once missing here and
     # so was "retired" and dropped while live
-    live = {indexer.collection(base) for base in (KNOWLEDGE, MEMORIES, TOOLS)}
+    live = {indexer.collection(base) for base in (KNOWLEDGE, MEMORIES, BELIEFS, TOOLS)}
     retired = sorted(set(await container.search.list_collections()) - live)
     if not dry_run:
         for name in retired:

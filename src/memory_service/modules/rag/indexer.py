@@ -52,6 +52,9 @@ log = get_logger(__name__)
 
 KNOWLEDGE = "knowledge"
 MEMORIES = "memories"
+#: Beliefs in a collection of their own: in the memories' one they took part in its scoring
+#: (the sparse IDF is the collection's), so a memory ranked differently once beliefs existed.
+BELIEFS = "beliefs"
 #: The open ends of a memory's valid and knowledge time, written as instants so a range
 #: filter can read them: a store range filter never matches a field that is absent.
 TIME_MIN = datetime(1900, 1, 1, tzinfo=UTC)
@@ -191,7 +194,7 @@ class Indexer:
     async def ensure_collections(self) -> None:
         sparse_idf = getattr(self.sparse, "server_side_idf", True)
         dims = self.spaces.dimensions
-        for base in (KNOWLEDGE, MEMORIES):
+        for base in (KNOWLEDGE, MEMORIES, BELIEFS):
             memories = base == MEMORIES
             await self.store.ensure_collection(
                 CollectionSpec(
@@ -206,7 +209,7 @@ class Indexer:
                     # in RAM costs a few MB and saves a page-cache read per returned hit on
                     # the remote store. Knowledge chunks are the bulk of the index and stay
                     # on disk.
-                    on_disk_payload=base != MEMORIES,
+                    on_disk_payload=base == KNOWLEDGE,
                 )
             )
 
@@ -610,7 +613,7 @@ class Indexer:
         return n
 
     async def index_beliefs(self, tenant_id: str, belief_ids: Sequence[str]) -> int:
-        """Upsert current beliefs into the memories collection as ``kind=belief`` (one text
+        """Upsert current beliefs into their own collection as ``kind=belief`` (one text
         each, its readers its sources' common audience) and remove every other state:
         replaced, retired, deleted. Nothing reads beliefs unless a search names the kind."""
         await self.ensure_collections()
@@ -618,7 +621,7 @@ class Indexer:
             beliefs = await uow.beliefs.get_many(tenant_id, belief_ids)
         live = [b for b in beliefs if b.current]
         current = {b.belief_id for b in live}
-        collection = self.collection(MEMORIES)
+        collection = self.collection(BELIEFS)
         if gone := [i for i in belief_ids if i not in current]:
             await self.store.delete(collection, gone)
         if live:
@@ -632,14 +635,9 @@ class Indexer:
                         record_id=b.belief_id,
                         collection=collection,
                         tenant_id=tenant_id,
-                        dense={
-                            **_vectors_at(dense, i),
-                            **{name.context: v for name, v in _vectors_at(dense, i).items()},
-                        },
+                        dense=_vectors_at(dense, i),
                         sparse=sparse[i],
-                        sparse_context=sparse[i],
                         late=late[i] if late else None,
-                        late_context=late[i] if late else None,
                         payload={
                             "kind": "belief",
                             "visibility_keys": list(b.visibility_keys),

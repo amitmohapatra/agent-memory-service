@@ -10,13 +10,15 @@ from __future__ import annotations
 
 import re
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 import httpx
 import pytest
+from sqlalchemy import text
 
 from memory_service.api.app import create_app
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.modules.memory.consolidation import ConsolidationService
+from memory_service.modules.memory.consolidation import ConsolidationService, beliefs_changed
 from tests.integration.test_beliefs import (
     _BELIEF,
     StubModel,
@@ -246,3 +248,40 @@ async def test_a_page_alone_does_not_make_a_context_look_as_if_it_had_a_profile(
     )
     assert full.status_code == 200, full.text
     assert "profile" not in full.json()  # the profile blocks are the user's, as on main
+
+
+# -- the pages come on top of the memories --------------------------------------------------
+
+
+async def test_the_memories_are_byte_identical_with_and_without_beliefs(
+    container, uow_factory, api
+) -> None:
+    """With the pages not charged (the default), what the context had on main is untouched:
+    the same memories, in the same order, for the same question and budget, whether or not
+    the person has beliefs. More facts than the memories' count limit, each also a belief
+    the question's search finds, so a belief that took a memory's place would show."""
+    from memory_service.modules.context import sections
+
+    assert sections.PEOPLE_CHARGED is False
+    for n in range(110):
+        # a day each: a distinct date orders the timeline and breaks the ranking's ties,
+        # which are in no fixed order between two builds, beliefs or not
+        await say(
+            container, uow_factory, "caroline", f"I visited museum number {n} in Lisbon.", day=n
+        )
+    await settle(container)
+    question = "Which museums in Lisbon did I visit?"
+    with_beliefs = (await context(api, question))["rendered"]
+    assert len(await beliefs(uow_factory)) == 110 and section(with_beliefs, "People")
+    async with uow_factory() as uow:  # the same memories, no belief (as on main)
+        rows = await uow.session.execute(text("SELECT DISTINCT scope_key FROM beliefs"))
+        for (scope,) in rows.all():
+            gone = await uow.beliefs.delete_unit(T, scope, "user:caroline", datetime.now(UTC))
+            await beliefs_changed(uow, gone)  # as a write does: points and caches follow
+        await uow.commit()
+    await jobs_but_consolidation(container, uow_factory)  # their points go too
+    without = (await context(api, question))["rendered"]
+    assert not section(without, "People")
+    for heading in ("Most relevant", "Memories"):
+        assert section(with_beliefs, heading) == section(without, heading), heading
+    assert section(with_beliefs, "Memories")  # there are memories to compare

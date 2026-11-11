@@ -22,7 +22,7 @@ from memory_service.domain.conversation import Message, Session, Thread, Turn
 from memory_service.domain.enums import Lifetime, MemoryType, MessageRole, Visibility
 from memory_service.domain.ids import content_hash
 from memory_service.modules.jobs.registry import register_handlers
-from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES
+from memory_service.modules.rag.indexer import BELIEFS, KNOWLEDGE, MEMORIES
 from memory_service.ports.search import SearchFilter
 from memory_service.tools import reindex
 from memory_service.tools.reindex import ReindexReport, rebuild_search_index
@@ -111,6 +111,11 @@ def _names(container) -> tuple[str, str]:
     return indexer.collection(KNOWLEDGE), indexer.collection(MEMORIES)
 
 
+def _beliefs(container) -> str:
+    """Beliefs' collection: dropped and rebuilt with the others."""
+    return container.services["indexer"].collection(BELIEFS)
+
+
 async def _ids(container, collection: str, tenant_id: str) -> set[str]:
     return set(await container.search.record_ids(collection, SearchFilter(tenant_id=tenant_id)))
 
@@ -126,7 +131,7 @@ async def test_a_whole_store_rebuild_restores_every_record_after_a_drop(
     report = await rebuild_search_index(container, drop=True)
 
     assert report.ok and report.failures == []
-    assert report.dropped == [knowledge, memories]
+    assert report.dropped == [knowledge, memories, _beliefs(container)]
     assert report.documents == 1 and report.chunks >= 1
     assert report.memories >= 2 and report.episodes == 1
     assert await _ids(container, knowledge, "acme") == acme_chunks
@@ -164,7 +169,7 @@ async def test_a_collection_already_gone_is_not_reported_as_dropped(container, u
     knowledge, memories = _names(container)
     await container.search.drop_collection(knowledge)
     report = await rebuild_search_index(container, drop=True)
-    assert report.dropped == [memories]
+    assert report.dropped == [memories, _beliefs(container)]
     assert report.ok
 
 
@@ -178,7 +183,7 @@ async def test_a_tenant_rebuild_removes_and_restores_only_that_tenant(
 
     report = await rebuild_search_index(container, tenant_id="acme", drop=True)
 
-    assert len(report.dropped) == 2
+    assert len(report.dropped) == 3
     assert report.dropped[0].startswith(f"{knowledge} (tenant acme: ")
     assert report.dropped[1] == f"{memories} (tenant acme: {len(acme_before)} points)"
     assert report.documents == 1 and report.episodes == 1
@@ -202,6 +207,7 @@ async def test_a_tenant_drop_after_the_index_was_lost_rebuilds_instead_of_failin
     assert report.dropped == [
         f"{knowledge} (tenant acme: 0 points)",
         f"{memories} (tenant acme: 0 points)",
+        f"{_beliefs(container)} (tenant acme: 0 points)",
     ]
     assert report.documents == 1 and report.episodes == 1
     assert seeded["acme_memory"] in await _ids(container, memories, "acme")

@@ -17,7 +17,9 @@ each entry says which one moved. Decisions behind each change are in the
   supersede) queues its person too. Each person with beliefs is pinned into `/v1/context`
   as a `### <name>` page under its own `## People` heading, after the profile and never in
   it (current lines by facet, then earlier values; on top of the memories' budget), and
-  beliefs are found as summaries. Forgetting or rejecting a memory deletes every belief that
+  beliefs are found as summaries. Beliefs are searched apart from the memories, in a
+  collection of their own, so the memories a context holds are the same with or without
+  them. Forgetting or rejecting a memory deletes every belief that
   cites it, in that commit, and rebuilds the person; a newer value hides the beliefs citing
   the old one until the person's next run. The hourly consolidation sweep keeps the 3
   newest superseded versions of a belief. Reflection no longer runs on a person's facts

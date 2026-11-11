@@ -52,7 +52,9 @@ PINNED_SHARE: Final = 0.5
 #: How the people's pages (beliefs) are paid for, the one place it is decided (design note
 #: §3.7). True: out of the context's token budget, after every other pinned section within
 #: ``PINNED_SHARE``, so the memories get what is left. False: on top of it - the pages still
-#: fit ``PINNED_SHARE`` of the budget on their own, and the memories keep their whole budget.
+#: fit ``PINNED_SHARE`` of the budget on their own (the one cap on them: past it the pages
+#: are trimmed, never a memory), and the memories are byte for byte what they are without
+#: beliefs (the recalled beliefs no page shows come after them, ``BELIEF_HITS_MAX``).
 #: False, accuracy first: measured on LoCoMo, the memories stop at a count (about 100), not
 #: at the token budget, so charging the pages pushed no memory out, and it would once the
 #: memories reach the budget.
@@ -174,11 +176,12 @@ def within_budget(
     spare = allowed - used if PEOPLE_CHARGED else allowed
     kept.pages = _people_that_fit(pinned.people, spare, relevance or {})
     if PEOPLE_CHARGED:
-        used += _people_cost(kept.pages)
+        used += people_tokens(kept.pages)
     return kept, used
 
 
-def _people_cost(pages: Sequence[ProfileBlockView]) -> int:
+def people_tokens(pages: Sequence[ProfileBlockView]) -> int:
+    """What the people's pages cost in the prompt."""
     text = people_section(pages)
     return estimate_tokens(text) if text else 0
 
@@ -191,12 +194,12 @@ def _people_that_fit(
     while any line can go instead. Never a cut at the end and never a character cap: a page
     holds as many lines as the budget does."""
     pages = [v for p in people if (v := p.view()) is not None]
-    if _people_cost(pages) <= spare:
+    if people_tokens(pages) <= spare:
         return pages
     share = spare - estimate_tokens(f"## {PEOPLE_HEADING}")
     for _ in range(3):  # per-line estimates against the section's: a token or two off
         pages = [v for p in people if (v := p.view(_chosen(people, share, relevance)))]
-        over = _people_cost(pages) - spare
+        over = people_tokens(pages) - spare
         if over <= 0:
             return pages
         share -= over

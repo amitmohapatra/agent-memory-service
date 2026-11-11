@@ -601,3 +601,21 @@ async def test_over_the_pinned_share_a_page_keeps_the_lines_the_question_finds(
     page = next(b.text for b in small.people if b.block == "caroline").splitlines()
     assert 0 < len(page) < 13  # over the share: trimmed, not dropped
     assert any("theremin" in line for line in page)  # the line the question is about stays
+
+
+async def test_a_search_index_rebuild_restores_the_beliefs(container, uow_factory, wired) -> None:
+    """Beliefs live in a collection of their own: a whole-store rebuild drops it with the
+    others and indexes the current beliefs again (after a model change it starts empty)."""
+    from memory_service.tools.reindex import rebuild_search_index
+
+    def answer(prompt: str) -> list[dict]:
+        return [entry("add", [short], text_) for text_, short in ids(prompt).items()]
+
+    wired(StubModel(answer))
+    await say(container, uow_factory, "caroline", "I keep bees on my balcony.")
+    await settle(container)
+    [held] = await beliefs(uow_factory)
+    report = await rebuild_search_index(container, drop=True)
+    assert report.ok and any(name.startswith("beliefs_") for name in report.dropped)
+    found = await container.services["retrieval"].retrieve(ASKER, "bees balcony", kinds=("belief",))
+    assert held.belief_id in {c.record_id for c in found.candidates}

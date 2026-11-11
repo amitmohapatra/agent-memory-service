@@ -31,7 +31,7 @@ from memory_service.domain.script import Script, detect_script
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.rag.indexer import KNOWLEDGE, MEMORIES, Indexer
+from memory_service.modules.rag.indexer import BELIEFS, KNOWLEDGE, MEMORIES, Indexer
 from memory_service.modules.retrieval import memory_ranking, slots
 from memory_service.modules.retrieval.memory_queries import plan_memory_queries
 from memory_service.modules.retrieval.router import QueryRouter, RoutedQuery
@@ -227,7 +227,7 @@ class QueryVectors:
 _COLLECTION_OF_KIND = {
     "memory": MEMORIES,
     "episode": MEMORIES,
-    "belief": MEMORIES,
+    "belief": BELIEFS,
     "chunk": KNOWLEDGE,
     "summary": KNOWLEDGE,
 }
@@ -754,6 +754,29 @@ class RetrievalEngine:
             for h in hits
         ]
         return candidates
+
+    async def search_beliefs(
+        self,
+        ctx: MemoryExecutionContext,
+        routed: RoutedQuery,
+        query: str,
+        visibility: VisibilitySpecification,
+        vectors: QueryVectors,
+    ) -> list[Candidate]:
+        """The beliefs ``query`` finds, best first, on vectors a retrieval already encoded:
+        a search of their own, so they never take a place in that retrieval's ranking
+        (``ContextBuilder``), and only those a reader may be shown (``_validate_beliefs``)."""
+        found = await self._search_kind(
+            ctx,
+            routed,
+            query,
+            visibility,
+            kind="belief",
+            document_ids=None,
+            encoded=vectors,
+            diagnostics={},
+        )
+        return await self._validate_beliefs(ctx, found, visibility)
 
     async def _validate_beliefs(
         self,
