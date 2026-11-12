@@ -30,6 +30,8 @@ import re
 from collections.abc import Iterable, Sequence
 from typing import Any, Final
 
+from pydantic import Field
+
 from memory_service.domain.context_bundle import ProfileBlockView, profile_section
 from memory_service.domain.language import detect_language
 from memory_service.domain.memory import SELF_ANYWHERE
@@ -255,6 +257,14 @@ def _superseded(chosen: Sequence[tuple[SearchHit, set[str]]]) -> dict[str, Searc
     return out
 
 
+class AboutUser(ProfileBlockView):
+    """The ``about_user`` section as ``standing_blocks`` returns it: its pinned lines as the
+    text, and the further ones beside them, which the context adds from the room the memories
+    leave (``with_more_about``). Not part of what the context carries."""
+
+    more: tuple[str, ...] = Field(default=(), exclude=True)
+
+
 async def standing_blocks(
     engine: Any,
     query: str,
@@ -265,20 +275,8 @@ async def standing_blocks(
     """The ``standing_rules``, ``preferences`` and ``about_user`` sections for ``query`` (see
     the module doc). A rule the ``user`` block also lists is still listed here: this section
     is what applies to the request, the block everything the user keeps."""
-    return (await standing_sections(engine, query, visibility, vectors, workspace_id))[0]
-
-
-async def standing_sections(
-    engine: Any,
-    query: str,
-    visibility: Any,
-    vectors: Any,
-    workspace_id: str | None = None,
-) -> tuple[list[ProfileBlockView], list[str]]:
-    """``standing_blocks`` and, beside them, the further lines of the ``about_user`` section
-    (``_about``), for the room the memories leave (``with_more_about``)."""
     if vectors is None:
-        return [], []
+        return []
     lang = detect_language(query)
     query_stems = _stems(query, lang)
     places = sorted({workspace_id or SELF_ANYWHERE, SELF_ANYWHERE})
@@ -318,8 +316,8 @@ async def standing_sections(
             out.append(ProfileBlockView(block=block, text="\n".join(lines), version=0))
     about, more = _about(setup, shown, lang)
     if about:
-        out.append(ProfileBlockView(block=ABOUT_BLOCK, text=about, version=0))
-    return out, more if about else []
+        out.append(AboutUser(block=ABOUT_BLOCK, text=about, version=0, more=tuple(more)))
+    return out
 
 
 def _about(
@@ -357,15 +355,18 @@ def _about(
 
 
 def with_more_about(
-    profile: Sequence[ProfileBlockView], more: Sequence[str], room: int
+    profile: Sequence[ProfileBlockView], room: int
 ) -> tuple[list[ProfileBlockView], int]:
-    """``profile`` with the further ``about_user`` lines that fit ``room`` tokens added to
-    that section, in order, and the tokens they take. A profile without the section (none
-    pinned, or the profile did not fit its share) gets none."""
+    """``profile`` with the further lines of its ``about_user`` section (``AboutUser.more``)
+    that fit ``room`` tokens added to that section, in order, and the tokens they take. A
+    profile without the section (no pinned line, or the profile did not fit its share) gets
+    none."""
     blocks = list(profile)
-    at = next((n for n, block in enumerate(blocks) if block.block == ABOUT_BLOCK), None)
-    if at is None or not more:
+    at = next((n for n, block in enumerate(blocks) if isinstance(block, AboutUser)), None)
+    if at is None:
         return blocks, 0
+    more = blocks[at].more  # type: ignore[attr-defined]
+    blocks[at] = ProfileBlockView(block=ABOUT_BLOCK, text=blocks[at].text, version=0)
     base = estimate_tokens(profile_section(blocks) or "")
     taken = 0
     for line in more:
