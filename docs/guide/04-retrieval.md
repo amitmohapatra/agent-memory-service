@@ -346,7 +346,7 @@ holds (its best memory at `related_evidence_relevance`, 0.40, or closer) also ge
 five ranked memories from under the floor, after everything above it
 (`builder.UNDER_FLOOR_MAX`): a question over several conversations is far, in the encoder's
 space, from some of the turns that answer it, and they rank well by their words and their
-session.
+session (`docs/MEASUREMENTS.md` §10).
 
 **The budget.** The default `token_budget` is 8,000 (`ContextSettings`); the conversation
 window is the most recent messages after the thread summary, at most 20 and 2,000 tokens

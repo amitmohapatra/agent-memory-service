@@ -622,3 +622,98 @@ What this shows, and what it does not:
 - Not measured: the three-worker API with multiprocess metrics, PgBouncer in the path, a
   populated corpus, the NLI model, and the 8 vCPU target. The 300 ms p95 target is still not
   claimed. The p95 of 180-620 ms at 4-30 rps is over a near-empty corpus.
+
+## 10. Packing from under the floor, and the `about_user` section — 2026-11-12
+
+Two changes to what a context holds, measured apart and together in one process per question
+(the same ranked candidates on every side; "before" is main at 6382c33). Part 1: when the
+question's best memory is at least 0.40 similar to it, the next five ranked memories under
+the relevance floor are packed after everything above it (`builder.UNDER_FLOOR_MAX`). Part
+2: `about_user` lists up to 16 of the user's self-descriptions instead of 4
+(`standing.ABOUT_MAX`). The box is the 4-CPU sandbox VM of §9; real encoders; no model at
+ingest unless said. Tokens are the service's own estimate unless said.
+
+**LongMemEval-S, the two weak types**, through the conversation path (every turn appended as
+a message with its role, one thread per session, one user who also asks). 40 multi-session
+questions (seeded sample, 116 evidence turns) and all 30 single-session-preference questions
+(44 evidence turns). Evidence turns in the context's memories:
+
+| | before | part 1 alone | part 2 alone | both |
+|---|---|---|---|---|
+| multi-session, evidence turns in context | 107 / 116 | 111 | 107 | 111 |
+| multi-session, questions holding all of theirs | 34 / 40 | 37 | 34 | 37 |
+| multi-session, evidence in the first 10 memories | 89 / 116 | 89 | 89 | 89 |
+| multi-session, memories packed / context tokens | 37.2 / 3,057 | 41.2 | 37.2 | 41.2 / 4,011 |
+| preference, evidence turns in context | 37 / 44 | 38 | 37 | 38 |
+| preference, questions holding all of theirs | 23 / 30 | 24 | 23 | 24 |
+| preference, evidence in the first 10 memories | 32 / 44 | 32 | 32 | 32 |
+
+The first ten memories are the same on all 70 questions. The rule applies on 32 of the 40
+and 20 of the 30 (best memory at 0.40 or closer). Packing every memory under the floor
+instead of five held the same 111 turns in 89 memories. Answers with a small model, three
+samples, before and both parts in one batch; "range" is where 95% of the differences fall
+when each question's six answers are reshuffled between the two sides:
+
+| | right before | right after | range |
+|---|---|---|---|
+| multi-session, the benchmark's reader | 93 / 120 | 98 | -5 to +5 |
+| multi-session, the harness's notes as reader | 93 / 120 | 93 | -6 to +8 |
+| preference, the benchmark's reader | 25 / 90 | 25 | -6 to +6 |
+| preference, the harness's notes as reader | 54 / 90 | 57 | -9 to +7 |
+
+Of the three multi-session questions that gained evidence, two went from 0 to 3 right of
+3 under both readers and one was right before; every total is inside its range. Preference is decided by
+the reader, not by the context: the same contexts score 25 and 54 of 90.
+
+**LoCoMo, evidence in the context**, ten conversations, a corpus ingested without a model
+and one ingested with a small model's extraction, 1,986 questions each plus 131 held-out
+questions and 100 questions nothing answers. Evidence turns in the context's memories,
+before → both parts; part 2 alone equals before and part 1 alone equals both in every cell,
+and the count in the first 10 memories is the same before and after in every cell:
+
+| category (evidence turns) | no-model corpus | extraction corpus |
+|---|---|---|
+| single_hop (895) | 877 → 877 | 879 → 879 |
+| multi_hop (883) | 736 → 737 | 765 → 766 |
+| temporal (375) | 365 → 365 | 364 → 365 |
+| open_domain (208) | 137 → 137 | 147 → 148 |
+| adversarial (460) | 443 → 454 | 453 → 456 |
+| held-out (224) | 216 → 217 | 216 → 216 |
+| nothing answers: memories packed | 7.5 → 7.6 | 8.4 → 8.4 |
+
+**LoCoMo, answers.** Part 2 changes every context of this corpus (its two speakers' turns
+are tenant-visible, so `about_user` fills for every question), so a seeded sample was
+answered: 80 questions per category on each corpus, three samples, before and both parts
+in one batch, the usual judges. Right of 240, with the same range:
+
+| category | no-model corpus | extraction corpus | range |
+|---|---|---|---|
+| single_hop | 220 → 220 | 225 → 220 | ±6 to ±7 |
+| multi_hop | 176 → 183 | 174 → 176 | ±7 to ±10 |
+| temporal | 188 → 185 | 185 → 187 | ±6 to ±7 |
+| open_domain | 142 → 147 | 153 → 153 | ±8 to ±9 |
+| adversarial | 216 → 213 | 215 → 215 | ±8 to ±9 |
+| all (of 1,200) | 942 → 948 | 952 → 951 | ±16 to ±19 |
+
+Flat: 711 of the 800 questions scored the same, 44 went up and 45 down, and every cell is
+inside its range. Split by what changed in the context, neither part moves the answers
+(profile only: 166 → 166 of 216 and 180 → 180 of 228; packed memories too: 776 → 782 of 984
+and 772 → 771 of 972).
+
+**The field case** (twenty things said of one's work in a first conversation, then "What do
+you remember about how I work?" in a new one, same workspace). Before, the plan ("Coach
+Womens Bags") is nowhere in the context, with or without the extraction model; after, the
+user's sentence is in `about_user` on both sides (10 lines listed). The note the agent saved
+is in no profile section. From another workspace the section is empty, as before.
+
+**Cost per read.** Part 1: +2.7 memories and +84 to +92 tokens on LoCoMo, +4 memories and
++284 tokens on the LongMemEval questions; a question nothing answers packs 7.6 memories for
+7.5. Part 2: +480 tokens on LoCoMo (3.4 → 16 lines) and +670 on LongMemEval (2.3 → 16
+lines of up to 200 characters), also for a question nothing answers (478 → 949 tokens). In
+the reader model's own count the two together are about 800 input tokens more per LoCoMo
+answer (9,250 → 10,060) and about 1,350 more per LongMemEval answer (5,455 → 6,807).
+
+**Not measured.** Recall at 10 does not move, by design. The retrieval benchmark's own
+LongMemEval path (every turn an observation of a tenant-visible user) was not rerun. The
+extraction model was used at ingest only for the second LoCoMo corpus and the field case.
+
