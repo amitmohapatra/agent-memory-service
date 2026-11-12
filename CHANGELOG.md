@@ -55,6 +55,12 @@ each entry says which one moved. Decisions behind each change are in the
   search for every question, whatever its wording, was measured and left out: no bar on
   the share of the question's words an answer covers kept lines out of questions nothing
   answers. No endpoint or field changed; `earlier_chats` may hold up to six lines.
+- **With a model, every message a person writes is read** (service). The model used to be
+  kept from a message by its shape: one made only of questions, or a short reply to nobody,
+  was never sent. A question often states a fact in passing ("... with a cat that sheds a
+  lot?"), so the shape test is gone and the model decides what a message states; it returns
+  nothing for one that states nothing. Without a model nothing changes: the same messages
+  form the same memories.
 - **An assistant's message is never read as the user's own statement** (service). A message
   with the role `ASSISTANT`, `AGENT` or `SYSTEM` formed no memory when it carried an
   `agent_run_id`, which the harness always sends, but without one it was read as something a

@@ -34,8 +34,9 @@ the day said; an `add` the rules read, a memory holds (normalized text, a cosine
 NLI head's entailment both ways) or a rule reading said again with the speaker's name is
 dropped. An update or a contradiction goes through the cross-conversation replacement path
 (`CrossConversationReplacement.settle`: the encoder relates, the NLI head scores, the
-adjudicator settles the middle; unsure keeps both, the old one as an earlier value). A message
-is skipped by its shape only (only questions; a short reply to nobody). Calls in flight are
+adjudicator settles the middle; unsure keeps both, the old one as an earlier value). Every
+message a person writes is read, whatever its shape: what it states is the model's to judge, and a
+question often carries a fact ("... with a cat that sheds a lot?"). Calls in flight are
 bounded per tenant. The memories are `provider: llm`, classified like the rules' readings, and
 never reinforce or replace what was said.
 
