@@ -48,13 +48,19 @@ PREFERENCES_BLOCK: Final = "preferences"
 ABOUT_BLOCK: Final = "about_user"
 #: the sections this module writes (``sections.within_budget`` keeps them before the rest)
 BLOCKS: Final = frozenset({RULES_BLOCK, PREFERENCES_BLOCK, ABOUT_BLOCK})
-ABOUT_MAX: Final = 4
-#: how many the about_user search returns (one dense search): enough to drop superseded ones
-ABOUT_SEARCH_K: Final = 12
+#: Room for what a person says of their work in a first conversation. At 4 lines (and 600
+#: characters) which statements came back depended on the question: of twenty things a user
+#: said of their work, "I'm Alex. I plan Coach Womens Bags for the Retail channel." was not
+#: among the four nearest "What do you remember about how I work?" (cosine 0.15, under the
+#: ranking's relevance floor too), so the new conversation had it nowhere. With 16 lines all
+#: ten statements only this section carries are listed.
+ABOUT_MAX: Final = 16
+#: how many the about_user search returns (one dense search): three for each line shown, so
+#: the superseded ones among them are still found and dropped
+ABOUT_SEARCH_K: Final = 3 * ABOUT_MAX
 #: what the pinned ``user`` block is kept from (``profile.refresh``): never listed here again
 _IN_USER_BLOCK: Final = frozenset(t.value for t in PROFILE_MEMORY_TYPES)
-#: the section's size in characters, and one line's
-ABOUT_CHARS: Final = 600
+#: one line's size in characters
 ABOUT_LINE_CHARS: Final = 200
 RULE_CATEGORIES: Final = ("rule", "instruction")
 #: a statement the labeller read as a rule (ADR 0037) is one whatever rule extracted it; a
@@ -296,7 +302,7 @@ def _about(found: Sequence[tuple[SearchHit, float]], shown: set[tuple], lang: st
     """The ``about_user`` section: the user's current self-descriptions nearest the request,
     whatever their similarity, one line each, without what another section already lists,
     what the pinned ``user`` block holds (a USER or PREFERENCE memory) or a later one on the
-    same subject supersedes, at most ``ABOUT_MAX`` lines and ``ABOUT_CHARS``."""
+    same subject supersedes, at most ``ABOUT_MAX`` lines of ``ABOUT_LINE_CHARS``."""
     current = [
         (hit, _stems(_text(hit), lang), similarity)
         for hit, similarity in found
@@ -306,15 +312,8 @@ def _about(found: Sequence[tuple[SearchHit, float]], shown: set[tuple], lang: st
         and _said(hit) not in shown
     ]
     gone = _superseded([(hit, _frame(_text(hit), lang)) for hit, _, _ in current])
-    lines: list[str] = []
-    size = 0
-    for full in _lines([c for c in current if c[0].record_id not in gone]):
-        line = full[:ABOUT_LINE_CHARS]
-        if len(lines) == ABOUT_MAX or size + len(line) > ABOUT_CHARS:
-            break
-        lines.append(line)
-        size += len(line) + 1
-    return "\n".join(lines)
+    lines = _lines([c for c in current if c[0].record_id not in gone])[:ABOUT_MAX]
+    return "\n".join(line[:ABOUT_LINE_CHARS] for line in lines)
 
 
 def _choose(

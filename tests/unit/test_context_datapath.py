@@ -755,26 +755,45 @@ def test_the_context_route_sends_the_builder_bytes(settings: Any, overrides: Any
     }
 
 
-async def test_a_ranked_memory_under_the_relevance_floor_is_not_packed() -> None:
-    """A fusion score always fills the budget; the dense similarity decides what is worth a
-    slot. Exact hits and companions are judged by what brought them in."""
-    builder = _builder(memories=4)
+def _scored(builder: ContextBuilder, similarities: dict[str, float]) -> None:
+    """The fixture's memories with these similarities to the question; the last an exact hit."""
     _, engine = _parts(builder)
-    similarities = {"mem_0": 0.62, "mem_1": 0.05, "mem_2": engine.relevance_floor}
 
     async def score(result: RetrievalResult) -> None:
         for c in result.candidates:
             c.similarity = similarities.get(c.record_id)
-        result.candidates[3].retrievers = ["exact"]
-        result.candidates[3].similarity = 0.01
+        result.candidates[-1].retrievers = ["exact"]
+        result.candidates[-1].similarity = 0.01
 
     engine.score_similarity = score  # type: ignore[method-assign]
+
+
+async def test_a_ranked_memory_under_the_relevance_floor_is_not_packed() -> None:
+    """A fusion score always fills the budget; the dense similarity decides what is worth a
+    slot. Exact hits and companions are judged by what brought them in."""
+    builder = _builder(memories=4)
+    floor = _parts(builder)[1].relevance_floor
+    _scored(builder, {"mem_0": 0.39, "mem_1": 0.05, "mem_2": floor})
     bundle = await builder.build(CTX, "who owns the rollback plan?")
     packed = {m.item_id: m.relevance for m in bundle.memories}
     assert set(packed) == {"mem_0", "mem_2", "mem_3"}, "mem_1 is under the floor"
-    assert packed["mem_0"] == pytest.approx(0.62), "relevance is the similarity"
+    assert packed["mem_0"] == pytest.approx(0.39), "relevance is the similarity"
     assert packed["mem_3"] == 1.0, "an exact hit is exempt"
     assert bundle.diagnostics["below_relevance_floor"] == 1
+    await builder.close()
+
+
+async def test_the_next_ranked_under_the_floor_follow_the_rest_when_the_best_memory_is_close():
+    """The question's best memory is at ``related_evidence_relevance``: the question is about
+    something the store holds, so the first few ranked memories under the floor are packed
+    after everything above it (``UNDER_FLOOR_MAX``), and the rest are left out and counted."""
+    builder = _builder(memories=10)
+    under = {f"mem_{i}": 0.19 - i / 100 for i in range(1, 8)}
+    _scored(builder, {"mem_0": RETRIEVAL.related_evidence_relevance, **under, "mem_8": 0.3})
+    bundle = await builder.build(CTX, "who owns the rollback plan?")
+    packed = [m.item_id for m in bundle.memories]
+    assert packed == ["mem_0", "mem_8", "mem_9", "mem_1", "mem_2", "mem_3", "mem_4", "mem_5"]
+    assert bundle.diagnostics["below_relevance_floor"] == 2, "mem_6 and mem_7"
     await builder.close()
 
 
