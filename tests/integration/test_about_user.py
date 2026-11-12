@@ -212,3 +212,132 @@ async def test_another_users_self_description_in_the_same_workspace_is_not_in_mi
         assert "Sam" not in mine.render(), asked
         theirs = await _about(container, _chat("u2"), asked)
         assert SAM in theirs and "Alex" not in theirs, asked
+
+
+#: seventeen longer things a person says of their own work, each its own subject
+LONG_SELF_DESCRIPTIONS = (
+    "I work from the Chicago office on Tuesdays and Thursdays and from the Milwaukee "
+    "distribution centre on the other days, because the regional planning team meets there.",
+    "I use a MacBook with two external monitors at my desk and a tablet on the shop floor, "
+    "so anything you send me has to be readable on a small screen as well.",
+    "Our team runs its weekly review on Monday mornings with the merchandise managers of all "
+    "four regions, and the agenda is fixed by the Friday before at the latest.",
+    "I report to the divisional merchandise manager for handbags and small leather goods, who "
+    "signs off every seasonal plan before it goes to the finance department.",
+    "Our fiscal year starts in February and closes at the end of January, which is why the "
+    "fourth quarter covers the whole of the holiday trading period for us.",
+    "I usually build my reports in Excel before sharing them, with one sheet for each region "
+    "and a summary sheet at the front that the directors read first.",
+    "We sell through outlets and department stores as well as our own full-price boutiques, "
+    "and each of the three has its own markdown calendar and clearance cadence.",
+    "I cover the east region stores from Boston down to Washington, including the two flagship "
+    "locations in Manhattan that carry the widest assortment of the whole chain.",
+    "I'm Alex. I plan Coach Womens Bags for the Retail channel.",
+    "I am responsible for the spring assortment of the leather category, from the first line "
+    "review with the designers to the final buy quantities for every door.",
+    "I keep my open-to-buy in a shared workbook that the allocation analysts update every "
+    "morning with the receipts and the cancellations of the previous day.",
+    "We lock the plan two weeks before each quarter, and after that any change to the receipt "
+    "flow needs a written exception approved by the planning director.",
+    "I check inventory positions every Friday afternoon against the sell-through of the week, "
+    "store by store, before I decide which styles to replenish or transfer.",
+    "Our stores close their books on the last Saturday of the month, so the monthly numbers I "
+    "quote always follow the retail calendar and never the civil one.",
+    "I am based in the central time zone although most of my stores are on the east coast, so "
+    "my mornings start with the opening reports of the eastern doors.",
+    "I travel to the showroom in New York for every market week, four times a year, and I am "
+    "out of the office and slow to answer for the whole of those weeks.",
+    "I mentor two assistant planners who joined the team last autumn, and I review their "
+    "weekly recaps before they are sent to the merchandise managers.",
+)
+
+
+#: what the pinned ``user`` block keeps of a person: who they are
+WHO_THEY_ARE = (
+    "My name is Alex Morgan.",
+    "My manager is Priya Raman.",
+    "My assistant is Jordan Whitfield.",
+    "My director is Helena Okafor.",
+    "My deputy is Marcus Lindqvist.",
+    "I am vegetarian.",
+    "I am left-handed.",
+    "I am fluent in Spanish and French.",
+    "I am a senior merchandise planner.",
+    "I am a member of the pricing committee.",
+    "I am a certified first aider.",
+    "I am on leave every August.",
+)
+RULES = (
+    "Never change a retail price without my approval, not even in a draft, and never round a "
+    "price to a whole dollar unless the pricing committee has signed the change off in writing.",
+    "Always list my stores by their number, never by the name of the mall, and keep the "
+    "flagship locations at the top of the list whatever the ranking criterion happens to be.",
+    "Never send a weekly email to the directors before I have read it, and never copy the "
+    "regional managers on a message that mentions margin, shrink or markdown budgets.",
+    "Always put the totals of a report on its first page, with the figure of last year beside "
+    "each one, and say in one line which calendar the comparison follows.",
+    "Never quote a sell-through figure in a draft without the number of weeks it covers and "
+    "the date of the inventory snapshot it was computed from.",
+    "Always write dates as day, month and year in anything about my stores, because half of "
+    "the team reads them the European way and the other half does not.",
+)
+
+
+async def _works_at_a_retailer(container, uow_factory) -> None:
+    """One person's first conversation: who they are, six rules, a preference and seventeen
+    things about their own work; the ``user`` block refreshed as the nightly job does."""
+    first = _chat()
+    for said in (
+        *WHO_THEY_ARE,
+        *RULES,
+        "I prefer to see sell-through before margin in any weekly report.",
+        *LONG_SELF_DESCRIPTIONS,
+    ):
+        await _say(container, uow_factory, first, said)
+    await container.services["profile"].refresh_user("acme", "u1")
+
+
+async def _context(container, budget: int):
+    bundle = await container.services["context_builder"].build(
+        _chat(), "Draft the weekly report for my stores.", token_budget=budget
+    )
+    return bundle, {block.block: block.text for block in bundle.profile}
+
+
+async def test_a_small_budget_still_carries_the_user_block_and_the_rules(
+    container, uow_factory
+) -> None:
+    """A harness that does not know its model's window asks for 2,000 tokens, of which the
+    pinned sections may take half, and the profile is whole or cut to its standing sections.
+    The room for more self-descriptions must not cost what a context of that size held: the
+    user's name and their rules. The first lines of ``about_user`` are pinned as they were
+    (four lines, 600 characters); the further ones take only the room the memories leave."""
+    await _works_at_a_retailer(container, uow_factory)
+    bundle, sections = await _context(container, 2000)
+    assert "Alex Morgan" in sections.get("user", "")
+    assert "Never change a retail price" in sections.get("standing_rules", "")
+    assert "Always list my stores by their number" in sections.get("standing_rules", "")
+    assert sections.get("about_user")
+    assert bundle.token_estimate <= 2000
+
+    roomy, sections = await _context(container, 8000)
+    assert "Alex Morgan" in sections["user"]
+    assert len(sections["about_user"].splitlines()) == 16
+    assert [m.item_id for m in roomy.memories] == [m.item_id for m in bundle.memories], (
+        "the memories are what they are without the further lines"
+    )
+
+
+async def test_further_self_descriptions_take_only_the_room_the_memories_leave(
+    container, uow_factory
+) -> None:
+    """At 1,000 tokens the whole profile does not fit its half and the memories fill the
+    rest: the rules that apply are still there, ``about_user`` is its pinned lines and no
+    more, and the context is within its budget."""
+    await _works_at_a_retailer(container, uow_factory)
+    bundle, sections = await _context(container, 1000)
+    assert "Never change a retail price" in sections.get("standing_rules", "")
+    about = sections.get("about_user", "").splitlines()
+    assert 0 < len(about) <= 4 and len(sections["about_user"]) <= 600
+    assert bundle.token_estimate <= 1000
+    assert bundle.memories, "and the memories took the rest"

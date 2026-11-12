@@ -56,7 +56,7 @@ from memory_service.modules.context.sections import (
     within_budget,
 )
 from memory_service.modules.context.semantic_cache import SemanticBundleCache, semantic_key
-from memory_service.modules.context.standing import standing_blocks
+from memory_service.modules.context.standing import standing_sections, with_more_about
 from memory_service.modules.context.views import full_view, prompt_view
 from memory_service.modules.context.window import replay_window
 from memory_service.modules.conversation.service import ConversationService
@@ -327,7 +327,7 @@ class _Lookup:
 
 class _StandingRead:
     """The read of the standing rules and preferences that apply to a request
-    (``standing.standing_blocks``), started when the retrieval has the route and the query's
+    (``standing.standing_sections``), started when the retrieval has the route and the query's
     vectors (``RetrievalEngine.retrieve(on_encoded=...)``): it runs under the ranking."""
 
     def __init__(
@@ -335,12 +335,12 @@ class _StandingRead:
     ) -> None:
         self.engine, self.query, self.visibility = engine, query, visibility
         self.workspace_id = workspace_id
-        self.task: asyncio.Future[list[ProfileBlockView]] | None = None
+        self.task: asyncio.Future[tuple[list[ProfileBlockView], list[str]]] | None = None
 
     def start(self, routed: RoutedQuery, vectors: QueryVectors) -> None:
         if STANDING and routed.needs_memories and self.task is None:
             self.task = asyncio.ensure_future(
-                standing_blocks(
+                standing_sections(
                     self.engine, self.query, self.visibility, vectors, self.workspace_id
                 )
             )
@@ -752,7 +752,12 @@ class ContextBuilder:
             pinned.pages,
             budget - pinned_tokens - said_tokens,
         )
-        shown += pinned_tokens + said_tokens
+        # the further about_user lines take only what the memories left of the budget
+        room = budget - pinned_tokens - said_tokens - bundle.token_estimate
+        pinned.profile, more = with_more_about(
+            pinned.profile, pinned.about_more, room - (shown if PEOPLE_CHARGED else 0)
+        )
+        shown += pinned_tokens + said_tokens + more
         self._remember_semantic(found, result, bundle)
         spent = self.assist.tokens_used() - tokens_before
         return bundle.model_copy(
@@ -789,7 +794,7 @@ class ContextBuilder:
         visibility: Any,
         result: RetrievalResult,
         pinned: Pinned,
-        started: asyncio.Future[list[ProfileBlockView]] | None = None,
+        started: asyncio.Future[tuple[list[ProfileBlockView], list[str]]] | None = None,
         workspace_id: str | None = None,
     ) -> None:
         """Score the candidates' similarity and, beside it, read the user's standing rules
@@ -798,7 +803,9 @@ class ContextBuilder:
         as soon as the retrieval has the query's vectors)."""
         standing = started or (
             asyncio.ensure_future(
-                standing_blocks(self.engine, query, visibility, result.query_vectors, workspace_id)
+                standing_sections(
+                    self.engine, query, visibility, result.query_vectors, workspace_id
+                )
             )
             if STANDING and result.routed.needs_memories
             else None
@@ -810,7 +817,8 @@ class ContextBuilder:
                 standing.cancel()
             raise
         if standing is not None:
-            pinned.profile = [*await standing, *pinned.profile]
+            blocks, pinned.about_more = await standing
+            pinned.profile = [*blocks, *pinned.profile]
 
     async def _add_extras(
         self,

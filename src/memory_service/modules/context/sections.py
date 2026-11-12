@@ -108,6 +108,9 @@ class ToolsRequest(BaseModel):
 @dataclass
 class Pinned:
     profile: list[ProfileBlockView] = field(default_factory=list)
+    #: the further lines of the profile's ``about_user`` section, which are not pinned: they
+    #: take only the room the memories leave (``standing.with_more_about``)
+    about_more: list[str] = field(default_factory=list)
     #: a page per person with beliefs, pinned after everything else within the share left
     people: list[PersonPage] = field(default_factory=list)
     #: the pages of ``people`` that fit (``within_budget``)
@@ -157,6 +160,7 @@ def within_budget(
     allowed, used = int(budget * PINNED_SHARE), 0
     kept = Pinned()
     kept.profile, cost = _profile_that_fits(pinned.profile, allowed)
+    kept.about_more = pinned.about_more
     used += cost
     if (text := summary_section(pinned.thread_summary)) and pinned.thread_summary is not None:
         cost = estimate_tokens(text)
