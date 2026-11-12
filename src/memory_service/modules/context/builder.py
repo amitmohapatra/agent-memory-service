@@ -56,7 +56,7 @@ from memory_service.modules.context.sections import (
     within_budget,
 )
 from memory_service.modules.context.semantic_cache import SemanticBundleCache, semantic_key
-from memory_service.modules.context.standing import standing_blocks
+from memory_service.modules.context.standing import standing_blocks, with_more_about
 from memory_service.modules.context.views import full_view, prompt_view
 from memory_service.modules.context.window import replay_window
 from memory_service.modules.conversation.service import ConversationService
@@ -125,6 +125,18 @@ def _cacheable(bundle: ContextBundle) -> bool:
 #: Earlier values (ADR 0038) a bundle carries at most, in its history section: enough for "what
 #: was it before", never enough to crowd the current evidence's budget.
 HISTORY_MAX = 4
+
+#: How many ranked memories under the encoder's relevance floor are packed, after everything
+#: above it, when the question's best memory is close to it (``related_evidence_relevance``).
+#: A question over several conversations is far, in the encoder's space, from some of the
+#: turns that answer it: they rank well, by their words and their session, and the floor then
+#: dropped them with most of the token budget unused. Measured on 40 LongMemEval
+#: multi-session questions (116 evidence turns, messages appended as a conversation, no
+#: model): 107 were in the context, 111 with 5, 10, 20 or every one under the floor, and with
+#: every one (89 memories for 37) no more questions were answered right; the first ten
+#: memories are the same. A question the store cannot answer has no close memory and packs
+#: what it did.
+UNDER_FLOOR_MAX: Final = 5
 
 #: What a ``format=prompt`` response carries of the bundle.
 
@@ -201,6 +213,13 @@ def _with_beliefs(
     if items:
         bundle = bundle.model_copy(update={"summaries": [*bundle.summaries, *items]})
     return bundle, cost
+
+
+def _charged(shown: int, pages: Sequence[ProfileBlockView]) -> int:
+    """Of the ``shown`` tokens a context carries beside its packed evidence, those that come
+    out of its token budget: all of them, less the people's pages while those are on top of
+    it (``PEOPLE_CHARGED``)."""
+    return shown if PEOPLE_CHARGED else shown - people_tokens(pages)
 
 
 def candidate_to_item(c: Candidate) -> ContextItem:
@@ -741,6 +760,11 @@ class ContextBuilder:
             budget - pinned_tokens - said_tokens,
         )
         shown += pinned_tokens + said_tokens
+        # the further about_user lines take only what the memories left of the budget
+        pinned.profile, more = with_more_about(
+            pinned.profile, budget - bundle.token_estimate - _charged(shown, pinned.pages)
+        )
+        shown += more
         self._remember_semantic(found, result, bundle)
         spent = self.assist.tokens_used() - tokens_before
         return bundle.model_copy(
@@ -1160,6 +1184,23 @@ class ContextBuilder:
             )
         )
 
+    def _packing_order(
+        self, items: Sequence[tuple[Candidate, ContextItem]], slot: slots.Slot | None
+    ) -> tuple[list[tuple[Candidate, ContextItem]], list[tuple[Candidate, ContextItem]]]:
+        """The candidates in the order they are packed, and those of them from under the
+        relevance floor: every candidate that clears the floor (``_below_floor``), as ranked;
+        then, when the question's best memory is at least ``related_evidence_relevance``
+        close to it, the first ``UNDER_FLOOR_MAX`` memories under the floor, as ranked."""
+        above = [pair for pair in items if not self._below_floor(pair[0], slot)]
+        close = self.retrieval_cfg.related_evidence_relevance
+        best = max((c.similarity or 0.0 for c, _ in items if c.kind == "memory"), default=0.0)
+        if not 0 < close <= best:
+            return above, []
+        under = [
+            pair for pair in items if pair[0].kind == "memory" and self._below_floor(pair[0], slot)
+        ][:UNDER_FLOOR_MAX]
+        return [*above, *under], under
+
     def _coverage(
         self,
         report: EvidenceReport,
@@ -1279,13 +1320,9 @@ class ContextBuilder:
                         break
             return out
 
-        below_floor = 0
-        slot = slots.question_slot(query)
-        for c, item in items:
+        order, under_floor = self._packing_order(items, slots.question_slot(query))
+        for c, item in order:
             if c.record_id in included_ids:
-                continue
-            if self._below_floor(c, slot):
-                below_floor += 1
                 continue
             if c.kind == "chunk" and len(knowledge) < self.cfg.knowledge_max:
                 node = str(c.payload.get("node_id") or "")
@@ -1342,6 +1379,9 @@ class ContextBuilder:
                 continue
             included_ids.add(c.record_id)
             remaining -= item.token_estimate
+        # what the floor left out: those under it that were not packed after the rest
+        below_floor = len(items) - len(order)
+        below_floor += sum(c.record_id not in included_ids for c, _ in under_floor)
         if below_floor:
             result.diagnostics["below_relevance_floor"] = below_floor
         evidence = result.diagnostics.get("evidence")

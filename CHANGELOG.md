@@ -41,6 +41,34 @@ each entry says which one moved. Decisions behind each change are in the
   asking call.
 
 ### Changed
+- **A few memories from under the relevance floor are packed when the question is about
+  something the store holds** (service). A ranked memory under the encoder's relevance floor
+  (0.20) was never packed. A question over several conversations is far, in the encoder's
+  space, from some of the turns that answer it; they ranked well and the floor dropped them
+  with most of the token budget unused. Now, when the question's best memory is at least
+  `related_evidence_relevance` (0.40) similar to it, the next five ranked memories under the
+  floor are packed after everything above it, so what was packed before is packed in the
+  same order. A question the store cannot answer has no close memory and packs what it did.
+  `diagnostics.below_relevance_floor` counts the candidates left out. Documents are packed
+  as before. On 40 LongMemEval multi-session questions the evidence turns in the context
+  went from 107 to 111 of 116 and the questions holding all of theirs from 34 to 37; no
+  LoCoMo category holds less ([MEASUREMENTS.md §10](docs/MEASUREMENTS.md)). About 90 to 280
+  more tokens per read. No setting, endpoint, field or SDK call changed.
+- **`about_user` has room for what a person says of their work** (service). The profile
+  section that carries the user's own setup into every request listed the 4 statements
+  nearest the request (600 characters), so which ones came back depended on the question:
+  of twenty things a user said in a first conversation, "I'm Alex. I plan Coach Womens Bags
+  for the Retail channel." was in neither the profile nor the memories when a new
+  conversation asked "What do you remember about how I work?". It lists up to 16 now. The
+  first lines are pinned exactly as before (the same 4 lines and 600 characters, within the
+  pinned sections' half of the budget); the further ones, each at most 200 characters, are
+  added only from the token budget the memories leave. So at every budget the pinned
+  sections and the memories are what they were, and a small context (the harness asks for
+  2,000 tokens when it does not know its model's window) keeps its `user` block and its
+  rules. Still the user's own, of the workspace they were said in, current only; a note an
+  agent saves about the user stays out of it (ADR 0013). About 480 to 670 more tokens per
+  read at the default 8,000 for a user with that many statements, none where the memories
+  fill the budget ([MEASUREMENTS.md §10](docs/MEASUREMENTS.md)).
 - **A question gets the same search however it is worded** (service). The router no longer
   has a route for a question that opens with "when", "who owns" or "why did we decide"
   (`TEMPORAL`, `ENTITY_RELATION`, `DECISION`): each was an English wording pattern, so the same

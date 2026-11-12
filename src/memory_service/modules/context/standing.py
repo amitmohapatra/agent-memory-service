@@ -30,11 +30,14 @@ import re
 from collections.abc import Iterable, Sequence
 from typing import Any, Final
 
-from memory_service.domain.context_bundle import ProfileBlockView
+from pydantic import Field
+
+from memory_service.domain.context_bundle import ProfileBlockView, profile_section
 from memory_service.domain.language import detect_language
 from memory_service.domain.memory import SELF_ANYWHERE
 from memory_service.domain.profile import PROFILE_MEMORY_TYPES
 from memory_service.modules.context.evidence import content_terms, stemmed_terms
+from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.memory.replacement import _function_words
 from memory_service.ports.search import SearchHit
 
@@ -48,14 +51,31 @@ PREFERENCES_BLOCK: Final = "preferences"
 ABOUT_BLOCK: Final = "about_user"
 #: the sections this module writes (``sections.within_budget`` keeps them before the rest)
 BLOCKS: Final = frozenset({RULES_BLOCK, PREFERENCES_BLOCK, ABOUT_BLOCK})
+#: The first lines of the section are pinned with the profile, within the pinned sections'
+#: share of the budget: the nearest ``ABOUT_MAX`` of the ``ABOUT_SEARCH_K`` nearest, within
+#: ``ABOUT_CHARS``.
 ABOUT_MAX: Final = 4
-#: how many the about_user search returns (one dense search): enough to drop superseded ones
+#: how many of the nearest the pinned lines are read from: enough to drop superseded ones
 ABOUT_SEARCH_K: Final = 12
 #: what the pinned ``user`` block is kept from (``profile.refresh``): never listed here again
 _IN_USER_BLOCK: Final = frozenset(t.value for t in PROFILE_MEMORY_TYPES)
-#: the section's size in characters, and one line's
+#: the pinned lines' size in characters, and one line's
 ABOUT_CHARS: Final = 600
 ABOUT_LINE_CHARS: Final = 200
+#: Room for what a person says of their work in a first conversation: the section's lines in
+#: all, the pinned ones and the further ones, which are added only from the token budget the
+#: memories leave (``with_more_about``), so the pinned sections and the memories are what
+#: they are without them at every budget. With the four pinned lines alone, which statements
+#: came back depended on the question: of twenty things a user said of their work, "I'm Alex.
+#: I plan Coach Womens Bags for the Retail channel." was not among the four nearest "What do
+#: you remember about how I work?" (cosine 0.15, under the ranking's relevance floor too), so
+#: the new conversation had it nowhere. With 16 lines all ten statements only this section
+#: carries are listed. Sixteen pinned lines, tried first, cost a 2,000-token context its
+#: ``user`` block and a 1,000-token one its whole profile (``sections.within_budget``).
+ABOUT_LINES: Final = 16
+#: how many the about_user search returns (one dense search): three for each line shown, so
+#: the superseded ones among them are still found and dropped
+ABOUT_LINES_SEARCH_K: Final = 3 * ABOUT_LINES
 RULE_CATEGORIES: Final = ("rule", "instruction")
 #: a statement the labeller read as a rule (ADR 0037) is one whatever rule extracted it; a
 #: correction of a fact ("Update: B replaced A as the buyer") is not, and reaches the bundle as
@@ -237,6 +257,14 @@ def _superseded(chosen: Sequence[tuple[SearchHit, set[str]]]) -> dict[str, Searc
     return out
 
 
+class AboutUser(ProfileBlockView):
+    """The ``about_user`` section as ``standing_blocks`` returns it: its pinned lines as the
+    text, and the further ones beside them, which the context adds from the room the memories
+    leave (``with_more_about``). Not part of what the context carries."""
+
+    more: tuple[str, ...] = Field(default=(), exclude=True)
+
+
 async def standing_blocks(
     engine: Any,
     query: str,
@@ -271,7 +299,7 @@ async def standing_blocks(
             vectors,
             must_any={"self_description": places},
             keyword=False,
-            limit=ABOUT_SEARCH_K,
+            limit=ABOUT_LINES_SEARCH_K,
         ),
     )
     out: list[ProfileBlockView] = []
@@ -286,35 +314,68 @@ async def standing_blocks(
         shown |= {_said(hit) for hit, _, _ in chosen}
         if lines:
             out.append(ProfileBlockView(block=block, text="\n".join(lines), version=0))
-    about = _about(setup, shown, lang)
+    about, more = _about(setup, shown, lang)
     if about:
-        out.append(ProfileBlockView(block=ABOUT_BLOCK, text=about, version=0))
+        out.append(AboutUser(block=ABOUT_BLOCK, text=about, version=0, more=tuple(more)))
     return out
 
 
-def _about(found: Sequence[tuple[SearchHit, float]], shown: set[tuple], lang: str) -> str:
+def _about(
+    found: Sequence[tuple[SearchHit, float]], shown: set[tuple], lang: str
+) -> tuple[str, list[str]]:
     """The ``about_user`` section: the user's current self-descriptions nearest the request,
     whatever their similarity, one line each, without what another section already lists,
     what the pinned ``user`` block holds (a USER or PREFERENCE memory) or a later one on the
-    same subject supersedes, at most ``ABOUT_MAX`` lines and ``ABOUT_CHARS``."""
-    current = [
-        (hit, _stems(_text(hit), lang), similarity)
-        for hit, similarity in found
-        if not hit.payload.get("earlier_value")
-        and hit.payload.get("memory_type") not in _IN_USER_BLOCK
-        and _text(hit)
-        and _said(hit) not in shown
-    ]
-    gone = _superseded([(hit, _frame(_text(hit), lang)) for hit, _, _ in current])
-    lines: list[str] = []
+    same subject supersedes. Its pinned lines, read from the nearest ``ABOUT_SEARCH_K`` (at
+    most ``ABOUT_MAX`` lines and ``ABOUT_CHARS``), and the further ones, from everything
+    found, up to ``ABOUT_LINES`` in all."""
+
+    def listed(hits: Sequence[tuple[SearchHit, float]]) -> list[str]:
+        current = [
+            (hit, _stems(_text(hit), lang), similarity)
+            for hit, similarity in hits
+            if not hit.payload.get("earlier_value")
+            and hit.payload.get("memory_type") not in _IN_USER_BLOCK
+            and _text(hit)
+            and _said(hit) not in shown
+        ]
+        gone = _superseded([(hit, _frame(_text(hit), lang)) for hit, _, _ in current])
+        lines = _lines([c for c in current if c[0].record_id not in gone])
+        return [line[:ABOUT_LINE_CHARS] for line in lines]
+
+    pinned: list[str] = []
     size = 0
-    for full in _lines([c for c in current if c[0].record_id not in gone]):
-        line = full[:ABOUT_LINE_CHARS]
-        if len(lines) == ABOUT_MAX or size + len(line) > ABOUT_CHARS:
+    for line in listed(found[:ABOUT_SEARCH_K]):
+        if len(pinned) == ABOUT_MAX or size + len(line) > ABOUT_CHARS:
             break
-        lines.append(line)
+        pinned.append(line)
         size += len(line) + 1
-    return "\n".join(lines)
+    more = [line for line in listed(found) if line not in pinned]
+    return "\n".join(pinned), more[: ABOUT_LINES - len(pinned)]
+
+
+def with_more_about(
+    profile: Sequence[ProfileBlockView], room: int
+) -> tuple[list[ProfileBlockView], int]:
+    """``profile`` with the further lines of its ``about_user`` section (``AboutUser.more``)
+    that fit ``room`` tokens added to that section, in order, and the tokens they take. A
+    profile without the section (no pinned line, or the profile did not fit its share) gets
+    none."""
+    blocks = list(profile)
+    at = next((n for n, block in enumerate(blocks) if isinstance(block, AboutUser)), None)
+    if at is None:
+        return blocks, 0
+    more = blocks[at].more  # type: ignore[attr-defined]
+    blocks[at] = ProfileBlockView(block=ABOUT_BLOCK, text=blocks[at].text, version=0)
+    base = estimate_tokens(profile_section(blocks) or "")
+    taken = 0
+    for line in more:
+        longer = blocks[at].model_copy(update={"text": f"{blocks[at].text}\n{line}"})
+        cost = estimate_tokens(profile_section([*blocks[:at], longer, *blocks[at + 1 :]]) or "")
+        if cost - base > room:
+            break
+        blocks[at], taken = longer, cost - base
+    return blocks, taken
 
 
 def _choose(

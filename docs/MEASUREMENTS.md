@@ -622,3 +622,138 @@ What this shows, and what it does not:
 - Not measured: the three-worker API with multiprocess metrics, PgBouncer in the path, a
   populated corpus, the NLI model, and the 8 vCPU target. The 300 ms p95 target is still not
   claimed. The p95 of 180-620 ms at 4-30 rps is over a near-empty corpus.
+
+## 10. Packing from under the floor, and the `about_user` section — 2026-11-12
+
+Two changes to what a context holds, measured apart and together in one process per question
+(the same ranked candidates on every side; "before" is main at 6382c33). Part 1: when the
+question's best memory is at least 0.40 similar to it, the next five ranked memories under
+the relevance floor are packed after everything above it (`builder.UNDER_FLOOR_MAX`). Part
+2: `about_user` lists up to 16 of the user's self-descriptions instead of 4
+(`standing.ABOUT_LINES`). The box is the 4-CPU sandbox VM of §9; real encoders; no model at
+ingest unless said. Tokens are the service's own estimate unless said.
+
+Part 2 was measured with all sixteen lines pinned, and that form was then found to cost a
+small context its profile: the pinned sections share half the budget, and the profile is
+kept whole, or cut to its standing sections, or dropped. At 2,000 tokens (what the harness
+asks for when it does not know its model's window) a user with a name, six rules, a
+preference and seventeen self-descriptions lost the `user` block, and at 1,000 the whole
+profile, rules included. As shipped, the first lines are pinned exactly as before (4 lines,
+600 characters) and the further ones are added only from the budget the memories leave
+(`standing.with_more_about`). At 8,000 that is the measured context: rebuilt in one process
+beside the measured form, the packed memories are identical on all 800 sampled LoCoMo
+questions and all 70 LongMemEval questions, and the whole rendered context on 604 of the 800
+and 65 of the 70. The others list 16 lines too, of which one to three differ: a line main
+pins from the nearest twelve that the deeper read had dropped as restated. On the 604
+identical LoCoMo contexts the answers below are 717 → 721 of 909 and 722 → 723 of 903. The
+tables below are the measured form unless said.
+
+**LongMemEval-S, the two weak types**, through the conversation path (every turn appended as
+a message with its role, one thread per session, one user who also asks). 40 multi-session
+questions (seeded sample, 116 evidence turns) and all 30 single-session-preference questions
+(44 evidence turns). Evidence turns in the context's memories:
+
+| | before | part 1 alone | part 2 alone | both |
+|---|---|---|---|---|
+| multi-session, evidence turns in context | 107 / 116 | 111 | 107 | 111 |
+| multi-session, questions holding all of theirs | 34 / 40 | 37 | 34 | 37 |
+| multi-session, evidence in the first 10 memories | 89 / 116 | 89 | 89 | 89 |
+| multi-session, memories packed / context tokens | 37.2 / 3,057 | 41.2 | 37.2 | 41.2 / 4,011 |
+| preference, evidence turns in context | 37 / 44 | 38 | 37 | 38 |
+| preference, questions holding all of theirs | 23 / 30 | 24 | 23 | 24 |
+| preference, evidence in the first 10 memories | 32 / 44 | 32 | 32 | 32 |
+
+The first ten memories are the same on all 70 questions. The rule applies on 32 of the 40
+and 20 of the 30 (best memory at 0.40 or closer). Packing every memory under the floor
+instead of five held the same 111 turns in 89 memories. Answers with a small model, three
+samples, before and both parts in one batch; "range" is where 95% of the differences fall
+when each question's six answers are reshuffled between the two sides:
+
+| | right before | right after | range |
+|---|---|---|---|
+| multi-session, the benchmark's reader | 93 / 120 | 98 | -5 to +5 |
+| multi-session, the harness's notes as reader | 93 / 120 | 93 | -6 to +8 |
+| preference, the benchmark's reader | 25 / 90 | 25 | -6 to +6 |
+| preference, the harness's notes as reader | 54 / 90 | 57 | -9 to +7 |
+
+Of the three multi-session questions that gained evidence, two went from 0 to 3 right of
+3 under both readers and one was right before; every total is inside its range. Preference is decided by
+the reader, not by the context: the same contexts score 25 and 54 of 90.
+
+**LoCoMo, evidence in the context**, ten conversations, a corpus ingested without a model
+and one ingested with a small model's extraction, 1,986 questions each plus 131 held-out
+questions and 100 questions nothing answers. Evidence turns in the context's memories,
+before → both parts; part 2 alone equals before and part 1 alone equals both in every cell,
+and the count in the first 10 memories is the same before and after in every cell:
+
+| category (evidence turns) | no-model corpus | extraction corpus |
+|---|---|---|
+| single_hop (895) | 877 → 877 | 879 → 879 |
+| multi_hop (883) | 736 → 737 | 765 → 766 |
+| temporal (375) | 365 → 365 | 364 → 365 |
+| open_domain (208) | 137 → 137 | 147 → 148 |
+| adversarial (460) | 443 → 454 | 453 → 456 |
+| held-out (224) | 216 → 217 | 216 → 216 |
+| nothing answers: memories packed | 7.5 → 7.6 | 8.4 → 8.4 |
+
+**LoCoMo, answers.** Part 2 changes every context of this corpus (its two speakers' turns
+are tenant-visible, so `about_user` fills for every question), so a seeded sample was
+answered: 80 questions per category on each corpus, three samples, before and both parts
+in one batch, the usual judges. Right of 240, with the same range:
+
+| category | no-model corpus | extraction corpus | range |
+|---|---|---|---|
+| single_hop | 220 → 220 | 225 → 220 | ±6 to ±7 |
+| multi_hop | 176 → 183 | 174 → 176 | ±7 to ±10 |
+| temporal | 188 → 185 | 185 → 187 | ±6 to ±7 |
+| open_domain | 142 → 147 | 153 → 153 | ±8 to ±9 |
+| adversarial | 216 → 213 | 215 → 215 | ±8 to ±9 |
+| all (of 1,200) | 942 → 948 | 952 → 951 | ±16 to ±19 |
+
+Flat: 711 of the 800 questions scored the same, 44 went up and 45 down, and every cell is
+inside its range. Split by what changed in the context, neither part moves the answers
+(profile only: 166 → 166 of 216 and 180 → 180 of 228; packed memories too: 776 → 782 of 984
+and 772 → 771 of 972).
+
+**The field case** (twenty things said of one's work in a first conversation, then "What do
+you remember about how I work?" in a new one, same workspace). Before, the plan ("Coach
+Womens Bags") is nowhere in the context, with or without the extraction model; after, the
+user's sentence is in `about_user` on both sides (10 lines listed). The note the agent saved
+is in no profile section. From another workspace the section is empty, as before.
+
+**Cost per read** at 8,000. Part 1: +2.7 memories and +84 to +92 tokens on LoCoMo, +4
+memories and +284 tokens on the LongMemEval questions; a question nothing answers packs 7.6
+memories for 7.5. Part 2: +480 tokens on LoCoMo (3.4 → 16 lines) and +670 on LongMemEval
+(2.3 → 16 lines of up to 200 characters), also for a question nothing answers (478 → 949
+tokens); as shipped these come out of unused room only, and are fewer at a smaller budget. In
+the reader model's own count the two together are about 800 input tokens more per LoCoMo
+answer (9,250 → 10,060) and about 1,350 more per LongMemEval answer (5,455 → 6,807).
+
+**Smaller budgets** (the shipped form, by replay of the build's tail on one retrieval per
+question; 2,160 full builds agreed with the replay but 4). Evidence turns in the context's
+memories, and questions holding all of theirs, by `token_budget`:
+
+| budget | LoCoMo no-model (2,821 turns, 1,986 questions) | LoCoMo extraction | LongMemEval multi-session (116, 40) | preference (44, 30) |
+|---|---|---|---|---|
+| 1,000 | 76.0% / 80.4% | 80.0% / 82.8% | 76.7% / 65.0% | 70.5% / 60.0% |
+| 2,000 | 85.1% / 87.4% | 88.0% / 89.5% | 87.1% / 75.0% | 79.5% / 70.0% |
+| 3,200 | 89.0% / 90.2% | 91.4% / 91.9% | 92.2% / 85.0% | 81.8% / 73.3% |
+| 4,000 | 90.4% / 91.2% | 92.3% / 92.7% | 94.0% / 90.0% | 84.1% / 76.7% |
+| 6,400 | 91.1% / 92.0% | 92.7% / 93.0% | 95.7% / 92.5% | 86.4% / 80.0% |
+| 8,000 | 91.1% / 92.0% | 92.7% / 93.0% | 95.7% / 92.5% | 86.4% / 80.0% |
+
+The budget stops binding between 4,000 and 6,400: at 8,000 a context uses 4,000 to 4,700
+tokens on average and 5,000 to 6,300 at the 90th percentile; at 3,200 and below nearly
+every context is full, and at 4,000 most are. The evidence in the first ten memories is the same from 2,000 up; what
+a smaller budget loses is the evidence ranked after them, so the questions that need
+several turns lose most (LoCoMo multi_hop, no-model corpus: 56.6% of its evidence at 1,000,
+72.3% at 2,000, 79.8% at 3,200, 82.4% at 4,000, 83.5% from 6,400; open_domain 39.4%, 52.9%,
+60.6%, 63.9%, 65.9%). On the LongMemEval questions, whose user has a profile of about 950
+tokens, the `user` block is in 0 of 70 contexts at 1,000, 45 at 2,000 and all 70 from 3,200;
+the standing rules are in 51, 66 and 66. The further `about_user` lines appear as room
+does: 3 to 4 lines at 2,000, 6 to 7 at 3,200, about 10 at 4,000, 16 from 6,400.
+
+**Not measured.** Recall at 10 does not move, by design. The retrieval benchmark's own
+LongMemEval path (every turn an observation of a tenant-visible user) was not rerun. The
+extraction model was used at ingest only for the second LoCoMo corpus and the field case.
+

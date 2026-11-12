@@ -141,7 +141,9 @@ chunk and summary carries its dense similarity to the question as `relevance` (0
 under the floor (0.20 for the shipped multilingual encoder) is not packed, so a question the
 store cannot answer comes back nearly empty instead of full of whatever ranked next
 (`diagnostics.below_relevance_floor` counts them). Exact identifier hits and expansion
-companions are exempt. They are one indexed read each and run concurrently with retrieval; none of them calls
+companions are exempt. When the question's best memory is close to it (a similarity of 0.40
+or more), the next five ranked memories under the floor are packed after everything above
+it: a question over several conversations is far from some of the turns that answer it. They are one indexed read each and run concurrently with retrieval; none of them calls
 a model. `window=False` leaves the conversation window out, for a framework that keeps its own
 history. The cache key includes the `tools` request.
 
