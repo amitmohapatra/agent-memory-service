@@ -501,6 +501,22 @@ def _other_principals_shared(mem: CanonicalMemory, ctx: MemoryExecutionContext) 
     return mem.owner_principal != ctx.principal_id and mem.scope.level.value in _SHARED_LEVELS
 
 
+def statement(observation: Observation, ctx: MemoryExecutionContext) -> MemoryCandidate:
+    """A person's message as their statement, whether or not a verbatim turn is kept of it:
+    who said it, its evidence and whether it follows the user. What the model's reading of a
+    message the rules kept nothing of is made from (``pipeline._gaps``)."""
+    return MemoryCandidate(
+        content=observation.content.strip(),
+        memory_type=MemoryType.OBSERVATION,
+        lifetime=Lifetime.LONG_TERM,
+        subject=_user_subject(ctx),
+        predicate="said",
+        evidence=_evidence(observation),
+        category="verbatim_turn",
+        follows_user=follows_user(observation),
+    )
+
+
 def _user_subject(ctx: MemoryExecutionContext) -> str:
     return f"user:{ctx.user_id}" if ctx.user_id else ctx.principal_id
 

@@ -47,7 +47,7 @@ from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.observation import Observation
 from memory_service.domain.script import Script
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.memory.native import is_question, tokens
+from memory_service.modules.memory.native import tokens
 from memory_service.modules.memory.replacement import EARLIER_CONTRADICTION
 from memory_service.modules.memory.temporal import dated_mentions
 from memory_service.ports.intelligence import MemoryCandidate
@@ -67,8 +67,6 @@ DUPLICATE_COSINE: Final = 0.92
 #: consolidation applies to a restatement in other words
 NEAR_COSINE: Final = MEMORY_INTELLIGENCE.dedup_paraphrase_cosine
 SAME_ENTAILMENT: Final = MEMORY_INTELLIGENCE.dedup_paraphrase_entailment
-#: a message no longer than this ("Thanks!", "ok, sure") is a reply, not a statement
-SHORT_REPLY_CHARS: Final = 15
 #: model calls in flight per tenant
 PER_TENANT: Final = 4
 #: how far from the day it was said a model-resolved date may fall
@@ -188,18 +186,6 @@ def _norm(text: str) -> str:
     return _SPACE.sub(" ", text).strip().casefold()
 
 
-def worth_asking(sentences: Sequence[str], recent: Sequence[Turn], speaker: str) -> bool:
-    """Whether the message may hold something the rules missed, by its shape alone, in any
-    language: a statement (not only questions) longer than a short reply, or a short reply
-    to another speaker's turn ("yes, book that one" confirms what was offered)."""
-    statements = [s for s in sentences if not is_question(s)]
-    if not statements:
-        return False
-    if sum(len(s) for s in statements) <= SHORT_REPLY_CHARS:
-        return bool(recent) and recent[-1].speaker != speaker
-    return True
-
-
 def payload(
     *,
     message: str,
@@ -247,10 +233,14 @@ class GapFill:
         self._slots: dict[str, asyncio.Semaphore] = {}
 
     def wanted(self, observation: Observation, ctx: MemoryExecutionContext) -> bool:
-        """A person's own message, when the model may read it and no server does."""
+        """A person's own message, whatever its shape, when the model may read it and no
+        server does: the model decides what a question or a short reply holds, not a rule.
+        Not one the caller asked not to be read, nor an empty one."""
         return (
             observation.kind is ObservationKind.MESSAGE
             and not observation.agent_authored
+            and not observation.hints.skip_extraction
+            and bool(observation.content.strip())
             and self.assist.wants("contextual_extraction")
             and not (self.server_reads is not None and self.server_reads(observation, ctx))
         )

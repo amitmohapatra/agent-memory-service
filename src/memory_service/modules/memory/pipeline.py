@@ -42,11 +42,11 @@ from memory_service.modules.llm.policy import identity_of
 from memory_service.modules.memory.admission import AdmissionGate
 from memory_service.modules.memory.consolidation import CONSOLIDATION_USE, schedule_for
 from memory_service.modules.memory.ephemeral import EphemeralMemory
-from memory_service.modules.memory.gapfill import POOL, RECENT_TURNS, GapFill, Turn, worth_asking
+from memory_service.modules.memory.gapfill import POOL, RECENT_TURNS, GapFill, Turn
 from memory_service.modules.memory.gapfill import TYPES as GAP_TYPES
 from memory_service.modules.memory.gapfill import candidate as gap_candidate
 from memory_service.modules.memory.gapfill import covered as gap_covered
-from memory_service.modules.memory.native import follows_user, normalized_hash, split_sentences
+from memory_service.modules.memory.native import follows_user, normalized_hash, statement
 from memory_service.modules.memory.referred import referred_turn
 from memory_service.modules.memory.replacement import CrossConversationReplacement
 from memory_service.modules.memory.restatement import restate
@@ -568,14 +568,17 @@ class ObservationPipeline:
         """What the model reads from a user's message beyond the rules (``gapfill``): each
         candidate with the memory it claims to update or contradict, if any, and the memories
         it was shown."""
-        turn = next((c for c in candidates if c.category == "verbatim_turn"), None)
-        if self.gapfill is None or turn is None or not self.gapfill.wanted(observation, ctx):
+        if self.gapfill is None or not self.gapfill.wanted(observation, ctx):
             return Gaps()
+        # the message as its speaker's statement: the verbatim turn the rules kept of it, or
+        # the message itself where they kept none (a question, a greeting)
+        turn = (
+            next((c for c in candidates if c.category == "verbatim_turn"), None)
+            or (await self._classified([statement(observation, ctx)], observation, ctx))[0]
+        )
         speaker = _speaker(observation)
         async with self.uow_factory() as uow:
             recent = await self._recent(uow, observation, prior)
-            if not worth_asking(split_sentences(observation.content), recent, speaker):
-                return Gaps()
             # where this message's memories are anchored, a profile fact's (the user's) too
             anchors = [*candidates, turn.model_copy(update={"memory_type": MemoryType.USER})]
             pool = await uow.memories.list_scope(

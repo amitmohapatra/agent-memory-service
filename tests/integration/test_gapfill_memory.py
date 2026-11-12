@@ -190,3 +190,59 @@ async def test_a_reply_the_model_read_whole_is_not_kept_again_with_its_question(
     kept = await _contents(container, uow_factory)
     assert any("(in reply to: Where is it?)" in m for m in kept) is referred, kept
     assert all(f in kept for f in facts), kept
+
+
+QUESTION = "How do I keep my living room dust-free, especially with a cat that sheds a lot?"
+CAT = "u1 has a cat that sheds a lot."
+
+
+def _add(fact: str, quote: str) -> dict:
+    return {
+        "ops": [
+            {
+                "op": "add",
+                "fact": fact,
+                "quote": quote,
+                "type": "fact",
+                "subject": "",
+                "date": "",
+                "confidence": 0.6,
+                "target": 0,
+            }
+        ]
+    }
+
+
+@pytest.mark.parametrize(
+    ("said", "fact", "quote"),
+    [
+        (QUESTION, CAT, "a cat that sheds a lot"),
+        ("I'm vegan.", "u1 is vegan.", "I'm vegan."),
+    ],
+)
+async def test_the_model_reads_a_message_whatever_its_shape(
+    container, uow_factory, said: str, fact: str, quote: str
+):
+    """A question, or a statement of a few words, is a message a person wrote like any other:
+    the rules keep nothing of the question (no verbatim turn either) and little of the short
+    one, and the model reads both and decides what they hold. What it returns is stored
+    against the message, as the user's."""
+    pipeline = container.services["observation_pipeline"]
+    with mocked_gateway([_add(fact, quote)]) as gateway:
+        pipeline.gapfill = GapFill(gateway.assist(uses=["contextual_extraction"]))
+        ack = await _observe(container, uow_factory, U1, said, hints=USER)
+        assert gateway.route.call_count == 1
+        assert said in gateway.prompts()[-1]["messages"][1]["content"]
+    read = next(m for m in await _memories(uow_factory, U1, container) if m.content == fact)
+    assert read.system_metadata.get("provider") == "llm"
+    assert read.visibility is Visibility.USER and read.owner_principal == "user:u1"
+    assert [e.source_id for e in read.evidence] == [ack.observation_id]
+
+
+async def test_without_a_model_a_question_forms_nothing_and_asks_nothing(container, uow_factory):
+    """The container's own gap-fill, with no model configured: wired, and it asks nothing."""
+    assert container.services["observation_pipeline"].gapfill is not None
+    with mocked_gateway([_add(CAT, "a cat that sheds a lot")]) as gateway:
+        await _observe(container, uow_factory, U1, QUESTION, hints=USER)
+        assert gateway.route.call_count == 0
+    assert await _memories(uow_factory, U1, container) == []

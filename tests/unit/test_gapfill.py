@@ -11,7 +11,7 @@ import pytest
 from memory_service.domain.enums import MemoryType
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory import gapfill
-from memory_service.modules.memory.gapfill import GapFill, Turn, candidate, checked, worth_asking
+from memory_service.modules.memory.gapfill import GapFill, Turn, candidate, checked
 from tests.support_llm import mocked_gateway
 from tests.unit.test_memory_native import CTX, _obs
 
@@ -110,19 +110,6 @@ async def test_what_the_rules_already_read_is_not_added_twice():
     same = op(fact="Her name is Biscuit.")
     out, _ = await fill([{"ops": [same, same]}], rules=["Her  name is biscuit."])
     assert out == []
-
-
-@pytest.mark.parametrize(
-    ("sentences", "recent", "asked"),
-    [
-        (["What time is it?"], [], False),
-        (["Thanks!"], [Turn("Ana", "I moved.")], False),
-        (["Yes, book it."], [Turn("assistant", "Shall I book the Granvia?")], True),
-        (["I moved to Pune."], [], True),
-    ],
-)
-def test_a_message_is_asked_about_by_its_shape(sentences, recent, asked):
-    assert worth_asking(sentences, recent, "Ana") is asked
 
 
 async def test_calls_in_flight_are_bounded_per_tenant():
