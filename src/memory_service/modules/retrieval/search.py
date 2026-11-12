@@ -43,6 +43,7 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.memory import CanonicalMemory, statement_kind_of
 from memory_service.domain.profile import PROFILE_MEMORY_TYPES
+from memory_service.domain.text import SENTENCE_BREAK
 from memory_service.modules.context.window import steps_list, turns, units
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.llm.assist import LLMAssist
@@ -89,6 +90,30 @@ EARLIER_CHAT_SHARE: Final = 0.5
 #: Characters of one such answer: a longer one keeps its start and its end (a worked-out
 #: answer states what it computes first and its result last).
 EARLIER_CHAT_CHARS: Final = 1000
+#: What a context carries beyond those pinned lines, only from the token budget its memories
+#: leave (``builder._roomier``), so the pinned sections and the memories are what they are
+#: without it: of a long answer the passage the question's words fall in, in place of its two
+#: ends (:func:`_passage`), within the same cap and then within ``EARLIER_CHAT_MORE_CHARS``;
+#: and further answers within the same share of the best, up to ``EARLIER_CHAT_MORE_LINES``
+#: in all, read from the newest ``EARLIER_CHAT_SCAN`` messages that share a word with the
+#: question instead of the newest ``OWNED_SCAN``. Measured on 51 LongMemEval questions whose
+#: answer is in an assistant's reply of a conversation of about 490 messages: the reply
+#: asked about was older than the newest 200 on 12 of them, and longer than the cap on 26.
+EARLIER_CHAT_MORE_LINES: Final = 6
+EARLIER_CHAT_MORE_CHARS: Final = 3000
+EARLIER_CHAT_SCAN: Final = 1000
+
+
+class EarlierAnswer(EarlierChatLine):
+    """An earlier answer as :meth:`Searcher.earlier_chats` returns it: the line a context pins
+    (the answer's two ends within the cap) and, beside it, what a context may carry in its
+    place from the room its memories leave: the ``passage`` the question's words fall in,
+    within the same cap, and a ``fuller`` one. ``further``: an answer beyond the pinned ones,
+    carried only from that room. Not part of what a context carries."""
+
+    passage: str = Field(default="", exclude=True)
+    fuller: str = Field(default="", exclude=True)
+    further: bool = Field(default=False, exclude=True)
 
 
 class SearchItem(BaseModel):
@@ -166,6 +191,56 @@ def _ends(text: str, chars: int) -> str:
         return text
     half = (chars - 3) // 2
     return f"{text[:half].rstrip()} … {text[-half:].lstrip()}"
+
+
+def _passage(text: str, weight: dict[str, float], chars: int) -> str:
+    """``text``, or within ``chars`` the sentences of it the question's words fall in: the
+    ones holding the heaviest of them first (``weight``: :func:`_weights`), then the earliest,
+    whole, in the answer's own order, with what is left out marked. An answer that is one long
+    sentence keeps its two ends (:func:`_ends`)."""
+    if len(text) <= chars:
+        return text
+    parts = [p.strip() for p in SENTENCE_BREAK.split(text) if p.strip()]
+    heaviest = sorted(
+        range(len(parts)),
+        key=lambda i: (-sum(weight.get(w, 0.0) for w in _words(parts[i])), i),
+    )
+    kept: set[int] = set()
+    room = chars - 4  # the marks at both ends
+    for i in heaviest:
+        if len(parts[i]) + 3 <= room:
+            kept.add(i)
+            room -= len(parts[i]) + 3
+    if not kept:
+        return _ends(text, chars)
+    out: list[str] = []
+    last = -1
+    for i in sorted(kept):
+        if i != last + 1:
+            out.append("…")
+        out.append(parts[i])
+        last = i
+    if last != len(parts) - 1:
+        out.append("…")
+    return " ".join(out)
+
+
+def _answers(wanted: set[str], read: Sequence[Message]) -> tuple[list[Message], dict[str, float]]:
+    """The assistant's messages of ``read`` within :data:`EARLIER_CHAT_SHARE` of the one that
+    best matches the query, best first (the newest among equals), and the query words'
+    weights over ``read``."""
+    said = [_words(m.content) for m in read]
+    weight = _weights(wanted, said)
+    answers = [
+        (n, m)
+        for n, m in (
+            (sum(weight[w] for w in wanted & s), m) for s, m in zip(said, read, strict=True)
+        )
+        if n and m.role is MessageRole.ASSISTANT
+    ]
+    answers.sort(key=lambda nm: (-nm[0], -nm[1].occurred_at.timestamp()))
+    best = answers[0][0] if answers else 0.0
+    return [m for n, m in answers if n >= EARLIER_CHAT_SHARE * best], weight
 
 
 def _day(raw: Any) -> str | None:
@@ -512,28 +587,29 @@ class Searcher:
         """What the assistant answered in the user's earlier conversations of this workspace
         that best matches ``query`` (ADR 0044): at most :data:`EARLIER_CHAT_LINES`, each
         within :data:`EARLIER_CHAT_SHARE` of the best, best first, each with when and in
-        which conversation it was said and whether the user's next message corrected it. The
-        user's own words there are memories already (ADR 0036): they are not repeated. Without
-        a user, none."""
+        which conversation it was said and whether the user's next message corrected it; then
+        the further answers a context adds when it has room (:class:`EarlierAnswer`), read
+        from further back. The user's own words there are memories already (ADR 0036): they
+        are not repeated. Without a user, none."""
         wanted = _words(query)
-        owned = [
-            m
-            for m in await self._owned(ctx, wanted, None)
-            if m.thread_id != ctx.thread_id and m.kind is MessageKind.VISIBLE
-        ]
-        answers = [
-            (n, m) for n, m in _scored(wanted, owned) if n and m.role is MessageRole.ASSISTANT
-        ]
-        if not answers:
+        found = await self._owned(ctx, wanted, None, limit=EARLIER_CHAT_SCAN)
+        # the pinned lines: from the newest OWNED_SCAN, as a search of the messages reads them
+        newest, further = (
+            [m for m in rows if m.thread_id != ctx.thread_id and m.kind is MessageKind.VISIBLE]
+            for rows in (found[:OWNED_SCAN], found)
+        )
+        pinned = _answers(wanted, newest)[0][:EARLIER_CHAT_LINES]
+        answers, weight = _answers(wanted, further)
+        ids = {m.message_id for m in pinned}
+        more = [m for m in answers if m.message_id not in ids]
+        kept = [*pinned, *more[: EARLIER_CHAT_MORE_LINES - len(pinned)]]
+        if not kept:
             return []
-        best = max(n for n, _ in answers)
-        answers.sort(key=lambda nm: (-nm[0], -nm[1].occurred_at.timestamp()))
-        kept = [m for n, m in answers if n >= EARLIER_CHAT_SHARE * best][:EARLIER_CHAT_LINES]
         async with self.uow_factory() as uow:
             corrected = await self._corrected(uow, ctx.tenant_id, kept)
             steps = [await self._steps(uow, ctx.tenant_id, m) for m in kept]
         return [
-            EarlierChatLine(
+            EarlierAnswer(
                 message_id=m.message_id,
                 role=m.role,
                 text=_ends(m.content, EARLIER_CHAT_CHARS),
@@ -541,6 +617,9 @@ class Searcher:
                 said_at=m.occurred_at,
                 corrected=m.message_id in corrected,
                 steps=made,
+                passage=_passage(m.content, weight, EARLIER_CHAT_CHARS),
+                fuller=_passage(m.content, weight, EARLIER_CHAT_MORE_CHARS),
+                further=m.message_id not in ids,
             )
             for m, made in zip(kept, steps, strict=True)
         ]
@@ -571,7 +650,12 @@ class Searcher:
             )
 
     async def _owned(
-        self, ctx: MemoryExecutionContext, wanted: set[str], observed: ObservedRange | None
+        self,
+        ctx: MemoryExecutionContext,
+        wanted: set[str],
+        observed: ObservedRange | None,
+        *,
+        limit: int = OWNED_SCAN,
     ) -> list[Message]:
         """The newest messages of the threads the caller's user owns in the request's
         workspace: the user's own conversations there, which only that user (and the agents
@@ -584,7 +668,7 @@ class Searcher:
                 ctx.tenant_id,
                 ctx.user_id,
                 workspace_id=ctx.workspace_id,
-                limit=OWNED_SCAN,
+                limit=limit,
                 threads=OWNED_THREADS,
                 words=sorted(wanted, key=lambda w: (-len(w), w))[:OWNED_WORDS],
                 since=since,

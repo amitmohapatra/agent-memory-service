@@ -730,7 +730,7 @@ class ContextBuilder:
                     token_budget=conversation_budget,
                 )
                 asked_before = await previous
-                said_before = await earlier
+                answered_before = await earlier
         except BaseException:
             for side in (sections, recent, previous, earlier, standing.task):
                 if side is not None:
@@ -748,7 +748,7 @@ class ContextBuilder:
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
         beliefs = await self._beliefs(ctx, query, visibility, result)
         pinned, pinned_tokens = within_budget(pinned, budget, _belief_ranks(beliefs))
-        said_before, said_tokens = _within(said_before, budget - pinned_tokens)
+        said_before, said_tokens = _within(answered_before, budget - pinned_tokens)
         bundle = self._assemble(
             query, result, conversation, budget - pinned_tokens - said_tokens, found.revision_fp
         )
@@ -763,6 +763,13 @@ class ContextBuilder:
         # the further about_user lines take only what the memories left of the budget
         pinned.profile, more = with_more_about(
             pinned.profile, budget - bundle.token_estimate - _charged(shown, pinned.pages)
+        )
+        shown += more
+        # and then the earlier answers' passages and further answers, from what is still left
+        said_before, more = _roomier(
+            said_before,
+            answered_before,
+            budget - bundle.token_estimate - _charged(shown, pinned.pages),
         )
         shown += more
         self._remember_semantic(found, result, bundle)
@@ -1525,13 +1532,45 @@ def render_window(
 
 
 def _within(lines: list[EarlierChatLine], budget: int) -> tuple[list[EarlierChatLine], int]:
-    """The best of the earlier conversations' lines (``lines`` is best first) whose section
-    fits half of ``budget``, and the tokens that section takes."""
+    """The best of the earlier conversations' pinned lines (``lines`` is best first; a
+    further answer is not pinned, ``search.EarlierAnswer``) whose section fits half of
+    ``budget``, and the tokens that section takes."""
     kept: list[EarlierChatLine] = []
     for line in lines:
-        if _section_tokens([*kept, line]) <= budget // 2:
+        if not getattr(line, "further", False) and _section_tokens([*kept, line]) <= budget // 2:
             kept.append(line)
     return kept, _section_tokens(kept)
+
+
+def _roomier(
+    kept: list[EarlierChatLine], found: list[EarlierChatLine], room: int
+) -> tuple[list[EarlierChatLine], int]:
+    """The earlier conversations' lines with what ``room`` more tokens hold of the rest
+    (``search.EarlierAnswer``), and the tokens that adds: of each ``kept`` line the passage
+    the question falls in, in place of its two ends, and the further answers ``found``, best
+    first; then each line's fuller passage. The lines as the context carries them."""
+    base = _section_tokens(kept)
+    shown = {line.message_id: _carried(line, line.text) for line in kept}
+
+    def carry(line: EarlierChatLine, text: str) -> None:
+        """``line`` with ``text``, when the section still fits the room."""
+        tried = {**shown, line.message_id: _carried(line, text)}
+        if text and _section_tokens(list(tried.values())) - base <= room:
+            shown[line.message_id] = tried[line.message_id]
+
+    for line in found:
+        if line.message_id in shown or getattr(line, "further", False):
+            carry(line, getattr(line, "passage", "") or line.text)
+    for line in found:
+        if line.message_id in shown:
+            carry(line, getattr(line, "fuller", ""))
+    lines = [shown[line.message_id] for line in found if line.message_id in shown]
+    return lines, _section_tokens(lines) - base
+
+
+def _carried(line: EarlierChatLine, text: str) -> EarlierChatLine:
+    """``line`` as a context carries it, saying ``text``."""
+    return EarlierChatLine.model_validate({**line.model_dump(), "text": text})
 
 
 def _section_tokens(lines: list[EarlierChatLine]) -> int:

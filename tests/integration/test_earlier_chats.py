@@ -22,6 +22,7 @@ from memory_service.domain.enums import MessageKind, MessageRole
 from memory_service.domain.errors import ScopeDenied
 from memory_service.domain.ids import new_id
 from memory_service.modules.jobs.registry import register_handlers
+from memory_service.modules.retrieval import search
 
 pytestmark = pytest.mark.integration
 
@@ -285,3 +286,87 @@ async def test_an_earlier_answer_comes_with_its_steps_and_each_result_reads_whol
     with pytest.raises(ScopeDenied):
         async with uow_factory() as uow:
             await service.get_message(uow, _chat("bob"), ref)
+
+
+#: a long worked answer: what it computes first, the asked-about figure in its middle, its
+#: closing advice last; well past the section's cap for one answer
+LONG_WORKED = (
+    "Here is the full replenishment review for the north region, style by style. "
+    + "The Cotton Tee holds steady at its usual weekly rate and needs no change this cycle. " * 9
+    + "For the Merino Hoodie in the north, the reorder quantity works out to 137 units. "
+    + "The Linen Shirt sells below plan and its next order can wait for the summer reset. " * 9
+    + "Tell me if you want the same review for the south region."
+)
+
+
+async def test_a_long_answer_is_quoted_where_the_question_falls(container, uow_factory) -> None:
+    """The figure asked about is in the middle of a long answer, past the two ends the section
+    used to keep: the passage the question's words fall in is what is carried."""
+    monday = _chat()
+    await _say(container, uow_factory, monday, ASKED, when=MONDAY)
+    await _say(container, uow_factory, monday, LONG_WORKED, role=MessageRole.ASSISTANT, when=MONDAY)
+    assert len(LONG_WORKED) > 1500
+
+    bundle = await _context(container, _chat(), FRIDAY_ASK)
+    [line] = bundle.earlier_chats
+    assert "the reorder quantity works out to 137 units." in line.text
+
+
+async def _earlier_answers(container, uow_factory, count: int) -> None:
+    """``count`` earlier chats, each asking for and answering one region's reorder number."""
+    for n in range(count):
+        chat = _chat()
+        await _say(container, uow_factory, chat, f"Reorder for region {n}?", when=MONDAY)
+        await _say(
+            container,
+            uow_factory,
+            chat,
+            f"For the Merino Hoodie, the reorder number worked out for region {n} is {300 + n}.",
+            role=MessageRole.ASSISTANT,
+            when=MONDAY,
+        )
+
+
+async def test_more_earlier_answers_come_when_the_context_has_room(
+    container, uow_factory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Five answers match the question alike. Three are pinned, as before; the others are
+    added only from the budget the memories leave: the context stays within its budget and
+    its memories are what they are without the further answers."""
+    await _earlier_answers(container, uow_factory, 5)
+    ask = "What was that reorder number you worked out for the Merino Hoodie?"
+    builder = container.services["context_builder"]
+    builder.cache = builder.semantic_cache = None
+
+    roomy = await builder.build(_chat(), ask)
+    assert len(roomy.earlier_chats) == 5
+    tight = await builder.build(_chat(), ask, token_budget=260)
+    assert tight.token_estimate <= 260 and len(tight.earlier_chats) < 5
+
+    monkeypatch.setattr(search, "EARLIER_CHAT_MORE_LINES", search.EARLIER_CHAT_LINES)
+    for budget, with_more in ((8000, roomy), (260, tight)):
+        without = await builder.build(_chat(), ask, token_budget=budget)
+        assert len(without.earlier_chats) <= 3
+        assert [m.text for m in without.memories] == [m.text for m in with_more.memories]
+
+
+async def test_an_answer_given_many_messages_ago_is_still_found(container, uow_factory) -> None:
+    """The answer was given before the newest two hundred messages that share a word with the
+    question: the section reads further back than those."""
+    monday = _chat()
+    await _say(container, uow_factory, monday, ASKED, when=MONDAY)
+    await _say(container, uow_factory, monday, WORKED_OUT, role=MessageRole.ASSISTANT, when=MONDAY)
+    later = _chat()
+    async with uow_factory() as uow:
+        for n in range(210):
+            await container.services["conversation"].append_message(
+                uow,
+                later,
+                role=MessageRole.ASSISTANT if n % 2 else MessageRole.USER,
+                content=f"Note {n}: the Merino Scarf sold {n} units in the south.",
+                occurred_at=TUESDAY,
+            )
+        await uow.commit()
+
+    bundle = await _context(container, _chat(), FRIDAY_ASK)
+    assert any("137" in line.text for line in bundle.earlier_chats)
