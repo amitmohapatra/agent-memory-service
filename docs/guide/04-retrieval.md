@@ -341,6 +341,12 @@ and one under `relevance_floor` (0.20) is not packed; exact hits and expansion c
 exempt. Measured on a LoCoMo conversation (`docs/MEASUREMENTS.md` §8.2): at 0.20 every
 evidence memory of 135 questions was still packed, while ten questions nothing in the corpus
 answers went from 30.8 packed memories each to 0.9; at 0.25 the first evidence was lost.
+The floor is for the question the store cannot answer. A question about something the store
+holds (its best memory at `related_evidence_relevance`, 0.40, or closer) also gets the next
+five ranked memories from under the floor, after everything above it
+(`builder.UNDER_FLOOR_MAX`): a question over several conversations is far, in the encoder's
+space, from some of the turns that answer it, and they rank well by their words and their
+session.
 
 **The budget.** The default `token_budget` is 8,000 (`ContextSettings`); the conversation
 window is the most recent messages after the thread summary, at most 20 and 2,000 tokens
