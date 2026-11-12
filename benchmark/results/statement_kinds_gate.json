@@ -108,9 +108,9 @@
       "lexicon": 361
     },
     "latency_ms_per_sentence": {
-      "p50": 0.101,
-      "p95": 0.247,
-      "mean": 0.11
+      "p50": 0.159,
+      "p95": 0.366,
+      "mean": 0.173
     },
     "errors": [
       {
@@ -398,9 +398,9 @@
       "lexicon": 154
     },
     "latency_ms_per_sentence": {
-      "p50": 0.095,
-      "p95": 0.256,
-      "mean": 0.113
+      "p50": 0.139,
+      "p95": 0.311,
+      "mean": 0.149
     },
     "errors": [
       {
@@ -556,9 +556,9 @@
           "lexicon": 254
         },
         "latency_ms_per_sentence": {
-          "p50": 0.107,
-          "p95": 0.315,
-          "mean": 0.128
+          "p50": 0.182,
+          "p95": 0.497,
+          "mean": 0.205
         },
         "errors": [
           {
@@ -1017,9 +1017,9 @@
           "lexicon": 241
         },
         "latency_ms_per_sentence": {
-          "p50": 0.117,
-          "p95": 0.299,
-          "mean": 0.137
+          "p50": 0.178,
+          "p95": 0.469,
+          "mean": 0.217
         },
         "errors": [
           {
@@ -1587,16 +1587,16 @@
     }
   },
   "provenance": {
-    "timestamp": "2026-11-12T16:01:27.771677+00:00",
-    "git_commit": "8b662128602a862a9d79935f8cc1f9c937cbe88b",
+    "timestamp": "2026-10-30T08:28:00.284306+00:00",
+    "git_commit": "f86a1412a1b3df637047b433c6be4d1bce9309de",
     "host_load": {
-      "loadavg_1m": 6.83,
-      "loadavg_5m": 6.95,
-      "loadavg_15m": 6.54,
-      "load_per_core": 1.71
+      "loadavg_1m": 0.79,
+      "loadavg_5m": 4.14,
+      "loadavg_15m": 5.71,
+      "load_per_core": 0.2
     },
-    "python": "3.13.18",
-    "platform": "Linux-6.18.44-fc-v378-x86_64-with-glibc2.39",
+    "python": "3.13.14",
+    "platform": "Linux-6.18.44-fc-v185-x86_64-with-glibc2.39",
     "machine": "x86_64",
     "cpu_count": 4,
     "memory_gb": 15.7,
