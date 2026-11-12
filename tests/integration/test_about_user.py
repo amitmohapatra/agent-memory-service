@@ -11,6 +11,7 @@ import json
 import pytest
 
 from memory_service.domain.enums import Lifetime, MemoryType, MessageRole, Visibility
+from tests.integration.test_memory import _memories
 from tests.integration.test_replacement_across_conversations import _scripted
 from tests.integration.test_statements_follow_the_user import _chat, _say
 
@@ -178,3 +179,36 @@ async def test_one_self_description_among_many_reaches_every_new_conversation(
         container, _chat(workspace_id="ws2"), "What do you remember about how I work?"
     )
     assert "Coach Womens Bags" not in elsewhere
+
+
+SAM = "I'm Sam. I plan Mens Shoes for the Outlet channel."
+
+
+async def test_another_users_self_description_in_the_same_workspace_is_not_in_mine(
+    container, uow_factory
+) -> None:
+    """Two people in one workspace of one tenant, each in their own conversation with the
+    default visibility: the section's search filters on what the asker may read and on the
+    workspace, not on whose statement it is, so it is the statement's own visibility (USER:
+    what a user says follows that user, ADR 0036) that keeps one person's "I'm Sam ..." out
+    of the other's profile."""
+    alex, sam = _chat("u1"), _chat("u2")
+    await _say(container, uow_factory, alex, ALEX)
+    await _say(container, uow_factory, sam, SAM)
+
+    stored = [
+        m
+        for m in await _memories(uow_factory, sam, container)
+        if m.content == SAM and (m.system_metadata or {}).get("self_description")
+    ]
+    assert stored, "the statement is kept as a self-description of the workspace"
+    assert {m.visibility for m in stored} == {Visibility.USER}
+    assert {m.system_metadata["self_description"] for m in stored} == {"ws1"}
+
+    for asked in ("What do you remember about how I work?", "Which channel do I plan for?"):
+        mine = await container.services["context_builder"].build(_chat("u1"), asked)
+        sections = {block.block: block.text for block in mine.profile}
+        assert ALEX in sections.get("about_user", ""), asked
+        assert "Sam" not in mine.render(), asked
+        theirs = await _about(container, _chat("u2"), asked)
+        assert SAM in theirs and "Alex" not in theirs, asked
