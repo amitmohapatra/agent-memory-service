@@ -19,7 +19,6 @@ from memory_service.domain.enums import (
     DedupDecision,
     Lifetime,
     MemoryType,
-    MessageRole,
     ObservationKind,
     ScopeLevel,
     TemporalStatus,
@@ -334,16 +333,16 @@ async def _one_writer_per_user(uow: UnitOfWork, ctx: MemoryExecutionContext) -> 
 
 def _told(observation: Observation) -> bool:
     """Whether a message is something the service was told, which memories are formed from:
-    not a tool's result (its errors, its raw JSON) and not an agent run's own words (its
-    answer, a hedge included). Both stay in the transcript; a fact the agent wants kept goes
-    through ``memory_remember``. A person's words, an event and a document are told, and so
-    is what an agent submits as an observation of its own (``AGENT_RESULT``)."""
+    not a tool's result (its errors, its raw JSON) and not an assistant's or an agent's own
+    words (its answer, a hedge included). The role says who spoke, with or without an agent
+    run: an application that posts both sides of a conversation, or imports one, posts the
+    assistant's side with no run id, and its advice is not the user's rule or fact. Both stay
+    in the transcript; a fact the agent wants kept goes through ``memory_remember``. A
+    person's words, an event and a document are told, and so is what an agent submits as an
+    observation of its own (``AGENT_RESULT``)."""
     if observation.kind is not ObservationKind.MESSAGE:
         return True
-    role = str((observation.custom_metadata or {}).get("role", "")).upper()
-    if role == MessageRole.TOOL:
-        return False
-    return not (observation.agent_run_id and role in AGENT_ROLES)
+    return str((observation.custom_metadata or {}).get("role", "")).upper() not in AGENT_ROLES
 
 
 def authored_type(memory_type: MemoryType, *, by_agent: bool) -> MemoryType:
