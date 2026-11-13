@@ -221,8 +221,10 @@ conversation's newest still come back when nothing matches). An agent asks the s
 `memory_search` (`kinds: ["message"]`); with no kinds named, a query that points to an earlier
 chat ("what did you work out last time?") reads messages too.
 
-**In the pushed context** (ADR 0044), a question that points to an earlier chat gets the
-assistant's best matching answers from the user's earlier conversations, under
+**In the pushed context** (ADR 0044), any question gets the assistant's answers from the user's
+earlier conversations that are as close to it as related evidence must be
+(`related_evidence_relevance`, by the encoder the relevance floor reads; found by the question's
+words first), closest first, whatever its wording, under
 `## Earlier conversations` ([context.md](../api/context.md)): the same read, the assistant's
 messages only (the user's own words are memories already, ADR 0036), at most three. Any other
 question does not read them. A context with room left after its evidence is packed carries

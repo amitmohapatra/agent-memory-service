@@ -66,6 +66,19 @@ async def _say(
     await container.tasks.drain()
 
 
+@pytest.fixture(autouse=True)
+def answers_close_to_the_question(monkeypatch) -> None:
+    """These tests are about whose answers come back and how they read: every earlier answer
+    counts as close to the question (the stand-in encoder knows no meaning). The two tests of
+    the bar itself set their own cosine."""
+    from memory_service.modules.retrieval.search import Searcher
+
+    async def close(self, query, answers):
+        return [1.0 for _ in answers]
+
+    monkeypatch.setattr(Searcher, "_relevance", close)
+
+
 async def _monday(container, uow_factory, user: str = "ann", workspace: str = "ws1"):
     """Monday's chat: the question and the assistant's worked-out figure; then Tuesday's chat
     about something else, which shares words but does not answer."""
@@ -130,17 +143,15 @@ async def test_memory_search_reads_the_earlier_answers_when_the_question_points_
     assert item["text"].startswith("ASSISTANT: ") and item["observed_on"] == "2026-10-26"
 
 
-async def test_a_question_that_does_not_point_back_reads_no_earlier_chat(
+async def test_memory_search_reads_messages_only_when_the_question_points_to_them(
     container, uow_factory
 ) -> None:
-    """The cost stays where it was for every other question: no lines, no message search."""
+    """``memory_search`` keeps its kinds: no message search for a question that names no
+    earlier chat (the context's section is decided apart, by relevance)."""
     await _monday(container, uow_factory)
-    friday = _chat()
     ask = "What reorder quantity should we place for the Merino Hoodie in the north?"
 
-    bundle = await _context(container, friday, ask)
-    assert bundle.earlier_chats == [] and "## Earlier conversations" not in bundle.render()
-    assert {i["kind"] for i in await _searched(container, friday, ask)} <= {"memory", "chunk"}
+    assert {i["kind"] for i in await _searched(container, _chat(), ask)} <= {"memory", "chunk"}
 
 
 async def test_another_user_of_the_same_agent_gets_nothing(container, uow_factory) -> None:
@@ -217,8 +228,7 @@ async def test_a_new_chat_that_continues_an_earlier_one_gets_its_answer(
     container, uow_factory
 ) -> None:
     """A new chat opened with "And for the cardigan in that same colour, same quarter?" has
-    nothing of its own the words point at: the earlier chat has (break-and-fix bf3-mixed-05).
-    The same words inside a chat that has its own earlier question read nothing more."""
+    nothing of its own the words point at: the earlier chat has (break-and-fix bf3-mixed-05)."""
     monday = _chat()
     await _say(
         container,
@@ -230,13 +240,6 @@ async def test_a_new_chat_that_continues_an_earlier_one_gets_its_answer(
 
     fresh = await _context(container, _chat(), CONTINUES)
     assert [c.text for c in fresh.earlier_chats] == [CARDIGAN]
-
-    ongoing = _chat()
-    await _say(container, uow_factory, ongoing, "What was revenue for denim jeans in Q3 2026?")
-    await _say(container, uow_factory, ongoing, "£9,120.", role=MessageRole.ASSISTANT)
-    assert (await _context(container, ongoing, CONTINUES)).earlier_chats == []
-    plain = await _context(container, _chat(), "What was revenue for denim jeans in Q3 2026?")
-    assert plain.earlier_chats == []
 
 
 #: Monday's long tool result: every knitwear SKU's units, past what an answer repeats.
@@ -370,3 +373,40 @@ async def test_an_answer_given_many_messages_ago_is_still_found(container, uow_f
 
     bundle = await _context(container, _chat(), FRIDAY_ASK)
     assert any("137" in line.text for line in bundle.earlier_chats)
+
+
+def _relevance_of(monkeypatch, cosine: float) -> None:
+    """Every earlier answer exactly this close to the question, by the encoder's reading."""
+    from memory_service.modules.retrieval.search import Searcher
+
+    async def close(self, query, answers):
+        return [cosine for _ in answers]
+
+    monkeypatch.setattr(Searcher, "_relevance", close, raising=False)
+
+
+async def test_a_relevant_answer_is_shown_however_the_question_is_worded(
+    container, uow_factory, monkeypatch
+) -> None:
+    """The section is decided by how close the answer is to the question, not by a phrase
+    in the question: this one names no earlier chat and carries on from nothing."""
+    monday = await _monday(container, uow_factory)
+    _relevance_of(monkeypatch, 0.9)
+
+    bundle = await _context(
+        container, _chat(), "What reorder quantity should we place for the Merino Hoodie?"
+    )
+    assert [c.thread_id for c in bundle.earlier_chats if "137" in c.text] == [monday.thread_id]
+    assert "## Earlier conversations" in bundle.render()
+
+
+async def test_an_answer_far_from_the_question_is_not_shown_whatever_the_wording(
+    container, uow_factory, monkeypatch
+) -> None:
+    """Under the service's bar for related evidence no earlier answer is shown, though the
+    question points to an earlier chat in so many words."""
+    await _monday(container, uow_factory)
+    _relevance_of(monkeypatch, 0.1)
+
+    bundle = await _context(container, _chat(), FRIDAY_ASK)
+    assert bundle.earlier_chats == [] and "## Earlier conversations" not in bundle.render()

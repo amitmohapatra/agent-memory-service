@@ -361,6 +361,11 @@ def _within(when: datetime, observed: ObservedRange | None) -> bool:
     return (start is None or when >= start) and (end is None or when <= end)
 
 
+def _cosine(left: Sequence[float], right: Sequence[float]) -> float:
+    norm = math.sqrt(sum(x * x for x in left)) * math.sqrt(sum(y * y for y in right))
+    return sum(x * y for x, y in zip(left, right, strict=True)) / norm if norm else 0.0
+
+
 class Searcher:
     def __init__(
         self,
@@ -585,8 +590,10 @@ class Searcher:
 
     async def earlier_chats(self, ctx: MemoryExecutionContext, query: str) -> list[EarlierChatLine]:
         """What the assistant answered in the user's earlier conversations of this workspace
-        that best matches ``query`` (ADR 0044): at most :data:`EARLIER_CHAT_LINES`, each
-        within :data:`EARLIER_CHAT_SHARE` of the best, best first, each with when and in
+        that are as close to ``query`` as related evidence must be
+        (``related_evidence_relevance``, by the encoder the relevance floor reads; ADR 0044),
+        closest first: found by the question's words (at most :data:`EARLIER_CHAT_LINES`
+        within :data:`EARLIER_CHAT_SHARE` of the best), each with when and in
         which conversation it was said and whether the user's next message corrected it; then
         the further answers a context adds when it has room (:class:`EarlierAnswer`), read
         from further back. The user's own words there are memories already (ADR 0036): they
@@ -600,11 +607,18 @@ class Searcher:
         )
         pinned = _answers(wanted, newest)[0][:EARLIER_CHAT_LINES]
         answers, weight = _answers(wanted, further)
-        ids = {m.message_id for m in pinned}
-        more = [m for m in answers if m.message_id not in ids]
-        kept = [*pinned, *more[: EARLIER_CHAT_MORE_LINES - len(pinned)]]
+        first = {m.message_id for m in pinned}
+        more = [m for m in answers if m.message_id not in first]
+        found_by_words = [*pinned, *more[: EARLIER_CHAT_MORE_LINES - len(pinned)]]
+        if not found_by_words:
+            return []
+        # shown when it is as close to the question as related evidence must be, closest first
+        close = self.engine.cfg.related_evidence_relevance
+        scored = zip(await self._relevance(query, found_by_words), found_by_words, strict=True)
+        kept = [m for score, m in sorted(scored, key=lambda p: -p[0]) if score >= close]
         if not kept:
             return []
+        ids = {m.message_id for m in kept[:EARLIER_CHAT_LINES]}
         async with self.uow_factory() as uow:
             corrected = await self._corrected(uow, ctx.tenant_id, kept)
             steps = [await self._steps(uow, ctx.tenant_id, m) for m in kept]
@@ -623,6 +637,15 @@ class Searcher:
             )
             for m, made in zip(kept, steps, strict=True)
         ]
+
+    async def _relevance(self, query: str, answers: Sequence[Message]) -> list[float]:
+        """How close each answer is to ``query``: the cosine the relevance floor reads (the
+        primary space's encoder), each answer as one text."""
+        encoder = self.engine.indexer.spaces.primary
+        asked, said = await asyncio.gather(
+            encoder.embed_query(query), encoder.embed_documents([m.content for m in answers])
+        )
+        return [_cosine(asked, text) for text in said]
 
     @staticmethod
     async def _steps(uow: UnitOfWork, tenant_id: str, answer: Message) -> str:

@@ -129,3 +129,15 @@ remembered.
 * An earlier conversation of another workspace is no longer found by `memory_search` or
   `/v1/recall` (`message`, `episode`). A deployment that used one workspace per chat and relied
   on recall across them passes the shared workspace, or none, on the request.
+
+## Amendment: the section is decided by relevance, not by the question's wording
+
+The pushed section no longer waits for a phrase in the question ("last time", "you worked out",
+an opening "And ..."). The answers the question's words find are read by the encoder the relevance
+floor uses, and those at least `related_evidence_relevance` close to the question are shown,
+closest first. `router.continues` and its patterns are gone; `points_to_earlier_chat` stays for
+`memory_search`'s choice of kinds only. Measured on LongMemEval-S contexts composed offline
+(126 questions, replies at 0.40 by the encoder alone): the assistant type answers 53 of 56
+against 48 with the wording gate and 34 before it, and one of 100 questions nothing answers gets
+a line. The cost is on every context of a user with earlier conversations: one read of their
+messages by the question's words and one encoder pass over at most six answers.

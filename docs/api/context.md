@@ -113,10 +113,12 @@ It is no evidence for `/v1/verify`. It never comes alone: the statement that rep
 closed and served only by a temporal read. A `search` result that is an earlier value carries
 `"superseded": true`.
 
-**What the assistant answered in an earlier chat comes with a question that points to one**
-(ADR 0044). "What was that number you worked out on Monday?", "last time you said...", "I told
+**What the assistant answered in an earlier chat comes with a question it is close to**
+(ADR 0044). The answers the question's words find are shown when the encoder reads them as close
+to it as related evidence must be (`related_evidence_relevance`), closest first; the question
+needs no particular wording (it used to: "What was that number you worked out on Monday?", "last time you said...", "I told
 you..." (English, German, Spanish, Arabic and Hindi cue words), or a conversation's first question
-that carries on from something ("And for the cotton one in that same colour?"): the user's memories hold their
+that carries on from something ("And for the cotton one in that same colour?")): the user's memories hold their
 own words, never the assistant's, so the best matching answers of the assistant in the user's
 earlier conversations are added under "## Earlier conversations" in `rendered` and as
 `earlier_chats` (`format="full"`: `id`, `role`, `text`, `thread_id`, `said_at`, `corrected`, and `steps`: the steps list of the turn it answered, each result as `result msg_...`):

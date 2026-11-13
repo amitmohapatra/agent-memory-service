@@ -76,8 +76,6 @@ from memory_service.modules.retrieval.periods import months_dated
 from memory_service.modules.retrieval.router import (
     QueryRouter,
     RoutedQuery,
-    continues,
-    points_to_earlier_chat,
 )
 from memory_service.modules.tools.hints import asks_change, ruled
 from memory_service.observability.logging import get_logger
@@ -1101,32 +1099,12 @@ class ContextBuilder:
     async def _earlier_chats(
         self, ctx: MemoryExecutionContext, query: str
     ) -> list[EarlierChatLine]:
-        """What the assistant answered in the user's earlier conversations, when ``query``
-        points to one (ADR 0044), or carries on from something (:func:`router.continues`) as
-        the first question of its conversation, which has nothing of its own it could carry
-        on from; nothing otherwise, at no cost. Read while retrieval runs."""
+        """What the assistant answered in the user's earlier conversations that is close to
+        ``query`` (ADR 0044; :meth:`Searcher.earlier_chats` decides by relevance, whatever the
+        question's wording). Read while retrieval runs."""
         if self.earlier_chats is None or not ctx.user_id:
             return []
-        if points_to_earlier_chat(query) or (
-            continues(query) and not await self._asked_before(ctx, query)
-        ):
-            return await self.earlier_chats(ctx, query)
-        return []
-
-    async def _asked_before(self, ctx: MemoryExecutionContext, query: str) -> bool:
-        """Whether this conversation holds a question of the user's besides ``query``."""
-        if not ctx.thread_id:
-            return False
-        async with self.uow_factory() as uow:
-            if await uow.threads.get(ctx.tenant_id, ctx.thread_id) is None:
-                return False
-            newest = await self.conversation.list_messages(
-                uow, ctx, ctx.thread_id, limit=FOLLOW_UP_MESSAGES
-            )
-        asked = query.strip()
-        return any(
-            m.role is MessageRole.USER and m.content.strip() not in ("", asked) for m in newest
-        )
+        return await self.earlier_chats(ctx, query)
 
     async def _previous_question(self, ctx: MemoryExecutionContext, query: str) -> str | None:
         """The thread's previous questions, when ``query`` is short enough to follow them up

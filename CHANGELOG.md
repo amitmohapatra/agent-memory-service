@@ -41,6 +41,13 @@ each entry says which one moved. Decisions behind each change are in the
   asking call.
 
 ### Changed
+- **Earlier answers are shown by relevance, not by the question's wording** (service). The
+  `## Earlier conversations` section used to wait for a phrase in the question ("last time",
+  "you worked out", an opening "And ..."). Now the answers the question's words find are
+  read by the encoder, and those as close to the question as related evidence must be
+  (`related_evidence_relevance`) are shown, closest first, for any question (ADR 0044,
+  amended). Every context of a user with earlier conversations now pays one read of their
+  messages and one encoder pass over at most six answers.
 - **More of the assistant's earlier answers when a context has room** (service). For a
   question that points to an earlier chat the context pins up to three of the assistant's
   earlier answers, a long one as its two ends (ADR 0044). When the context still has room
