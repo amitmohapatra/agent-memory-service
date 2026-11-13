@@ -149,3 +149,27 @@ async def test_a_server_error_still_opens_the_circuit() -> None:
     with pytest.raises(DependencyUnavailable, match="circuit open"):
         await llm.complete([LLMMessage(role="user", content="hi")])
     await llm.close()
+
+
+@pytest.mark.anyio
+async def test_a_call_asks_for_its_answer_and_room_for_the_models_thinking() -> None:
+    """The limit a call names is the size of its answer. A model that thinks before it
+    answers spends that limit on the thinking, so a call that named 50 or 500 tokens came
+    back with no text: measured on one conversation, 269 of 510 restatement calls, 94 of 284
+    summaries and 10 of 13 conflict checks failed, while the calls that named 1,536 or more
+    never did. Every request therefore carries the answer's size plus the same room."""
+    from tests.support_llm import mocked_gateway
+
+    with mocked_gateway(['{"ok": true}', '{"ok": true}', '{"ok": true}']) as gw:
+        assist = gw.assist(uses=["memory_restatement", "summaries", "conflict_adjudication"])
+        schema = {"type": "object"}
+        await assist.structured(
+            "memory_restatement", system="s", user="u", schema=schema, max_tokens=500
+        )
+        await assist.structured("summaries", system="s", user="u", schema=schema, max_tokens=256)
+        await assist.structured(
+            "conflict_adjudication", system="s", user="u", schema=schema, max_tokens=50
+        )
+        sent = [p.get("max_tokens") or p.get("max_completion_tokens") for p in gw.prompts()]
+    assert sent == [500 + LLM.thinking_room, 256 + LLM.thinking_room, 50 + LLM.thinking_room]
+    assert LLM.thinking_room >= 8000

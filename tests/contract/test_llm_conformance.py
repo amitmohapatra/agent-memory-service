@@ -279,7 +279,8 @@ async def test_a_memory_call_conforms_on_every_route_auth_profile_and_wire(
     finally:
         await llm.close()
 
-    budget = min(200, shape.max_output_tokens or 200)
+    asked = 200 + LLM.thinking_room  # the answer and room for the model's thinking
+    budget = min(asked, shape.max_output_tokens or asked)
     for body in bodies:
         assert body["model"] == "conformance-model"
         if shape.reasoning_output or not shape.temperature:

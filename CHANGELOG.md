@@ -348,6 +348,15 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **A model that thinks before it answers no longer returns nothing on the short calls**
+  (service). The output limit of a model call was the size of its answer alone, so a model
+  that thinks first spent the limit on the thinking and came back with no text. Measured on
+  one LoCoMo conversation with every model use on: 269 of 510 turn restatements, 94 of 284
+  summaries and 10 of 13 conflict checks failed this way, and none of the calls that named
+  1,536 tokens or more. Every request now carries the answer's size plus 8,000 tokens of
+  room for thinking (`LLMTuning.thinking_room`), still capped by the model profile's
+  `max_output_tokens`. A model that does not think stops where its answer ends, so the room
+  costs it nothing. Not yet confirmed against a live model.
 - **A length of time is no date** (service). "SUP-20's lead time is 32 days, from my call
   today" was stored with "32 days = 2026-10-01" beside it: with a relative cue in the text
   ("today"), the relative-time parser read a bare count of a unit as that long ago, and an
