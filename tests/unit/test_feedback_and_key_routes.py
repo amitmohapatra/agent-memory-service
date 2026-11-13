@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from memory_service.api.app import create_app
+from memory_service.api.validation import METADATA_MAX_BYTES, METADATA_MAX_KEYS, TOOL_JSON_MAX_BYTES
 from tests.unit.test_agent_credential_cipher import TEST_KEY
 
 #: The unit database is shared across runs, so every run administers tenants of its own.
@@ -130,6 +131,49 @@ def test_feedback_on_other_targets_is_visible_to_its_author_and_workspace(
         "/v1/feedback", headers=BOB, params={"target_kind": "run", "target_id": "run_vis_1"}
     )
     assert listed.status_code == 200 and listed.json()["feedback"] == []
+
+
+def test_a_decision_on_a_call_with_nested_arguments_is_accepted(app_client: TestClient) -> None:
+    """The harness sends a decision's call arguments unchanged at ``metadata.args``; an
+    OpenAI shell call (``{"commands": [...]}``) or a function tool taking an object nests
+    deeper than custom_metadata's two levels, and was refused with a 422 and lost. The
+    arguments are bounded as a recorded call's are (64 KiB, any depth); the rest of the
+    metadata keeps custom_metadata's bounds."""
+    base = {
+        "target_kind": "tool_call",
+        "target_id": "call_nested_1",
+        "verdict": "approve",
+        "source": "interrupt",
+        "reviewer": "user:alice",
+    }
+
+    def decision(feedback_id: str, **metadata: object) -> httpx.Response:
+        body = {**base, "feedback_id": feedback_id, "metadata": metadata}
+        return app_client.post("/v1/feedback", headers=USER, json=body)
+
+    shell = {"commands": ["ls -la", "cat README.md"], "env": {"CI": "1"}}
+    deep = {"order": {"lines": [{"sku": "SKU-22", "tags": [["a"]]}]}}
+    for i, args in enumerate((shell, deep)):
+        r = decision(f"fb_nested_{i}", tool="shell", args=args, interrupt_id=f"int_n{i}")
+        assert r.status_code == 201, r.text
+        assert r.json()["metadata"]["args"] == args
+    # larger than custom_metadata's 8 KiB, within a recorded call's 64 KiB
+    big = {"patch": "x" * (TOOL_JSON_MAX_BYTES - 1024), "files": ["a.py"]}
+    assert decision("fb_nested_big", tool="apply_patch", args=big).status_code == 201
+    # what a recorded call's arguments may not be, the decision's may not be either
+    huge = {"patch": "x" * TOOL_JSON_MAX_BYTES}
+    problem = _problem(decision("fb_nested_huge", tool="apply_patch", args=huge), 422)
+    assert problem["code"] == "VALIDATION"
+    assert "metadata.args may serialise to at most 65536 bytes" in str(problem["details"])
+    # every other key keeps custom_metadata's bounds: depth, size and key count
+    for bad in (
+        {"args": shell, "extra": {"a": {"b": 1}}},
+        {"args": shell, "note": "x" * METADATA_MAX_BYTES},
+        {"args": shell, **{f"k{i}": i for i in range(METADATA_MAX_KEYS)}},
+    ):
+        problem = _problem(decision("fb_nested_bad", **bad), 422)
+        assert problem["code"] == "VALIDATION"
+        assert problem["details"]["errors"][0]["loc"] == ["body", "metadata"]
 
 
 def test_a_malformed_cursor_is_a_problem_not_a_500(app_client: TestClient) -> None:

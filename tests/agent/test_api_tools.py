@@ -264,6 +264,72 @@ async def test_approvals_become_a_rule_that_applies_once_accepted(app, running) 
     assert other_agent.value.status == 404
 
 
+def _flat(i: int) -> dict:
+    return {"quote": f"Q-{i}", "price": 1200 + i}
+
+
+def _nested(i: int) -> dict:
+    """Arguments holding a list of objects and an object: deeper than custom_metadata's two
+    levels once they sit at ``metadata.args``, as an OpenAI shell call's ``commands`` or a
+    function tool taking structured input do."""
+    return {"quote": f"Q-{i}", "lines": [{"sku": "SKU-22", "price": 1200 + i}], "notify": {}}
+
+
+@pytest.mark.covers(
+    "tools.record_invocation", "feedback.submit_feedback", "tools.approval_suggestions"
+)
+async def test_a_decision_on_nested_arguments_counts_as_a_flat_one_does(app, running) -> None:
+    """A decision whose call arguments nest is matched to the call the run recorded (by the
+    hash of the whole value) and counts toward the learned rule exactly as a flat one: the
+    same number of decisions from the same reviewers, the same suggestion. It used to be
+    refused with a 422 (custom_metadata's depth) and the decision was lost."""
+    _, harness = await _harness(app)
+    agent = harness.bind(user_id="u1").agent("quote-bot")
+    await agent.advanced.tools.put_catalog(CATALOG)
+
+    async def decide(label: str, args_of, *, recorded_of=None) -> list:
+        actions = []
+        for i in range(5):
+            run = harness.bind(user_id="u1").agent("quote-bot", agent_run_id=f"run_{label}_{i}")
+            recorded = (recorded_of or args_of)(i)
+            await run.record_tool(UPDATE, recorded, output={"ok": True}, task=TASK, step=0)
+            sent = await run.feedback(
+                "tool_call",
+                f"call_{label}_{i}",
+                "approve",
+                reviewer=f"user:lead{i % 2}",
+                metadata={"tool": UPDATE, "args": args_of(i), "interrupt_id": f"int_{label}_{i}"},
+            )
+            stored = await run.feedback.get(sent.feedback_id)
+            assert stored.metadata["args"] == args_of(i)
+            assert stored.projection is not None
+            actions.append((stored.projection.action, stored.projection.reason))
+        return actions
+
+    counted = [("tool_call_counted", None)] * 5
+    assert await decide("flat", _flat) == counted
+    assert await decide("nested", _nested) == counted
+
+    async def by_shape() -> dict[str, tuple]:
+        suggestions = await agent.advanced.tools.approval_suggestions()
+        return {s.arg_shape: (s.tool, s.suggestion, s.support) for s in suggestions}
+
+    assert await by_shape() == {
+        "price:num:1e3,quote:str": (UPDATE, "auto_approve", 5),
+        "lines:list,notify:obj,quote:str": (UPDATE, "auto_approve", 5),
+    }
+
+    # matched on the whole nested value: an approval of arguments the run never recorded
+    # (one level down they differ) backs nothing and counts nothing
+    def elsewhere(i: int) -> dict:
+        return {**_nested(i), "lines": [{"sku": "SKU-99", "price": 1200 + i}]}
+
+    unbacked = await decide("unbacked", _nested, recorded_of=elsewhere)
+    assert {action for action, _ in unbacked} == {"none"}
+    assert all("recorded no call" in str(reason) for _, reason in unbacked)
+    assert (await by_shape())["lines:list,notify:obj,quote:str"] == (UPDATE, "auto_approve", 5)
+
+
 @pytest.mark.covers("skills.learned_skills", "skills.dismiss_learned_skill")
 @pytest.mark.covers_error("skills.learned_skills", "skills.dismiss_learned_skill")
 async def test_an_agent_learns_a_skill_from_its_runs_and_is_offered_it(make_settings) -> None:

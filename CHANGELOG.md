@@ -41,6 +41,17 @@ each entry says which one moved. Decisions behind each change are in the
   asking call.
 
 ### Changed
+- **A decision on a tool call with nested arguments is kept and counted** (service). The
+  arguments a decision answers travel unchanged at `POST /v1/feedback`'s `metadata.args`, and
+  feedback `metadata` was bounded like every `custom_metadata` (2 levels of nesting, 8 KiB), so
+  a decision on a call whose arguments hold a list or an object (an OpenAI shell call's
+  `{"commands": [...]}`, a function tool taking an object) was refused with a 422 and lost: it
+  never counted toward a learned approval rule. `metadata.args` is now bounded as a recorded
+  call's arguments are (64 KiB serialised, any depth) and is matched to the recorded call and
+  counted exactly as flat arguments are; the other keys keep the custom-metadata bounds (32 keys
+  in all, `args` included; 2 levels; 8 KiB). Every other `custom_metadata` field is unchanged.
+  The published description of `FeedbackRequest.metadata` says so; no route, field or SDK call
+  changed.
 - **More of the assistant's earlier answers when a context has room** (service). For a
   question that points to an earlier chat the context pins up to three of the assistant's
   earlier answers, a long one as its two ends (ADR 0044). When the context still has room

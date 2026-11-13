@@ -3520,7 +3520,7 @@
           },
           "metadata": {
             "additionalProperties": true,
-            "description": "Caller-defined JSON object: at most 32 keys, 2 levels of nesting and 8192 bytes serialised.",
+            "description": "Caller-defined JSON object: at most 32 keys. `args` (the decided tool call's arguments) may nest to any depth and serialise to at most 65536 bytes, as a recorded call's arguments may; the other keys together at most 2 levels of nesting and 8192 bytes serialised.",
             "title": "Metadata",
             "type": "object"
           },
