@@ -169,7 +169,7 @@ in [the eleven uses](#the-eleven-uses)):
 flowchart TB
   U["a module asks: wants(use)?"] --> G{"can any endpoint resolve?<br/>(own LLM_BASE_URL, or agents' accepted)"}
   G -->|no| N["no: the native path answers"]
-  G -->|yes| P{"the tenant's policy names the use?<br/>(no policy row: every use except<br/>the opt-in memory_restatement)"}
+  G -->|yes| P{"the tenant's policy names the use?<br/>(no policy row: every use)"}
   P -->|no| N
   P -->|yes| K{"which endpoint? the acting agent's,<br/>else the tenant's,<br/>else the service's own"}
   K -->|"a revoked registration at the resolved level"| N
@@ -249,7 +249,7 @@ instead (`models: {"memory_restatement": "<model id>"}`).
 | `summaries` | document node summaries (bounded number per document), thread summaries (`summary.refresh`, every `SUMMARY_EVERY` messages), the `user` profile block, graph entity summaries (≤ 4 model calls per enrichment job) | strong | abstractive text | the extractive / template text, stored the same way |
 | `reflection` | periodic job, per principal with a key, over recent memories | strong | cited insights (≥ 2 sources) | none |
 | `memory_connections` | periodic job over recent memory pairs | strong | typed edges between memories (supersedes / contradicts / relates) | none |
-| `memory_restatement` | **opt-in** (ADR 0027): a conversation message, at ingest, when the tenant's policy names this use. The model sees the turn, the turn before it, the speakers and the date, and returns a standalone restatement, up to three facts and up to four relations, checked against what it was shown (every number and capitalised name must occur there). Backfill earlier turns with `python -m memory_service.tools.restate --tenant <id> [--limit N] [--force]` | fast | the restatement appended to the turn's own index key (`system_metadata["restatement"]`; the content stays verbatim) and model-extracted graph relations bound to the turn (confidence ≤ 0.6) | the turn indexed as said |
+| `memory_restatement` | a conversation message, at ingest (ADR 0027). On by default; a stored policy that leaves this use out turns it off. The model sees the turn, the turn before it, the speakers and the date, and returns a standalone restatement, up to three facts and up to four relations, checked against what it was shown (every number and capitalised name must occur there). Backfill earlier turns with `python -m memory_service.tools.restate --tenant <id> [--limit N] [--force]` | fast | the restatement appended to the turn's own index key (`system_metadata["restatement"]`; the content stays verbatim) and model-extracted graph relations bound to the turn (confidence ≤ 0.6) | the turn indexed as said |
 
 ### Reads (only when the read is assisted)
 
@@ -294,20 +294,22 @@ The README states the boundary exactly: "Model-free operation is a supported mod
 of equal answer accuracy." Generated-answer accuracy with the current write path has not been
 measured either way ([README status](../../README.md#status-read-this-before-you-trust-a-number)).
 
-### Opting in: `memory_restatement`
+### On by default: `memory_restatement`
 
-The one opt-in use restates each conversation turn so it stands on its own — names for
-pronouns, absolute dates for relative ones — and appends that to the turn's own index key; the
-memory's content stays verbatim (ADR 0027). It costs one model call per message, so the
-default policy leaves it out: a tenant lists it in its policy `uses`, and backfills earlier
-turns with `python -m memory_service.tools.restate --tenant <id> [--limit N] [--force]`.
+This use restates each conversation turn so it stands on its own — names for pronouns,
+absolute dates for relative ones — and appends that to the turn's own index key; the memory's
+content stays verbatim (ADR 0027). Like every other use it runs when a key can pay and the
+tenant has no stored policy. It costs one model call per message. To turn it off, store a
+policy whose `uses` leaves it out (`PUT /v1/model-key/policy`). Turns stored before it could
+run are restated with
+`python -m memory_service.tools.restate --tenant <id> [--limit N] [--force]`.
 
-Its evidence so far is mixed and the ADR says so: offline on one LoCoMo conversation, turn +
-restatement as the turn's own key read recall@10 0.858 against 0.839 without; through the
-service with a 2B CPU model, 0.838 → 0.842, within noise; and judged on answers, the 2B model's
-restated corpus lost answers (17 → 13 of 30 under the strict ruler). "So with a 2B model the
-restatement does not pay; it stays opt-in", and the deciding run with a hosted model through
-the gateway has not been recorded yet.
+It first shipped off by default, because its evidence with a small model was mixed: offline
+on one LoCoMo conversation, turn + restatement as the turn's own key read recall@10 0.858
+against 0.839 without; through the service with a 2B CPU model, 0.838 → 0.842, within noise;
+and judged on answers, the 2B model's restated corpus lost answers (17 → 13 of 30 under the
+strict ruler). It is on by default since 2026-11-13; the ADR's section of that date holds the
+measurement behind the change.
 
 ---
 

@@ -136,7 +136,7 @@ Run every baseline on a quiet machine, alone - `HEAVY=` wraps it in a machine-wi
 | Mode | Tenant policy | What answers | Run |
 |---|---|---|---|
 | `nollm` | no model use at all, reads deterministic | the context itself is scored | the full dataset, every language |
-| `llm` | the live policy: every use but `memory_restatement`, `read_assist` on, one gateway model (`CAPEVAL_LLM_MODEL`, required) | the context is scored | sample `llm` |
+| `llm` | the live policy: every use the service calls a model for, `memory_restatement` included, `read_assist` on, one gateway model (`CAPEVAL_LLM_MODEL`, required) | the context is scored | sample `llm` |
 | `harness` | as `nollm` | an agent wrapped by agent-harness: a function agent whose prompt is the pushed context and whose model (`CAPEVAL_ANSWER_MODEL`) answers; the answer is scored | sample `harness` |
 
 The samples are deterministic (`_modes.json`): per capability the InventorySmart scenario first,

@@ -142,7 +142,7 @@ Step by step:
    provider labels what each user sentence does (fact, rule, status, correction, lifecycle:
    the statement labeller, ADR 0037), extracts candidates — here, a `timezone` attribute and
    the verbatim turn, both labelled `FACT` —
-   classifies them (type, lifetime, visibility), optionally restates the turn (opt-in), and
+   classifies them (type, lifetime, visibility), restates the turn when a model may, and
    consolidates each against current memories in the same scope: create, reinforce, merge,
    supersede or contradict (chapter 3). All of it, the `memory.index` job and the revision
    bumps commit in one transaction with the observation marked `PROCESSED`.

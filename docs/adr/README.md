@@ -37,7 +37,7 @@ is not finished).
 | [0024](0024-multilingual-runtime-and-accuracy-programme.md) | The multilingual runtime and its accuracy programme (Memory Service M2 + M4); the operator's view is [`MULTILINGUAL-RUNTIME.md`](../MULTILINGUAL-RUNTIME.md) | accepted |
 | [0025](0025-late-interaction-two-keys-and-learned-memory-ranking.md) | Late interaction, two keys per memory, and a learned memory ranking | accepted; supersedes the `colbert` part of 0012; its learned ranking superseded by 0026 |
 | [0026](0026-general-memory-ranking.md) | A general memory ranking instead of a learned one | accepted; supersedes decision 3 of 0025 |
-| [0027](0027-memory-restatement-at-ingest.md) | A conversation turn restated at ingest, searched with the turn | accepted; opt-in: runs only when a tenant names `memory_restatement` in its model policy `uses` (and a key can pay) |
+| [0027](0027-memory-restatement-at-ingest.md) | A conversation turn restated at ingest, searched with the turn | accepted; on by default since 2026-11-13: runs when a key can pay, unless a stored model policy leaves `memory_restatement` out of its `uses` |
 | [0028](0028-feedback-review.md) | A vote waits for review before the platform learns from it | accepted; amended by 0039 |
 | [0029](0029-lean-context-responses.md) | Context, tool hints and recall answer lean | accepted |
 | [0030](0030-api-surface-errors-idempotency-pagination-descriptions.md) | API surface: retryable database errors with `Retry-After`, `PAYLOAD_TOO_LARGE`, `Idempotency-Key` on every write, `Location`, one cursor convention, conditional GETs, every field described | accepted; amends 0022 and 0023 |

@@ -177,12 +177,11 @@ print(await t.model_key_status())  # the tenant level, never its key
 
 A policy narrows what the model is used for. It is the tenant's alone (there is no agent- or
 workspace-level policy) and has exactly three fields: `uses`, `read_assist` and
-`models: {use: model}`. With no row the default is **every use except the opt-in ones** —
-today only `memory_restatement` (ADR 0027), which costs a model call per conversation message
-and so is never started by registering a key — with reads assisted and the service's default
-model per use. (`GET /v1/model-key/policy` answers `stored: false` and that default.) A stored
-policy's `uses` is exactly what runs: name `memory_restatement` there to opt in. A use runs
-only when all of these hold:
+`models: {use: model}`. With no row the default is **every use**, with reads assisted and the
+service's default model per use. (`GET /v1/model-key/policy` answers `stored: false` and that
+default.) That includes `memory_restatement` (ADR 0027), which costs one model call per
+conversation message. A stored policy's `uses` is exactly what runs: leave
+`memory_restatement` out there to turn it off. A use runs only when all of these hold:
 
 ```
 an endpoint resolves (above)  ∧  the tenant policy's uses
@@ -201,7 +200,7 @@ and the owner's policy decides; a periodic job scans only tenants that hold a li
 
 ```python
 await t.set_model_policy(
-    ["contextual_extraction", "summaries", "memory_restatement"],  # restatement: opt-in
+    ["contextual_extraction", "summaries", "memory_restatement"],  # only these run
     read_assist=False,
     models={"memory_restatement": "gpt-4.1-mini"},  # as the endpoint names it
 )

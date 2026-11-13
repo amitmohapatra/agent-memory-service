@@ -140,7 +140,7 @@ port.
 **No model call is ever made.**
 A use runs only when all four hold: an endpoint resolves (the agent's registered one, else
 its tenant's, else the service's own `LLM_BASE_URL`), the tenant's policy names the use (no
-policy row: every use except the opt-in `memory_restatement`), the registration is not
+policy row: every use), the registration is not
 revoked, and, on a read, the policy's `read_assist` is on
 ([chapter 8](guide/08-models.md#when-a-call-is-allowed)). `GET /v1/agents/model-key` says which
 endpoint the agent's calls use and why (`source`, `reason`): `none` with

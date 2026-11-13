@@ -1,6 +1,7 @@
 # ADR 0027: A conversation turn restated at ingest, searched with the turn
 
-Date: 2026-10-02. Status: accepted (opt-in per tenant policy).
+Date: 2026-10-02. Status: accepted; on by default since 2026-11-13 (it first shipped opt-in
+per tenant policy; see [the last section](#2026-11-13-on-by-default)).
 
 ## Context
 
@@ -41,7 +42,8 @@ merged by rank, lowered it to 0.568. The LoCoMo paper finds the same for "observ
    local model behind Bifrost alike. It is **opt-in**: the default policy (no policy row)
    leaves it out, so registering a key does not start a model call per message on its own;
    a tenant names it in its policy (`PUT /v1/model-key/policy`, `uses`). Without a model nothing
-   changes.
+   changes. (The opt-in part was changed on 2026-11-13:
+   [see below](#2026-11-13-on-by-default).)
 5. **The relations link the turn in the knowledge graph.** They are stored as
    `system_metadata["restatement_relations"]`; graph enrichment (`modules/graph/native.py`)
    writes each as a model-extracted relation (confidence at most 0.6, `extraction: llm`)
@@ -124,3 +126,20 @@ neutral at best, so it was removed rather than shipped off.
   keep their key until they are re-indexed.
 - `benchmark.native_source_retrieval --ingest-uses memory_restatement` (with `BENCH_LLM=on`
   and the gateway) measures it through the service; the use is part of the corpus key.
+
+## 2026-11-13: on by default
+
+Decision 4 shipped the use opt-in: with no policy row it was left out. That part is changed.
+With no policy row, every use runs when a key can pay, `memory_restatement` included. A
+stored policy still runs exactly the uses it names, so a policy whose `uses` leaves
+`memory_restatement` out turns it off (`PUT /v1/model-key/policy`).
+
+MEASURED_HERE
+
+What it costs: one more model call per conversation message for every tenant that has a key
+(its own, or the service's own endpoint) and no stored policy. Turns stored before the
+change keep their key until `tools/restate` runs over them (decision 6).
+
+The capability eval's `llm` mode names the use in its policy from this date
+(`benchmark/capabilities/data/_modes.json`); `llm` results recorded before were measured
+without it.
