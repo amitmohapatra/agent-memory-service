@@ -41,6 +41,37 @@ each entry says which one moved. Decisions behind each change are in the
   asking call.
 
 ### Changed
+- **More of the assistant's earlier answers when a context has room** (service). For a
+  question that points to an earlier chat the context pins up to three of the assistant's
+  earlier answers, a long one as its two ends (ADR 0044). When the context still has room
+  once its evidence is packed, it now carries more, and only from that room, so the pinned
+  section and the memories are what they were: of a long answer the passage the question's
+  words fall in (whole sentences, what is left out marked, up to 3,000 characters), and up
+  to three further answers within the same share of the best, read from the newest 1,000
+  messages that share a word with the question instead of the newest 200. On 56 LongMemEval
+  questions whose answer is in the assistant's reply, the sentences of that reply in the
+  context went from 312 of 657 to 592 (328 on main, where memories made from the
+  assistant's messages carried some), and the questions holding any of it from 47 to 52. A
+  search for every question, whatever its wording, was measured and left out: no bar on
+  the share of the question's words an answer covers kept lines out of questions nothing
+  answers. No endpoint or field changed; `earlier_chats` may hold up to six lines.
+- **An assistant's message is never read as the user's own statement** (service). A message
+  with the role `ASSISTANT`, `AGENT` or `SYSTEM` formed no memory when it carried an
+  `agent_run_id`, which the harness always sends, but without one it was read as something a
+  person said: an application that posts both sides of a conversation, or imports one, had the
+  assistant's advice stored as the user's facts and listed among their standing rules. The
+  role says who spoke: such a message forms no memory with or without a run id, stays in the
+  transcript, and is found by a message search and by the earlier-conversations section of
+  the context, as one with a run id already was. Nothing changes for a caller that sends the
+  run id. On 126 LongMemEval questions ingested as conversations without a model, 60% of the
+  memories came from the assistant's messages and 489 of the 549 lines of the users'
+  `standing_rules` sections were the assistant's; none are now, and the users' own evidence
+  in the first ten memories rose (multi-session 87 to 93 of 116 turns, preference 31 to 34
+  of 44). One multi-session question holds one evidence turn less (111 to 110): its best
+  memory on main was one made from the assistant's message. Existing stored memories are not
+  migrated: what was formed from an assistant's message before stays until it is forgotten. A
+  caller that wants an assistant's fact kept uses `memory_remember` (or `remember`). No
+  endpoint, field or SDK call changed.
 - **A few memories from under the relevance floor are packed when the question is about
   something the store holds** (service). A ranked memory under the encoder's relevance floor
   (0.20) was never packed. A question over several conversations is far, in the encoder's

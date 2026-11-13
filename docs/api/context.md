@@ -123,7 +123,12 @@ earlier conversations are added under "## Earlier conversations" in `rendered` a
 at most three, each within half the best match's score, oldest first in `rendered`, each with
 its date and weekday, its conversation and "the assistant said", and "corrected by the user's
 next message" when it was. A long answer keeps its start and its end (1,000 characters). They
-take at most half of what is left of `token_budget` after the pinned sections, are no evidence
+take at most half of what is left of `token_budget` after the pinned sections. When the
+context still has room once its evidence is packed, a long answer is quoted where the
+question's words fall instead (whole sentences, what is left out marked "…", up to 3,000
+characters), and up to three further answers within the same share of the best are added,
+read from further back (the newest 1,000 messages that share a word with the question, not
+200); a context whose evidence fills its budget carries the section as it was. They are no evidence
 for `/v1/verify` (an earlier answer is not proof), and only the user's own conversations of the
 request's workspace are read, never a deleted one. Any other question reads nothing more. A
 conversation the harness ran without memory (`without=["memory"]`, a temporary chat) was never

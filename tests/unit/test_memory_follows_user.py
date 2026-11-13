@@ -408,7 +408,8 @@ async def test_an_agent_runs_own_words_and_its_tools_results_form_no_memory(role
 def test_a_persons_words_an_event_and_an_agents_result_still_form_memories() -> None:
     assert _told(_obs(CODE, HARNESS)), "the user's turn the harness relays"
     assert _told(_obs("Deploy finished.", HARNESS, role="EVENT"))
-    assert _told(_obs(CODE, role="ASSISTANT")), "a chat app's assistant, outside any run"
+    assert not _told(_obs(CODE, role="ASSISTANT")), "an assistant's words, outside any run too"
+    assert not _told(_obs(CODE, role="SYSTEM"))
     assert _told(_obs("Draft plan.", HARNESS, kind=ObservationKind.AGENT_RESULT, role=None))
     assert not _told(_obs("Thinking: UTC.", HARNESS, role="AGENT"))
 

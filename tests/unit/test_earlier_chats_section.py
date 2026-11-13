@@ -11,7 +11,7 @@ from memory_service.api.schemas.context import ContextResponse
 from memory_service.domain.context_bundle import EarlierChatLine, earlier_chats_section
 from memory_service.domain.enums import MessageRole
 from memory_service.modules.context.builder import _within
-from memory_service.modules.retrieval.search import _ends, _weights
+from memory_service.modules.retrieval.search import _ends, _passage, _weights
 
 pytestmark = pytest.mark.unit
 
@@ -91,3 +91,25 @@ def test_an_answer_comes_with_the_steps_that_made_it() -> None:
         '  1. sales_summary(group_by="supplier"): result msg_9',
         "- 2026-10-27 Tuesday, conversation thr_27, the assistant said: West: 182,340.",
     ]
+
+
+def test_a_long_answer_keeps_the_sentences_the_question_falls_in() -> None:
+    """Whole sentences, the ones holding the question's heaviest words first, in the answer's
+    own order, within the cap, with what was left out marked."""
+    text = (
+        "Here is the review. "
+        + "The Cotton Tee needs no change. " * 30
+        + "The Merino Hoodie reorder is 137 units. "
+        + "The Linen Shirt can wait. " * 30
+        + "Ask for the south too."
+    )
+    weight = {"merino": 2.0, "hoodie": 2.0, "reorder": 1.0, "review": 0.2}
+    passage = _passage(text, weight, 200)
+    assert len(passage) <= 200
+    assert "The Merino Hoodie reorder is 137 units." in passage
+    assert passage.index("Here is the review.") < passage.index("The Merino Hoodie")
+    assert " … " in passage and passage.count("The Cotton Tee") < 30
+    assert _passage("short", weight, 200) == "short"
+    assert _passage("one sentence with no stop " * 40, weight, 200) == _ends(
+        "one sentence with no stop " * 40, 200
+    )

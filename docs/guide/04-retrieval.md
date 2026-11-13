@@ -225,7 +225,10 @@ chat ("what did you work out last time?") reads messages too.
 assistant's best matching answers from the user's earlier conversations, under
 `## Earlier conversations` ([context.md](../api/context.md)): the same read, the assistant's
 messages only (the user's own words are memories already, ADR 0036), at most three. Any other
-question does not read them.
+question does not read them. A context with room left after its evidence is packed carries
+more of them: the passage of a long answer the question's words fall in rather than its two
+ends, and up to three further answers, read from further back (`search.EARLIER_CHAT_MORE_*`,
+`EARLIER_CHAT_SCAN`; `builder._roomier`).
 
 **Cost.** Measured in-process on PostgreSQL 16, 4 vCPU (`benchmark/bench_message_search.py`), a
 query whose words appear in every message (the worst case), p50 / p95:

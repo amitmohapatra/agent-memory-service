@@ -65,10 +65,12 @@ kept: on LoCoMo, keeping the verbatim turn is what lifted the retrieval ceiling 
 else is refused rather than stored as a surprise.
 
 Not every turn teaches. A `TOOL` message (a tool's result: its error text, its raw JSON) and an
-agent run's own words (an `ASSISTANT`, `AGENT` or `SYSTEM` message written under an
-`agent_run_id`: its answer, a hedge included) stay in the transcript and form no memory: replayed
+assistant's or an agent's own words (an `ASSISTANT`, `AGENT` or `SYSTEM` message: its answer, a
+hedge included) stay in the transcript and form no memory: replayed
 into a fresh tenant, one real transcript formed 59 memories of which 25 were such junk, and a
-stored hedge was later served back as the answer. A fact an agent wants kept goes through
+stored hedge was later served back as the answer. The role says who spoke, with or without an
+`agent_run_id`: an application that posts both sides of a conversation, or imports one, posts
+the assistant's side without a run id, and its advice is not the user's rule or fact. A fact an agent wants kept goes through
 `memory_remember` (or `remember`). A person's words, an `EVENT`, a document and an agent's own
 `AGENT_RESULT` observation form memories as before.
 
