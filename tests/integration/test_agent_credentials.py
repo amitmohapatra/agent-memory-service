@@ -12,6 +12,7 @@ from memory_service.domain.errors import ProviderNotConfigured
 from memory_service.domain.ids import new_id
 from memory_service.modules.llm.credentials import ModelCredentials, agent_identity
 from memory_service.modules.llm.policy import current_model_identity
+from memory_service.modules.memory import restatement
 from memory_service.ports.credentials import ModelIdentity
 from tests.integration.test_memory import _observe
 from tests.support_llm import BASE, bound_to, chat_response, mocked_gateway
@@ -438,16 +439,27 @@ async def test_configure_the_harness_only_and_memory_follows(container, uow_fact
         )
         import json
 
-        completion = gateway.post(f"{BASE}/chat/completions").respond(
-            200, json=chat_response(json.dumps({"ops": []}))
-        )
+        import httpx
+
+        def reply(request):
+            """Gap-fill finds nothing to add; the turn's restatement says nothing."""
+            system = json.loads(request.content)["messages"][0]["content"]
+            said = (
+                {"restatement": "", "facts": [], "relations": []}
+                if restatement.SYSTEM in system
+                else {"ops": []}
+            )
+            return httpx.Response(200, json=chat_response(json.dumps(said)))
+
+        completion = gateway.post(f"{BASE}/chat/completions").mock(side_effect=reply)
         await _observe(container, uow_factory, ALICE, MESSAGE)
-        assert catalog.call_count == completion.call_count == 1
+        # no stored policy: every use runs on the agent's key, the turn's restatement too
+        assert catalog.call_count == 1 and completion.call_count == 2
         memories = await _memories(uow_factory, ALICE, container)
         assert any("She did not restart the database." in memory.content for memory in memories)
-        assert bearer(completion.calls.last) == "vk-auto-ingest"
+        assert {bearer(call) for call in completion.calls} == {"vk-auto-ingest"}
         # A different agent and then the revoked agent retain sources without a model call.
         await _observe(container, uow_factory, WRITER, MESSAGE)
         await save(credentials, uow_factory, ALICE, None)
         await _observe(container, uow_factory, ALICE, MESSAGE + " A new incident followed.")
-        assert catalog.call_count == completion.call_count == 1
+        assert catalog.call_count == 1 and completion.call_count == 2

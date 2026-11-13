@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from memory_service.config.settings import ALL_LLM_USES
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.llm.assist import LLMAssist
@@ -41,7 +42,8 @@ async def test_the_tenant_policy_and_the_most_specific_key_decide(container, uow
     policies = ModelPolicies(uow_factory)
     credentials = credentials_service(uow_factory)
     default = await policies.access(AGENT)
-    assert default.read_assist and not default.has_key and "reflection" in default.uses
+    assert default.read_assist and not default.has_key
+    assert default.uses == frozenset(ALL_LLM_USES), "no policy row: every use"
 
     await _set_key(credentials, uow_factory, tenant_identity("acme"), "vk-tenant-test")
     assert (await policies.access(AGENT)).has_key, "the tenant's key pays for its agents"

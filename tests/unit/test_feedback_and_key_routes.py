@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from memory_service.api.app import create_app
+from memory_service.config.settings import ALL_LLM_USES
 from tests.unit.test_agent_credential_cipher import TEST_KEY
 
 #: The unit database is shared across runs, so every run administers tenants of its own.
@@ -306,6 +307,7 @@ def test_the_tenant_policy_names_uses_read_assist_and_the_model_per_use(
 ) -> None:
     default = app_client.get("/v1/model-key/policy", headers=ADMIN).json()
     assert default["stored"] is False and default["read_assist"] is True and default["models"] == {}
+    assert default["uses"] == sorted(ALL_LLM_USES), "no policy row: every use"
     body = {
         "uses": ["summaries", "grounding_judge"],
         "read_assist": False,

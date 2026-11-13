@@ -17,6 +17,7 @@
           "entity_resolution",
           "grounding_judge",
           "memory_connections",
+          "memory_restatement",
           "reflection",
           "relation_extraction",
           "summaries"
@@ -24,7 +25,7 @@
         "read_assist": true,
         "model_env": "CAPEVAL_LLM_MODEL"
       },
-      "note": "The tenant's model policy as the live stack runs it: every use but the opt-in memory_restatement, reads assisted, one gateway model."
+      "note": "The tenant's model policy as the live stack runs it with a key and no stored policy: every use the service still calls a model for (memory_restatement included; query_expansion is ignored, so it is not listed), reads assisted, one gateway model."
     },
     "harness": {
       "policy": {

@@ -15,9 +15,9 @@ every capitalised name, occurs in what the model was shown (the turn, the turn b
 speakers) - a date the model computed from the session date is the one exception - so a
 hallucinated person, place or quantity never enters the index. It goes to the resolved model
 endpoint like every other use: which model (an OpenAI, Gemini or local one) is the tenant's
-policy or the endpoint's, and whose endpoint serves it is the bound identity's. It is opt-in
-(``OPT_IN_LLM_USES``): a tenant's policy names it, because it costs a model call per
-conversation message.
+policy or the endpoint's, and whose endpoint serves it is the bound identity's. It is on by
+default like every other use (``DEFAULT_ACCESS``) and costs a model call per conversation
+message: a tenant turns it off with a stored policy that leaves it out.
 """
 
 from __future__ import annotations

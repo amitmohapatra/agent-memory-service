@@ -13,7 +13,7 @@ import pytest
 import respx
 
 from memory_service.adapters.models.llm import EndpointLLM
-from memory_service.config.settings import LLMSettings
+from memory_service.config.settings import ALL_LLM_USES, LLMSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.modules.jobs.registry import _accounted
 from memory_service.modules.llm.assist import LLMAssist
@@ -78,6 +78,19 @@ async def test_wants_is_the_bound_policy() -> None:
         assert not assist.wants("query_expansion"), "the policy does not allow it"
     assert policies.resolved == [ModelIdentity("acme", "user:u1")]
     assert current_binding() is None, "the binding ends with the block"
+
+
+async def test_no_policy_row_allows_every_use_once_a_key_can_pay() -> None:
+    assert DEFAULT_ACCESS.uses == frozenset(ALL_LLM_USES)
+    assert "memory_restatement" in DEFAULT_ACCESS.uses
+    keyed, _ = _assist(replace(DEFAULT_ACCESS, has_key=True), own=False)
+    async with keyed.bound(ModelIdentity("acme", "user:u1")):
+        assert all(keyed.wants(use) for use in ALL_LLM_USES)
+    # a stored policy runs exactly the uses it names: leaving one out turns it off
+    named = frozenset(ALL_LLM_USES) - {"memory_restatement"}
+    narrowed, _ = _assist(ModelAccess(named, read_assist=True, has_key=True), own=False)
+    async with narrowed.bound(ModelIdentity("acme", "user:u1")):
+        assert narrowed.wants("summaries") and not narrowed.wants("memory_restatement")
 
 
 async def test_a_call_needs_an_endpoint_that_can_serve_it() -> None:
