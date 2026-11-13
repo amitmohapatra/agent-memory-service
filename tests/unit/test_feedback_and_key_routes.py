@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from memory_service.api.app import create_app
+from tests.conftest import v1_routes
 from tests.unit.test_agent_credential_cipher import TEST_KEY
 
 #: The unit database is shared across runs, so every run administers tenants of its own.
@@ -378,17 +379,19 @@ def test_a_policy_naming_query_expansion_is_accepted_and_warned_about_once(
 def test_every_public_route_refuses_a_missing_credential(app_client: TestClient) -> None:
     """Authentication is a dependency each route declares; a route that forgets it is open.
     Dependencies are solved before the body is validated, so no body is needed here."""
-    from fastapi.routing import APIRoute
-
+    routes = v1_routes()
+    published = app_client.get("/openapi.json").json()["paths"]
+    methods = {"get", "post", "put", "patch", "delete"}
+    operations = sum(
+        len(methods & set(ops)) for path, ops in published.items() if path.startswith("/v1")
+    )
+    assert len(routes) == operations, "every published /v1 operation is checked, none skipped"
     unguarded = []
-    for route in app_client.app.routes:
-        if not isinstance(route, APIRoute) or not route.path.startswith("/v1"):
-            continue
-        for method in route.methods - {"HEAD", "OPTIONS"}:
-            path = route.path.replace("{", "x").replace("}", "")
-            response = app_client.request(method, path, headers={"X-Trellis-Tenant": TENANT})
-            if response.status_code != 401:
-                unguarded.append(f"{method} {route.path} -> {response.status_code}")
+    for method, template, _ in routes:
+        path = template.replace("{", "x").replace("}", "")
+        response = app_client.request(method, path, headers={"X-Trellis-Tenant": TENANT})
+        if response.status_code != 401:
+            unguarded.append(f"{method} {template} -> {response.status_code}")
     assert not unguarded, unguarded
 
 
