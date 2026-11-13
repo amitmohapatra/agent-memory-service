@@ -310,8 +310,8 @@ for day in (await admin.tenant.model_usage()).days:  # GET /v1/model-key/usage
     print(day.day, day.use, day.tokens, day.calls)
 ```
 
-- No policy row = every use **except** `memory_restatement` (opt-in), reads assisted. A stored
-  policy runs exactly the uses it names: list `memory_restatement` to opt in.
+- No policy row = every use, `memory_restatement` included, reads assisted. A stored policy
+  runs exactly the uses it names: leave `memory_restatement` out to turn it off.
 - A revoked endpoint refuses; it never falls through to the tenant's or the service's own.
 - There is no workspace-level endpoint or policy and no per-request `use_llm`. The model a use
   calls is the policy's, else the endpoint's, else `auto` (chosen from the endpoint's
@@ -339,7 +339,7 @@ for day in (await admin.tenant.model_usage()).days:  # GET /v1/model-key/usage
 
 | Scenario | Command |
 | --- | --- |
-| A tenant just opted into `memory_restatement`: restate turns stored before | `python -m memory_service.tools.restate --tenant <id> [--limit N] [--force]` |
+| Turns stored before a tenant could use `memory_restatement` (no key yet, or a policy that left it out): restate them | `python -m memory_service.tools.restate --tenant <id> [--limit N] [--force]` |
 | Index lost, encoder changed, or a key-layout change (ADR 0026's `mk3`) | `make reindex` (`REINDEX_ARGS="--drop"` for a full rebuild; `make reindex-image` inside the runtime image) |
 
 - `restate` binds each turn to its owner, so their key pays and their policy decides; `--force`

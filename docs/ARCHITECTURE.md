@@ -277,7 +277,7 @@ Every deterministic path stays complete on its own. `modules/llm/assist.py::LLMA
 the single entry point modules use. A request or job first binds the identity that owns the
 work (`LLMAssist.bound` / `reading`: one indexed read of the key and policy hierarchies); a use
 is then consulted only when the gateway is configured, the resolved tenant policy allows it
-(no policy row: every use except the opt-in `memory_restatement`) and a key can pay
+(no policy row: every use) and a key can pay
 (contextual_extraction, relation_extraction, entity_resolution, conflict_adjudication,
 summaries, reflection, memory_connections, query_expansion, chunk_context,
 memory_restatement, grounding_judge; see [the eleven uses](guide/08-models.md#the-eleven-uses)).

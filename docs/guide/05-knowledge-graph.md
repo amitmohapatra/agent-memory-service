@@ -140,7 +140,7 @@ flowchart LR
   D --> ND["native: DocumentIE business grammar<br/>(lexicon + aliases, typed facts, table cells)<br/>+ mentioned_in, discusses, co_occurs_with"]
   T --> NT["native: used_entity, identified_by<br/>(modules/tools/edges.py)"]
   M -.-> LM["relation_extraction (strong tier)<br/>typed edges, confidence at most 0.8"]
-  M -.-> RS["memory_restatement relations (opt-in)<br/>confidence at most 0.6"]
+  M -.-> RS["memory_restatement relations<br/>confidence at most 0.6"]
   D -.-> LD["relation_extraction on co-occurring pairs<br/>and up to 6 non-English chunks"]
   NM --> G[("graph_entities<br/>graph_relations")]
   ND --> G
@@ -200,7 +200,7 @@ edges carry the call's audience.
 | Use | When | Bounds (`modules/graph/native.py`, `GraphSettings`) |
 |---|---|---|
 | `relation_extraction` | English: a memory with two or more rule-found entities and only `mentions` between them → typed relations among those entities. Other languages: the model names both ends, and both names must occur verbatim in the text. Documents: the top co-occurring entity pairs, and chunks not in English | confidence at most 0.8, `extraction: llm`; at most 8 relations per memory, 12 pairs and 6 non-English chunks per document |
-| `memory_restatement` (opt-in, ADR 0027) | the relations returned with a turn's restatement are written bound to the turn, and the turn is linked to each object it names | confidence at most 0.6; every word of person and object must occur in what the model was shown |
+| `memory_restatement` (ADR 0027) | the relations returned with a turn's restatement are written bound to the turn, and the turn is linked to each object it names | confidence at most 0.6; every word of person and object must occur in what the model was shown |
 | `summaries` | entity summaries rewritten as prose | at most 4 model calls per enrichment job, 32 entities refreshed per job, 12 facts per summary |
 | `entity_resolution` | `GET /v1/graph/entities?q=` names that match no entity lexically | never used by the retrieval-time graph stage |
 

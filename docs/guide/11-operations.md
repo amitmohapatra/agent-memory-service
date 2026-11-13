@@ -275,7 +275,7 @@ revert of the build ([MULTILINGUAL-RUNTIME.md](../MULTILINGUAL-RUNTIME.md#moving
 up to the new one, in place and while serving: compose runs it on every `up`
 (`memory-backfill`), elsewhere `make backfill BACKFILL_ARGS="--state <file>"`
 ([deploy/database.md](../deploy/database.md#upgrading-a-store-an-earlier-build-wrote-no-clearing)).
-A tenant that opts into `memory_restatement` restates earlier turns with
+Turns stored before a tenant could use `memory_restatement` are restated with
 `python -m memory_service.tools.restate --tenant <id> [--limit N] [--force]` (ADR 0027).
 
 ---

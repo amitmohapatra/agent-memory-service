@@ -41,6 +41,16 @@ each entry says which one moved. Decisions behind each change are in the
   asking call.
 
 ### Changed
+- **Restating a conversation turn is on by default** (service). A tenant with a model key
+  (its own, or the service's own endpoint) and no stored policy now runs every model use,
+  `memory_restatement` included (ADR 0027). Before, that one use ran only when a stored
+  policy named it. MEASURED_HERE
+  The cost: one more model call per conversation message for tenants with a key and no
+  policy. To turn it off, store a policy whose `uses` leaves `memory_restatement` out
+  (`PUT /v1/model-key/policy`, `tenant.set_model_policy`). A stored policy still runs
+  exactly the uses it names. Turns stored earlier are restated with
+  `python -m memory_service.tools.restate --tenant <id>`. No route, field or SDK call
+  changed. The capability eval's `llm` mode now names the use too.
 - **More of the assistant's earlier answers when a context has room** (service). For a
   question that points to an earlier chat the context pins up to three of the assistant's
   earlier answers, a long one as its two ends (ADR 0044). When the context still has room
