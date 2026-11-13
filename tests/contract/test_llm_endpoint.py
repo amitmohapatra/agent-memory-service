@@ -24,7 +24,7 @@ from memory_service.adapters.models.llm import (
 from memory_service.adapters.models.llm import (
     EndpointLLM as _EndpointLLM,
 )
-from memory_service.config.constants import LLMTransport, LLMTuning
+from memory_service.config.constants import LLM, LLMTransport, LLMTuning
 from memory_service.config.settings import LLMSettings
 from memory_service.domain.errors import DependencyUnavailable, ProviderNotConfigured
 from memory_service.modules.llm.assist import LLMAssist
@@ -134,7 +134,8 @@ async def test_complete_sends_the_bearer_key_and_maps_usage() -> None:
     request = route.calls.last.request
     assert request.headers["authorization"] == "Bearer vk-test"
     body = json.loads(request.content)
-    assert body["model"] == "openai/gpt-4.1" and body["max_tokens"] == 64
+    assert body["model"] == "openai/gpt-4.1"
+    assert body["max_tokens"] == 64 + LLM.thinking_room  # the answer and room to think
     assert body["messages"] == [
         {"role": "system", "content": "s"},
         {"role": "user", "content": "u"},

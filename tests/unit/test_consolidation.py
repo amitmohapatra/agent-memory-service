@@ -382,7 +382,7 @@ async def test_the_consolidation_use_gets_room_for_its_answer_and_others_keep_th
         )
         await assist.structured("summaries", system="s", user="u", schema=schema, max_tokens=99_999)
         sent = [p.get("max_tokens") or p.get("max_completion_tokens") for p in gw.prompts()]
-    assert sent == [LLM.long_max_tokens, LLM.max_tokens]
+    assert sent == [LLM.long_max_tokens + LLM.thinking_room, LLM.max_tokens + LLM.thinking_room]
     assert LLM.long_max_tokens > LLM.max_tokens
 
 

@@ -215,8 +215,11 @@ broken endpoint never stops another's calls. A `429` is retried after the delay 
 asks for — read from `Retry-After` and from the response body, because some providers put it only
 there — and never counts toward the breaker: backpressure is the gateway working
 (`docs/MEASUREMENTS.md` §5b records the run where it did not, and every judge call failed
-silently). A reasoning model that spends its whole output budget thinking returns an error
-naming the cause rather than an empty answer (§5).
+silently). Every request's output limit is the answer's size plus 8,000 tokens of room for
+the model's thinking (`LLMTuning.thinking_room`), capped by the profile's `max_output_tokens`:
+without the room, a model that thinks first spent a short call's whole limit before it wrote
+anything. One that still spends its whole output budget thinking returns an error naming the
+cause rather than an empty answer (§5).
 
 Every successful call adds to `llm_usage_daily` (`GET /v1/model-key/usage`) and
 `memory_llm_tokens_total{tenant,use,direction}`; a request reports its own spend in
