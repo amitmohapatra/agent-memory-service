@@ -50,6 +50,7 @@ graph_budget_expired_total = Counter(
 
 _MULTI_HOP_TYPES = {
     QueryType.DOCUMENT_MULTI_HOP,
+    QueryType.ENTITY_RELATION,
     QueryType.GENERAL_SEMANTIC,
 }
 # query words that name a relation: "exclude" -> excludes, "drove" -> driven_by, "pay" -> ...
@@ -184,6 +185,8 @@ class GraphStage:
         # question itself, so it holds whatever the wording or the language; a question that
         # names no date gets what holds now.
         as_of = parse_date(routed.query)
+        if __import__("os").environ.get("ROUTER_ASOF_OLD") == "1" and routed.query_type is not QueryType.TEMPORAL:
+            as_of = None  # MEASUREMENT: the rule before the change
         answer = await self.graph.query(
             ctx,
             query=routed.query,

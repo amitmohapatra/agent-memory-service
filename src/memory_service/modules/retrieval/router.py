@@ -17,6 +17,7 @@ The cue patterns that remain are English. A question in another language
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 
@@ -130,6 +131,29 @@ def points_to_earlier_chat(query: str) -> bool:
     return bool(_EARLIER_CHAT.search(query))
 
 
+# MEASUREMENT: the removed patterns, put back one by one with ROUTER_BACK
+_DECISION = re.compile(
+    r"\b(why did we (?:decide|choose|pick|go with)|decision|decided|agreed|rationale|trade-?off|chose|why was .* (?:chosen|rejected))\b",
+    re.IGNORECASE,
+)
+_TEMPORAL = re.compile(
+    r"\b(when (?:did|was|were|does|do|is|are|will)|what (?:year|month|date|day|time)|how long (?:ago|did|has|have)|what time|as of|since|before|after|until|between|last (?:week|month|quarter|year)|this (?:week|month|quarter|year)|in (?:19|20)\d{2}|q[1-4]\b|fy\d{2}|\d{4}-\d{2}-\d{2}|yesterday|today|latest|current(?:ly)?|previous|history of|changed over|over time|timeline)\b",
+    re.IGNORECASE,
+)
+_ENTITY = re.compile(
+    r"\b(who (?:is|owns|leads|manages|reports to|approved)|which (?:team|company|person|agent)|related to|connected to|works? (?:with|for)|owner of|members? of|part of|"
+    # relation cues the knowledge graph answers directly (typed facts + their evidence)
+    r"(?:does|do|did|is|are|was|were) .{2,60}? (?:exclude|excludes|include|includes|operate in|provide|provides|serve|serves|acquire|acquired|approve|approved)|"
+    r"(?:what|which) (?:items|costs|charges|segments|regions|products|companies)|how much did .{2,40}? pay|segments? of|excluded from|approved by|acquired by|driven by)\b",
+    re.IGNORECASE,
+)
+_BACK_CUES = {"decision": _DECISION, "temporal": _TEMPORAL, "entity": _ENTITY}
+
+
+def _back() -> set[str]:
+    return {x for x in os.environ.get("ROUTER_BACK", "").split(",") if x}
+
+
 _CUES = {
     "conversation": (_CONVERSATION,),
     "user_memory": (_USER_MEMORY,),
@@ -176,16 +200,40 @@ class QueryRouter:
             "history": bool(_HISTORY.search(q)),
             "earlier_chat": points_to_earlier_chat(q),
         }
+        english = is_english(lang)
+        back = {n: english and bool(_BACK_CUES[n].search(q)) for n in sorted(_back())}
+        if len(back) == 3:  # the dict as it was before the change, key order included
+            signals = {
+                "identifier": signals["identifier"],
+                "conversation": signals["conversation"],
+                "user_memory": signals["user_memory"],
+                "decision": back["decision"],
+                "temporal": back["temporal"],
+                "global": signals["global"],
+                "multi_hop": signals["multi_hop"],
+                "entity": back["entity"],
+                "doc_local": signals["doc_local"],
+                "history": signals["history"],
+                "earlier_chat": signals["earlier_chat"],
+            }
+        else:
+            signals.update(back)
         if signals["identifier"]:
             qt = QueryType.EXACT_IDENTIFIER
         elif signals["conversation"]:
             qt = QueryType.CONVERSATION_HISTORY
         elif signals["user_memory"]:
             qt = QueryType.USER_MEMORY
+        elif signals.get("decision"):
+            qt = QueryType.DECISION
         elif signals["global"]:
             qt = QueryType.GLOBAL_SUMMARY
         elif signals["multi_hop"]:
             qt = QueryType.DOCUMENT_MULTI_HOP
+        elif signals.get("entity"):
+            qt = QueryType.ENTITY_RELATION
+        elif signals.get("temporal"):
+            qt = QueryType.TEMPORAL
         elif signals["doc_local"]:
             qt = QueryType.DOCUMENT_LOCAL
         else:
@@ -219,12 +267,18 @@ class QueryRouter:
                 QueryType.DOCUMENT_MULTI_HOP,
                 QueryType.DOCUMENT_LOCAL,
                 QueryType.GLOBAL_SUMMARY,
+                QueryType.DECISION,
+                QueryType.TEMPORAL,
+                QueryType.ENTITY_RELATION,
             ),
             needs_knowledge=qt not in (QueryType.CONVERSATION_HISTORY, QueryType.USER_MEMORY),
             needs_graph=(qt is QueryType.GENERAL_SEMANTIC and self.semantic_graph)
             or qt
             in (
                 QueryType.DOCUMENT_MULTI_HOP,
+                QueryType.DECISION,
+                QueryType.TEMPORAL,
+                QueryType.ENTITY_RELATION,
                 # an identifier names an entity: what the graph knows about it answers too
                 QueryType.EXACT_IDENTIFIER,
             ),
