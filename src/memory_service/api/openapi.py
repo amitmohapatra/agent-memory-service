@@ -8,7 +8,8 @@ from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from fastapi.routing import APIRoute
 
-from memory_service.api.errors import Problem, error_responses
+from memory_service.api.deadline import RouteClass, route_class
+from memory_service.api.errors import PROBLEM_MEDIA_TYPE, Problem, error_responses
 from memory_service.api.headers import (
     CACHE_CONTROL_HEADER,
     CORRELATION_ID_HEADER,
@@ -24,7 +25,7 @@ from memory_service.api.headers import (
     RETRY_AFTER_HEADER,
     TRACE_ID_HEADER,
 )
-from memory_service.config.constants import HEADERS, PROJECT_URL
+from memory_service.config.constants import HEADERS, OVERLOAD, PROJECT_URL
 from memory_service.observability.tracing import TRACEPARENT_HEADER
 
 TITLE = "trellis-memory API"
@@ -254,6 +255,9 @@ def _document_responses(path: str, method: str, op: dict[str, Any]) -> None:
     responses = op.setdefault("responses", {})
     for status in EDGE_STATUSES:
         responses.setdefault(str(status), error_responses(status)[status])
+    deadline = route_class(method.upper(), path)
+    if deadline is not None:
+        responses.setdefault("504", _timeout_response(deadline))
     headers = list(RESPONSE_HEADERS)
     if takes_idempotency_key(method, op):
         headers += list(WRITE_RESPONSE_HEADERS)
@@ -271,6 +275,27 @@ def _document_responses(path: str, method: str, op: dict[str, Any]) -> None:
             example = media.get("example")
             if isinstance(example, dict) and "instance" in example:
                 example["instance"] = path
+
+
+def _timeout_response(kind: RouteClass) -> dict[str, Any]:
+    """The ``504 TIMEOUT`` the deadline middleware (``api/deadline.py``) answers when an
+    operation runs past its route class's budget: retryable, with ``Retry-After``, its detail
+    the middleware's own (the budget is the default's: ``OVERLOAD``)."""
+    budget = {
+        "read": OVERLOAD.read_deadline_seconds,
+        "write": OVERLOAD.write_deadline_seconds,
+        "verify": OVERLOAD.verify_deadline_seconds,
+    }[kind]
+    detail = f"The request exceeded its {budget:g} s {kind} deadline"
+    response = error_responses(504)[504]
+    response["description"] = (
+        f"{detail}: nothing is promised about a write it interrupted, so retry it with the "
+        "same Idempotency-Key after Retry-After"
+        if kind == "write"
+        else f"{detail}; retry after Retry-After"
+    )
+    response["content"][PROBLEM_MEDIA_TYPE]["example"]["detail"] = detail
+    return response
 
 
 def takes_idempotency_key(method: str, op: dict[str, Any]) -> bool:
@@ -388,6 +413,11 @@ def custom_openapi(app: FastAPI, *, version: str) -> dict[str, Any]:
             if path.startswith(OPS_PREFIXES):
                 # the probes and the scrape answer before any key exists
                 op["security"] = []
+                kind = route_class(method.upper(), path)
+                if kind is not None:  # ``/version`` is a read with a deadline like any other
+                    timeout = _timeout_response(kind)
+                    timeout["headers"] = _response_header_refs([RETRY_AFTER_HEADER])
+                    op.setdefault("responses", {}).setdefault("504", timeout)
                 continue
             params = op.setdefault("parameters", [])
             existing = {p.get("name") for p in params}
