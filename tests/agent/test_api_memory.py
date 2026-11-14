@@ -307,3 +307,51 @@ async def _held_about(app, running, user: str) -> list[str]:
             return [r.memory_id for r in rows]
 
     return running.portal.call(read)
+
+
+# ------------------------------------------------------------------ the user's inventory
+
+
+@pytest.mark.covers("memory.list_memories", "messages.create_messages")
+async def test_the_users_inventory_lists_what_they_said_in_a_chat(app, running) -> None:
+    """MEM-03b (BUG-M3). ``GET /v1/memories`` is "what do we hold about this user"
+    (docs/api/memory.md), and a statement said in a conversation is anchored in that thread
+    (ADR 0036) with the user as its audience: the inventory listed by anchor, so it held none
+    of them. A teammate's statements in the same team thread are never the user's."""
+    admin, harness, _ = await _team(app)
+    # a team's admins reach its threads: u2 writes in the thread u1 opened
+    await admin.tenant.workspaces.set_member("finance", "user:u2", role="admin")
+    in_team = {"workspace_id": "finance", "thread_id": "thr-team"}
+    await harness.bind(user_id="u1", **in_team).agent("concierge").history.add([("USER", BADGE)])
+    await (
+        harness.bind(user_id="u2", **in_team)
+        .agent("concierge")
+        .history.add([("USER", "My desk phone extension is 7781.")])
+    )
+    running.portal.call(app.state.container.tasks.drain)
+
+    for reader in (harness.bind(user_id="u1"), harness.bind(user_id="u1", workspace_id="finance")):
+        held = [m.content for m in (await reader.advanced.memories.page(limit=100)).items]
+        assert any("B4242" in c for c in held), held
+        assert not any("7781" in c for c in held), "a teammate's statement is not the user's"
+    theirs = [m.content for m in (await harness.bind(user_id="u2").advanced.memories.page()).items]
+    assert any("7781" in c for c in theirs) and not any("B4242" in c for c in theirs)
+
+
+@pytest.mark.covers("memory.list_memories")
+async def test_the_users_inventory_pages_without_a_gap_or_a_repeat(app, running) -> None:
+    """The cursor walks the user's anchors and what they said in their chats as one keyset:
+    every memory once, newest first, at a page size below, at and above what is held."""
+    _, harness, _ = await _team(app)
+    for n in range(3):
+        chat = harness.bind(user_id="u1", thread_id=f"thr-{n}").agent("concierge")
+        await chat.history.add([("USER", f"My locker number is L{n}0{n}.")])
+    await harness.bind(user_id="u1").remember("I prefer aisle seats.", visibility="USER")
+    running.portal.call(app.state.container.tasks.drain)
+    user = harness.bind(user_id="u1")
+    everything = [m.memory_id for m in (await user.advanced.memories.page(limit=200)).items]
+    assert len(everything) == len(set(everything))
+    assert sum("locker" in m.content for m in (await user.advanced.memories.page()).items) >= 3
+    for size in (1, len(everything) - 1, len(everything), len(everything) + 1):
+        walked = [m.memory_id async for m in user.advanced.memories.iter(page_size=size)]
+        assert walked == everything, size
