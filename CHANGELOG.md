@@ -401,9 +401,12 @@ each entry says which one moved. Decisions behind each change are in the
   security: SEC-R-10). A recorded call keeps its arguments without the tool's `redact` paths, but the
   approval, rejection or edit of such a call stored the raw arguments it was sent
   (`metadata.args`, up to 64 KiB; an edit's `correction` too) and answered them in every read
-  of the record. Once a decision is projected, the record keeps the arguments as the tool
-  redacts them and `metadata.args_hash`, the hash of the arguments as sent; decisions are
-  matched to recorded calls, and to each other, by that hash. No route or schema changed.
+  of the record, the `POST` that carried them included. The record is stored, from the
+  `POST` on, with the arguments as the tool's catalog entry redacts them and
+  `metadata.args_hash`, the hash of the arguments as sent (one that the client sends is not
+  kept); decisions are matched to recorded calls, and to each other, by that hash. A
+  decision stored before this version keeps what it was stored with, and is matched by the
+  hash of its stored arguments as before. No route or schema changed.
 - **A length of time is no date** (service). "SUP-20's lead time is 32 days, from my call
   today" was stored with "32 days = 2026-10-01" beside it: with a relative cue in the text
   ("today"), the relative-time parser read a bare count of a unit as that long ago, and an

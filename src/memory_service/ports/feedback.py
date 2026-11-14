@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from memory_service.domain.feedback import (
     Feedback,
@@ -42,13 +42,6 @@ class FeedbackRepository(Protocol):
     async def set_review(
         self, tenant_id: str, feedback_id: str, review: FeedbackReview
     ) -> None: ...
-
-    async def set_kept(
-        self, tenant_id: str, feedback_id: str, *, metadata: dict[str, Any], correction: Any
-    ) -> None:
-        """Replace what the record keeps of the thing it judged (``metadata``, ``correction``):
-        a decided tool call's arguments as its tool lets them be stored."""
-        ...
 
     async def list_pending(
         self,

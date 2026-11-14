@@ -98,8 +98,8 @@ BULK_REVIEW_MAX: Final = 500
 #: apart; after that it counts nothing.
 CALL_RECORD_CHECKS: Final = 10
 CALL_RECORD_WAIT_SECONDS: Final = 30
-#: Where a projected decision on a tool call keeps the hash of the call's raw arguments
-#: (``metadata``), beside the copy of them its tool lets be stored (``_keep_redacted``).
+#: Where a decision on a tool call keeps the hash of the call's raw arguments (``metadata``),
+#: beside the copy of them its tool lets be stored (``_as_its_tool_redacts``).
 ARGS_HASH_KEY: Final = "args_hash"
 #: The record fields the trusted headers decide; a body that disagrees is refused.
 IDENTITY_FIELDS: Final = ("tenant_id", "workspace_id", "user_id")
@@ -173,6 +173,8 @@ class FeedbackService:
                 "review": None,
             }
         )
+        if stored.target_kind is FeedbackTargetKind.TOOL_CALL:
+            stored = await self._as_its_tool_redacts(uow, stored)
         stored = stored.model_copy(
             update={"vote": classify(stored, trusted=trusted, run_vouched=run_vouched)}
         )
@@ -848,23 +850,20 @@ class FeedbackService:
         recorded the call it approved, that tool with those arguments (``_backed``), each
         recorded call backing one counted approval (``_spent``: the interrupt id is the
         client's). A rejection or an edit only makes the tool ask more, so it needs no
-        recorded call.
-
-        Whatever it counted, the decision then keeps the call's arguments as a recorded call
-        keeps them: their hash and the copy the tool's ``redact`` paths leave, never the raw
-        ones (``_keep_redacted``)."""
-        projection = await self._count_tool_call(uow, record, now=now)
-        await self._keep_redacted(uow, record)
-        return projection
+        recorded call. The arguments it reads are what intake stored
+        (``_as_its_tool_redacts``)."""
+        return await self._count_tool_call(uow, record, now=now)
 
     @staticmethod
-    async def _keep_redacted(uow: UnitOfWork, record: Feedback) -> None:
-        """Replace the decided call's arguments (``metadata.args``, and an edit's replacement
-        arguments, ``correction``) with what its tool lets be stored: the copy without the
-        tool's ``redact`` paths, and ``metadata.args_hash``, the one-way hash of the raw
-        arguments that a recorded call carries too (``ToolService.record``) and later
-        decisions are matched by (``_args_hash``). A tool the catalog does not hold declared
-        nothing to redact."""
+    async def _as_its_tool_redacts(uow: UnitOfWork, record: Feedback) -> Feedback:
+        """``record`` as it may be stored, before it is: the decided call's arguments
+        (``metadata.args``, and an edit's replacement arguments, ``correction``) as a recorded
+        call keeps them (``ToolService.record``), the copy without the tool's ``redact``
+        paths, and ``metadata.args_hash``, the one-way hash of the arguments as sent, which
+        decisions are matched to recorded calls by (``_args_hash``); a hash the client sent
+        is never kept as it. The paths are the tool's catalog entry, known before its call is
+        recorded; a tool the catalog does not hold declared nothing to redact, and its
+        arguments are kept as its recorded call keeps them."""
         tool = str(record.metadata.get("tool") or "").strip()
         descriptor = await uow.tools.by_name(
             record.tenant_id, tool, workspace_id=record.workspace_id
@@ -874,14 +873,12 @@ class FeedbackService:
             return descriptor.redacted_args(args) if descriptor and isinstance(args, dict) else args
 
         metadata = dict(record.metadata)
+        metadata.pop(ARGS_HASH_KEY, None)
         args = metadata.get("args")
         if isinstance(args, dict):
             metadata.update({"args": kept(args), ARGS_HASH_KEY: stable_hash(args)})
-        await uow.feedback.set_kept(
-            record.tenant_id,
-            record.feedback_id,
-            metadata=metadata,
-            correction=kept(record.correction),
+        return record.model_copy(
+            update={"metadata": metadata, "correction": kept(record.correction)}
         )
 
     async def _count_tool_call(
@@ -1149,10 +1146,10 @@ def _approves(record: Feedback) -> bool:
 
 
 def _args_hash(record: Feedback) -> str:
-    """The hash of the decided call's raw arguments: the one its projection kept
-    (``_keep_redacted`` wrote it, whatever the client sent), else of the arguments as they
-    arrived (a decision not projected yet, or one projected before the hash was kept)."""
-    kept = record.metadata.get(ARGS_HASH_KEY) if record.projection is not None else None
+    """The hash of the decided call's raw arguments: the one intake kept
+    (``_as_its_tool_redacts``), else of the arguments as stored (a decision stored before the
+    hash was kept holds them as they were sent)."""
+    kept = record.metadata.get(ARGS_HASH_KEY)
     return kept if isinstance(kept, str) else stable_hash(record.metadata.get("args"))
 
 
