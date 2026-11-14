@@ -488,14 +488,16 @@ class MemoryRepository(Protocol):
         tenant_id: str,
         *,
         scope_keys: Sequence[str],
+        audience_keys: Sequence[str] = (),
         memory_types: Sequence[str] | None = None,
         current_only: bool = True,
         before: tuple[datetime, str] | None = None,
         limit: int = 200,
     ) -> list[CanonicalMemory]:
-        """Newest created first by (created_at, memory_id), a keyset that never moves;
-        ``before`` is that keyset of the next page. Exactly ``limit`` rows come back unless
-        the scope is exhausted."""
+        """The memories anchored at one of ``scope_keys``, and those whose audience holds one
+        of ``audience_keys`` wherever they are anchored. Newest created first by (created_at,
+        memory_id), a keyset that never moves; ``before`` is that keyset of the next page.
+        Exactly ``limit`` rows come back unless the scope is exhausted."""
         ...
 
     async def forget(self, tenant_id: str, memory_id: str) -> bool: ...

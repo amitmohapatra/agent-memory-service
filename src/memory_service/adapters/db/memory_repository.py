@@ -628,6 +628,7 @@ class SqlMemoryRepository:
         tenant_id: str,
         *,
         scope_keys: Sequence[str],
+        audience_keys: Sequence[str] = (),
         memory_types: Sequence[str] | None = None,
         current_only: bool = True,
         before: tuple[datetime, str] | None = None,
@@ -635,14 +636,20 @@ class SqlMemoryRepository:
     ) -> list[CanonicalMemory]:
         """Newest created first. The page holds ``limit`` valid rows: a derived row that has
         lapsed is skipped and replaced by the next one, so fewer than ``limit`` rows means
-        the scope is exhausted (the keyset is ``(created_at, memory_id)``, which never moves)."""
-        if not scope_keys:
+        the scope is exhausted (the keyset is ``(created_at, memory_id)``, which never moves).
+        An anchor is ``ix_memories_tenant_scope``'s range and an audience key
+        ``ix_memories_visibility_keys``' (GIN containment); one statement either way."""
+        if not scope_keys and not audience_keys:
             return []
+        held = or_(
+            MemoryRow.scope_key.in_(list(scope_keys)),
+            *(MemoryRow.visibility_keys.contains([key]) for key in audience_keys),
+        )
         out: list[CanonicalMemory] = []
         while len(out) < limit:
             stmt = select(MemoryRow).where(
                 MemoryRow.tenant_id == tenant_id,
-                MemoryRow.scope_key.in_(list(scope_keys)),
+                held,
                 MemoryRow.deleted_at.is_(None),
             )
             if current_only:

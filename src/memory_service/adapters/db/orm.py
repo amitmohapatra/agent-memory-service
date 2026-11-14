@@ -670,6 +670,15 @@ class MemoryRow(Base):
         ),
         Index("ix_memories_tenant_user", "tenant_id", "user_id", "created_at"),
         Index("ix_memories_tenant_thread", "tenant_id", "thread_id"),
+        # the inventory's audience read: a user's statements anchored in their conversations
+        # (``list_scope``, migration 0037)
+        Index(
+            "ix_memories_visibility_keys",
+            "visibility_keys",
+            postgresql_using="gin",
+            postgresql_ops={"visibility_keys": "jsonb_path_ops"},
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index(
             "ix_memories_recent_updates",
             "updated_at",

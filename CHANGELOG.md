@@ -366,6 +366,15 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **The user's inventory lists what they said in their conversations** (service, BUG-M3).
+  `GET /v1/memories` ("what do we hold about this user") listed the memories anchored at the
+  caller's agent, user, thread, group, workspace and tenant, and a statement said in a
+  conversation is anchored in its thread (ADR 0036), so without that thread the inventory
+  held none of the user's statements. It now also lists every memory whose audience is the
+  user (`user:<tenant>/<user>`), wherever it is anchored, in the same keyset (one statement a
+  page; migration `0037_memory_audience_index` adds a GIN index on the live rows'
+  `visibility_keys`, built concurrently). Another participant's statements in a shared
+  thread are not the user's and are not listed. No route or schema changed.
 - **An agent asks before retracting what was read out of the user's words** (service,
   BUG-M1). A memory read out of a user's turn that a harness relayed (a preference, a fact)
   is owned by the agent (`agent:<user>/<agent>`) and is no `said` turn, so `memory_forget`,
