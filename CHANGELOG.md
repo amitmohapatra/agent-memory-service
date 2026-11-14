@@ -366,6 +366,16 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **The tenant's admin key may forget, update and restore any memory of its tenant**
+  (service, authorization). The docs give these to "its owner, the user an agent acts for, or
+  a tenant admin", and the admin key is the tenant admin's credential (docs/api/feedback.md),
+  but the decision read only an authorization tuple of the principal the key acted as: the
+  key could forget what that principal owned and nothing else, so a memory a teammate or an
+  agent wrote could not be erased with it. `AuthorizationService.is_tenant_admin` now also
+  answers yes for a request sent with the tenant's `admin` key (or the platform key); a
+  context stored for later work never carries that authority, and an error from the
+  authorization store still refuses. Another tenant's key is refused as before. No route or
+  schema changed.
 - **A decision on a tool call no longer keeps the arguments its tool redacts** (service,
   security: SEC-R-10). A recorded call keeps its arguments without the tool's `redact` paths, but the
   approval, rejection or edit of such a call stored the raw arguments it was sent

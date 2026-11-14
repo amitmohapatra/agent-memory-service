@@ -133,7 +133,8 @@ memory = await ctx.advanced.memories.restore(memory_id)  # CURRENT and re-indexe
 ```
 
 The same people who may forget a memory may restore it (its owner, the user an agent acts for,
-or a tenant admin). Restoring a memory that is not archived returns it unchanged; one that was
+or a tenant admin: a request sent with the tenant's admin key, whoever it acts for, or a user
+the tenant made its admin). Restoring a memory that is not archived returns it unchanged; one that was
 forgotten stays forgotten (`404`).
 
 ### Forgetting takes what was derived from it

@@ -168,6 +168,12 @@ class AuthorizationService:
         return any(results)
 
     async def is_tenant_admin(self, ctx: MemoryExecutionContext) -> bool:
+        """The tenant's administrator: a request sent with its administrator credential,
+        whichever principal it acts as, or a principal the authorization store holds as the
+        tenant's admin (in person, or the user an agent acts for). An error from the store
+        propagates: it never reads as yes."""
+        if ctx.administers_tenant:
+            return True
         subjects = [ctx.principal_id]
         if ctx.is_agent and ctx.user_id:
             subjects.append(f"user:{ctx.user_id}")

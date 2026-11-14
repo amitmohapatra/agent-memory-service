@@ -325,11 +325,13 @@ def build_context(
     _require_tenant_active(container, tenant_id)
     user_id = headers["user_id"] or body.user_id
     _require_may_act_as(request, user_id, body.agent_id)
+    principal = _principal(request)
     try:
         ctx = MemoryExecutionContext(
             tenant_id=tenant_id,
             workspace_id=workspace_id,
             user_id=user_id,
+            administers_tenant=principal is not None and is_tenant_administrator(principal),
             thread_id=body.thread_id,
             session_id=body.session_id,
             turn_id=body.turn_id,
