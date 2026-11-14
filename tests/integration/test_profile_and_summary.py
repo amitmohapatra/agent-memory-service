@@ -148,3 +148,45 @@ async def test_a_standing_rule_said_in_conversation_is_pinned_in_the_user_block(
     assert block.block == "user"
     assert "cilantro" in block.text
     assert "sales number" not in block.text
+
+
+async def test_a_standing_question_comes_due_again_every_refresh(container, uow_factory) -> None:
+    """``source_query`` is answered now and every ``QUERY_REFRESH`` after: the periodic
+    claim takes a due question once, moves it an interval on so a second claim leaves it,
+    and takes it again when the interval has passed. A block with no question never comes
+    due, and clearing the question stops it."""
+    from datetime import UTC, datetime, timedelta
+
+    from memory_service.modules.profile.service import QUERY_REFRESH
+
+    profile = container.services["profile"]
+    async with uow_factory() as uow:
+        await profile.edit(uow, ANN, "user.releases", "", None, source_query="when is review?")
+        await profile.edit(uow, ANN, "user.notes", "", "no question here")
+        await uow.commit()
+    await container.tasks.drain()
+    now = datetime.now(UTC) + timedelta(seconds=1)
+    assert await profile.schedule_due(now=now) == 1
+    assert await profile.schedule_due(now=now) == 0, "claimed: not taken twice"
+    assert await profile.schedule_due(now=now + QUERY_REFRESH - timedelta(seconds=2)) == 0
+    assert await profile.schedule_due(now=now + QUERY_REFRESH + timedelta(seconds=1)) == 1
+    async with uow_factory() as uow:
+        await profile.edit(uow, ANN, "user.releases", "", None, source_query=None)
+        await uow.commit()
+    assert await profile.schedule_due(now=now + 3 * QUERY_REFRESH) == 0
+
+
+async def test_a_profile_edit_is_bounded_and_needs_a_block_to_replace_in(
+    container, uow_factory
+) -> None:
+    from memory_service.domain.errors import NotFound, ValidationFailed
+    from memory_service.modules.profile.service import PROFILE_BLOCK_MAX_CHARS
+
+    profile = container.services["profile"]
+    async with uow_factory() as uow:
+        with pytest.raises(NotFound):
+            await profile.edit(uow, ANN, "user.missing", "old text", "new text")
+        with pytest.raises(ValidationFailed, match=str(PROFILE_BLOCK_MAX_CHARS)):
+            await profile.edit(uow, ANN, "user.long", "", "x" * (PROFILE_BLOCK_MAX_CHARS + 1))
+        stored = await profile.edit(uow, ANN, "user.long", "", "x" * PROFILE_BLOCK_MAX_CHARS)
+        assert len(stored.text) == PROFILE_BLOCK_MAX_CHARS

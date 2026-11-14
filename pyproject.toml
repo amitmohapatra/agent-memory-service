@@ -279,3 +279,6 @@ source = [
   "trellis.memory",
 ]
 branch = true
+# SQLAlchemy's asyncio layer runs the driver in greenlets; without this, coverage loses track
+# of the lines after a database await and reports them as never run (agent-runs sets the same).
+concurrency = ["greenlet", "thread"]

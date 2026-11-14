@@ -288,3 +288,120 @@ def test_remember_refuses_what_it_cannot_store(client) -> None:
     ):
         r = client.post("/v1/memories", headers=H, json={"scope": {}, **body})
         assert r.status_code == 422, (body, r.text)
+
+
+def test_a_runs_messages_without_a_thread_go_to_the_runs_own_conversation(client) -> None:
+    """A run is a conversation of its own when nobody named one: its messages go to the
+    thread named by its ``agent_run_id``, and read back from there. With neither a thread
+    nor a run there is nowhere to put them."""
+    run_id = new_id("agent_run")
+    scope = {"agent_id": "planner", "agent_run_id": run_id}
+    sent = post_message(client, H, {"scope": scope, "role": "USER", "content": "plan a trip"})
+    assert sent.status_code == 202, sent.text
+    assert sent.json()["thread_id"] == run_id
+    listed = client.get(f"/v1/threads/{run_id}/messages", headers=H)
+    assert listed.status_code == 200, listed.text
+    assert [m["content"] for m in listed.json()["messages"]] == ["plan a trip"]
+    nowhere = post_message(
+        client, H, {"scope": {"agent_id": "planner"}, "role": "USER", "content": "x"}
+    )
+    assert nowhere.status_code == 422, nowhere.text
+    assert "thread_id" in nowhere.json()["detail"]
+
+
+def test_a_profile_edit_must_change_something_and_old_needs_new(client) -> None:
+    """``PATCH /v1/profile/{block}`` with nothing to change, or text to replace with
+    nothing, is refused before anything is read or written."""
+    scope = {"thread_id": new_id("thread")}
+    for body, said in (
+        ({}, "send new, source_query, or both"),
+        ({"old": "Berlin", "source_query": "where do I live?"}, "old needs new"),
+    ):
+        refused = client.patch("/v1/profile/user", headers=H, json={"scope": scope, **body})
+        assert refused.status_code == 422, refused.text
+        assert said in refused.text
+
+
+def test_a_tools_approval_rule_must_parse_and_empty_removes_it(client) -> None:
+    """``approve_when`` is checked when the catalog entry is written: a rule that does not
+    parse is a 422, and an empty string clears the rule."""
+
+    def put(rule: str) -> object:
+        entry = {"name": "billing.refund", "description": "refund", "approve_when": rule}
+        return client.put("/v1/tools/catalog", headers=H, json={"tools": [entry]})
+
+    assert put("amount >=").status_code == 422
+    kept = put("amount >= 1000")
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["tools"][0]["approve_when"] == "amount >= 1000"
+    cleared = put("")
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["tools"][0]["approve_when"] is None
+
+
+def test_an_internal_message_read_by_id_is_refused_to_a_person_who_did_not_write_it(
+    client,
+) -> None:
+    """Internal execution is not chat: a person reading the thread sees its visible
+    messages by id, but an agent's internal step answers ``403 SCOPE_DENIED``."""
+    scope = _scope()
+    said = post_message(client, H, {"scope": scope, "role": "USER", "content": "plan my trip"})
+    agent_scope = {**scope, "agent_id": "planner", "agent_run_id": new_id("agent_run")}
+    step = post_message(
+        client,
+        H,
+        {"scope": agent_scope, "role": "AGENT", "kind": "INTERNAL", "content": "tool: search"},
+    )
+    assert step.status_code == 202, step.text
+    visible = client.get(f"/v1/messages/{said.json()['message_id']}", headers=H)
+    assert visible.status_code == 200, visible.text
+    internal = client.get(f"/v1/messages/{step.json()['message_id']}", headers=H)
+    assert internal.status_code == 403, internal.text
+    assert internal.json()["code"] == "SCOPE_DENIED"
+
+
+def test_a_session_or_turn_of_another_conversation_is_refused(client) -> None:
+    """Lineage stays a tree: a session belongs to one thread and a turn to one session, and
+    a message that names them across is refused rather than filed under both."""
+    first = _scope()
+    assert (
+        post_message(client, H, {"scope": first, "role": "USER", "content": "a"}).status_code == 202
+    )
+    other_thread = {**first, "thread_id": new_id("thread")}
+    crossed = post_message(client, H, {"scope": other_thread, "role": "USER", "content": "b"})
+    assert crossed.status_code == 422, crossed.text
+    assert "session_id belongs to a different thread" in crossed.text
+    other_session = {**first, "session_id": new_id("session")}
+    crossed = post_message(client, H, {"scope": other_session, "role": "USER", "content": "c"})
+    assert crossed.status_code == 422, crossed.text
+    assert "turn_id belongs to a different session" in crossed.text
+
+
+def test_an_imported_message_is_stored_once_per_source_id(client) -> None:
+    """A re-import of the same ``(source_system, source_message_id)`` is deduplicated: the
+    first message's acknowledgement comes back, marked so, and nothing is stored twice."""
+    scope = {"thread_id": new_id("thread")}
+    imported = {"source_system": "slack", "source_message_id": "C1-1700000000.1"}
+    first = post_message(
+        client, H, {"scope": scope, "role": "USER", "content": "hello", **imported}
+    )
+    assert first.status_code == 202, first.text
+    again = post_message(
+        client,
+        H,
+        {"scope": scope, "role": "USER", "content": "hello (edited)", **imported},
+    )
+    assert again.status_code == 202, again.text
+    assert again.json()["message_id"] == first.json()["message_id"]
+    assert again.json()["deduplicated"] is True and not first.json()["deduplicated"]
+    listed = client.get(f"/v1/threads/{scope['thread_id']}/messages", headers=H).json()
+    assert [m["content"] for m in listed["messages"]] == ["hello"]
+
+
+def test_an_internal_agent_message_needs_the_agent(client) -> None:
+    scope = _scope()
+    refused = post_message(
+        client, H, {"scope": scope, "role": "AGENT", "kind": "INTERNAL", "content": "step"}
+    )
+    assert refused.status_code == 422, refused.text
+    assert "require agent_id" in refused.text
