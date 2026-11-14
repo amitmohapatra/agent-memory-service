@@ -155,3 +155,85 @@ async def test_another_tenant_reaches_none_of_this_conversation(app, running) ->
     with pytest.raises(MemoryError) as upload:
         await claiming.advanced.documents.add(("x.txt", b"x", "text/plain"))
     assert upload.value.status == 403
+
+
+BADGE_NOTE = b"Visitor badge B7731 opens the north gate.\n"
+TEAM_NOTE = b"The north gate closes at 22:00 for everyone.\n"
+
+
+def _messages_left(app, running, thread_id: str) -> int:
+    """The thread's message rows not marked deleted, from the store."""
+    from sqlalchemy import text  # noqa: PLC0415
+
+    async def read() -> int:
+        async with app.state.container.database.engine.begin() as conn:
+            found = await conn.execute(
+                text("SELECT count(*) FROM messages WHERE thread_id = :t AND deleted_at IS NULL"),
+                {"t": thread_id},
+            )
+            return int(found.scalar_one())
+
+    return running.portal.call(read)
+
+
+@pytest.mark.covers("threads.delete_thread", "documents.upload_document")
+@pytest.mark.covers_error("documents.get_document")
+async def test_a_deleted_threads_documents_and_messages_are_read_by_nothing(app, running) -> None:
+    """After ``DELETE /v1/threads/{id}`` nothing of the conversation is returned: a document
+    attached in it (readable only inside it) left ``/v1/context``, search and the document
+    read, and its messages are marked deleted. A document the user shared wider (``USER``)
+    is held by that audience still, and stays."""
+    harness = await _harness(app)
+    chat = harness.bind(user_id="u1", thread_id="thr-gate")
+    await chat.history.add([("USER", "Here is my visitor badge note.")])
+    attached = await chat.advanced.documents.add(("badge.txt", BADGE_NOTE, "text/plain"))
+    shared = await chat.advanced.documents.add(
+        ("gate.txt", TEAM_NOTE, "text/plain"), visibility="USER"
+    )
+    container = app.state.container
+    running.portal.call(container.tasks.drain)
+    user = harness.bind(user_id="u1")
+    assert "B7731" in (await chat.context("visitor badge north gate")).rendered
+
+    await chat.history.delete()
+    running.portal.call(container.tasks.drain)
+
+    for reader in (user, harness.bind(user_id="u1", thread_id="thr-next")):
+        assert "B7731" not in (await reader.context("visitor badge north gate")).rendered
+        found = await reader.search("visitor badge north gate", kinds=["chunk"], limit=20)
+        assert not any("B7731" in item.text for item in found)
+        with pytest.raises(MemoryError) as gone:
+            await reader.advanced.documents.document(attached.document_id)
+        assert gone.value.status == 404
+    assert (await user.advanced.documents.document(shared.document_id)).document_id
+    assert _messages_left(app, running, "thr-gate") == 0
+
+
+@pytest.mark.covers("threads.delete_thread", "messages.create_messages", "documents.get_document")
+async def test_a_document_another_live_thread_attached_outlives_the_first_thread(
+    app, running
+) -> None:
+    """A document is shared across threads by attaching it to a message of another one: it
+    is removed only when no live thread holds it."""
+    harness = await _harness(app)
+    first = harness.bind(user_id="u1", thread_id="thr-first")
+    handle = await first.advanced.documents.add(("badge.txt", BADGE_NOTE, "text/plain"))
+    attachment = {
+        "filename": "badge.txt",
+        "media_type": "text/plain",
+        "size_bytes": handle.size_bytes,
+        "checksum": handle.checksum,
+        "document_id": handle.document_id,
+    }
+    second = harness.bind(user_id="u1", thread_id="thr-second")
+    await second.history.add(
+        [{"role": "USER", "content": "same note", "attachments": [attachment]}]
+    )
+    running.portal.call(app.state.container.tasks.drain)
+
+    await first.history.delete()
+    assert (await second.advanced.documents.document(handle.document_id)).document_id
+    await second.history.delete()  # the last thread that held it
+    with pytest.raises(MemoryError) as gone:
+        await harness.bind(user_id="u1").advanced.documents.document(handle.document_id)
+    assert gone.value.status == 404

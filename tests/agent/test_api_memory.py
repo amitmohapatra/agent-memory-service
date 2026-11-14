@@ -277,9 +277,9 @@ async def test_erasing_a_user_with_the_admin_key_leaves_nothing_any_read_returns
     assert not await _held_about(app, running, "u1")
     for reader in (harness.bind(user_id="u1"), harness.bind(user_id="u1").agent("concierge")):
         assert "B4242" not in (await reader.context("my badge number")).rendered
-        for kinds in (["memory"], ["message"], ["episode"], ["summary"]):
-            found = await reader.search("badge number", kinds=kinds, limit=50)
-            assert not any("B4242" in item.text for item in found), kinds
+        for kind in ("memory", "message", "episode", "summary"):
+            found = await reader.search("badge number", kinds=[kind], limit=50)
+            assert not any("B4242" in item.text for item in found), kind
         assert not any("B4242" in m.content for m in (await reader.advanced.memories.page()).items)
         for memory_id in held:
             with pytest.raises(MemoryError) as gone:
