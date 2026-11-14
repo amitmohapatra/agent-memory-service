@@ -366,6 +366,17 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **A deleted thread's documents and messages are read by nothing** (service). `DELETE
+  /v1/threads/{id}` marked the thread deleted and left its messages live and its documents
+  readable: a document attached in the deleted thread still answered `/v1/context`, search
+  and `GET /v1/documents/{id}`. The deletion now marks the thread's messages deleted (soft,
+  as the thread: the rows stay for the archive and the audit) and the documents only it held
+  (uploaded into it or attached in it, with no audience wider than the thread and no live
+  message of another live thread attaching them), and the document index job takes their
+  chunks out of the index. A document another live thread attaches stays until the last such
+  thread goes. Also: a message carrying attachments failed with a foreign-key error (the
+  attachment rows were written before the message). Migration
+  `0038_attachment_document_index`. No route or schema changed.
 - **The user's inventory lists what they said in their conversations** (service, BUG-M3).
   `GET /v1/memories` ("what do we hold about this user") listed the memories anchored at the
   caller's agent, user, thread, group, workspace and tenant, and a statement said in a

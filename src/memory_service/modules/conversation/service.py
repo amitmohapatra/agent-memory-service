@@ -36,7 +36,7 @@ from memory_service.domain.enums import MessageKind, MessageRole, ObservationKin
 from memory_service.domain.errors import NotFound, ScopeDenied, ValidationFailed
 from memory_service.domain.ids import content_hash, new_id, thread_session_id, thread_turn_id
 from memory_service.domain.observation import Observation
-from memory_service.domain.revisions import RevisionKind
+from memory_service.domain.revisions import RevisionKind, document_revision_keys
 from memory_service.domain.text import sanitise
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.conversation.summary import (
@@ -45,6 +45,7 @@ from memory_service.modules.conversation.summary import (
     enqueue_episode_index,
     enqueue_refresh,
 )
+from memory_service.modules.jobs.names import TASK_DOCUMENT_INDEX
 from memory_service.modules.tenancy.gate import require_workspace_member
 from memory_service.modules.working_memory.hot_thread import HotThreadCache
 from memory_service.observability.logging import get_logger
@@ -206,6 +207,24 @@ class ConversationService:
             raise NotFound("Thread not found")
         await self.authz.require(ctx, "can_write", "thread", thread_id)
         await uow.threads.soft_delete(ctx.tenant_id, thread_id)
+        # nothing of the conversation is read again: its messages are marked deleted (soft,
+        # as the thread: the archive and the audit keep the rows), and the documents only it
+        # held go with it, out of the index by their own index job
+        await uow.messages.delete_thread(ctx.tenant_id, thread_id)
+        for document, audience in await uow.documents.release_thread(ctx.tenant_id, thread_id):
+            keys = document_revision_keys(ctx.tenant_id, document.thread_id, audience)
+            for kind, identifier in sorted(keys):
+                await uow.revisions.bump(ctx.tenant_id, kind, identifier)
+            await uow.enqueue(
+                JobSpec(
+                    task_name=TASK_DOCUMENT_INDEX,
+                    queue=Queue.EMBEDDING,
+                    payload={"tenant_id": ctx.tenant_id, "document_id": document.document_id},
+                    idempotency_key=f"index:{document.document_id}:released",
+                    lock=f"document:{document.document_id}",
+                    tenant_id=ctx.tenant_id,
+                )
+            )
         await uow.revisions.bump(ctx.tenant_id, RevisionKind.THREAD, thread_id)
         if thread.owner_user_id:
             # a context its owner built in another conversation may quote this one (ADR
