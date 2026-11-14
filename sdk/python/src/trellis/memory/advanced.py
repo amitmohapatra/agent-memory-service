@@ -92,9 +92,13 @@ class DocumentsAPI:
         # The filename and media type are part of the request the service compares against a
         # replayed key, so they belong in the key: identical bytes uploaded under a different
         # name are a different document, not a replay of the same one.
+        # So does the audience it is uploaded for: two users (or threads) uploading the same
+        # bytes are two uploads, never a replay of the other's (whose document they may not read).
+        scope = self._ctx.scope
         fields = (
             f"{name}|{mtype}|{message_id or ''}|{title or ''}|{visibility or ''}"
             f"|{sorted(metadata.items())}"
+            f"|{scope.workspace_id or ''}|{scope.user_id or ''}|{scope.thread_id or ''}"
         )
         form_digest = hashlib.blake2b(fields.encode(), digest_size=6).hexdigest()
         tenant = self._ctx.scope.tenant_id or ""

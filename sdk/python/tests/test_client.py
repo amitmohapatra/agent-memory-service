@@ -733,3 +733,24 @@ async def test_an_endpoint_model_goes_on_the_wire_with_its_key_unmasked(client):
     assert json.loads(put.calls.last.request.content)["endpoint"]["api_key"] is None
     with pytest.raises(TypeError):
         await ctx.advanced.model_keys.set("sk-a-bare-key")
+
+
+@respx.mock
+async def test_the_same_file_uploaded_by_two_users_is_not_one_replay(client: MemoryClient) -> None:
+    """The derived idempotency key names the audience the upload is for: two users of one
+    tenant uploading the same bytes under the same name are two uploads. Keyed on the bytes
+    and the form alone, the second user's upload replayed the first's answer: it got back a
+    document it may not read, and its own was never stored."""
+    route = respx.post("http://memory.test/v1/documents").mock(
+        return_value=httpx.Response(
+            202,
+            json={"document_id": "doc_1", "filename": "a.md", "checksum": "c", "size_bytes": 5},
+        )
+    )
+    keys = []
+    for user, thread in (("u1", None), ("u2", None), ("u1", "thr_1"), ("u1", None)):
+        ctx = client.bind(tenant_id="acme", user_id=user, thread_id=thread)
+        await ctx.advanced.documents.add(b"hello", filename="a.md", media_type="text/markdown")
+        keys.append(route.calls.last.request.headers["idempotency-key"])
+    assert len(set(keys[:3])) == 3  # another user, another thread: another upload
+    assert keys[3] == keys[0]  # the same upload again (a retry): the same key
