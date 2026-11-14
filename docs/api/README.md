@@ -62,7 +62,9 @@ a `status`, a `detail` and, where a field is at fault, `errors`. The SDK raises 
 means the same request may pass later, and a retryable `429`, `503` or `504` says when in
 `Retry-After` (seconds): `503 DEPENDENCY_UNAVAILABLE` is a store that is down (PostgreSQL
 unreachable or its pool exhausted, Qdrant or OpenFGA away), `504 TIMEOUT` a database statement
-stopped at its budget. A body or file over the limit is `413 PAYLOAD_TOO_LARGE`
+stopped at its budget or a request past its deadline (5 s for a read, 15 s for a write or a
+verify; every operation but an upload, the probes and `/metrics` has one, and its OpenAPI
+operation lists the `504`). A body or file over the limit is `413 PAYLOAD_TOO_LARGE`
 (`PayloadTooLargeError`, a `ValidationError`), as in agent-runs. A `detail` never quotes a driver's or a server's message. Insufficient
 evidence is not an error: a context answers `evidence_status` ([context.md](context.md)).
 

@@ -56,14 +56,24 @@ def route_class(method: str, path: str) -> RouteClass | None:
     return "write"
 
 
+def budgets(limits: OverloadTuning) -> dict[RouteClass, float]:
+    """Each route class's deadline, in seconds."""
+    return {
+        "read": limits.read_deadline_seconds,
+        "write": limits.write_deadline_seconds,
+        "verify": limits.verify_deadline_seconds,
+    }
+
+
+def timeout_detail(kind: RouteClass, budget: float) -> str:
+    """What the 504 says: which deadline the request ran past."""
+    return f"The request exceeded its {budget:g} s {kind} deadline"
+
+
 class DeadlineMiddleware:
     def __init__(self, app: ASGIApp, *, limits: OverloadTuning) -> None:
         self.app = app
-        self.budgets: dict[RouteClass, float] = {
-            "read": limits.read_deadline_seconds,
-            "write": limits.write_deadline_seconds,
-            "verify": limits.verify_deadline_seconds,
-        }
+        self.budgets = budgets(limits)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -103,7 +113,7 @@ class DeadlineMiddleware:
             response = problem_response(
                 build_problem(
                     code=ErrorCode.TIMEOUT,
-                    message=f"The request exceeded its {budget:g} s {kind} deadline",
+                    message=timeout_detail(kind, budget),
                     status=504,
                     retryable=True,
                     instance=scope["path"],

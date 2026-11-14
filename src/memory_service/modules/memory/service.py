@@ -288,6 +288,12 @@ class MemoryService:
             )
         if memory.owner_principal in (ctx.principal_id, f"user:{ctx.user_id}"):
             return
+        if (
+            not ctx.is_agent
+            and ctx.user_id
+            and memory.owner_principal.startswith(f"agent:{ctx.user_id}/")
+        ):
+            return  # the user an agent acts for: what an agent bound to them wrote or relayed
         if not await self.authz.is_tenant_admin(ctx):
             raise ScopeDenied(
                 f"only the owner (or a tenant admin) can {action} a memory",

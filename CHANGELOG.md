@@ -41,6 +41,13 @@ each entry says which one moved. Decisions behind each change are in the
   asking call.
 
 ### Changed
+- **The OpenAPI document lists the `504` the request deadline answers** (service, contract).
+  Every operation the deadline middleware covers (every one but `POST /v1/documents`, the
+  probes and `/metrics`: 69 of 73) now documents `504` with the `Problem` schema, `code:
+  TIMEOUT`, `retryable: true` and `Retry-After`, its example the middleware's own detail
+  ("The request exceeded its 5 s read deadline", 15 s for a write or a verify). The service
+  already answered it; generated clients and contract checkers no longer take it for an
+  undocumented status.
 - **A decision on a tool call with nested arguments is kept and counted** (service). The
   arguments a decision answers travel unchanged at `POST /v1/feedback`'s `metadata.args`, and
   feedback `metadata` was bounded like every `custom_metadata` (2 levels of nesting, 8 KiB), so
@@ -359,6 +366,13 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **A decision on a tool call no longer keeps the arguments its tool redacts** (service,
+  security: SEC-R-10). A recorded call keeps its arguments without the tool's `redact` paths, but the
+  approval, rejection or edit of such a call stored the raw arguments it was sent
+  (`metadata.args`, up to 64 KiB; an edit's `correction` too) and answered them in every read
+  of the record. Once a decision is projected, the record keeps the arguments as the tool
+  redacts them and `metadata.args_hash`, the hash of the arguments as sent; decisions are
+  matched to recorded calls, and to each other, by that hash. No route or schema changed.
 - **A length of time is no date** (service). "SUP-20's lead time is 32 days, from my call
   today" was stored with "32 days = 2026-10-01" beside it: with a relative cue in the text
   ("today"), the relative-time parser read a bare count of a unit as that long ago, and an

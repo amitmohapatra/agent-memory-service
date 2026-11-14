@@ -324,7 +324,11 @@ sequenceDiagram
 | each tool call | `POST /v1/tools/invocations` | `tool`, `args`, `output`, `status` (ok, error, timeout, rejected, cancelled), `error_class`, `latency_ms`, `task`, `step` | `clients/memory.py::record_tool` |
 | on demand, mid-run | `POST /v1/tools/hints` | `task`, `available` (the run's tool names) | the `tool_search` memory tool |
 
-Arguments are redacted per the catalog entry's `redact` list before they are stored.
+Arguments are redacted per the catalog entry's `redact` list before they are stored. The same
+holds for a decision on a call: once it is projected, the feedback record keeps
+`metadata.args` (and an edit's replacement arguments, `correction`) as the tool redacts them,
+with `metadata.args_hash`, the one-way hash of the arguments as sent, which a recorded call
+carries too and later decisions are matched by.
 
 ### What comes back
 

@@ -8,11 +8,12 @@ from __future__ import annotations
 import base64
 
 import pytest
+from sqlalchemy import text
 
 from memory_service.api.app import create_app
 from tests.agent.conftest import BOOTSTRAP, sdk
 from tests.conftest import PG_AVAILABLE, _test_overrides
-from trellis.memory import MemoryError
+from trellis.memory import Feedback, MemoryError
 from trellis.memory.approval import evaluate
 
 pytestmark = pytest.mark.e2e
@@ -264,6 +265,76 @@ async def test_approvals_become_a_rule_that_applies_once_accepted(app, running) 
     assert other_agent.value.status == 404
 
 
+#: A credential a tool call carries and its tool says is never stored (``redact``).
+TOKEN = "tok-live-9f31c2a7"
+OTHER_TOKEN = "tok-live-0b77d4e1"
+
+
+def _signed(token: str = TOKEN) -> dict:
+    return {"quote": "Q-1", "price": 1200, "auth": {"scheme": "bearer", "token": token}}
+
+
+def _stored_feedback(app, running) -> str:
+    """Every feedback row's arguments as the database holds them (``metadata``, ``correction``)."""
+
+    async def read() -> str:
+        async with app.state.container.database.engine.begin() as conn:
+            rows = await conn.execute(text("SELECT metadata::text, correction::text FROM feedback"))
+            return "\n".join(f"{kept} {correction}" for kept, correction in rows)
+
+    return running.portal.call(read)
+
+
+@pytest.mark.covers("tools.record_invocation", "feedback.submit_feedback", "feedback.get_feedback")
+async def test_a_decision_keeps_a_calls_arguments_as_its_tool_redacts_them(app, running) -> None:
+    """SEC-R-10: a tool declares ``redact: ["auth.token"]``, so its recorded call keeps the
+    arguments without the token. A decision on that call sends the raw arguments (they must
+    hash as the recorded ones do); what the feedback row keeps, and what a read of it answers,
+    is the tool's redacted copy and the hash, never the token: approved, rejected or edited.
+    Later decisions are still matched by the hash of the whole value: one recorded call backs
+    one approval, a second call a second, and a call with another token is another call."""
+    _, harness = await _harness(app)
+    agent = harness.bind(user_id="u1").agent("quote-bot")
+    await agent.advanced.tools.put_catalog([CATALOG[0], {**CATALOG[1], "redact": ["auth.token"]}])
+    run = harness.bind(user_id="u1").agent("quote-bot", agent_run_id="run_signed")
+
+    async def decided(n: int, verdict: str, args: dict, **fields) -> Feedback:
+        sent = await run.feedback(
+            "tool_call",
+            f"call_signed_{n}",
+            verdict,
+            reviewer="user:lead0",
+            metadata={"tool": UPDATE, "args": args, "interrupt_id": f"int_signed_{n}"},
+            **fields,
+        )
+        return await run.feedback.get(sent.feedback_id)
+
+    recorded = await run.record_tool(UPDATE, _signed(), output={"ok": True}, task=TASK, step=0)
+    approved = await decided(1, "approve", _signed())
+    assert approved.projection is not None and approved.projection.action == "tool_call_counted"
+    assert approved.metadata["args"] == _signed("[redacted]")
+    assert approved.metadata["args_hash"] == recorded.args_hash
+
+    # one recorded call backs one approval; a second call of the same arguments a second
+    spent = await decided(2, "approve", _signed())
+    assert spent.projection is not None and spent.projection.action == "none"
+    await run.record_tool(UPDATE, _signed(), output={"ok": True}, task=TASK, step=1)
+    second = await decided(3, "approve", _signed())
+    assert second.projection is not None and second.projection.action == "tool_call_counted"
+    # the hash is of the whole value: the same call with another token was never recorded
+    other = await decided(4, "approve", _signed(OTHER_TOKEN))
+    assert other.projection is not None and other.projection.action == "none"
+    # a rejection and an edit (its replacement arguments) need no recorded call
+    rejected = await decided(5, "reject", _signed())
+    edited = await decided(6, "edit", _signed(), correction=_signed(OTHER_TOKEN))
+    assert edited.correction == edited.metadata["args"] == _signed("[redacted]")
+
+    answered = [approved, spent, second, other, rejected, edited]
+    said = "".join(f.model_dump_json() for f in answered) + _stored_feedback(app, running)
+    assert TOKEN not in said and OTHER_TOKEN not in said
+    assert said.count('"scheme"') >= len(answered)  # what the tool does not redact is kept
+
+
 def _flat(i: int) -> dict:
     return {"quote": f"Q-{i}", "price": 1200 + i}
 
@@ -340,7 +411,6 @@ async def test_an_agent_learns_a_skill_from_its_runs_and_is_offered_it(make_sett
     if not PG_AVAILABLE:
         pytest.skip("PostgreSQL not reachable")
     from fastapi.testclient import TestClient
-    from sqlalchemy import text
 
     from tests.e2e.conftest import TABLES
 
