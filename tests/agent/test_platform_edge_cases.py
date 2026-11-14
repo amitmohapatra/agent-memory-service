@@ -15,7 +15,7 @@ import pytest
 from memory_service.api.app import create_app
 from memory_service.config import constants
 from tests.agent.conftest import BOOTSTRAP, sdk
-from tests.conftest import PG_AVAILABLE, _test_overrides
+from tests.conftest import PG_AVAILABLE, _test_overrides, v1_routes
 from trellis.memory import MemoryError
 
 pytestmark = pytest.mark.e2e
@@ -621,3 +621,54 @@ async def test_a_tenant_holds_a_bounded_number_of_live_keys(app, running, monkey
     assert full.value.status == 409 and "live keys" in str(full.value)
     await admin.tenant.keys.revoke(a.key_id)
     assert (await admin.tenant.keys.issue("service", "c")).token, "room again after a revocation"
+
+
+def _administration_routes() -> list[tuple[str, str, str]]:
+    """``(method, path, role)`` for every route whose dependencies demand an administering
+    role, found by walking each route's dependency tree rather than by a list someone has
+    to keep: a route added later behind ``TenantAdminDep`` or ``PlatformDep`` is checked
+    here the day it is added."""
+    from typing import get_args
+
+    from memory_service.api.deps import PlatformDep, TenantAdminDep
+
+    platform = get_args(PlatformDep)[1].dependency
+    tenant_admin = get_args(TenantAdminDep)[1].dependency
+
+    def calls(dependant) -> set:
+        found = {dependant.call}
+        for sub in dependant.dependencies:
+            found |= calls(sub)
+        return found
+
+    routes = []
+    for method, path, route in v1_routes():
+        needed = calls(route.dependant)
+        role = "platform" if platform in needed else "admin" if tenant_admin in needed else None
+        if role is not None:
+            routes.append((method, path, role))
+    return routes
+
+
+async def test_every_administration_route_refuses_a_key_without_its_role(app, running) -> None:
+    """ADR 0021: a service key administers nothing, and a tenant admin is not the platform.
+    Checked on every route that asks for the role, before the route reads its body: each
+    answers ``403 AUTHORIZATION`` naming the role it needs."""
+    platform = sdk(app, BOOTSTRAP)
+    acme = await platform.admin.create_tenant("Acme", tenant_id="acme")
+    service = await sdk(app, acme.admin_key.token).tenant.keys.issue("service", "harness")
+    routes = _administration_routes()
+    assert {role for _, _, role in routes} == {"platform", "admin"}
+    assert len(routes) >= 20, routes  # the walk found the routes, not an empty app
+    for method, path, role in routes:
+        url = path
+        while "{" in url:
+            start = url.index("{")
+            url = url[:start] + "x1" + url[url.index("}", start) + 1 :]
+        refused = [service.token] + ([acme.admin_key.token] if role == "platform" else [])
+        for token in refused:
+            answer = running.request(method, url, headers=_admin_headers(token), json={})
+            assert answer.status_code == 403, (method, path, token[:6], answer.text)
+            problem = answer.json()
+            assert problem["code"] == "AUTHORIZATION", (method, path, problem)
+            assert role in problem["details"]["required_role"], (method, path, problem)

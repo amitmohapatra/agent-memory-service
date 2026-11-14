@@ -210,7 +210,10 @@ an id field, the entity is `identified_by` the id. That is how "Acme" becomes `s
 
 A verdict on a tool call (`POST /v1/feedback` with `target_kind: tool_call`, `metadata.tool` and,
 ideally, `metadata.args`; an `edit`'s correction stands in for the arguments) is counted per
-(agent, tool, argument shape). The shape is value-free: each argument with its kind, numbers by
+(agent, tool, argument shape). `metadata.args` is the call's arguments as they were, bounded as a
+recorded call's are (64 KiB serialised, any depth: a shell call's `{"commands": [...]}` or an
+object argument is fine); the rest of `metadata` keeps the custom-metadata bounds (32 keys in all,
+2 levels, 8 KiB). The shape is value-free: each argument with its kind, numbers by
 order of magnitude (`amount:num:1e4,supplier:str`). With at least 5 decisions, 95% approved
 suggests `auto_approve` and 50% or fewer `always_ask`. Nothing applies them on its own.
 

@@ -176,6 +176,24 @@ ADMIN_URL = os.environ.get(
 )
 
 
+def v1_routes() -> list[tuple[str, str, object]]:
+    """``(method, "/v1/...", APIRoute)`` for every public operation, from the routers the app
+    includes (``api.routers.v1.routers()``). Not ``app.routes``: FastAPI 0.141 nests included
+    routes behind a private ``_IncludedRouter``, so a walk of ``app.routes`` for ``APIRoute``
+    finds none and a check over it passes having checked nothing."""
+    from fastapi.routing import APIRoute
+
+    from memory_service.api.routers import v1
+
+    found = []
+    for router in v1.routers():
+        for route in router.routes:
+            assert isinstance(route, APIRoute), route
+            for method in sorted(route.methods - {"HEAD", "OPTIONS"}):
+                found.append((method, "/v1" + route.path, route))
+    return found
+
+
 def pg_reachable() -> bool:
     """Whether the *server* is up. The suite's own databases are created on demand."""
     import psycopg

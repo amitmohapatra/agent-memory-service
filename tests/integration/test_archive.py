@@ -205,3 +205,34 @@ def test_lifecycle_policy_from_settings(archive) -> None:
     archive.lifecycle = replace(archive.lifecycle, policy="explicit")
     rules = archive.lifecycle_policy()["lifecycle"]["rule"]
     assert [r["action"]["storageClass"] for r in rules] == ["NEARLINE", "COLDLINE", "ARCHIVE"]
+
+
+async def test_a_purged_message_is_read_back_only_from_a_segment_that_matches_it(
+    container, uow_factory, archive
+) -> None:
+    """The read path after a purge: the API fills a purged message's content from its
+    verified segment; a record whose hash no longer matches the canonical one is refused
+    as corrupt (``CORRUPT_SOURCE``) rather than served, and a message no segment holds is
+    not found. A message still in the hot store is answered from it."""
+    from memory_service.api.routers.v1.conversation import _hydrate
+    from memory_service.domain.errors import NotFound
+
+    thread = Thread(tenant_id=TENANT, owner_user_id="u1")
+    msgs = await _seed(uow_factory, thread, 3)
+    await archive.archive_thread(TENANT, thread.thread_id)
+    future = datetime.now(UTC) + timedelta(seconds=container.tuning.archive.purge_grace_seconds + 1)
+    assert await archive.purge_staged_payloads(now=future) == 3
+    async with uow_factory() as uow:
+        purged = await uow.messages.get(TENANT, msgs[1].message_id)
+    assert purged is not None and purged.archive_status is ArchiveStatus.PURGED
+
+    assert (await _hydrate(archive, purged)).content == msgs[1].content
+    with pytest.raises(CorruptSource):
+        await archive.load_message_content(
+            purged.model_copy(update={"content_hash": content_hash("something else")})
+        )
+    with pytest.raises(NotFound):
+        await archive.load_message_content(purged.model_copy(update={"sequence": 99}))
+    hot = purged.model_copy(update={"archive_status": ArchiveStatus.ARCHIVED, "content": "hot"})
+    assert await archive.load_message_content(hot) == "hot"
+    assert await _hydrate(archive, hot) is hot and await _hydrate(None, purged) is purged
