@@ -330,6 +330,7 @@ def build_context(
             tenant_id=tenant_id,
             workspace_id=workspace_id,
             user_id=user_id,
+            administers_tenant=holds_an_administrator_key(_principal(request)),
             thread_id=body.thread_id,
             session_id=body.session_id,
             turn_id=body.turn_id,
@@ -482,6 +483,16 @@ def acts_for_anyone(principal: ServicePrincipal) -> bool:
 def is_tenant_administrator(principal: ServicePrincipal) -> bool:
     """Whether the credential is a tenant's administrator (or the platform's)."""
     return _has_role(principal, (KeyRole.ADMIN, KeyRole.PLATFORM))
+
+
+def holds_an_administrator_key(principal: ServicePrincipal | None) -> bool:
+    """Whether the credential is an administrator's key the service issued (a tenant's
+    ``admin`` key, or the platform's): the tenant admin the memory rules name, whoever the
+    request acts for. A development key, which reaches every administration route, acts on
+    data as the principal it names and holds no more of their memories than that principal."""
+    return (
+        principal is not None and principal.mode == "api_key" and is_tenant_administrator(principal)
+    )
 
 
 def ensure_role(principal: ServicePrincipal, *roles: KeyRole) -> ServicePrincipal:

@@ -287,15 +287,6 @@ class SqlFeedbackRepository:
             )
         )
 
-    async def set_kept(
-        self, tenant_id: str, feedback_id: str, *, metadata: dict[str, Any], correction: Any
-    ) -> None:
-        await self.s.execute(
-            update(FeedbackRow)
-            .where(FeedbackRow.tenant_id == tenant_id, FeedbackRow.feedback_id == feedback_id)
-            .values(metadata_=metadata, correction=correction)
-        )
-
     async def set_review(self, tenant_id: str, feedback_id: str, review: FeedbackReview) -> None:
         await self.s.execute(
             update(FeedbackRow)

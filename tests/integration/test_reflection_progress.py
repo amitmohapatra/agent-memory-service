@@ -142,8 +142,16 @@ async def test_cross_thread_insight_is_recalled_and_hidden_after_source_deletion
     other = reader.model_copy(update={"user_id": "another-user"})
     result = await engine.retrieve(other, "Atlas Postgres Kubernetes", kinds=("memory",))
     assert not result.candidates
+    # the fact was read out of the user's words: the user forgets it (an agent may not
+    # unasked), a member of the workspace it was kept for
+    the_user = first.model_copy(update={"agent_id": None})
     async with uow_factory() as uow:
-        await container.services["memory"].forget(uow, first, original[0].memory_id)
+        await container.services["authz"].set_workspace_member(
+            U1.tenant_id, U1.workspace_id, f"user:{U1.user_id}", "member", revisions=uow.revisions
+        )
+        await uow.commit()
+    async with uow_factory() as uow:
+        await container.services["memory"].forget(uow, the_user, original[0].memory_id)
         await uow.commit()
     # Do not drain index removal: canonical validation must hide a stale derived hit.
     result = await engine.retrieve(reader, "Atlas Postgres Kubernetes", kinds=("memory",))

@@ -29,16 +29,21 @@ from memory_service.domain.memory import CanonicalMemory, TemporalState
 from memory_service.domain.observation import ProcessingHints
 from memory_service.domain.text import sanitise
 from memory_service.modules.authz.service import AuthorizationService
-from memory_service.modules.authz.visibility import validate_requested_visibility
+from memory_service.modules.authz.visibility import (
+    validate_requested_visibility,
+    visibility_keys,
+)
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.consolidation import CONSOLIDATION_USE, schedule_for
 from memory_service.modules.memory.native import default_visibility, normalized_hash
 from memory_service.modules.memory.pipeline import (
+    SAID_BY_USER,
     TASK_MEMORY_INDEX,
     authored_type,
     build_memory,
     keys_for,
     said_by_a_person,
+    states_in_person,
     supersede,
 )
 from memory_service.modules.memory.replacement import reinstate
@@ -156,6 +161,7 @@ class MemoryService:
             entities=list(dict.fromkeys(entities)),
             provider="statement",
             category=STATED_CATEGORY,
+            said_by_user=states_in_person(ctx),
         )
         memory = build_memory(candidate, ctx, now=now, fiscal=self.fiscal).model_copy(
             update={"memory_id": memory_id, "custom_metadata": custom_metadata or {}}
@@ -220,6 +226,7 @@ class MemoryService:
                 "entities": list(old.system_metadata.get("entities") or []),
                 "expires_at": old.system_metadata.get("expires_at"),
                 "supersede_reason": reason,
+                SAID_BY_USER: states_in_person(ctx),
             },
             custom_metadata=dict(old.custom_metadata),
             created_at=now,
@@ -335,7 +342,9 @@ class MemoryService:
         before: tuple[datetime, str] | None = None,
         limit: int = 100,
     ) -> list[CanonicalMemory]:
-        """Memories anchored to the caller's agent, user, thread, agent group or tenant,
+        """Memories anchored to the caller's agent, user, thread, agent group or tenant, and
+        what is held for the caller's user wherever it is anchored (a statement said in a
+        conversation is anchored in its thread, ADR 0036, with the user as its audience),
         newest created first. ``before`` is the (created_at, memory_id) keyset of the next
         page; the page holds ``limit`` *visible* rows, however many hidden rows lie between
         them, and a row written or reinforced during the walk is never skipped because the
@@ -403,12 +412,23 @@ class MemoryService:
         )
         spec = await self.authz.visibility(ctx, revisions=uow.revisions)
         scope_keys = [s.key() for s in anchors]
+        users = (
+            visibility_keys(
+                ctx.tenant_id,
+                Visibility.USER,
+                owner_principal=ctx.principal_id,
+                user_id=ctx.user_id,
+            )
+            if ctx.user_id
+            else []
+        )
         out: list[CanonicalMemory] = []
         batch = max(limit * 2, 50)
         while len(out) < limit:
             rows = await uow.memories.list_scope(
                 ctx.tenant_id,
                 scope_keys=scope_keys,
+                audience_keys=users,
                 memory_types=memory_types,
                 current_only=not include_superseded,
                 before=before,

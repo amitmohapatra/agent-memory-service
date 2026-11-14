@@ -366,13 +366,47 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **The user's inventory lists what they said in their conversations** (service, BUG-M3).
+  `GET /v1/memories` ("what do we hold about this user") listed the memories anchored at the
+  caller's agent, user, thread, group, workspace and tenant, and a statement said in a
+  conversation is anchored in its thread (ADR 0036), so without that thread the inventory
+  held none of the user's statements. It now also lists every memory whose audience is the
+  user (`user:<tenant>/<user>`), wherever it is anchored, in the same keyset (one statement a
+  page; migration `0037_memory_audience_index` adds a GIN index on the live rows'
+  `visibility_keys`, built concurrently). Another participant's statements in a shared
+  thread are not the user's and are not listed. No route or schema changed.
+- **An agent asks before retracting what was read out of the user's words** (service,
+  BUG-M1). A memory read out of a user's turn that a harness relayed (a preference, a fact)
+  is owned by the agent (`agent:<user>/<agent>`) and is no `said` turn, so `memory_forget`,
+  `memory_update` and supersede, forget and restore over HTTP let the agent change it
+  without asking the person. Every memory the pipeline or a statement writes now records
+  whether it is a person's own words (`system_metadata.said_by_user`: their message,
+  decision or feedback, relayed or not, or what a user states or restates directly), and an
+  agent is refused such a memory (`reason: users_own_statement`) as it is the turn itself.
+  What an agent noted or reported is unchanged. Migration `0036_said_by_user` marks the rows
+  stored before that were read out of a user's message (role `USER`, `VISIBLE`); a row read
+  out of a decision or feedback before this version keeps no message to tell from and stays
+  as it was. No route or schema changed.
+- **The tenant's admin key may forget, update and restore any memory of its tenant**
+  (service, authorization). The docs give these to "its owner, the user an agent acts for, or
+  a tenant admin", and the admin key is the tenant admin's credential (docs/api/feedback.md),
+  but the decision read only an authorization tuple of the principal the key acted as: the
+  key could forget what that principal owned and nothing else, so a memory a teammate or an
+  agent wrote could not be erased with it. `AuthorizationService.is_tenant_admin` now also
+  answers yes for a request sent with the tenant's `admin` key (or the platform key); a
+  context stored for later work never carries that authority, and an error from the
+  authorization store still refuses. Another tenant's key is refused as before. No route or
+  schema changed.
 - **A decision on a tool call no longer keeps the arguments its tool redacts** (service,
   security: SEC-R-10). A recorded call keeps its arguments without the tool's `redact` paths, but the
   approval, rejection or edit of such a call stored the raw arguments it was sent
   (`metadata.args`, up to 64 KiB; an edit's `correction` too) and answered them in every read
-  of the record. Once a decision is projected, the record keeps the arguments as the tool
-  redacts them and `metadata.args_hash`, the hash of the arguments as sent; decisions are
-  matched to recorded calls, and to each other, by that hash. No route or schema changed.
+  of the record, the `POST` that carried them included. The record is stored, from the
+  `POST` on, with the arguments as the tool's catalog entry redacts them and
+  `metadata.args_hash`, the hash of the arguments as sent (one that the client sends is not
+  kept); decisions are matched to recorded calls, and to each other, by that hash. A
+  decision stored before this version keeps what it was stored with, and is matched by the
+  hash of its stored arguments as before. No route or schema changed.
 - **A length of time is no date** (service). "SUP-20's lead time is 32 days, from my call
   today" was stored with "32 days = 2026-10-01" beside it: with a relative cue in the text
   ("today"), the relative-time parser read a bare count of a unit as that long ago, and an

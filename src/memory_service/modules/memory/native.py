@@ -648,9 +648,13 @@ class NativeMemoryIntelligence:
         self, observation: Observation, ctx: MemoryExecutionContext
     ) -> list[MemoryCandidate]:
         candidates = await self._extract(observation, ctx)
-        if not follows_user(observation):
+        origin = {
+            "follows_user": follows_user(observation),
+            "said_by_user": said_by_user(observation),
+        }
+        if not any(origin.values()):
             return candidates
-        return [c.model_copy(update={"follows_user": True}) for c in candidates]
+        return [c.model_copy(update=origin) for c in candidates]
 
     async def _extract(
         self, observation: Observation, ctx: MemoryExecutionContext

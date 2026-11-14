@@ -325,10 +325,13 @@ sequenceDiagram
 | on demand, mid-run | `POST /v1/tools/hints` | `task`, `available` (the run's tool names) | the `tool_search` memory tool |
 
 Arguments are redacted per the catalog entry's `redact` list before they are stored. The same
-holds for a decision on a call: once it is projected, the feedback record keeps
-`metadata.args` (and an edit's replacement arguments, `correction`) as the tool redacts them,
-with `metadata.args_hash`, the one-way hash of the arguments as sent, which a recorded call
-carries too and later decisions are matched by.
+holds for a decision on a call: the feedback record is stored, and answered from the
+`POST` on, with `metadata.args` (and an edit's replacement arguments, `correction`) as the
+tool redacts them, and `metadata.args_hash`, the one-way hash of the arguments as sent, which
+a recorded call carries too and decisions are matched by (an `args_hash` the client sends is
+not kept). The paths are the tool's catalog entry, so a decision sent before its call is
+recorded is redacted all the same; a tool the catalog does not hold declared nothing to
+redact, and its arguments are kept as its recorded call keeps them.
 
 ### What comes back
 
