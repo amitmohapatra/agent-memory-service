@@ -203,5 +203,5 @@ def test_every_operation_with_a_deadline_documents_its_504(client: TestClient) -
             "TIMEOUT",
             True,
         ), where
-        assert example["detail"] == details[kind], where
+        assert (example["detail"], example["instance"]) == (details[kind], path), where
     assert covered == 69  # every operation but the upload, the two probes and the scrape

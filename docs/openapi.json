@@ -48165,7 +48165,7 @@
                   "code": "TIMEOUT",
                   "detail": "The request exceeded its 5 s read deadline",
                   "details": {},
-                  "instance": "/v1/recall",
+                  "instance": "/version",
                   "request_id": "req_01J8ZZZZZZZZZZZZZZZZZZZZZZ",
                   "retryable": true,
                   "status": 504,

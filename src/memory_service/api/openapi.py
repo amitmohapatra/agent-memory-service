@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from fastapi.routing import APIRoute
 
-from memory_service.api.deadline import RouteClass, budgets, route_class, timeout_detail
+from memory_service.api.deadline import budgets, route_class, timeout_detail
 from memory_service.api.errors import PROBLEM_MEDIA_TYPE, Problem, error_responses
 from memory_service.api.headers import (
     CACHE_CONTROL_HEADER,
@@ -255,9 +255,6 @@ def _document_responses(path: str, method: str, op: dict[str, Any]) -> None:
     responses = op.setdefault("responses", {})
     for status in EDGE_STATUSES:
         responses.setdefault(str(status), error_responses(status)[status])
-    deadline = route_class(method.upper(), path)
-    if deadline is not None:
-        responses.setdefault("504", _timeout_response(deadline))
     headers = list(RESPONSE_HEADERS)
     if takes_idempotency_key(method, op):
         headers += list(WRITE_RESPONSE_HEADERS)
@@ -277,10 +274,14 @@ def _document_responses(path: str, method: str, op: dict[str, Any]) -> None:
                 example["instance"] = path
 
 
-def _timeout_response(kind: RouteClass) -> dict[str, Any]:
-    """The ``504 TIMEOUT`` the deadline middleware (``api/deadline.py``) answers when an
-    operation runs past its route class's budget: retryable, with ``Retry-After``, its detail
-    the middleware's own (the budget is the default's: ``OVERLOAD``)."""
+def _document_timeout(path: str, method: str, op: dict[str, Any]) -> None:
+    """Attach the ``504 TIMEOUT`` the deadline middleware (``api/deadline.py``) answers when
+    the operation runs past its route class's budget, to every operation that has one:
+    retryable, with ``Retry-After``, its detail the middleware's own (the budget is the
+    default's: ``OVERLOAD``)."""
+    kind = route_class(method.upper(), path)
+    if kind is None:
+        return
     detail = timeout_detail(kind, budgets(OVERLOAD)[kind])
     response = error_responses(504)[504]
     response["description"] = (
@@ -289,8 +290,9 @@ def _timeout_response(kind: RouteClass) -> dict[str, Any]:
         if kind == "write"
         else f"{detail}; retry after Retry-After"
     )
-    response["content"][PROBLEM_MEDIA_TYPE]["example"]["detail"] = detail
-    return response
+    response["headers"] = _response_header_refs([RETRY_AFTER_HEADER])
+    response["content"][PROBLEM_MEDIA_TYPE]["example"].update(detail=detail, instance=path)
+    op.setdefault("responses", {}).setdefault("504", response)
 
 
 def takes_idempotency_key(method: str, op: dict[str, Any]) -> bool:
@@ -405,14 +407,10 @@ def custom_openapi(app: FastAPI, *, version: str) -> dict[str, Any]:
         for method, op in methods.items():
             if method not in ("get", "post", "put", "patch", "delete"):
                 continue
+            _document_timeout(path, method, op)
             if path.startswith(OPS_PREFIXES):
                 # the probes and the scrape answer before any key exists
                 op["security"] = []
-                kind = route_class(method.upper(), path)
-                if kind is not None:  # ``/version`` is a read with a deadline like any other
-                    timeout = _timeout_response(kind)
-                    timeout["headers"] = _response_header_refs([RETRY_AFTER_HEADER])
-                    op.setdefault("responses", {}).setdefault("504", timeout)
                 continue
             params = op.setdefault("parameters", [])
             existing = {p.get("name") for p in params}
