@@ -274,12 +274,14 @@ def register_handlers(container: Container) -> None:
         async with uow_factory() as uow:
             memories = await uow.memories.get_many(tenant_id, memory_ids)
             await bump_memory_revisions(uow, memories)
-            # what the user said about themselves keeps their pinned profile block current
-            for user_id in sorted(
-                {m.scope.user_id for m in memories if m.memory_type in PROFILE_MEMORY_TYPES}
-                - {None}
-            ):
-                await ProfileService.enqueue_refresh(uow, tenant_id, str(user_id))
+            # what the user said about themselves keeps their pinned profile block current:
+            # written, replaced, archived, restored or forgotten (the block is rebuilt from
+            # what is left, so a forgotten memory's line goes with it)
+            users = await uow.memories.scope_users(
+                tenant_id, memory_ids, memory_types=[t.value for t in PROFILE_MEMORY_TYPES]
+            )
+            for user_id in sorted(users):
+                await ProfileService.enqueue_refresh(uow, tenant_id, user_id)
             # A deletion is absent from get_many. Invalidate after index removal too:
             # a read between the SQL commit and this job could cache the stale index.
             if len(memories) < len(set(memory_ids)):

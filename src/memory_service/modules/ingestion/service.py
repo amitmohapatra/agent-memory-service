@@ -35,6 +35,7 @@ from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import visibility_keys
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.ingestion.chunking import chunk_nodes, situate_chunks
+from memory_service.modules.jobs.names import TASK_DOCUMENT_INDEX
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import document_identity
 from memory_service.modules.tenancy.gate import require_workspace_member
@@ -50,7 +51,6 @@ from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 log = get_logger(__name__)
 
 TASK_DOCUMENT_PARSE = "document.parse"
-TASK_DOCUMENT_INDEX = "document.index"
 
 
 @dataclass(frozen=True)

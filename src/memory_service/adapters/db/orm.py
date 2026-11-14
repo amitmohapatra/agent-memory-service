@@ -203,7 +203,15 @@ class MessageAttachmentRow(Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     checksum: Mapped[str] = mapped_column(String(64), nullable=False)
 
-    __table_args__ = (Index("ix_message_attachments_message", "message_id"),)
+    __table_args__ = (
+        Index("ix_message_attachments_message", "message_id"),
+        # whether another thread still attaches a document (``release_thread``, migration 0038)
+        Index(
+            "ix_message_attachments_document",
+            "document_id",
+            postgresql_where=text("document_id IS NOT NULL"),
+        ),
+    )
 
 
 class AgentRunRow(Base):

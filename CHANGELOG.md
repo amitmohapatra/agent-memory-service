@@ -366,6 +366,24 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **A profile line goes with the memory it was learned from** (service). The pinned `user`
+  block is composed from the user's USER and PREFERENCE memories, but forgetting one left its
+  line: the index job queued `profile.refresh` only for memories it could still read (a
+  forgotten one is not), and a user with none left kept the block. The job now queues the
+  refresh for every user whose profile memory changed, forgotten included
+  (`MemoryRepository.scope_users`), and a learned block with nothing left is emptied. An
+  edited block keeps its text. No route or schema changed.
+- **A deleted thread's documents and messages are read by nothing** (service). `DELETE
+  /v1/threads/{id}` marked the thread deleted and left its messages live and its documents
+  readable: a document attached in the deleted thread still answered `/v1/context`, search
+  and `GET /v1/documents/{id}`. The deletion now marks the thread's messages deleted (soft,
+  as the thread: the rows stay for the archive and the audit) and the documents only it held
+  (uploaded into it or attached in it, with no audience wider than the thread and no live
+  message of another live thread attaching them), and the document index job takes their
+  chunks out of the index. A document another live thread attaches stays until the last such
+  thread goes. Also: a message carrying attachments failed with a foreign-key error (the
+  attachment rows were written before the message). Migration
+  `0038_attachment_document_index`. No route or schema changed.
 - **The user's inventory lists what they said in their conversations** (service, BUG-M3).
   `GET /v1/memories` ("what do we hold about this user") listed the memories anchored at the
   caller's agent, user, thread, group, workspace and tenant, and a statement said in a
@@ -404,9 +422,12 @@ each entry says which one moved. Decisions behind each change are in the
   of the record, the `POST` that carried them included. The record is stored, from the
   `POST` on, with the arguments as the tool's catalog entry redacts them and
   `metadata.args_hash`, the hash of the arguments as sent (one that the client sends is not
-  kept); decisions are matched to recorded calls, and to each other, by that hash. A
-  decision stored before this version keeps what it was stored with, and is matched by the
-  hash of its stored arguments as before. No route or schema changed.
+  kept); decisions are matched to recorded calls, and to each other, by that hash. Migration
+  `0039_redact_stored_decisions` rewrites the decisions stored before the same way, in
+  batches and idempotently: the hash of the stored arguments replaces any the client sent,
+  and the arguments are redacted where the tool's catalog entry is known (a decision on a
+  tool the catalog does not hold keeps its arguments, counted in the migration's log). No
+  route or schema changed.
 - **A length of time is no date** (service). "SUP-20's lead time is 32 days, from my call
   today" was stored with "32 days = 2026-10-01" beside it: with a relative cue in the text
   ("today"), the relative-time parser read a bare count of a unit as that long ago, and an

@@ -105,6 +105,10 @@ class TurnRepository(Protocol):
 class MessageRepository(Protocol):
     async def add(self, message: Message) -> None: ...
     async def get(self, tenant_id: str, message_id: str) -> Message | None: ...
+    async def delete_thread(self, tenant_id: str, thread_id: str) -> int:
+        """Mark every message of the thread deleted; how many were live."""
+        ...
+
     async def next_sequence(self, tenant_id: str, thread_id: str) -> int: ...
     async def list_thread(
         self,
@@ -255,6 +259,15 @@ class DocumentRepository(Protocol):
     ) -> None: ...
     async def any_in_workspace(self, tenant_id: str, workspace_id: str) -> bool: ...
     async def get(self, tenant_id: str, document_id: str) -> Document | None: ...
+    async def release_thread(
+        self, tenant_id: str, thread_id: str
+    ) -> list[tuple[Document, list[str]]]:
+        """Mark deleted the live documents ``thread_id`` held - attached in it, or uploaded
+        into it - that nothing else holds now: no wider audience than a thread (a ``user:``,
+        ``workspace:`` or ``tenant:`` key), no live thread of their own, no live message of
+        another live thread attaching them. Returns them, with their audience."""
+        ...
+
     async def find_by_checksum(self, tenant_id: str, checksum: str) -> Document | None: ...
     async def set_status(
         self,
@@ -430,6 +443,13 @@ class MemoryRepository(Protocol):
     async def get_many(
         self, tenant_id: str, memory_ids: Sequence[str]
     ) -> list[CanonicalMemory]: ...
+    async def scope_users(
+        self, tenant_id: str, memory_ids: Sequence[str], *, memory_types: Sequence[str]
+    ) -> set[str]:
+        """The users whose scope anchors one of ``memory_ids`` of ``memory_types``, forgotten
+        or not: whose derived data (the profile) a change of those memories touches."""
+        ...
+
     async def visibility_keys(self, tenant_id: str, memory_id: str) -> list[str]: ...
     async def update(self, memory: CanonicalMemory) -> None:
         """Persist content/temporal/evidence/counter changes; bumps ``revision``."""

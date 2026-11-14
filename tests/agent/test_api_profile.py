@@ -67,3 +67,33 @@ async def test_a_thread_gains_a_durable_summary_every_twenty_messages(app, runni
     assert summary is not None and summary.covers_to_sequence == 20
     assert summary.version == 1 and summary.model == "extractive"
     assert summary.text.startswith("user: Turn 0: about the paper order.")
+
+
+def _user_block(blocks) -> str:
+    return next((b.text for b in blocks if b.block == "user"), "")
+
+
+@pytest.mark.covers("profile.get_profile", "memory.forget_memory")
+async def test_a_profile_line_goes_with_the_memory_it_was_learned_from(app, running) -> None:
+    """Derived data follows its source: the pinned ``user`` block is composed from the
+    user's USER and PREFERENCE memories, and forgetting one left its line in the block (no
+    refresh was queued for a forgotten memory, and a user with none left kept the block). A
+    line another memory still holds stays. (A forgotten memory cannot be restored, and a
+    user's stated preference is protected from archiving, so no restore applies here.)"""
+    _, harness = await _tenant(app)
+    user = harness.bind(user_id="u1")
+    seats = await user.remember("I prefer window seats.", memory_type="PREFERENCE")
+    tea = await user.remember("I prefer green tea.", memory_type="PREFERENCE")
+    container = app.state.container
+    running.portal.call(container.tasks.drain)
+    assert "window seats" in _user_block(await user.profile())
+
+    await user.forget(seats.memory_id)
+    running.portal.call(container.tasks.drain)
+    held = _user_block(await user.profile())
+    assert "window seats" not in held and "green tea" in held
+    assert "window seats" not in (await user.context("seat preference")).rendered
+
+    await user.forget(tea.memory_id)  # the last one: nothing of theirs is left to learn from
+    running.portal.call(container.tasks.drain)
+    assert _user_block(await user.profile()) == ""
