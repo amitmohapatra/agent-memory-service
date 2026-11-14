@@ -96,9 +96,7 @@ async def test_the_agents_own_note_still_does_not_become_the_users_memory(
     )
 
 
-async def test_the_user_may_forget_what_an_agent_relayed_for_them(
-    container, uow_factory
-) -> None:
+async def test_the_user_may_forget_what_an_agent_relayed_for_them(container, uow_factory) -> None:
     """``forget`` is allowed to "the user an agent acts for" (its docstring, USAGE §4): what a
     harness relays for the user is owned by ``agent:<user>/<agent>``, and the user themselves
     was refused ("only the owner (or a tenant admin)"), so nobody but the agent could retract
