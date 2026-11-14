@@ -84,13 +84,17 @@ class _Service:
 class _Uow:
     def __init__(self, memories: list[CanonicalMemory] | None = None) -> None:
         self.stored = {m.memory_id: m for m in memories or []}
+        #: rows forgotten: absent from reads of live memories, still in the table
+        self.forgotten: dict[str, CanonicalMemory] = {}
         self.expired: list[tuple[str, str]] = []
         self.calls: list[tuple[str, Any]] = []
         self.jobs: list[JobSpec] = []
         self.bumped: list[tuple[str, RevisionKind, str]] = []
         self.commits = 0
         self.observations = SimpleNamespace(mark_processed=self._mark_processed)
-        self.memories = SimpleNamespace(get_many=self._get_many, expire_due=self._expire_due)
+        self.memories = SimpleNamespace(
+            get_many=self._get_many, expire_due=self._expire_due, scope_users=self._scope_users
+        )
         self.revisions = SimpleNamespace(bump=self._bump)
         self.idempotency = SimpleNamespace(purge_expired=self._purge_expired)
         self.outbox = SimpleNamespace(purge_dispatched=self._purge_dispatched)
@@ -108,6 +112,18 @@ class _Uow:
     async def _get_many(self, tenant_id: str, ids: list[str]) -> list[CanonicalMemory]:
         self.calls.append(("get_many", (tenant_id, list(ids))))
         return [self.stored[i] for i in dict.fromkeys(ids) if i in self.stored]
+
+    async def _scope_users(
+        self, tenant_id: str, ids: list[str], *, memory_types: list[str]
+    ) -> set[str]:
+        rows = {**self.forgotten, **self.stored}
+        return {
+            m.scope.user_id
+            for i in ids
+            if (m := rows.get(i)) is not None
+            and m.memory_type.value in memory_types
+            and m.scope.user_id
+        }
 
     async def _expire_due(self, *, now: datetime) -> list[tuple[str, str]]:
         self.calls.append(("expire_due", now))
@@ -395,6 +411,16 @@ async def test_a_deleted_memory_in_the_batch_moves_the_tenant_revision() -> None
     )
     assert ("acme", RevisionKind.TENANT, "") in uow.bumped
     assert [j.payload["user_id"] for j in uow.jobs] == ["u1"]
+
+
+async def test_a_forgotten_profile_memory_refreshes_its_users_profile() -> None:
+    """A forgotten memory is not read back, but its user's block is rebuilt without it."""
+    uow = _Uow()
+    uow.forgotten["mem_9"] = _memory("mem_9", MemoryType.PREFERENCE)
+    queue, _, _ = _wire(uow=uow)
+    await queue.handlers[TASK_MEMORY_INDEX]({"tenant_id": "acme", "memory_ids": ["mem_9"]})
+    assert [(j.task_name, j.payload["user_id"]) for j in uow.jobs] == [(TASK_PROFILE_REFRESH, "u1")]
+    assert ("acme", RevisionKind.TENANT, "") in uow.bumped
 
 
 async def test_a_memory_with_no_user_refreshes_no_profile() -> None:
