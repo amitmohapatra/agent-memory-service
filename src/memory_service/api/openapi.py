@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from fastapi.routing import APIRoute
 
-from memory_service.api.deadline import RouteClass, route_class
+from memory_service.api.deadline import RouteClass, budgets, route_class, timeout_detail
 from memory_service.api.errors import PROBLEM_MEDIA_TYPE, Problem, error_responses
 from memory_service.api.headers import (
     CACHE_CONTROL_HEADER,
@@ -281,12 +281,7 @@ def _timeout_response(kind: RouteClass) -> dict[str, Any]:
     """The ``504 TIMEOUT`` the deadline middleware (``api/deadline.py``) answers when an
     operation runs past its route class's budget: retryable, with ``Retry-After``, its detail
     the middleware's own (the budget is the default's: ``OVERLOAD``)."""
-    budget = {
-        "read": OVERLOAD.read_deadline_seconds,
-        "write": OVERLOAD.write_deadline_seconds,
-        "verify": OVERLOAD.verify_deadline_seconds,
-    }[kind]
-    detail = f"The request exceeded its {budget:g} s {kind} deadline"
+    detail = timeout_detail(kind, budgets(OVERLOAD)[kind])
     response = error_responses(504)[504]
     response["description"] = (
         f"{detail}: nothing is promised about a write it interrupted, so retry it with the "
