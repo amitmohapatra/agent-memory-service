@@ -335,6 +335,47 @@ async def test_a_decision_keeps_a_calls_arguments_as_its_tool_redacts_them(app, 
     assert said.count('"scheme"') >= len(answered)  # what the tool does not redact is kept
 
 
+@pytest.mark.covers("tools.record_invocation", "feedback.submit_feedback")
+async def test_a_decision_never_stores_or_answers_what_its_tool_redacts(app, running) -> None:
+    """SEC-R-10, at intake. An approval sent before the run recorded the call (the decision
+    arrives as the run resumes) is projected only once the call is recorded, and an edit's
+    replacement arguments are never projected away: the row held the raw token from the POST
+    until projection, and the POST answered it. Read straight after each POST, the row and
+    the answer hold the tool's redacted copy and the hash of what was sent."""
+    _, harness = await _harness(app)
+    agent = harness.bind(user_id="u1").agent("quote-bot")
+    await agent.advanced.tools.put_catalog([CATALOG[0], {**CATALOG[1], "redact": ["auth.token"]}])
+    run = harness.bind(user_id="u1").agent("quote-bot", agent_run_id="run_early")
+
+    early = await run.feedback(
+        "tool_call",
+        "call_early",
+        "approve",
+        reviewer="user:lead0",
+        metadata={"tool": UPDATE, "args": _signed(), "interrupt_id": "int_early"},
+    )
+    assert early.projection is None, "the call is not recorded yet: the approval waits"
+    edit = await run.feedback(
+        "tool_call",
+        "call_edit",
+        "edit",
+        reviewer="user:lead0",
+        metadata={"tool": UPDATE, "args": _signed(), "interrupt_id": "int_edit"},
+        correction=_signed(OTHER_TOKEN),
+    )
+    stored = _stored_feedback(app, running)
+    answered = early.model_dump_json() + edit.model_dump_json()
+    for said in (stored, answered):
+        assert TOKEN not in said and OTHER_TOKEN not in said
+        assert said.count('"scheme"') >= 2  # what the tool does not redact is kept
+    assert early.metadata["args"] == _signed("[redacted]")
+    assert edit.correction == _signed("[redacted]")
+
+    # the waiting approval still spends the call the run then records
+    recorded = await run.record_tool(UPDATE, _signed(), output={"ok": True}, task=TASK, step=0)
+    assert early.metadata["args_hash"] == recorded.args_hash
+
+
 def _flat(i: int) -> dict:
     return {"quote": f"Q-{i}", "price": 1200 + i}
 
