@@ -427,7 +427,12 @@ class GapFill:
 
 
 def candidate(
-    fill: Fill, *, speaker: str, evidence: list[EvidenceRef], follows_user: bool = False
+    fill: Fill,
+    *,
+    speaker: str,
+    evidence: list[EvidenceRef],
+    follows_user: bool = False,
+    said_by_user: bool = False,
 ) -> MemoryCandidate:
     """The memory a checked op writes: the model's words, kept apart from what was said
     (``provider="llm"``: never reinforcing or replacing an asserted source)."""
@@ -451,6 +456,7 @@ def candidate(
         category="source_fact",
         provider="llm",
         follows_user=follows_user,
+        said_by_user=said_by_user,
     )
 
 

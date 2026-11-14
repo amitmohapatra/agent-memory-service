@@ -244,6 +244,7 @@ def build_memory(
             "provider_ref": candidate.provider_ref,
             "expires_at": expires.isoformat() if expires else None,
             "dated_mentions": dated,
+            SAID_BY_USER: candidate.said_by_user,
             **statement_metadata(candidate),
             # the user's own setup, and the workspace it was said in (``context.standing``)
             **(
@@ -355,14 +356,28 @@ def authored_type(memory_type: MemoryType, *, by_agent: bool) -> MemoryType:
     return MemoryType.AGENT if by_agent and memory_type in LASTING_TYPES else memory_type
 
 
+#: ``system_metadata`` key: the memory is a person's own words, or was read out of them
+#: (``MemoryCandidate.said_by_user``), whoever wrote the row
+SAID_BY_USER: Final = "said_by_user"
+
+
+def states_in_person(ctx: MemoryExecutionContext) -> bool:
+    """Whether what ``ctx`` writes directly (a memory it states, a new version) is a person's
+    own words: a user, with no agent acting for them."""
+    return ctx.user_id is not None and not ctx.is_agent
+
+
 def said_by_a_person(memory: CanonicalMemory) -> bool:
-    """Whether ``memory`` is what a person said: written by them (a ``user:`` owner), or their
-    words kept as said (a ``said`` turn of a ``user:`` subject, which a harness may relay).
+    """Whether ``memory`` is what a person said: written by them (a ``user:`` owner), their
+    words kept as said (a ``said`` turn of a ``user:`` subject, which a harness may relay), or
+    read out of their words (``SAID_BY_USER``: a harness relaying the turn owns the reading).
     Only that person restates or retracts it; an agent acting for them adds a note of its own
     (``authored_type``'s rule, for rewriting): a run's ``memory_update`` replaced "I raised
     PO-77812 for 2,000 corrugated boxes" with "12 times 7 = 84", kept as what the user said."""
-    return memory.owner_principal.startswith("user:") or (
-        memory.predicate == "said" and (memory.subject or "").startswith("user:")
+    return (
+        memory.owner_principal.startswith("user:")
+        or (memory.predicate == "said" and (memory.subject or "").startswith("user:"))
+        or bool(memory.system_metadata.get(SAID_BY_USER))
     )
 
 
@@ -602,6 +617,7 @@ class ObservationPipeline:
                         speaker=turn.subject or speaker,
                         evidence=turn.evidence,
                         follows_user=turn.follows_user,
+                        said_by_user=turn.said_by_user,
                     ),
                     f.target,
                 )

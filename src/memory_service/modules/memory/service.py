@@ -34,11 +34,13 @@ from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.consolidation import CONSOLIDATION_USE, schedule_for
 from memory_service.modules.memory.native import default_visibility, normalized_hash
 from memory_service.modules.memory.pipeline import (
+    SAID_BY_USER,
     TASK_MEMORY_INDEX,
     authored_type,
     build_memory,
     keys_for,
     said_by_a_person,
+    states_in_person,
     supersede,
 )
 from memory_service.modules.memory.replacement import reinstate
@@ -156,6 +158,7 @@ class MemoryService:
             entities=list(dict.fromkeys(entities)),
             provider="statement",
             category=STATED_CATEGORY,
+            said_by_user=states_in_person(ctx),
         )
         memory = build_memory(candidate, ctx, now=now, fiscal=self.fiscal).model_copy(
             update={"memory_id": memory_id, "custom_metadata": custom_metadata or {}}
@@ -220,6 +223,7 @@ class MemoryService:
                 "entities": list(old.system_metadata.get("entities") or []),
                 "expires_at": old.system_metadata.get("expires_at"),
                 "supersede_reason": reason,
+                SAID_BY_USER: states_in_person(ctx),
             },
             custom_metadata=dict(old.custom_metadata),
             created_at=now,

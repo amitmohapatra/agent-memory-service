@@ -366,6 +366,18 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **An agent asks before retracting what was read out of the user's words** (service,
+  BUG-M1). A memory read out of a user's turn that a harness relayed (a preference, a fact)
+  is owned by the agent (`agent:<user>/<agent>`) and is no `said` turn, so `memory_forget`,
+  `memory_update` and supersede, forget and restore over HTTP let the agent change it
+  without asking the person. Every memory the pipeline or a statement writes now records
+  whether it is a person's own words (`system_metadata.said_by_user`: their message,
+  decision or feedback, relayed or not, or what a user states or restates directly), and an
+  agent is refused such a memory (`reason: users_own_statement`) as it is the turn itself.
+  What an agent noted or reported is unchanged. Migration `0036_said_by_user` marks the rows
+  stored before that were read out of a user's message (role `USER`, `VISIBLE`); a row read
+  out of a decision or feedback before this version keeps no message to tell from and stays
+  as it was. No route or schema changed.
 - **The tenant's admin key may forget, update and restore any memory of its tenant**
   (service, authorization). The docs give these to "its owner, the user an agent acts for, or
   a tenant admin", and the admin key is the tenant admin's credential (docs/api/feedback.md),
