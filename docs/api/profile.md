@@ -26,10 +26,13 @@ revision the pushed context depends on, so a cached bundle with the old text is 
 (`old` is no longer in the text) answers 409, and the agent reads the block again.
 
 The service keeps the **`user`** block from the user's own USER and PREFERENCE memories (the
-`profile.refresh` job, queued whenever one is indexed): with the tenant's model (use
-`summaries`) it writes a concise profile, one `name: value` line per fact; without one, a line
-per memory. Once a person or an agent has edited the block, the job only appends facts learned
-after the edit, so an edit is never lost or undone. `name: value` lines are also what tool
+`profile.refresh` job, queued whenever one is written, replaced, archived, restored or
+forgotten): with the tenant's model (use `summaries`) it writes a concise profile, one
+`name: value` line per fact; without one, a line per memory. It is composed from the memories
+held now, so a forgotten memory's line leaves with the next refresh, and a user with none left
+gets an empty block. Once a person or an agent has edited the block, the job only appends facts
+learned after the edit, so an edit is never lost or undone (and a line appended from a memory
+since forgotten stays: an edited block is the editor's text). `name: value` lines are also what tool
 hints fill an argument of the same name from.
 
 ## Thread summaries

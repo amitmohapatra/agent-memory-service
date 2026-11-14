@@ -443,6 +443,13 @@ class MemoryRepository(Protocol):
     async def get_many(
         self, tenant_id: str, memory_ids: Sequence[str]
     ) -> list[CanonicalMemory]: ...
+    async def scope_users(
+        self, tenant_id: str, memory_ids: Sequence[str], *, memory_types: Sequence[str]
+    ) -> set[str]:
+        """The users whose scope anchors one of ``memory_ids`` of ``memory_types``, forgotten
+        or not: whose derived data (the profile) a change of those memories touches."""
+        ...
+
     async def visibility_keys(self, tenant_id: str, memory_id: str) -> list[str]: ...
     async def update(self, memory: CanonicalMemory) -> None:
         """Persist content/temporal/evidence/counter changes; bumps ``revision``."""

@@ -312,6 +312,23 @@ class SqlMemoryRepository:
         by_id = {r.memory_id: _to_domain(r) for r in rows if not _invalid_derived(r)}
         return [by_id[i] for i in memory_ids if i in by_id]
 
+    async def scope_users(
+        self, tenant_id: str, memory_ids: Sequence[str], *, memory_types: Sequence[str]
+    ) -> set[str]:
+        if not memory_ids:
+            return set()
+        users = await self.s.scalars(
+            select(MemoryRow.user_id)
+            .where(
+                MemoryRow.tenant_id == tenant_id,
+                MemoryRow.memory_id.in_(list(memory_ids)),
+                MemoryRow.memory_type.in_(list(memory_types)),
+                MemoryRow.user_id.is_not(None),
+            )
+            .distinct()
+        )
+        return {str(u) for u in users.all()}
+
     async def visibility_keys(self, tenant_id: str, memory_id: str) -> list[str]:
         r = await self.s.get(MemoryRow, memory_id)
         if r is None or r.tenant_id != tenant_id or r.deleted_at is not None:

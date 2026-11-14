@@ -366,6 +366,13 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **A profile line goes with the memory it was learned from** (service). The pinned `user`
+  block is composed from the user's USER and PREFERENCE memories, but forgetting one left its
+  line: the index job queued `profile.refresh` only for memories it could still read (a
+  forgotten one is not), and a user with none left kept the block. The job now queues the
+  refresh for every user whose profile memory changed, forgotten included
+  (`MemoryRepository.scope_users`), and a learned block with nothing left is emptied. An
+  edited block keeps its text. No route or schema changed.
 - **A deleted thread's documents and messages are read by nothing** (service). `DELETE
   /v1/threads/{id}` marked the thread deleted and left its messages live and its documents
   readable: a document attached in the deleted thread still answered `/v1/context`, search
