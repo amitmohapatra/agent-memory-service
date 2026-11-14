@@ -94,3 +94,40 @@ async def test_the_agents_own_note_still_does_not_become_the_users_memory(
     assert not any("summarise before planning" in t for t in texts), (
         f"the agent's own note leaked into the user's memory; retrieved {texts}"
     )
+
+
+async def test_the_user_may_forget_what_an_agent_relayed_for_them(
+    container, uow_factory
+) -> None:
+    """``forget`` is allowed to "the user an agent acts for" (its docstring, USAGE §4): what a
+    harness relays for the user is owned by ``agent:<user>/<agent>``, and the user themselves
+    was refused ("only the owner (or a tenant admin)"), so nobody but the agent could retract
+    the user's own words."""
+    ctx = _ctx(agent_id="plansmart", agent_run_id=new_id("agent_run"))
+    await _say(container, uow_factory, ctx, PREFERENCE, role=MessageRole.USER)
+    plain = ctx.model_copy(update={"agent_id": None, "agent_run_id": None})
+    service = container.services["memory"]
+    async with uow_factory() as uow:
+        mine = [m for m in await service.list_memories(uow, plain) if "one-sentence" in m.content]
+    assert mine and all(m.owner_principal == "agent:u1/plansmart" for m in mine), mine
+    for memory in mine:  # the reading, and the turn kept beside it when there is one
+        async with uow_factory() as uow:
+            await service.forget(uow, plain, memory.memory_id)
+            await uow.commit()
+    await container.tasks.drain()  # the index job removes them from search
+    assert not any("one-sentence" in t for t in await _user_visible(container, ctx))
+
+
+async def test_another_user_still_may_not_forget_it(container, uow_factory) -> None:
+    from memory_service.domain.errors import ScopeDenied
+
+    ctx = _ctx(agent_id="plansmart", agent_run_id=new_id("agent_run"))
+    await _say(container, uow_factory, ctx, PREFERENCE, role=MessageRole.USER)
+    plain = ctx.model_copy(update={"agent_id": None, "agent_run_id": None})
+    service = container.services["memory"]
+    async with uow_factory() as uow:
+        mine = [m for m in await service.list_memories(uow, plain) if "one-sentence" in m.content]
+    other = plain.model_copy(update={"user_id": "u2"})
+    async with uow_factory() as uow:
+        with pytest.raises(ScopeDenied):
+            await service.forget(uow, other, mine[0].memory_id)
