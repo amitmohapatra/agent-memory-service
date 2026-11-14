@@ -198,6 +198,10 @@ def risk_tier(side_effects: SideEffects | None, annotations: ToolAnnotations) ->
     return "irreversible" if annotations.destructive else "write"
 
 
+#: What a tool's ``redact`` path holds in a stored copy of its arguments.
+REDACTED: Final = "[redacted]"
+
+
 def stable_hash(value: Any) -> str:
     """SHA-256 over a canonical JSON form: same arguments, same hash, any key order."""
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
@@ -303,7 +307,7 @@ class ToolDescriptor(BaseModel):
                     break
                 node = node[part]
             if isinstance(node, dict) and parts[-1] in node:
-                node[parts[-1]] = "[redacted]"
+                node[parts[-1]] = REDACTED
         return out
 
 

@@ -422,9 +422,12 @@ each entry says which one moved. Decisions behind each change are in the
   of the record, the `POST` that carried them included. The record is stored, from the
   `POST` on, with the arguments as the tool's catalog entry redacts them and
   `metadata.args_hash`, the hash of the arguments as sent (one that the client sends is not
-  kept); decisions are matched to recorded calls, and to each other, by that hash. A
-  decision stored before this version keeps what it was stored with, and is matched by the
-  hash of its stored arguments as before. No route or schema changed.
+  kept); decisions are matched to recorded calls, and to each other, by that hash. Migration
+  `0039_redact_stored_decisions` rewrites the decisions stored before the same way, in
+  batches and idempotently: the hash of the stored arguments replaces any the client sent,
+  and the arguments are redacted where the tool's catalog entry is known (a decision on a
+  tool the catalog does not hold keeps its arguments, counted in the migration's log). No
+  route or schema changed.
 - **A length of time is no date** (service). "SUP-20's lead time is 32 days, from my call
   today" was stored with "32 days = 2026-10-01" beside it: with a relative cue in the text
   ("today"), the relative-time parser read a bare count of a unit as that long ago, and an
