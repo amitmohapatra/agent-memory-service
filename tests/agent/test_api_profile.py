@@ -125,3 +125,30 @@ async def test_a_line_written_into_the_profile_by_hand_outlives_the_memory_it_re
 
     await user.profile.edit("user", "", old="- I prefer window seats.\n")
     assert _user_block(await user.profile()) == "- Call me Sam."
+
+
+@pytest.mark.covers("profile.edit_profile_block", "memory.forget_memory")
+async def test_a_line_the_job_appends_to_an_edited_block_goes_with_its_memory(app, running) -> None:
+    """Derived data follows its source (ADR 0032), in an edited block too: a line the profile
+    job appended from a memory leaves when that memory is forgotten, and the editor's own
+    lines stay. A job's line a person then edits is theirs, and stays (the hand-written
+    line: ``test_a_line_written_into_the_profile_by_hand_outlives_the_memory_it_repeats``)."""
+    _, harness = await _tenant(app)
+    user = harness.bind(user_id="u1")
+    written = await user.profile.edit("user", "name: Sam\n- I travel light.")
+    seats = await user.remember("I prefer window seats.", memory_type="PREFERENCE")
+    tea = await user.remember("I prefer green tea.", memory_type="PREFERENCE")
+    container = app.state.container
+    running.portal.call(container.tasks.drain)
+    learned = _user_block(await user.profile()).splitlines()
+    assert learned[:2] == written.text.splitlines()
+    assert sorted(learned[2:]) == ["- I prefer green tea.", "- I prefer window seats."]
+
+    await user.forget(seats.memory_id)
+    running.portal.call(container.tasks.drain)
+    assert _user_block(await user.profile()) == f"{written.text}\n- I prefer green tea."
+
+    await user.profile.edit("user", "- I prefer green tea, no sugar.", old="- I prefer green tea.")
+    await user.forget(tea.memory_id)  # the last one: the job has nothing left to learn from
+    running.portal.call(container.tasks.drain)
+    assert _user_block(await user.profile()) == f"{written.text}\n- I prefer green tea, no sugar."

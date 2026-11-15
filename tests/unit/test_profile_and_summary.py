@@ -11,7 +11,13 @@ from memory_service.domain.conversation import Message
 from memory_service.domain.enums import MemoryType, MessageKind, MessageRole
 from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.memory import CanonicalMemory
-from memory_service.domain.profile import PROFILE_BLOCK_MAX_CHARS, block_scope, profile_scopes
+from memory_service.domain.profile import (
+    PROFILE_BLOCK_MAX_CHARS,
+    ProfileBlock,
+    block_scope,
+    lines_kept,
+    profile_scopes,
+)
 from memory_service.modules.conversation.summary import (
     LINE_CHARS,
     SUMMARY_MAX_CHARS,
@@ -57,14 +63,66 @@ def _memory(content: str) -> CanonicalMemory:
 def test_the_learned_block_is_a_line_per_fact_and_an_edit_is_only_appended_to() -> None:
     facts = [_memory("Prefers email"), _memory("Prefers  email"), _memory("Lives in Berlin")]
     assert template(facts) == "- Prefers email\n- Lives in Berlin"
-    edited = "name: Ann\n- prefers email"
-    before = datetime(2000, 1, 1, tzinfo=UTC)
-    assert appended(edited, facts, before) == "name: Ann\n- prefers email\n- Lives in Berlin"
-    assert appended("already: Lives in Berlin", facts[2:], before) == "already: Lives in Berlin"
-    assert appended(edited, facts, datetime.now(UTC)) == edited, "only facts after the edit"
+    edited = _edited("name: Ann\n- prefers email")
+    held = {f.memory_id for f in facts}
+    assert appended(edited, facts, held) == (
+        "name: Ann\n- prefers email\n- Lives in Berlin",
+        {"- Lives in Berlin": facts[2].memory_id},
+    )
+    assert appended(_edited("already: Lives in Berlin"), facts[2:], held) == (
+        "already: Lives in Berlin",
+        {},
+    )
+    now = _edited(edited.text, at=datetime.now(UTC))
+    assert appended(now, facts, held) == (edited.text, {}), "only facts after the edit"
     assert len(template([_memory("x" * 900)] * 1 + [_memory(str(i) * 900) for i in range(9)])) <= (
         PROFILE_BLOCK_MAX_CHARS
     )
+
+
+def _edited(
+    text: str,
+    appended_from: dict[str, str] | None = None,
+    at: datetime = datetime(2000, 1, 1, tzinfo=UTC),
+) -> ProfileBlock:
+    return ProfileBlock(
+        tenant_id="acme",
+        scope_key="user:u1",
+        block="user",
+        text=text,
+        source="edited",
+        updated_at=at,
+        appended_from=appended_from or {},
+    )
+
+
+def test_a_line_the_job_appended_leaves_with_its_memory_and_the_editor_s_lines_stay() -> None:
+    seats, tea = _memory("Prefers window seats"), _memory("Prefers green tea")
+    block = _edited(
+        "- Prefers window seats\nname: Ann\n- Prefers window seats\n- Prefers green tea",
+        {"- Prefers window seats": seats.memory_id, "- Prefers green tea": tea.memory_id},
+    )
+    # seats is forgotten: its line goes, and only the job's copy of it (the one below); the
+    # editor's own line saying the same stays. tea is held, past the newest memories read.
+    assert appended(block, [], {tea.memory_id}) == (
+        "- Prefers window seats\nname: Ann\n- Prefers green tea",
+        {"- Prefers green tea": tea.memory_id},
+    )
+    # a newer memory saying what a forgotten one said takes its line over
+    again = _memory("Prefers  window seats")
+    assert appended(
+        _edited("name: Ann\n- Prefers window seats", block.appended_from),
+        [again],
+        {again.memory_id},
+    ) == ("name: Ann\n- Prefers window seats", {"- Prefers window seats": again.memory_id})
+
+
+def test_a_job_s_line_an_editor_changes_or_removes_is_theirs() -> None:
+    lines = {"- Prefers tea": "memory_1", "- Lives in Berlin": "memory_2"}
+    assert lines_kept("name: Ann\n- Prefers tea, no sugar\n- Lives in Berlin", lines) == {
+        "- Lives in Berlin": "memory_2"
+    }
+    assert lines_kept("", lines) == {}
 
 
 def _message(sequence: int, content: str, role: MessageRole = MessageRole.USER) -> Message:

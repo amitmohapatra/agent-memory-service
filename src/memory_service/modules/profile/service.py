@@ -9,7 +9,8 @@ The ``profile.refresh`` job keeps the ``user`` block from the user's USER and PR
 memories: rewritten while the job owns it (``learned``; by the tenant's model when one is
 available, a line per memory otherwise), and only ever appended to once a person or an agent
 has edited it (``edited``) - with the facts learned since the edit - so an edit is never
-lost or undone.
+lost or undone. A line the job appends records its memory and leaves with it; the editor's
+lines, and a job's line they have since changed, are theirs and stay.
 
 Each person whose beliefs (``modules.memory.consolidation``) the reader may read gets a page,
 ``people``: their current beliefs grouped by facet, then their earlier values.
@@ -23,6 +24,7 @@ batches.
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -31,7 +33,7 @@ from typing import Any, Final
 from memory_service.domain.beliefs import FACETS, Belief, person_name
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import ProfileBlockView
-from memory_service.domain.enums import Lifetime
+from memory_service.domain.enums import Lifetime, TemporalStatus
 from memory_service.domain.errors import Conflict, NotFound, ValidationFailed
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.profile import (
@@ -40,6 +42,7 @@ from memory_service.domain.profile import (
     USER_BLOCK,
     ProfileBlock,
     block_scope,
+    lines_kept,
     profile_scopes,
 )
 from memory_service.domain.revisions import RevisionKind
@@ -130,16 +133,29 @@ def _bounded(lines: Sequence[str]) -> str:
     return "\n".join(out)
 
 
-def appended(text: str, memories: Sequence[CanonicalMemory], since: datetime) -> str:
-    """An edited block with the facts learned after the edit, that it does not already
-    state, added below it: what the edit changed is never put back."""
-    known = text.casefold()
-    new = [
-        f"- {' '.join(m.content.split())}"
-        for m in memories
-        if m.created_at > since and " ".join(m.content.split()).casefold() not in known
-    ]
-    return _bounded([*text.splitlines(), *dict.fromkeys(new)]) if new else text
+def appended(
+    block: ProfileBlock, memories: Sequence[CanonicalMemory], held: Collection[str]
+) -> tuple[str, dict[str, str]]:
+    """An edited block, refreshed: each line the job appended from a memory no longer
+    ``held`` leaves, and the facts learned after the edit that it does not already state are
+    added below it, each recorded with its memory. Returns the text and its job's lines. The
+    editor's lines stay, and what the edit changed is never put back."""
+    gone = Counter(line for line, m in block.appended_from.items() if m not in held)
+    lines: list[str] = []
+    for line in reversed(block.text.splitlines()):  # the job's lines are below the editor's
+        if gone[line]:
+            gone[line] -= 1
+        else:
+            lines.append(line)
+    lines.reverse()
+    sources = {line: m for line, m in block.appended_from.items() if m in held}
+    known = "\n".join(lines).casefold()
+    for m in memories:
+        content = " ".join(m.content.split())
+        if m.created_at > block.updated_at and content.casefold() not in known:
+            sources.setdefault(f"- {content}", m.memory_id)
+    text = _bounded([*lines, *(line for line in sources if line not in lines)])
+    return text, lines_kept(text, sources)
 
 
 #: People a context pins a page for, most cited first (the token budget decides how many fit).
@@ -290,6 +306,7 @@ class ProfileService:
                 source_query=query,
                 source_context=context,
                 refresh_due_at=due,
+                appended_from=lines_kept(text, current.appended_from) if current else {},
             )
         )
         if query and source_query is not UNSET:
@@ -320,7 +337,8 @@ class ProfileService:
         """Keep the ``user`` block from the user's own USER and PREFERENCE memories: composed
         from those held now, so a memory forgotten, replaced or archived leaves it with the
         next refresh, and a learned block of a user who has none left is emptied. An edited
-        block keeps its edit (a person's or an agent's words, not derived)."""
+        block keeps its edit (a person's or an agent's words, not derived); a line the job
+        appended to it leaves with its memory as a learned line does."""
         scope = f"user:{user_id}"
         async with self.uow_factory() as uow:
             memories = await uow.memories.about_user(
@@ -334,10 +352,14 @@ class ProfileService:
             # follow its author into every conversation for its whole TTL.
             memories = [m for m in memories if m.lifetime is not Lifetime.SHORT_TERM]
             current = await uow.profiles.get(tenant_id, scope, USER_BLOCK)
-        if not memories and (current is None or current.source == "edited"):
-            return current
-        text = await self._compose(tenant_id, user_id, memories, current) if memories else ""
-        if current is not None and text == current.text:
+            held = await _held(uow, tenant_id, current)
+        if current is not None and current.source == "edited":
+            text, sources = appended(current, memories, held)
+        elif memories or current is not None:
+            text, sources = await self._compose(tenant_id, user_id, memories), {}
+        else:
+            return None
+        if current is not None and (text, sources) == (current.text, current.appended_from):
             return current
         async with self.uow_factory() as uow:
             await uow.serialize(f"profile:{tenant_id}:{scope}:{USER_BLOCK}")
@@ -347,21 +369,18 @@ class ProfileService:
             stored = await uow.profiles.put(
                 ProfileBlock(tenant_id=tenant_id, scope_key=scope, block=USER_BLOCK, text=text)
                 if current is None
-                else current.model_copy(update={"text": text})
+                else current.model_copy(update={"text": text, "appended_from": sources})
             )
             await uow.revisions.bump(tenant_id, RevisionKind.USER, user_id)
             await uow.commit()
         return stored
 
     async def _compose(
-        self,
-        tenant_id: str,
-        user_id: str,
-        memories: Sequence[CanonicalMemory],
-        current: ProfileBlock | None,
+        self, tenant_id: str, user_id: str, memories: Sequence[CanonicalMemory]
     ) -> str:
-        if current is not None and current.source == "edited":
-            return appended(current.text, memories, current.updated_at)
+        """The learned block: the profile the tenant's model writes, or a line per memory."""
+        if not memories:
+            return ""
         async with self.assist.bound(ModelIdentity(tenant_id, f"user:{user_id}")):
             result = await self.assist.structured(
                 "summaries",
@@ -405,7 +424,7 @@ class ProfileService:
             if latest is None or latest.source_query != current.source_query or latest.text == text:
                 return latest
             stored = await uow.profiles.put(
-                latest.model_copy(update={"text": text, "source": "learned"})
+                latest.model_copy(update={"text": text, "source": "learned", "appended_from": {}})
             )
             await _bump(uow, tenant_id, block, scope_key)
             await uow.commit()
@@ -426,6 +445,14 @@ class ProfileService:
         if written and len(written) <= PROFILE_BLOCK_MAX_CHARS:
             return written
         return _bounded([f"- {' '.join(t.split())}" for t in texts[:QUERY_LINES]])
+
+
+async def _held(uow: UnitOfWork, tenant_id: str, block: ProfileBlock | None) -> set[str]:
+    """The memories the job appended a line of ``block`` from that are still held: not
+    forgotten, replaced or archived."""
+    ids = sorted(set(block.appended_from.values())) if block is not None else []
+    found = await uow.memories.get_many(tenant_id, ids)
+    return {m.memory_id for m in found if m.temporal.status is TemporalStatus.CURRENT}
 
 
 def _query_job(block: ProfileBlock) -> JobSpec:

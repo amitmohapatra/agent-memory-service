@@ -1072,6 +1072,8 @@ class ProfileBlockRow(Base):
     source_query: Mapped[str | None] = mapped_column(Text)
     source_context: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     refresh_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    #: line -> the memory the profile job appended it from (``ProfileBlock.appended_from``)
+    appended_from: Mapped[dict[str, str]] = mapped_column(JSONB, default=dict, server_default="{}")
 
     #: the profile job's claim of due standing questions (only blocks that have one)
     __table_args__ = (

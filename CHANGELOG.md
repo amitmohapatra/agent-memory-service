@@ -374,6 +374,15 @@ each entry says which one moved. Decisions behind each change are in the
   (its tenant's, workspace's, owner's and participants', read back from the authorization
   store) in the same request, and every cached scope of the tenant is rebuilt. What a user
   said for themselves (`USER`, ADR 0036) stays. No route, field or SDK call changed.
+- **A line the profile job appended to an edited `user` block leaves with its memory**
+  (service, ADR 0032). Once a person or an agent had edited the block, the job appended the
+  facts learned after the edit, and such a line stayed after its memory was forgotten,
+  replaced or archived. Each appended line now records the memory it came from
+  (`profile_blocks.appended_from`, migration `0040_profile_line_sources`), and the next
+  refresh removes it when that memory is no longer held; every line the editor wrote stays.
+  A line the job appended is the job's only while it reads as the job wrote it: once a
+  person or an agent changes it, it is theirs. A block edited before keeps all its lines as
+  the editor's. No route, field or SDK call changed.
 - **A deleted thread's documents leave nothing in the knowledge graph** (service, MEM-05).
   Deleting a thread took the documents only it held out of `/v1/context`, search and the
   document read, but the graph facts built from them stayed: `GET /v1/graph/entities` still
