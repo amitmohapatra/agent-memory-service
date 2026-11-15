@@ -388,6 +388,15 @@ class GraphStore(Protocol):
         evidence taken from it and the summary written from its facts."""
         ...
 
+    async def move_document(
+        self, tenant_id: str, document_id: str, visibility_keys: Sequence[str]
+    ) -> list[str]:
+        """A kept document's facts readable by its new audience (``visibility_keys``, its
+        document's): its relations carry exactly them, and each entity at either end of one,
+        and its own document entity, gains them besides its own. Returns those entities'
+        ids, whose summaries the new readers read."""
+        ...
+
     async def relations_for_document(
         self,
         tenant_id: str,

@@ -567,6 +567,19 @@ class QdrantSearchStore:
         )
         return before
 
+    async def set_visibility(
+        self, collection: str, flt: SearchFilter, visibility_keys: Sequence[str]
+    ) -> None:
+        try:
+            await self._client.set_payload(
+                collection_name=self._name(collection),
+                payload={"visibility_keys": list(visibility_keys)},
+                points=models.FilterSelector(filter=_filter(flt)),
+                wait=True,
+            )
+        except Exception as exc:
+            raise DependencyUnavailable(f"qdrant set_payload failed: {type(exc).__name__}") from exc
+
     async def record_ids(self, collection: str, flt: SearchFilter) -> list[str]:
         name, out, offset = self._name(collection), [], None
         while True:

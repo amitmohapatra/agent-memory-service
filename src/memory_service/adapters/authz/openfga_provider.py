@@ -8,12 +8,13 @@ in the CacheProvider when available.
 from __future__ import annotations
 
 import asyncio
+import functools
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import aiohttp
-from openfga_sdk import ClientConfiguration, OpenFgaClient
+from openfga_sdk import ClientConfiguration, OpenFgaClient, ReadRequestTupleKey
 from openfga_sdk.client.models import (
     ClientBatchCheckItem,
     ClientBatchCheckRequest,
@@ -39,6 +40,8 @@ log = get_logger(__name__)
 
 MODEL_PATH = Path(__file__).resolve().parents[4] / "deploy" / "openfga" / "model.fga"
 STORE_NAME = "memory-service"
+#: The most tuples one Read page holds (OpenFGA's own limit).
+READ_PAGE_SIZE: Final = 100
 
 
 class OpenFGAAuthorizationProvider:
@@ -269,6 +272,33 @@ class OpenFGAAuthorizationProvider:
             if _already_satisfied(exc):
                 return
             raise DependencyUnavailable(f"OpenFGA write failed: {_reason(exc)}") from exc
+
+    async def read(self, obj: str) -> list[RelationTuple]:
+        """Every tuple whose object is ``obj``, read page by page (OpenFGA's Read)."""
+        client = await self._get_client()
+
+        async def page(token: str) -> Any:
+            options: dict[str, int | str | dict[str, int | str]] = {"page_size": READ_PAGE_SIZE}
+            if token:
+                options["continuation_token"] = token
+            return await client.read(ReadRequestTupleKey(object=obj), options=options)
+
+        found: list[RelationTuple] = []
+        token = ""
+        while True:
+            try:
+                response = await _transient(functools.partial(page, token))
+            except Exception as exc:
+                raise DependencyUnavailable(
+                    f"OpenFGA read failed: {_reason(exc)}", details={"object": obj}
+                ) from exc
+            found.extend(
+                RelationTuple(user=t.key.user, relation=t.key.relation, object=t.key.object)
+                for t in response.tuples or []
+            )
+            token = response.continuation_token or ""
+            if not token:
+                return found
 
     async def list_objects(self, user: str, relation: str, object_type: str) -> list[str]:
         client = await self._get_client()

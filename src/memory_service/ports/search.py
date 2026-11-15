@@ -221,6 +221,13 @@ class SearchStore(Protocol):
 
     async def delete_by_filter(self, collection: str, flt: SearchFilter) -> int: ...
 
+    async def set_visibility(
+        self, collection: str, flt: SearchFilter, visibility_keys: Sequence[str]
+    ) -> None:
+        """Every record matching ``flt`` readable by ``visibility_keys`` alone: how a kept
+        document's passages move to the live threads that hold it."""
+        ...
+
     async def record_ids(self, collection: str, flt: SearchFilter) -> list[str]:
         """Every record id matching ``flt``. Used to find index entries whose source row is
         gone, which is the only way to notice a superseded generation of a document."""

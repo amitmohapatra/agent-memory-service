@@ -5,6 +5,9 @@ TASK_MEMORY_INDEX = "memory.index"
 #: A document's chunks embedded and searchable, or taken out of the index once it is gone
 #: (``Indexer.index_document``): ingestion enqueues it, and so does a thread's deletion
 TASK_DOCUMENT_INDEX = "document.index"
+#: A kept document's passages and graph facts moved to its document's audience (a thread
+#: that held it was deleted, and live threads still hold it): a thread's deletion enqueues it
+TASK_DOCUMENT_MOVE = "document.move"
 #: Graph enrichment of indexed memories / of an indexed document version: its own job on the
 #: GRAPH queue, in a pool of its own, so the LLM calls it makes never hold back indexing
 TASK_GRAPH_ENRICH_MEMORIES = "graph.enrich_memories"

@@ -15,6 +15,7 @@ from memory_service.modules.feedback.service import TASK_FEEDBACK_PROJECT
 from memory_service.modules.jobs.names import (
     TASK_BELIEF_INDEX,
     TASK_CONSOLIDATE,
+    TASK_DOCUMENT_MOVE,
     TASK_GRAPH_ENRICH_DOCUMENT,
     TASK_GRAPH_ENRICH_MEMORIES,
     TASK_MEMORY_INDEX,
@@ -141,6 +142,29 @@ def _register_consolidation(queue: _AccountedQueue, container: Container) -> Non
         )
 
 
+def _register_document_jobs(queue: _AccountedQueue, container: Container) -> None:
+    """A document's parse, and its move to a new audience (a thread that held it was
+    deleted, and live threads still hold it): its passages and its graph facts follow its
+    document's audience."""
+
+    async def document_parse(payload: dict[str, Any]) -> None:
+        ingestion = container.services.get("ingestion")
+        if ingestion is not None:
+            await ingestion.parse_document(payload["tenant_id"], payload["document_id"])
+
+    async def document_move(payload: dict[str, Any]) -> None:
+        tenant_id, document_id = payload["tenant_id"], payload["document_id"]
+        indexer = container.services.get("indexer")
+        if indexer is not None:
+            await indexer.move_document(tenant_id, document_id)
+        graph = container.services.get("graph")
+        if graph is not None:
+            await graph.move_document(tenant_id, document_id)
+
+    queue.register("document.parse", Queue.DOCUMENT_PARSE, document_parse, retries=3)
+    queue.register(TASK_DOCUMENT_MOVE, Queue.EMBEDDING, document_move, retries=5)
+
+
 def register_handlers(container: Container) -> None:
     if container.tasks is None:
         return
@@ -165,11 +189,6 @@ def register_handlers(container: Container) -> None:
         archiver = container.services.get("archive_service")
         if archiver is not None:
             await archiver.archive_thread(payload["tenant_id"], payload["thread_id"])
-
-    async def document_parse(payload: dict[str, Any]) -> None:
-        ingestion = container.services.get("ingestion")
-        if ingestion is not None:
-            await ingestion.parse_document(payload["tenant_id"], payload["document_id"])
 
     #: Without a model, enrichment is rules and lookups: tens of milliseconds of the event
     #: loop, less than a job of its own costs (an enqueue transaction, then a fetch, a start
@@ -444,7 +463,7 @@ def register_handlers(container: Container) -> None:
         "periodic.read_audit_purge", Queue.RECONCILE, read_audit_purge, cron="7 * * * *"
     )
     queue.register(TASK_PROCESS_OBSERVATION, Queue.CHAT_FAST, process_observation, retries=5)
-    queue.register("document.parse", Queue.DOCUMENT_PARSE, document_parse, retries=3)
+    _register_document_jobs(queue, container)
     queue.register(
         "document.index",
         Queue.EMBEDDING,

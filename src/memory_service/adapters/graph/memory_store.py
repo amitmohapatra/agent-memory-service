@@ -291,6 +291,30 @@ class MemoryGraphStore:
         kept = self._settle_entities(touched, document_id, audience)
         return ForgottenDocument(audience=sorted(audience), kept=kept)
 
+    async def move_document(
+        self, tenant_id: str, document_id: str, visibility_keys: Sequence[str]
+    ) -> list[str]:
+        keys = sorted(set(visibility_keys))
+        touched = {
+            e.entity_id
+            for e in self.entities.values()
+            if e.tenant_id == tenant_id and e.canonical_name == document_entity_name(document_id)
+        }
+        for rid, r in list(self.relations.items()):
+            if r.tenant_id == tenant_id and r.document_id == document_id:
+                self.relations[rid] = r.model_copy(update={"visibility_keys": keys})
+                touched |= {r.subject_id, r.object_id}
+        moved = sorted(touched & self.entities.keys())
+        for entity_id in moved:
+            e = self.entities[entity_id]
+            self.entities[entity_id] = e.model_copy(
+                update={
+                    "visibility_keys": sorted(set(e.visibility_keys) | set(keys)),
+                    "revision": e.revision + 1,
+                }
+            )
+        return moved
+
     def _drop_document_relations(self, tenant_id: str, document_id: str) -> list[Relation]:
         """Delete a document's relations and the ``invalidated_by`` edges that name them."""
         gone = [

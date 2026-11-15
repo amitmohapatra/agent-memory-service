@@ -50,6 +50,15 @@ class MemoryAuthorizationProvider:
             self._tuples[t.object][t.relation].add(t.user)
             self._objects_by_type[_split(t.object)[0]].add(t.object)
 
+    async def read(self, obj: str) -> list[RelationTuple]:
+        self._guard()
+        held = self._tuples.get(obj, {})
+        return [
+            RelationTuple(user=user, relation=relation, object=obj)
+            for relation, users in held.items()
+            for user in sorted(users)
+        ]
+
     def _validate(self, t: RelationTuple) -> None:
         obj_type, _ = _split(t.object)
         type_def = self.model.get(obj_type)

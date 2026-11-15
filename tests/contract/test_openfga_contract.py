@@ -232,6 +232,36 @@ async def test_workspace_revocation_is_immediate_for_its_members(
     await provider.close()
 
 
+async def test_a_threads_tuples_are_read_back_whole_and_revoked_with_them(
+    openfga_url: str, openfga_store: str
+) -> None:
+    """What deleting a thread does: every tuple naming it is read (its owner's and the agent
+    that took part, which no thread row records) and deleted, so neither lists it again."""
+    from memory_service.adapters.authz.openfga_provider import OpenFGAAuthorizationProvider
+    from memory_service.config.settings import AuthorizationSettings
+    from memory_service.ports.authorization import RelationTuple as R
+
+    provider = OpenFGAAuthorizationProvider(
+        AuthorizationSettings(
+            provider="openfga", openfga_api_url=openfga_url, openfga_store_id=openfga_store
+        )
+    )
+    thread = "thread:acme/thr-gone"
+    granted = [
+        R(user="tenant:acme", relation="tenant", object=thread),
+        R(user="user:u1", relation="owner", object=thread),
+        R(user="agent:u1/bot", relation="participant", object=thread),
+    ]
+    kept = R(user="user:u1", relation="owner", object="thread:acme/thr-kept")
+    await provider.write([*granted, kept])
+    assert sorted(await provider.read(thread), key=str) == sorted(granted, key=str)
+    await provider.write([], await provider.read(thread))
+    assert await provider.read(thread) == []
+    assert await provider.list_objects("agent:u1/bot", "can_read", "thread") == []
+    assert await provider.list_objects("user:u1", "can_read", "thread") == [kept.object]
+    await provider.close()
+
+
 async def test_the_authorization_model_rolls_forward_like_a_schema(
     openfga_url: str, openfga_store: str
 ) -> None:

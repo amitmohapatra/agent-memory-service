@@ -772,6 +772,24 @@ class Indexer:
     async def rebuild_document(self, tenant_id: str, document_id: str) -> int:
         return await self.index_document(tenant_id, document_id, force=True)
 
+    async def move_document(self, tenant_id: str, document_id: str) -> None:
+        """A kept document's passages read by its document's audience now (a thread that held
+        it was deleted, and live threads still hold it). A document gone since is taken out
+        by its own index job."""
+        async with self.uow_factory() as uow:
+            document = await uow.documents.get(tenant_id, document_id)
+            keys = await uow.documents.visibility_keys(tenant_id, document_id)
+        if document is None:
+            return
+        await self.store.set_visibility(
+            self.collection(KNOWLEDGE),
+            SearchFilter(tenant_id=tenant_id, must={"document_id": document_id}),
+            keys,
+        )
+        async with self.uow_factory() as uow:
+            await _bump_document_revisions(uow, document, keys)
+            await uow.commit()
+
     async def delete_document(self, tenant_id: str, document_id: str) -> None:
         async with self.uow_factory() as uow:
             document = await uow.documents.get(tenant_id, document_id)

@@ -13,6 +13,7 @@ from memory_service.modules.llm.assist import LLMAssist
 from tests.integration.test_graph import U1, U2, _observe
 from tests.unit.test_graph_entities import (
     MINE,
+    check_a_documents_audience_moves,
     check_a_gone_documents_graph_is_forgotten,
     entity,
     relation,
@@ -65,6 +66,11 @@ async def test_postgres_search_relations_and_summary_sources(container) -> None:
 async def test_postgres_forgets_a_gone_documents_graph(container) -> None:
     """MEM-05: the PostgreSQL store forgets a gone document as the in-memory one does."""
     await check_a_gone_documents_graph_is_forgotten(container.graph_store)
+
+
+async def test_postgres_moves_a_documents_audience(container) -> None:
+    """MEM-07: the PostgreSQL store moves a kept document's facts as the in-memory one does."""
+    await check_a_documents_audience_moves(container.graph_store)
 
 
 async def test_the_hop_limit_is_spent_on_new_edges(container) -> None:
