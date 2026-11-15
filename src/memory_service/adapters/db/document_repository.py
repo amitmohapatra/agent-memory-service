@@ -156,6 +156,53 @@ _RELEASE_THREAD = text(
 )
 
 
+#: The live documents the deleted thread ``:thread`` held (uploaded or attached in it) that
+#: another live thread still holds, through a live message attaching them: the deleted
+#: thread's audience key is replaced by the holders' (``thread:<tenant>/<thread>``, the key
+#: ``authz.visibility.visibility_keys`` writes for a thread). Only documents whose audience
+#: names the deleted thread move; one with a wider audience keeps it.
+_MOVE_THREAD = text(
+    """
+    WITH held AS (
+      SELECT a.document_id,
+             array_agg(DISTINCT 'thread:' || :tenant || '/' || m.thread_id) AS keys
+      FROM message_attachments AS a
+      JOIN messages AS m ON m.message_id = a.message_id
+      JOIN threads AS t ON t.thread_id = m.thread_id
+      WHERE m.tenant_id = :tenant
+        AND m.thread_id <> :thread
+        AND m.deleted_at IS NULL
+        AND t.deleted_at IS NULL
+        AND a.document_id IN (
+          SELECT d.document_id FROM documents AS d
+          WHERE d.tenant_id = :tenant AND d.thread_id = :thread
+          UNION
+          SELECT a2.document_id FROM message_attachments AS a2
+          JOIN messages AS m2 ON m2.message_id = a2.message_id
+          WHERE m2.tenant_id = :tenant AND m2.thread_id = :thread
+        )
+      GROUP BY a.document_id
+    )
+    UPDATE documents AS d
+    SET visibility_keys = (
+          SELECT jsonb_agg(DISTINCT k ORDER BY k)
+          FROM (
+            SELECT kept.k FROM jsonb_array_elements_text(d.visibility_keys) AS kept(k)
+            WHERE kept.k <> 'thread:' || :tenant || '/' || :thread
+            UNION SELECT unnest(held.keys)
+          ) AS moved(k)
+        ),
+        revision = d.revision + 1, updated_at = now()
+    FROM held
+    WHERE d.document_id = held.document_id
+      AND d.tenant_id = :tenant
+      AND d.deleted_at IS NULL
+      AND d.visibility_keys @> jsonb_build_array('thread:' || :tenant || '/' || :thread)
+    RETURNING d.document_id
+    """
+)
+
+
 class SqlDocumentRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.s = session
@@ -216,6 +263,13 @@ class SqlDocumentRepository:
             )
         )
         return [(_doc(r), list(r.visibility_keys or [])) for r in rows.all()]
+
+    async def move_thread(self, tenant_id: str, thread_id: str) -> list[str]:
+        return list(
+            (
+                await self.s.execute(_MOVE_THREAD, {"tenant": tenant_id, "thread": thread_id})
+            ).scalars()
+        )
 
     async def find_by_checksum(self, tenant_id: str, checksum: str) -> Document | None:
         r = await self.s.scalar(

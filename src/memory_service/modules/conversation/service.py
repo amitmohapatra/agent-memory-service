@@ -45,7 +45,7 @@ from memory_service.modules.conversation.summary import (
     enqueue_episode_index,
     enqueue_refresh,
 )
-from memory_service.modules.jobs.names import TASK_DOCUMENT_INDEX
+from memory_service.modules.jobs.names import TASK_DOCUMENT_INDEX, TASK_DOCUMENT_MOVE
 from memory_service.modules.tenancy.gate import require_workspace_member
 from memory_service.modules.working_memory.hot_thread import HotThreadCache
 from memory_service.observability.logging import get_logger
@@ -225,6 +225,19 @@ class ConversationService:
                     payload={"tenant_id": ctx.tenant_id, "document_id": document.document_id},
                     idempotency_key=f"index:{document.document_id}:released",
                     lock=f"document:{document.document_id}",
+                    tenant_id=ctx.tenant_id,
+                )
+            )
+        # a document a live thread still holds keeps its facts there: its audience moves
+        # from this thread to the holders, and its passages and graph facts follow (a job)
+        for document_id in await uow.documents.move_thread(ctx.tenant_id, thread_id):
+            await uow.enqueue(
+                JobSpec(
+                    task_name=TASK_DOCUMENT_MOVE,
+                    queue=Queue.EMBEDDING,
+                    payload={"tenant_id": ctx.tenant_id, "document_id": document_id},
+                    idempotency_key=f"move:{document_id}:{thread_id}",
+                    lock=f"document:{document_id}",
                     tenant_id=ctx.tenant_id,
                 )
             )

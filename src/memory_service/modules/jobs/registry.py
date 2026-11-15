@@ -15,6 +15,7 @@ from memory_service.modules.feedback.service import TASK_FEEDBACK_PROJECT
 from memory_service.modules.jobs.names import (
     TASK_BELIEF_INDEX,
     TASK_CONSOLIDATE,
+    TASK_DOCUMENT_MOVE,
     TASK_GRAPH_ENRICH_DOCUMENT,
     TASK_GRAPH_ENRICH_MEMORIES,
     TASK_MEMORY_INDEX,
@@ -211,6 +212,16 @@ def register_handlers(container: Container) -> None:
             ),
             lambda graph: graph.enrich_document(tenant_id, document_id),
         )
+
+    async def document_move(payload: dict[str, Any]) -> None:
+        """A kept document's passages and graph facts moved to its document's audience."""
+        tenant_id, document_id = payload["tenant_id"], payload["document_id"]
+        indexer = container.services.get("indexer")
+        if indexer is not None:
+            await indexer.move_document(tenant_id, document_id)
+        graph = container.services.get("graph")
+        if graph is not None:
+            await graph.move_document(tenant_id, document_id)
 
     async def document_index_gave_up(payload: dict[str, Any], error: str) -> None:
         ingestion = container.services.get("ingestion")
@@ -452,6 +463,7 @@ def register_handlers(container: Container) -> None:
         retries=5,
         on_give_up=document_index_gave_up,
     )
+    queue.register(TASK_DOCUMENT_MOVE, Queue.EMBEDDING, document_move, retries=5)
     queue.register(TASK_MEMORY_INDEX, Queue.EMBEDDING, memory_index, retries=5)
     queue.register(TASK_GRAPH_ENRICH_MEMORIES, Queue.GRAPH, graph_enrich_memories, retries=5)
     queue.register(TASK_GRAPH_ENRICH_DOCUMENT, Queue.GRAPH, graph_enrich_document, retries=5)

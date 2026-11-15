@@ -279,6 +279,27 @@ class GraphService:
         )
         return len(relations)
 
+    async def move_document(self, tenant_id: str, document_id: str) -> None:
+        """A kept document's facts read by its document's audience now (a thread that held it
+        was deleted, and live threads still hold it): the store moves them, and the
+        summaries of the entities they name are written again for their new readers,
+        deterministically (a move is no new content). A document gone since is forgotten by
+        its own index job."""
+        async with self.uow_factory() as uow:
+            document = await uow.documents.get(tenant_id, document_id)
+            keys = await uow.documents.visibility_keys(tenant_id, document_id)
+        if document is None:
+            return
+        moved = await self.store.move_document(tenant_id, document_id, keys)
+        readers = set(keys)
+        with model_call_policy(False):
+            await self.summaries.refresh(tenant_id, moved, readers=readers)
+        await self._bump(
+            tenant_id,
+            document_revision_keys(tenant_id, document.thread_id, keys)
+            | audience_revision_keys(tenant_id, readers),
+        )
+
     async def _forget_document(self, tenant_id: str, document_id: str) -> None:
         """Take a gone document's facts, the entities only they held and its evidence out of
         the graph, and write the summaries of the entities that stay again from the facts

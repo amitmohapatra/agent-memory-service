@@ -104,6 +104,25 @@ _FORGET_EVIDENCE = text(
 )
 
 
+#: Entities gain an audience, keeping their own (an entity is read by every reader of a fact
+#: or evidence of it).
+_ADD_AUDIENCE = text(
+    """
+    UPDATE graph_entities
+    SET visibility_keys = (
+          SELECT jsonb_agg(DISTINCT k ORDER BY k)
+          FROM (
+            SELECT jsonb_array_elements_text(visibility_keys)
+            UNION SELECT unnest(CAST(:keys AS text[]))
+          ) AS added(k)
+        ),
+        revision = revision + 1, updated_at = now()
+    WHERE tenant_id = :tenant AND entity_id = ANY(:ids)
+    RETURNING entity_id
+    """
+)
+
+
 def _entity(r: GraphEntityRow) -> Entity:
     return Entity(
         entity_id=r.entity_id,
@@ -628,6 +647,37 @@ class PostgresGraphStore:
                 .returning(GraphRelationRow.relation_id)
             )
             return len(res.scalars().all())
+
+    async def move_document(
+        self, tenant_id: str, document_id: str, visibility_keys: Sequence[str]
+    ) -> list[str]:
+        keys = sorted(set(visibility_keys))
+        async with self.session() as s, s.begin():
+            # by ix_graph_relations_document
+            ends = (
+                await s.execute(
+                    update(GraphRelationRow)
+                    .where(
+                        GraphRelationRow.tenant_id == tenant_id,
+                        GraphRelationRow.document_id == document_id,
+                    )
+                    .values(visibility_keys=keys)
+                    .returning(GraphRelationRow.subject_id, GraphRelationRow.object_id)
+                )
+            ).all()
+            touched = {r.subject_id for r in ends} | {r.object_id for r in ends}
+            touched |= set(
+                await s.scalars(
+                    select(GraphEntityRow.entity_id).where(
+                        GraphEntityRow.tenant_id == tenant_id,
+                        GraphEntityRow.canonical_name == document_entity_name(document_id),
+                    )
+                )
+            )
+            moved = await s.scalars(
+                _ADD_AUDIENCE, {"tenant": tenant_id, "keys": keys, "ids": sorted(touched)}
+            )
+            return sorted(moved)
 
     async def forget_document(self, tenant_id: str, document_id: str) -> ForgottenDocument:
         async with self.session() as s, s.begin():

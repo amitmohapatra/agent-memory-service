@@ -373,7 +373,13 @@ each entry says which one moved. Decisions behind each change are in the
   it (`GET /v1/graph/entities`). The deletion now deletes every tuple that names the thread
   (its tenant's, workspace's, owner's and participants', read back from the authorization
   store) in the same request, and every cached scope of the tenant is rebuilt. What a user
-  said for themselves (`USER`, ADR 0036) stays. No route, field or SDK call changed.
+  said for themselves (`USER`, ADR 0036) stays. A document the deleted thread held that
+  another live thread still holds (a live message of it attaches the document) keeps its
+  facts there (MEM-07): in the same transaction its audience moves from the deleted thread
+  to the live holder threads, and a `document.move` job moves its passages in the search
+  store and its graph facts (both graph stores) to that audience, rewriting the summaries
+  of the entities they name for their new readers without a model. A document no live
+  thread holds is read by nothing; its rows stay. No route, field or SDK call changed.
 - **A line the profile job appended to an edited `user` block leaves with its memory**
   (service, ADR 0032). Once a person or an agent had edited the block, the job appended the
   facts learned after the edit, and such a line stayed after its memory was forgotten,

@@ -268,6 +268,13 @@ class DocumentRepository(Protocol):
         another live thread attaching them. Returns them, with their audience."""
         ...
 
+    async def move_thread(self, tenant_id: str, thread_id: str) -> list[str]:
+        """Move to the live threads that hold them the audience of the live documents the
+        deleted ``thread_id`` held - attached in it, or uploaded into it - that another live
+        thread still holds (a live message of it attaches them): the deleted thread's key is
+        replaced by theirs. Returns the ids of the documents moved."""
+        ...
+
     async def find_by_checksum(self, tenant_id: str, checksum: str) -> Document | None: ...
     async def set_status(
         self,
