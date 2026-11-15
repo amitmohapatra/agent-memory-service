@@ -114,5 +114,7 @@ jobs:
       # Every relative link and anchor in the repository's Markdown resolves, and every
       # snippet in the docs calls SDK methods and keywords that exist (scripts/check_docs.py).
       - run: make docs-check
+      # the wheel and sdist hold only the package source: no tests, examples, docs or data
+      - run: make dist-check
       # The numbered examples, offline: an in-process service on this job's PostgreSQL.
       - run: make examples

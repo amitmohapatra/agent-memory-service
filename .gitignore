@@ -45,3 +45,25 @@ benchmark/results/capabilities/*.raw.json.gz
 benchmark/results/capabilities/*_repeat.md
 benchmark/results/capabilities/*_latency.md
 benchmark/results/capabilities/*.failed.*
+
+# raw benchmark runs: the families below are per-question dumps, ablations and sweeps. Commit
+# only what a gate, a test or a document reads (git add -f for a new one) and the run's summary;
+# raw runs go to the data/research-archive branch (benchmark/results/MANIFEST.md)
+benchmark/results/arms/
+benchmark/results/abl_*.json
+benchmark/results/flag_off_*.json
+benchmark/results/golden_off_*.json
+benchmark/results/locomo_*.json
+benchmark/results/scifact*.json
+benchmark/results/multilingual_*.json
+benchmark/results/load_runtime_*.json
+benchmark/results/*_shipped*.json
+benchmark/results/*_judged*.json
+benchmark/results/overhaul/*.json
+# a marker a local Qdrant start-up writes into the working directory
+.qdrant-initialized
+
+# stray files: merge leftovers, local agent settings
+*.orig
+*.rej
+.claude/settings.local.json

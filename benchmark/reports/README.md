@@ -4,7 +4,8 @@ Dated write-ups of measurement runs and reviews. They are **evidence**, not user
 each one describes the code as it was on its date, and ADRs, `docs/MEASUREMENTS.md` or code
 comments cite them for a specific number or decision. When a report and the current code
 disagree, the code (and the ADR that changed it) is right. The raw result files are in
-[`../results/`](../results).
+[`../results/`](../results); the raw runs nothing cites by name are on the `data/research-archive`
+branch, each listed with its sha256 in [`../results/MANIFEST.md`](../results/MANIFEST.md).
 
 The user documentation starts at [`docs/README.md`](../../docs/README.md).
 

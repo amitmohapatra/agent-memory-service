@@ -40,7 +40,7 @@ vendor: ## Refresh the vendored bifrost-sdk and trellis-contracts (generated; ne
 	$(call vendor_one,bifrost-sdk,$(BIFROST_SDK),BIFROST_SDK)
 	$(call vendor_one,trellis-contracts,$(TRELLIS_CONTRACTS),TRELLIS_CONTRACTS)
 
-.PHONY: help setup models models-all dev-up dev-down migrate lint format typecheck unit integration contract-test e2e security-test \
+.PHONY: help setup models models-all dev-up dev-down migrate lint format typecheck unit integration contract-test e2e security-test dist-check \
         performance-test failure-test eval bench-retrieval bench-advanced bench-memory bench-embedding bench-storage \
         load-test bench-model-throughput bench-context-latency bench-locomo bench-locomo-prepare bench-locomo-source bench-rerank-offline bench-runtime-retrieval bench-budget bench-external bench-external-prepare gates gates-network validate verify verify-fresh verify-quick smoke openapi reindex backfill examples docs-check clean
 
@@ -502,6 +502,13 @@ examples: ## Run every example offline, in-process (needs only PostgreSQL; examp
 	@set -e; for example in examples/[0-9][0-9]_*.py; do \
 	  echo "== $$example"; $(PY) python "$$example"; \
 	done
+
+dist-check:  ## The wheel and sdist hold only the package source: no tests, examples, docs or data
+	rm -rf build/dist
+	$(UV) build -q --out-dir build/dist/main .
+	python3 scripts/check_dist.py build/dist/main memory_service
+	$(UV) build -q --out-dir build/dist/sdk sdk/python
+	python3 scripts/check_dist.py build/dist/sdk trellis
 
 docs-check: ## Every relative link and anchor in the Markdown resolves; every docs snippet calls a real SDK
 	$(PY) python scripts/check_docs.py

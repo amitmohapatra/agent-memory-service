@@ -110,6 +110,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/memory_service"]
 
+[tool.hatch.build.targets.sdist]
+# only the package source and its metadata: no tests, examples, benchmarks, docs or data
+# (`make dist-check` fails on anything else in the wheel or the sdist)
+only-include = ["src/memory_service", "README.md", "CHANGELOG.md"]
+
 [tool.uv]
 default-groups = ["dev"]
 
