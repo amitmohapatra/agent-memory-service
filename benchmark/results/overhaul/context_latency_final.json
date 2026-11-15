@@ -1,0 +1,277 @@
+{
+  "context_response_bytes": {
+    "max": 95674.0,
+    "p50": 74128.0,
+    "p95": 88094.0,
+    "p99": 94027.0,
+    "samples": 60
+  },
+  "corpus": {
+    "documents": 4,
+    "seed_seconds": 192.7,
+    "tools": 8,
+    "turns": 300
+  },
+  "label": "final",
+  "off_topic": {
+    "kept_at_floor": {
+      "0.00": 2.1,
+      "0.10": 0.9,
+      "0.15": 0.9,
+      "0.20": 0.9,
+      "0.25": 0.1,
+      "0.30": 0.0,
+      "0.35": 0.0,
+      "0.40": 0.0,
+      "0.45": 0.0,
+      "0.50": 0.0
+    },
+    "memories_packed_mean": 2.1,
+    "response_bytes_mean": 25936
+  },
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "5f63002599afe74ea5353e3b93da170db7b11b32",
+    "host_load": {
+      "load_per_core": 1.13,
+      "loadavg_15m": 3.46,
+      "loadavg_1m": 4.5,
+      "loadavg_5m": 3.91
+    },
+    "llm": {
+      "enabled": true,
+      "fast_model": "gemini/gemini-3.8-flash",
+      "model": "gemini/gemini-3.8-flash",
+      "provider": "bifrost",
+      "uses": [
+        "contextual_extraction",
+        "reflection"
+      ]
+    },
+    "machine": "x86_64",
+    "memory_gb": 6.8,
+    "models": {
+      "deberta-v3-base-mnli-fever-anli": {
+        "repo": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      }
+    },
+    "packages": {
+      "docling": "2.127.0",
+      "fastapi": "0.141.1",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "timestamp": "2026-09-30T12:00:58.750057+00:00"
+  },
+  "providers": {
+    "authorization": "memory",
+    "cache": "dragonfly",
+    "embedding": "onnx-bekko-embedding-v1-a8m-model-pe5688b6d7350537c-d384",
+    "llm": "off",
+    "search": "qdrant"
+  },
+  "relevance_floor": {
+    "evidence_items": 131,
+    "floors": {
+      "0.00": {
+        "evidence_kept": 1.0,
+        "items_per_question": 32.2,
+        "other_kept": 1.0,
+        "questions_with_evidence": 1.0
+      },
+      "0.10": {
+        "evidence_kept": 1.0,
+        "items_per_question": 32.2,
+        "other_kept": 1.0,
+        "questions_with_evidence": 1.0
+      },
+      "0.15": {
+        "evidence_kept": 1.0,
+        "items_per_question": 32.2,
+        "other_kept": 1.0,
+        "questions_with_evidence": 1.0
+      },
+      "0.20": {
+        "evidence_kept": 1.0,
+        "items_per_question": 32.2,
+        "other_kept": 1.0,
+        "questions_with_evidence": 1.0
+      },
+      "0.25": {
+        "evidence_kept": 0.9847,
+        "items_per_question": 31.8,
+        "other_kept": 0.9867,
+        "questions_with_evidence": 0.9823
+      },
+      "0.30": {
+        "evidence_kept": 0.9847,
+        "items_per_question": 31.0,
+        "other_kept": 0.9632,
+        "questions_with_evidence": 0.9823
+      },
+      "0.35": {
+        "evidence_kept": 0.9695,
+        "items_per_question": 29.2,
+        "other_kept": 0.9056,
+        "questions_with_evidence": 0.9735
+      },
+      "0.40": {
+        "evidence_kept": 0.9084,
+        "items_per_question": 25.6,
+        "other_kept": 0.7926,
+        "questions_with_evidence": 0.9204
+      },
+      "0.45": {
+        "evidence_kept": 0.7786,
+        "items_per_question": 18.2,
+        "other_kept": 0.5589,
+        "questions_with_evidence": 0.7699
+      },
+      "0.50": {
+        "evidence_kept": 0.6336,
+        "items_per_question": 9.8,
+        "other_kept": 0.2947,
+        "questions_with_evidence": 0.6195
+      }
+    },
+    "other_items": 4214,
+    "questions": 135,
+    "questions_with_evidence_at_all": 113,
+    "rendered_chars_mean": 14581.7
+  },
+  "requests": 60,
+  "series": {
+    "cached": {
+      "max": 358.59,
+      "p50": 25.57,
+      "p95": 300.08,
+      "p99": 324.39,
+      "samples": 60
+    },
+    "context": {
+      "max": 644.86,
+      "p50": 313.71,
+      "p95": 494.97,
+      "p99": 532.06,
+      "samples": 60
+    },
+    "context_tools": {
+      "max": 742.26,
+      "p50": 355.86,
+      "p95": 544.08,
+      "p99": 595.64,
+      "samples": 60
+    },
+    "recall": {
+      "max": 499.25,
+      "p50": 247.22,
+      "p95": 396.69,
+      "p99": 446.57,
+      "samples": 60
+    }
+  },
+  "stages_ms": {
+    "context": {
+      "encode": {
+        "mean": 109.1,
+        "p95": 159.4
+      },
+      "expansion": {
+        "mean": 25.6,
+        "p95": 37.6
+      },
+      "graph": {
+        "mean": 7.5,
+        "p95": 28.1
+      },
+      "retrieve": {
+        "mean": 281.2,
+        "p95": 430.7
+      },
+      "scope": {
+        "mean": 11.4,
+        "p95": 20.2
+      },
+      "search": {
+        "mean": 117.4,
+        "p95": 217.0
+      },
+      "sections": {
+        "mean": 0.1,
+        "p95": 0.2
+      },
+      "similarity": {
+        "mean": 21.2,
+        "p95": 45.1
+      },
+      "verify": {
+        "mean": 16.8,
+        "p95": 31.0
+      },
+      "visibility": {
+        "mean": 0.1,
+        "p95": 0.3
+      }
+    },
+    "context_tools": {
+      "encode": {
+        "mean": 102.5,
+        "p95": 173.8
+      },
+      "expansion": {
+        "mean": 24.2,
+        "p95": 35.1
+      },
+      "graph": {
+        "mean": 9.8,
+        "p95": 32.0
+      },
+      "retrieve": {
+        "mean": 273.2,
+        "p95": 450.1
+      },
+      "scope": {
+        "mean": 20.2,
+        "p95": 72.5
+      },
+      "search": {
+        "mean": 114.6,
+        "p95": 218.2
+      },
+      "sections": {
+        "mean": 0.1,
+        "p95": 0.2
+      },
+      "similarity": {
+        "mean": 15.6,
+        "p95": 25.0
+      },
+      "tools": {
+        "mean": 38.1,
+        "p95": 60.9
+      },
+      "verify": {
+        "mean": 17.7,
+        "p95": 29.9
+      },
+      "visibility": {
+        "mean": 0.1,
+        "p95": 0.2
+      }
+    }
+  },
+  "transport": "in-process ASGI (no network hop)"
+}
