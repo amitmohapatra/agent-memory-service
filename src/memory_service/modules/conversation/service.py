@@ -207,6 +207,9 @@ class ConversationService:
             raise NotFound("Thread not found")
         await self.authz.require(ctx, "can_write", "thread", thread_id)
         await uow.threads.soft_delete(ctx.tenant_id, thread_id)
+        # its grant ends with it: no scope lists it, so nothing kept for its audience alone
+        # (a THREAD memory, the graph facts made from one) is read again, from any thread
+        await self.authz.revoke_thread(ctx.tenant_id, thread_id, revisions=uow.revisions)
         # nothing of the conversation is read again: its messages are marked deleted (soft,
         # as the thread: the archive and the audit keep the rows), and the documents only it
         # held go with it, out of the index by their own index job

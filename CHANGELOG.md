@@ -366,6 +366,14 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **A deleted thread's grant ends with it** (service, MEM-06). Deleting a thread left its
+  authorization tuples in place, so every scope of its owner (and of the agent that created
+  it) still listed it: a read naming no thread, or the deleted thread, still reached what was
+  kept for that conversation alone, such as a `THREAD` memory and the graph facts made from
+  it (`GET /v1/graph/entities`). The deletion now deletes every tuple that names the thread
+  (its tenant's, workspace's, owner's and participants', read back from the authorization
+  store) in the same request, and every cached scope of the tenant is rebuilt. What a user
+  said for themselves (`USER`, ADR 0036) stays. No route, field or SDK call changed.
 - **A deleted thread's documents leave nothing in the knowledge graph** (service, MEM-05).
   Deleting a thread took the documents only it held out of `/v1/context`, search and the
   document read, but the graph facts built from them stayed: `GET /v1/graph/entities` still

@@ -46,7 +46,7 @@ support it.
 | `POST /v1/verify` | verify an answer claim by claim against the context it was given; with a run, recorded as the judge's RUN feedback | `ctx.verify(answer, bundle_id=…, run_id=…)` |
 | `GET /v1/threads/{id}` | one thread, with its durable `summary` once it has one | `ctx.history.thread()` |
 | `PATCH /v1/threads/{id}` | title and metadata (creates the thread when it does not exist yet) | `ctx.history.update(title=…, metadata=…)` |
-| `DELETE /v1/threads/{id}` | soft-delete a thread, its messages and the documents only it held (no other live thread attaches them, no audience wider than the thread), with the graph facts and entities learned only from those documents: no read returns them again | `ctx.history.delete()` |
+| `DELETE /v1/threads/{id}` | soft-delete a thread, its messages and the documents only it held (no other live thread attaches them, no audience wider than the thread), with the graph facts and entities learned only from those documents: no read returns them again. Its grant ends too, so nothing kept for that conversation alone (a `THREAD` memory, the graph facts made from it) is read again from any thread; what the user said for themselves (`USER`) stays | `ctx.history.delete()` |
 | `POST /v1/messages` | append a batch of messages; `role: "EVENT"` is something that happened | `ctx.history.add([...])` |
 | `GET /v1/threads/{id}/messages` | the window, newest page last | `ctx.history(limit=…, include_internal=…)` |
 | `GET /v1/messages/{id}` | one message | `ctx.history.message(id)` |

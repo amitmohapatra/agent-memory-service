@@ -237,6 +237,16 @@ class AuthorizationService:
         await self.provider.write(tuples)
         await self._bump_membership(ctx.tenant_id, revisions, ctx.user_id or "", ctx.agent_id or "")
 
+    async def revoke_thread(
+        self, tenant_id: str, thread_id: str, *, revisions: RevisionRepository | None = None
+    ) -> None:
+        """Every grant of a deleted thread ended: each tuple that names it — its tenant's,
+        its workspace's, its owner's, an agent's that took part — so no scope lists it, and
+        nothing kept for its audience (``thread:`` keys) is read through it again."""
+        tuples = await self.provider.read(f"thread:{object_id(tenant_id, thread_id)}")
+        await self.provider.write([], tuples)
+        await self._bump_membership(tenant_id, revisions)  # every scope of the tenant
+
     async def grant_document(
         self,
         ctx: MemoryExecutionContext,

@@ -96,6 +96,21 @@ async def test_delete_tuple_revokes(provider: MemoryAuthorizationProvider) -> No
     )
 
 
+async def test_read_returns_every_tuple_that_grants_one_object(
+    provider: MemoryAuthorizationProvider,
+) -> None:
+    """What a deleted thread's revocation reads: its tenant's, workspace's, owner's and
+    participant's tuples, none of another object's; an object with none reads none."""
+    thread = "thread:acme/thr1"
+    assert sorted(await provider.read(thread), key=str) == sorted(
+        (t for t in GOLDEN_TUPLES if t.object == thread), key=str
+    )
+    assert await provider.read("thread:acme/never") == []
+    await provider.write([], await provider.read(thread))
+    assert await provider.list_objects("agent:research", "can_read", "thread") == []
+    assert await provider.list_objects("user:admin1", "can_read", "thread") == ["thread:acme/thr2"]
+
+
 async def test_invalid_tuples_rejected() -> None:
     p = MemoryAuthorizationProvider()
     with pytest.raises(ValueError, match="may not be directly assigned"):
