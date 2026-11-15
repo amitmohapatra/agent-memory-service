@@ -1,0 +1,42 @@
+{
+ "log": "/var/tmp/cons/memh-tmp/lo_main_1.log",
+ "uses": {
+  "conflict_adjudication": {
+   "calls": 18,
+   "failed": 14
+  },
+  "contextual_extraction": {
+   "calls": 362,
+   "failed": 0
+  },
+  "memory_restatement": {
+   "calls": 449,
+   "failed": 205
+  },
+  "reflection": {
+   "calls": 109,
+   "failed": 0
+  },
+  "relation_extraction": {
+   "calls": 324,
+   "failed": 10
+  },
+  "summaries": {
+   "calls": 231,
+   "failed": 70
+  }
+ },
+ "errors": {
+  "conflict_adjudication:LLMCallFailed": 14,
+  "memory_restatement:LLMCallFailed": 175,
+  "memory_restatement:LLMOutputInvalid": 30,
+  "relation_extraction:LLMCallFailed": 10,
+  "summaries:LLMCallFailed": 69,
+  "summaries:LLMOutputInvalid": 1
+ },
+ "answered_tokens": [
+  1297603,
+  427023
+ ],
+ "answered_usd": 0.3433
+}

@@ -1,0 +1,48 @@
+{
+ "thinking_room=0": {
+  "memory_restatement": {
+   "calls": 15,
+   "failed": 9,
+   "empty": 0
+  },
+  "conflict_adjudication": {
+   "calls": 10,
+   "failed": 7,
+   "empty": 0
+  },
+  "summaries": {
+   "calls": 10,
+   "failed": 0,
+   "empty": 0
+  },
+  "_usage": {
+   "requests": 39,
+   "input_tokens": 19143,
+   "output_tokens": 8875,
+   "usd": 0.0064
+  }
+ },
+ "thinking_room=8000": {
+  "memory_restatement": {
+   "calls": 15,
+   "failed": 0,
+   "empty": 0
+  },
+  "conflict_adjudication": {
+   "calls": 10,
+   "failed": 0,
+   "empty": 0
+  },
+  "summaries": {
+   "calls": 10,
+   "failed": 0,
+   "empty": 0
+  },
+  "_usage": {
+   "requests": 36,
+   "input_tokens": 16411,
+   "output_tokens": 13011,
+   "usd": 0.0081
+  }
+ }
+}

@@ -161,19 +161,25 @@ BADGE_NOTE = b"Visitor badge B7731 opens the north gate.\n"
 TEAM_NOTE = b"The north gate closes at 22:00 for everyone.\n"
 
 
-def _messages_left(app, running, thread_id: str) -> int:
-    """The thread's message rows not marked deleted, from the store."""
+def _count(app, running, sql: str, **params: str) -> int:
+    """``SELECT count(*) ...`` straight from the store."""
     from sqlalchemy import text  # noqa: PLC0415
 
     async def read() -> int:
         async with app.state.container.database.engine.begin() as conn:
-            found = await conn.execute(
-                text("SELECT count(*) FROM messages WHERE thread_id = :t AND deleted_at IS NULL"),
-                {"t": thread_id},
-            )
-            return int(found.scalar_one())
+            return int((await conn.execute(text(sql), params)).scalar_one())
 
     return running.portal.call(read)
+
+
+def _messages_left(app, running, thread_id: str) -> int:
+    """The thread's message rows not marked deleted, from the store."""
+    return _count(
+        app,
+        running,
+        "SELECT count(*) FROM messages WHERE thread_id = :t AND deleted_at IS NULL",
+        t=thread_id,
+    )
 
 
 @pytest.mark.covers("threads.delete_thread", "documents.upload_document")
@@ -237,3 +243,81 @@ async def test_a_document_another_live_thread_attached_outlives_the_first_thread
     with pytest.raises(MemoryError) as gone:
         await harness.bind(user_id="u1").advanced.documents.document(handle.document_id)
     assert gone.value.status == 404
+
+
+NORTHWIND_NOTE = (
+    b"Northwind Systems acquired Westfalen Labs in March 2025.\n"
+    b"Westfalen Labs provides payment software to retailers in Germany.\n"
+)
+CONTOSO_NOTE = (
+    b"Contoso Holdings acquired Fabrikam Industries in June 2024.\n"
+    b"Westfalen Labs provides freight software to carriers in France.\n"
+)
+
+
+def _graph_rows(app, running, document_id: str) -> tuple[int, int]:
+    """What the store's graph holds from ``document_id``: its relations, and the entities that
+    cite it (its own document entity, or evidence taken from it)."""
+    relations = _count(
+        app,
+        running,
+        "SELECT count(*) FROM graph_relations WHERE document_id = :d",
+        d=document_id,
+    )
+    entities = _count(
+        app,
+        running,
+        "SELECT count(*) FROM graph_entities WHERE canonical_name = 'doc:' || :d"
+        " OR evidence @> jsonb_build_array(jsonb_build_object('document_id', :d))",
+        d=document_id,
+    )
+    return relations, entities
+
+
+@pytest.mark.covers("threads.delete_thread", "documents.upload_document", "graph.search_entities")
+@pytest.mark.covers_error("graph.entity_profile")
+async def test_a_deleted_threads_documents_leave_nothing_in_the_graph(app, running) -> None:
+    """MEM-05. The graph facts and entities built from a document only the deleted thread
+    held go with it: no graph read returns them, from any thread or none, and the store holds
+    none; an entity both documents name stays with only what the kept one says. A document
+    another live thread still holds keeps its facts."""
+    harness = await _harness(app)
+    chat = harness.bind(user_id="u1", thread_id="thr-deals")
+    released = await chat.advanced.documents.add(("northwind.txt", NORTHWIND_NOTE, "text/plain"))
+    kept = await chat.advanced.documents.add(("contoso.txt", CONTOSO_NOTE, "text/plain"))
+    holder = harness.bind(user_id="u1", thread_id="thr-holder")
+    attachment = {
+        "filename": "contoso.txt",
+        "media_type": "text/plain",
+        "size_bytes": kept.size_bytes,
+        "checksum": kept.checksum,
+        "document_id": kept.document_id,
+    }
+    await holder.history.add([{"role": "USER", "content": "the deal", "attachments": [attachment]}])
+    container = app.state.container
+    running.portal.call(container.tasks.drain)
+    user = harness.bind(user_id="u1")  # every thread of theirs in scope
+    [northwind] = await user.advanced.graph.entities("Northwind Systems", limit=1)
+    [westfalen] = await user.advanced.graph.entities("Westfalen Labs", limit=1)
+    assert "payment software" in westfalen.summary and "freight software" in westfalen.summary
+    kept_before = _graph_rows(app, running, kept.document_id)
+    assert all(_graph_rows(app, running, released.document_id)) and all(kept_before)
+
+    await chat.history.delete()
+    running.portal.call(container.tasks.drain)
+
+    for reader in (user, holder, harness.bind(user_id="u1", thread_id="thr-new")):
+        assert not await reader.advanced.graph.entities("Northwind Systems")
+        with pytest.raises(MemoryError) as gone:
+            await reader.advanced.graph.entity(northwind.entity_id)
+        assert gone.value.status == 404
+    assert _graph_rows(app, running, released.document_id) == (0, 0)
+    assert _graph_rows(app, running, kept.document_id) == kept_before
+    [contoso] = await user.advanced.graph.entities("Contoso Holdings", limit=1)
+    assert (await user.advanced.graph.entity(contoso.entity_id)).relations
+    both = await user.advanced.graph.entity(westfalen.entity_id)
+    facts = both.relations + both.history
+    told = " ".join([both.entity.summary, *(f"{f.object} {f.fact_text}" for f in facts)])
+    assert "freight software" in told
+    assert not any(word in told for word in ("payment software", "Germany", "Northwind"))
+    assert released.document_id not in {e.document_id for e in both.evidence}

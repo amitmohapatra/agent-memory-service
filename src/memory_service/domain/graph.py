@@ -27,6 +27,15 @@ RelationStatus = Literal["CURRENT", "SUPERSEDED", "RETRACTED", "INVALIDATED"]
 
 INVALIDATED_BY = "invalidated_by"
 
+#: The canonical name of the entity that stands for a document in its own graph
+#: (``doc:<document_id>``): the end of its ``mentioned_in`` / ``defined_in`` facts.
+DOCUMENT_ENTITY_PREFIX = "doc:"
+
+
+def document_entity_name(document_id: str) -> str:
+    return f"{DOCUMENT_ENTITY_PREFIX}{document_id}"
+
+
 _CAUSAL = frozenset(
     [
         "driven_by",

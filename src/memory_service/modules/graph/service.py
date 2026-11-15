@@ -26,7 +26,7 @@ from memory_service.modules.graph.native import VALUE_TYPES, NativeGraphEnrichme
 from memory_service.modules.graph.summaries import EntitySummaries
 from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.llm.policy import document_identity
+from memory_service.modules.llm.policy import document_identity, model_call_policy
 from memory_service.modules.memory.native import _STOP as _STOP_WORDS
 from memory_service.modules.memory.revisions import memory_revision_keys
 from memory_service.observability.logging import get_logger
@@ -223,7 +223,11 @@ class GraphService:
     async def enrich_document(self, tenant_id: str, document_id: str) -> int:
         async with self.uow_factory() as uow:
             document = await uow.documents.get(tenant_id, document_id)
-            if document is None or not document.current_version_id:
+            if document is None:
+                # gone (its thread was deleted): what it put in the graph goes too
+                await self._forget_document(tenant_id, document_id)
+                return 0
+            if not document.current_version_id:
                 return 0
             version = await uow.documents.get_version(tenant_id, document.current_version_id)
             if version is None:
@@ -274,6 +278,23 @@ class GraphService:
             relations=len(relations),
         )
         return len(relations)
+
+    async def _forget_document(self, tenant_id: str, document_id: str) -> None:
+        """Take a gone document's facts, the entities only they held and its evidence out of
+        the graph, and write the summaries of the entities that stay again from the facts
+        left: deterministically, since the work of a document that is gone has no owner to
+        bind a model to."""
+        forgotten = await self.store.forget_document(tenant_id, document_id)
+        readers = set(forgotten.audience)
+        with model_call_policy(False):
+            await self.summaries.refresh(tenant_id, forgotten.kept, readers=readers)
+        await self._bump(tenant_id, audience_revision_keys(tenant_id, readers))
+        log.info(
+            "graph.document_forgotten",
+            tenant_id=tenant_id,
+            document_id=document_id,
+            entities_kept=len(forgotten.kept),
+        )
 
     # -- queries ----------------------------------------------------------------------
     async def resolve(

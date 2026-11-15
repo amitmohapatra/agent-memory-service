@@ -6,12 +6,13 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from memory_service.domain.graph import INVALIDATED_BY, GraphLayer
+from memory_service.domain.graph import INVALIDATED_BY, GraphLayer, document_entity_name
 from memory_service.modules.graph.invalidation import invalidation_edge, passes_time
 from memory_service.ports.intelligence import (
     Entity,
     EntityAlias,
     EntityFacts,
+    ForgottenDocument,
     GraphNeighborhood,
     Relation,
 )
@@ -277,6 +278,61 @@ class MemoryGraphStore:
         for rid in gone:
             del self.relations[rid]
         return len(gone)
+
+    async def forget_document(self, tenant_id: str, document_id: str) -> ForgottenDocument:
+        gone = self._drop_document_relations(tenant_id, document_id)
+        audience = {k for r in gone for k in r.visibility_keys}
+        touched = {r.subject_id for r in gone} | {r.object_id for r in gone}
+        touched |= {
+            e.entity_id
+            for e in self.entities.values()
+            if e.tenant_id == tenant_id and e.canonical_name == document_entity_name(document_id)
+        }
+        kept = self._settle_entities(touched, document_id, audience)
+        return ForgottenDocument(audience=sorted(audience), kept=kept)
+
+    def _drop_document_relations(self, tenant_id: str, document_id: str) -> list[Relation]:
+        """Delete a document's relations and the ``invalidated_by`` edges that name them."""
+        gone = [
+            r
+            for r in self.relations.values()
+            if r.tenant_id == tenant_id and r.document_id == document_id
+        ]
+        removed = {r.relation_id for r in gone}
+        for rid, r in list(self.relations.items()):
+            if rid in removed or (
+                r.predicate == INVALIDATED_BY and {r.subject_id, r.object_id} & removed
+            ):
+                del self.relations[rid]
+        return gone
+
+    def _settle_entities(
+        self, touched: set[str], document_id: str, audience: set[str]
+    ) -> list[str]:
+        """Delete the touched entities no relation holds; strip the document from the rest.
+
+        Adds the audiences of deleted entities to ``audience``; returns the ids kept.
+        """
+        held = {r.subject_id for r in self.relations.values()} | {
+            r.object_id for r in self.relations.values()
+        }
+        kept: list[str] = []
+        for entity_id in sorted(touched & self.entities.keys()):
+            entity = self.entities[entity_id]
+            if entity_id not in held:
+                audience.update(entity.visibility_keys)
+                del self.entities[entity_id]
+                continue
+            kept.append(entity_id)
+            self.entities[entity_id] = entity.model_copy(
+                update={
+                    "evidence": [e for e in entity.evidence if e.document_id != document_id],
+                    "summary": "",
+                    "revision": entity.revision + 1,
+                }
+            )
+            self.summary_sources_by_id.pop(entity_id, None)
+        return kept
 
     async def relations_for_document(
         self,

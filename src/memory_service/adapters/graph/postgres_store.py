@@ -60,13 +60,14 @@ from memory_service.adapters.db.engine import track_pool
 from memory_service.adapters.db.orm import GraphEntityRow, GraphRelationRow
 from memory_service.config.constants import DATABASE, GRAPH
 from memory_service.domain.evidence import EvidenceRef
-from memory_service.domain.graph import INVALIDATED_BY, GraphLayer
+from memory_service.domain.graph import INVALIDATED_BY, GraphLayer, document_entity_name
 from memory_service.modules.graph.invalidation import invalidation_edge
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
 from memory_service.ports.intelligence import (
     Entity,
     EntityFacts,
+    ForgottenDocument,
     GraphBudgetExceededError,
     GraphNeighborhood,
     Relation,
@@ -85,6 +86,22 @@ def _text_array(values: Iterable[str] | BindParameter[Any]) -> Any:
 def _keys_clause(column: Any, keys: Sequence[str] | BindParameter[Any]) -> Any:
     """``visibility_keys ?| $keys`` — any-of match on the JSONB string array."""
     return column.op("?|")(_text_array(keys))
+
+
+#: ``forget_document``: the entities a gone document's facts touched and other sources still
+#: hold keep no evidence from it, and their summary (written from its facts too) is cleared
+#: to be written again from the facts left.
+_FORGET_EVIDENCE = text(
+    """
+    UPDATE graph_entities
+    SET evidence = COALESCE(
+          (SELECT jsonb_agg(e) FROM jsonb_array_elements(evidence) AS e
+           WHERE e->>'document_id' IS DISTINCT FROM :document),
+          '[]'::jsonb),
+        summary = '', summary_source = '', revision = revision + 1, updated_at = now()
+    WHERE tenant_id = :tenant AND entity_id = ANY(:ids)
+    """
+)
 
 
 def _entity(r: GraphEntityRow) -> Entity:
@@ -611,6 +628,72 @@ class PostgresGraphStore:
                 .returning(GraphRelationRow.relation_id)
             )
             return len(res.scalars().all())
+
+    async def forget_document(self, tenant_id: str, document_id: str) -> ForgottenDocument:
+        async with self.session() as s, s.begin():
+            gone = (
+                await s.execute(
+                    delete(GraphRelationRow)
+                    .where(
+                        GraphRelationRow.tenant_id == tenant_id,
+                        GraphRelationRow.document_id == document_id,
+                    )
+                    .returning(
+                        GraphRelationRow.relation_id,
+                        GraphRelationRow.subject_id,
+                        GraphRelationRow.object_id,
+                        GraphRelationRow.visibility_keys,
+                    )
+                )
+            ).all()
+            audience = {k for r in gone for k in r.visibility_keys or []}
+            # the bookkeeping edges that quote a removed fact (their ends are relation ids)
+            removed = _text_array([r.relation_id for r in gone])
+            await s.execute(
+                delete(GraphRelationRow).where(
+                    GraphRelationRow.tenant_id == tenant_id,
+                    GraphRelationRow.predicate == INVALIDATED_BY,
+                    or_(
+                        GraphRelationRow.subject_id == func.any(removed),
+                        GraphRelationRow.object_id == func.any(removed),
+                    ),
+                )
+            )
+            # its own document entity holds no relation when the document named nothing
+            touched = {r.subject_id for r in gone} | {r.object_id for r in gone}
+            touched |= set(
+                await s.scalars(
+                    select(GraphEntityRow.entity_id).where(
+                        GraphEntityRow.tenant_id == tenant_id,
+                        GraphEntityRow.canonical_name == document_entity_name(document_id),
+                    )
+                )
+            )
+            ends = _text_array(sorted(touched))
+            # one indexed probe per end (ix_graph_relations_subject / _object)
+            held = [
+                exists().where(
+                    GraphRelationRow.tenant_id == tenant_id, end == GraphEntityRow.entity_id
+                )
+                for end in (GraphRelationRow.subject_id, GraphRelationRow.object_id)
+            ]
+            dropped = (
+                await s.execute(
+                    delete(GraphEntityRow)
+                    .where(
+                        GraphEntityRow.tenant_id == tenant_id,
+                        GraphEntityRow.entity_id == func.any(ends),
+                        *(~h for h in held),
+                    )
+                    .returning(GraphEntityRow.entity_id, GraphEntityRow.visibility_keys)
+                )
+            ).all()
+            audience |= {k for r in dropped for k in r.visibility_keys or []}
+            kept = sorted(touched - {r.entity_id for r in dropped})
+            await s.execute(
+                _FORGET_EVIDENCE, {"tenant": tenant_id, "document": document_id, "ids": kept}
+            )
+        return ForgottenDocument(audience=sorted(audience), kept=kept)
 
     # -- reads ----------------------------------------------------------------------
     async def find_entities(

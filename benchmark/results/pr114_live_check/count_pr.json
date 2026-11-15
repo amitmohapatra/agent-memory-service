@@ -1,0 +1,35 @@
+{
+ "log": "/var/tmp/cons/memh-tmp/lo_pr_1.log",
+ "uses": {
+  "conflict_adjudication": {
+   "calls": 20,
+   "failed": 0
+  },
+  "contextual_extraction": {
+   "calls": 362,
+   "failed": 0
+  },
+  "memory_restatement": {
+   "calls": 362,
+   "failed": 0
+  },
+  "reflection": {
+   "calls": 108,
+   "failed": 0
+  },
+  "relation_extraction": {
+   "calls": 138,
+   "failed": 0
+  },
+  "summaries": {
+   "calls": 380,
+   "failed": 0
+  }
+ },
+ "errors": {},
+ "answered_tokens": [
+  1339719,
+  610299
+ ],
+ "answered_usd": 0.4391
+}

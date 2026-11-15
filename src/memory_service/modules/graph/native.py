@@ -25,7 +25,7 @@ from typing import Any
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.documents import Chunk, DocumentNode, DocumentVersion
 from memory_service.domain.evidence import EvidenceRef, EvidenceSource
-from memory_service.domain.graph import layer_for
+from memory_service.domain.graph import DOCUMENT_ENTITY_PREFIX, document_entity_name, layer_for
 from memory_service.domain.ids import stable_key
 from memory_service.domain.language import is_english
 from memory_service.domain.memory import CanonicalMemory
@@ -201,7 +201,7 @@ def _entity_type(name: str, canonical: str) -> str:
     prefix = canonical.split(":", 1)[0] if ":" in canonical else ""
     if prefix in _PRINCIPAL_TYPES:
         return _PRINCIPAL_TYPES[prefix]
-    if canonical.startswith("doc:"):
+    if canonical.startswith(DOCUMENT_ENTITY_PREFIX):
         return "DOCUMENT"
     if name.isupper() and 2 <= len(name) <= 6:
         return "ACRONYM"
@@ -527,7 +527,7 @@ class NativeGraphEnrichment:
         now = datetime.now(UTC)
         entities: dict[str, Entity] = {}
         relations: dict[str, Relation] = {}
-        doc_canon = f"doc:{version.document_id}"
+        doc_canon = document_entity_name(version.document_id)
         doc_entity = make_entity(
             tenant,
             scope_key,

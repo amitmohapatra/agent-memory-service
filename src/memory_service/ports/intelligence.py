@@ -257,6 +257,18 @@ class EntityFacts(BaseModel):
     summary_source: str = ""
 
 
+class ForgottenDocument(BaseModel):
+    """What ``GraphStore.forget_document`` took out of the graph, for the caller to refresh."""
+
+    model_config = ConfigDict(frozen=True)
+
+    #: the audience keys of every fact and entity removed: the bundles that may hold them
+    audience: list[str]
+    #: entities the document's facts touched that other sources still hold; their evidence
+    #: from it is gone and their summaries are cleared, to be written again
+    kept: list[str]
+
+
 class GraphBudgetExceededError(Exception):
     """A budgeted traversal outran the store's time budget and was stopped by the store."""
 
@@ -368,6 +380,13 @@ class GraphStore(Protocol):
         ...
 
     async def delete_for_document(self, tenant_id: str, document_id: str) -> int: ...
+
+    async def forget_document(self, tenant_id: str, document_id: str) -> ForgottenDocument:
+        """Take out of the graph everything a document that is gone put there: its relations
+        (and the ``invalidated_by`` edges naming them), the entities left with no relation at
+        either end (its own document entity among them), and on the entities that stay, the
+        evidence taken from it and the summary written from its facts."""
+        ...
 
     async def relations_for_document(
         self,
