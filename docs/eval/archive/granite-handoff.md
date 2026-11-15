@@ -1,3 +1,5 @@
+> **Archived 2026-11-15.** A handoff from 2026-10-20; its branch table and status are not kept up to date. Current state: the repo's README, `docs/eval/capabilities.md` and the ADRs.
+
 # Granite 2B evaluation: handoff
 
 How to run the memory service's evaluations with a local Granite 3.3 2B model (llama.cpp
