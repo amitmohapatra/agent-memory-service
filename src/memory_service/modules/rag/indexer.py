@@ -278,7 +278,11 @@ class Indexer:
                 chunks if force else await uow.documents.list_chunks(tenant_id, document_id)
             )
             nodes = await uow.documents.list_nodes(tenant_id, document_id)
-        if not chunks or document is None:
+        if document is None:
+            # gone (its thread was deleted): what it put in the index goes too
+            await self.delete_document(tenant_id, document_id)
+            return 0
+        if not chunks:
             return 0
         async with self.assist.bound(document_identity(document)):
             with (

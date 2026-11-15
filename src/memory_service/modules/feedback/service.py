@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Final
+from typing import Any, Final
 
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import TemporalStatus
@@ -98,6 +98,9 @@ BULK_REVIEW_MAX: Final = 500
 #: apart; after that it counts nothing.
 CALL_RECORD_CHECKS: Final = 10
 CALL_RECORD_WAIT_SECONDS: Final = 30
+#: Where a decision on a tool call keeps the hash of the call's raw arguments (``metadata``),
+#: beside the copy of them its tool lets be stored (``_as_its_tool_redacts``).
+ARGS_HASH_KEY: Final = "args_hash"
 #: The record fields the trusted headers decide; a body that disagrees is refused.
 IDENTITY_FIELDS: Final = ("tenant_id", "workspace_id", "user_id")
 EVIDENCE_SOURCE: Final = EvidenceSource.FEEDBACK
@@ -170,6 +173,8 @@ class FeedbackService:
                 "review": None,
             }
         )
+        if stored.target_kind is FeedbackTargetKind.TOOL_CALL:
+            stored = await self._as_its_tool_redacts(uow, stored)
         stored = stored.model_copy(
             update={"vote": classify(stored, trusted=trusted, run_vouched=run_vouched)}
         )
@@ -845,7 +850,42 @@ class FeedbackService:
         recorded the call it approved, that tool with those arguments (``_backed``), each
         recorded call backing one counted approval (``_spent``: the interrupt id is the
         client's). A rejection or an edit only makes the tool ask more, so it needs no
-        recorded call."""
+        recorded call. The arguments it reads are what intake stored
+        (``_as_its_tool_redacts``)."""
+        return await self._count_tool_call(uow, record, now=now)
+
+    @staticmethod
+    async def _as_its_tool_redacts(uow: UnitOfWork, record: Feedback) -> Feedback:
+        """``record`` as it may be stored, before it is: the decided call's arguments
+        (``metadata.args``, and an edit's replacement arguments, ``correction``) as a recorded
+        call keeps them (``ToolService.record``), the copy without the tool's ``redact``
+        paths, and ``metadata.args_hash``, the one-way hash of the arguments as sent, which
+        decisions are matched to recorded calls by (``_args_hash``); a hash the client sent
+        is never kept as it. The paths are the tool's catalog entry, known before its call is
+        recorded; a tool the catalog does not hold declared nothing to redact, and its
+        arguments are kept as its recorded call keeps them."""
+        tool = str(record.metadata.get("tool") or "").strip()
+        descriptor = await uow.tools.by_name(
+            record.tenant_id, tool, workspace_id=record.workspace_id
+        )
+
+        def kept(args: Any) -> Any:
+            return descriptor.redacted_args(args) if descriptor and isinstance(args, dict) else args
+
+        metadata = dict(record.metadata)
+        metadata.pop(ARGS_HASH_KEY, None)
+        args = metadata.get("args")
+        if isinstance(args, dict):
+            metadata.update({"args": kept(args), ARGS_HASH_KEY: stable_hash(args)})
+        return record.model_copy(
+            update={"metadata": metadata, "correction": kept(record.correction)}
+        )
+
+    async def _count_tool_call(
+        self, uow: UnitOfWork, record: Feedback, *, now: datetime
+    ) -> FeedbackProjection:
+        """What a decision on a tool call counts, and why when nothing (see
+        ``_project_tool_call``)."""
         tool = str(record.metadata.get("tool") or "").strip()
         if not tool:
             return FeedbackProjection(
@@ -1105,12 +1145,20 @@ def _approves(record: Feedback) -> bool:
     )
 
 
+def _args_hash(record: Feedback) -> str:
+    """The hash of the decided call's raw arguments: the one intake kept
+    (``_as_its_tool_redacts``), else of the arguments as stored (a decision stored before the
+    hash was kept holds them as they were sent)."""
+    kept = record.metadata.get(ARGS_HASH_KEY)
+    return kept if isinstance(kept, str) else stable_hash(record.metadata.get("args"))
+
+
 async def _recorded(uow: UnitOfWork, record: Feedback) -> int:
     """How many calls of the decided tool with those arguments the decision's agent recorded
     in its run. A run id is the client's: two agents of one tenant may send the same one, so
     a call another agent recorded under it backs no decision of this one."""
     run_id, tool = record.agent_run_id or "", record.metadata.get("tool")
-    wanted = stable_hash(record.metadata.get("args"))
+    wanted = _args_hash(record)
     calls = await uow.tools.invocations_for_run(record.tenant_id, run_id)
     return sum(
         c.agent_id == record.agent_id and c.tool_name == tool and c.args_hash == wanted
@@ -1133,7 +1181,7 @@ async def _spent(uow: UnitOfWork, record: Feedback) -> bool:
     Serialised per run, so two approvals of one call are counted one after the other."""
     run_id, tool = record.agent_run_id or "", str(record.metadata.get("tool"))
     await uow.serialize(f"tool-approvals:{record.tenant_id}:{run_id}")
-    wanted = stable_hash(record.metadata.get("args"))
+    wanted = _args_hash(record)
     recorded = await _recorded(uow, record)
     decisions = await uow.feedback.counted_decisions(
         record.tenant_id,
@@ -1142,8 +1190,7 @@ async def _spent(uow: UnitOfWork, record: Feedback) -> bool:
         limit=APPROVAL_DECISIONS_READ,
     )
     counted = sum(
-        d.agent_run_id == run_id and _approves(d) and stable_hash(d.metadata.get("args")) == wanted
-        for d in decisions
+        d.agent_run_id == run_id and _approves(d) and _args_hash(d) == wanted for d in decisions
     )
     return counted >= recorded
 

@@ -95,6 +95,12 @@ class MemoryCandidate(BaseModel):
         "not an agent's) or an event recorded in their conversation: by default it then "
         "follows that user across their conversations",
     )
+    said_by_user: bool = Field(
+        default=False,
+        description="the text is a person's own words: their message, decision or feedback, "
+        "relayed by an agent or not, or what they state directly. What is read from it stays "
+        "theirs to restate or retract, whoever writes the row",
+    )
     preceding_turn: dict[str, str] | None = Field(
         default=None,
         description="the message said just before this one in the same conversation: its "

@@ -24,6 +24,15 @@ METADATA_MAX_DEPTH = 2
 TOOL_JSON_MAX_BYTES = 64 * 1024
 TOOL_OUTPUT_MAX_BYTES = 256 * 1024
 
+#: Feedback's ``metadata.args``: the arguments of the tool call a decision answers, which a
+#: client sends unchanged (``trellis.contracts`` ``InterruptResolution.to_feedback``) and the
+#: service matches against the call the run recorded. Bounded as those recorded arguments are
+#: (``TOOL_JSON_MAX_BYTES``, any depth), so a call that could be recorded can be decided: an
+#: OpenAI shell call's ``{"commands": [...]}`` alone is three levels deep there. The other
+#: keys keep the custom_metadata bounds (``args`` counting as one of the 32 keys), so the
+#: whole object stays under 8 KiB + 64 KiB serialised.
+FEEDBACK_ARGS_KEY = "args"
+
 
 def serialised_size(value: Any) -> int:
     """Bytes of the compact JSON form; the same measure the storage layer pays for."""
@@ -39,19 +48,31 @@ def container_depth(value: Any) -> int:
     return 0
 
 
-def _bounded_metadata(value: dict[str, Any]) -> dict[str, Any]:
+def _bounded_metadata(value: dict[str, Any], *, name: str = "custom_metadata") -> dict[str, Any]:
     if len(value) > METADATA_MAX_KEYS:
-        raise ValueError(f"custom_metadata may carry at most {METADATA_MAX_KEYS} keys")
+        raise ValueError(f"{name} may carry at most {METADATA_MAX_KEYS} keys")
     depth = container_depth(value)
     if depth > METADATA_MAX_DEPTH:
-        raise ValueError(
-            f"custom_metadata may nest at most {METADATA_MAX_DEPTH} levels deep (got {depth})"
-        )
+        raise ValueError(f"{name} may nest at most {METADATA_MAX_DEPTH} levels deep (got {depth})")
     size = serialised_size(value)
     if size > METADATA_MAX_BYTES:
-        raise ValueError(
-            f"custom_metadata may serialise to at most {METADATA_MAX_BYTES} bytes (got {size})"
-        )
+        raise ValueError(f"{name} may serialise to at most {METADATA_MAX_BYTES} bytes (got {size})")
+    return value
+
+
+def _bounded_feedback_metadata(value: dict[str, Any]) -> dict[str, Any]:
+    """custom_metadata's bounds, except that ``args`` is bounded as tool arguments are."""
+    if len(value) > METADATA_MAX_KEYS:
+        raise ValueError(f"metadata may carry at most {METADATA_MAX_KEYS} keys")
+    if FEEDBACK_ARGS_KEY in value:
+        size = serialised_size(value[FEEDBACK_ARGS_KEY])
+        if size > TOOL_JSON_MAX_BYTES:
+            raise ValueError(
+                f"metadata.{FEEDBACK_ARGS_KEY} may serialise to at most "
+                f"{TOOL_JSON_MAX_BYTES} bytes (got {size})"
+            )
+    rest = {k: v for k, v in value.items() if k != FEEDBACK_ARGS_KEY}
+    _bounded_metadata(rest, name="metadata")
     return value
 
 
@@ -74,6 +95,20 @@ CustomMetadata = Annotated[
         description=(
             f"Caller-defined JSON object: at most {METADATA_MAX_KEYS} keys, "
             f"{METADATA_MAX_DEPTH} levels of nesting and {METADATA_MAX_BYTES} bytes serialised."
+        )
+    ),
+]
+
+FeedbackMetadata = Annotated[
+    dict[str, Any],
+    AfterValidator(_bounded_feedback_metadata),
+    Field(
+        description=(
+            f"Caller-defined JSON object: at most {METADATA_MAX_KEYS} keys. "
+            f"`{FEEDBACK_ARGS_KEY}` (the decided tool call's arguments) may nest to any depth "
+            f"and serialise to at most {TOOL_JSON_MAX_BYTES} bytes, as a recorded call's "
+            f"arguments may; the other keys together at most {METADATA_MAX_DEPTH} levels of "
+            f"nesting and {METADATA_MAX_BYTES} bytes serialised."
         )
     ),
 ]

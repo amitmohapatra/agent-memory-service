@@ -41,6 +41,24 @@ each entry says which one moved. Decisions behind each change are in the
   asking call.
 
 ### Changed
+- **The OpenAPI document lists the `504` the request deadline answers** (service, contract).
+  Every operation the deadline middleware covers (every one but `POST /v1/documents`, the
+  probes and `/metrics`: 69 of 73) now documents `504` with the `Problem` schema, `code:
+  TIMEOUT`, `retryable: true` and `Retry-After`, its example the middleware's own detail
+  ("The request exceeded its 5 s read deadline", 15 s for a write or a verify). The service
+  already answered it; generated clients and contract checkers no longer take it for an
+  undocumented status.
+- **A decision on a tool call with nested arguments is kept and counted** (service). The
+  arguments a decision answers travel unchanged at `POST /v1/feedback`'s `metadata.args`, and
+  feedback `metadata` was bounded like every `custom_metadata` (2 levels of nesting, 8 KiB), so
+  a decision on a call whose arguments hold a list or an object (an OpenAI shell call's
+  `{"commands": [...]}`, a function tool taking an object) was refused with a 422 and lost: it
+  never counted toward a learned approval rule. `metadata.args` is now bounded as a recorded
+  call's arguments are (64 KiB serialised, any depth) and is matched to the recorded call and
+  counted exactly as flat arguments are; the other keys keep the custom-metadata bounds (32 keys
+  in all, `args` included; 2 levels; 8 KiB). Every other `custom_metadata` field is unchanged.
+  The published description of `FeedbackRequest.metadata` says so; no route, field or SDK call
+  changed.
 - **More of the assistant's earlier answers when a context has room** (service). For a
   question that points to an earlier chat the context pins up to three of the assistant's
   earlier answers, a long one as its two ends (ADR 0044). When the context still has room
@@ -357,6 +375,68 @@ each entry says which one moved. Decisions behind each change are in the
   room for thinking (`LLMTuning.thinking_room`), still capped by the model profile's
   `max_output_tokens`. A model that does not think stops where its answer ends, so the room
   costs it nothing. Not yet confirmed against a live model.
+- **A profile line goes with the memory it was learned from** (service). The pinned `user`
+  block is composed from the user's USER and PREFERENCE memories, but forgetting one left its
+  line: the index job queued `profile.refresh` only for memories it could still read (a
+  forgotten one is not), and a user with none left kept the block. The job now queues the
+  refresh for every user whose profile memory changed, forgotten included
+  (`MemoryRepository.scope_users`), and a learned block with nothing left is emptied. An
+  edited block keeps its text. No route or schema changed.
+- **A deleted thread's documents and messages are read by nothing** (service). `DELETE
+  /v1/threads/{id}` marked the thread deleted and left its messages live and its documents
+  readable: a document attached in the deleted thread still answered `/v1/context`, search
+  and `GET /v1/documents/{id}`. The deletion now marks the thread's messages deleted (soft,
+  as the thread: the rows stay for the archive and the audit) and the documents only it held
+  (uploaded into it or attached in it, with no audience wider than the thread and no live
+  message of another live thread attaching them), and the document index job takes their
+  chunks out of the index. A document another live thread attaches stays until the last such
+  thread goes. Also: a message carrying attachments failed with a foreign-key error (the
+  attachment rows were written before the message). Migration
+  `0038_attachment_document_index`. No route or schema changed.
+- **The user's inventory lists what they said in their conversations** (service, BUG-M3).
+  `GET /v1/memories` ("what do we hold about this user") listed the memories anchored at the
+  caller's agent, user, thread, group, workspace and tenant, and a statement said in a
+  conversation is anchored in its thread (ADR 0036), so without that thread the inventory
+  held none of the user's statements. It now also lists every memory whose audience is the
+  user (`user:<tenant>/<user>`), wherever it is anchored, in the same keyset (one statement a
+  page; migration `0037_memory_audience_index` adds a GIN index on the live rows'
+  `visibility_keys`, built concurrently). Another participant's statements in a shared
+  thread are not the user's and are not listed. No route or schema changed.
+- **An agent asks before retracting what was read out of the user's words** (service,
+  BUG-M1). A memory read out of a user's turn that a harness relayed (a preference, a fact)
+  is owned by the agent (`agent:<user>/<agent>`) and is no `said` turn, so `memory_forget`,
+  `memory_update` and supersede, forget and restore over HTTP let the agent change it
+  without asking the person. Every memory the pipeline or a statement writes now records
+  whether it is a person's own words (`system_metadata.said_by_user`: their message,
+  decision or feedback, relayed or not, or what a user states or restates directly), and an
+  agent is refused such a memory (`reason: users_own_statement`) as it is the turn itself.
+  What an agent noted or reported is unchanged. Migration `0036_said_by_user` marks the rows
+  stored before that were read out of a user's message (role `USER`, `VISIBLE`); a row read
+  out of a decision or feedback before this version keeps no message to tell from and stays
+  as it was. No route or schema changed.
+- **The tenant's admin key may forget, update and restore any memory of its tenant**
+  (service, authorization). The docs give these to "its owner, the user an agent acts for, or
+  a tenant admin", and the admin key is the tenant admin's credential (docs/api/feedback.md),
+  but the decision read only an authorization tuple of the principal the key acted as: the
+  key could forget what that principal owned and nothing else, so a memory a teammate or an
+  agent wrote could not be erased with it. `AuthorizationService.is_tenant_admin` now also
+  answers yes for a request sent with the tenant's `admin` key (or the platform key); a
+  context stored for later work never carries that authority, and an error from the
+  authorization store still refuses. Another tenant's key is refused as before. No route or
+  schema changed.
+- **A decision on a tool call no longer keeps the arguments its tool redacts** (service,
+  security: SEC-R-10). A recorded call keeps its arguments without the tool's `redact` paths, but the
+  approval, rejection or edit of such a call stored the raw arguments it was sent
+  (`metadata.args`, up to 64 KiB; an edit's `correction` too) and answered them in every read
+  of the record, the `POST` that carried them included. The record is stored, from the
+  `POST` on, with the arguments as the tool's catalog entry redacts them and
+  `metadata.args_hash`, the hash of the arguments as sent (one that the client sends is not
+  kept); decisions are matched to recorded calls, and to each other, by that hash. Migration
+  `0039_redact_stored_decisions` rewrites the decisions stored before the same way, in
+  batches and idempotently: the hash of the stored arguments replaces any the client sent,
+  and the arguments are redacted where the tool's catalog entry is known (a decision on a
+  tool the catalog does not hold keeps its arguments, counted in the migration's log). No
+  route or schema changed.
 - **A length of time is no date** (service). "SUP-20's lead time is 32 days, from my call
   today" was stored with "32 days = 2026-10-01" beside it: with a relative cue in the text
   ("today"), the relative-time parser read a bare count of a unit as that long ago, and an

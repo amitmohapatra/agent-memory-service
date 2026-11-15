@@ -317,7 +317,10 @@ class ProfileService:
         )
 
     async def refresh_user(self, tenant_id: str, user_id: str) -> ProfileBlock | None:
-        """Keep the ``user`` block from the user's own USER and PREFERENCE memories."""
+        """Keep the ``user`` block from the user's own USER and PREFERENCE memories: composed
+        from those held now, so a memory forgotten, replaced or archived leaves it with the
+        next refresh, and a learned block of a user who has none left is emptied. An edited
+        block keeps its edit (a person's or an agent's words, not derived)."""
         scope = f"user:{user_id}"
         async with self.uow_factory() as uow:
             memories = await uow.memories.about_user(
@@ -331,9 +334,9 @@ class ProfileService:
             # follow its author into every conversation for its whole TTL.
             memories = [m for m in memories if m.lifetime is not Lifetime.SHORT_TERM]
             current = await uow.profiles.get(tenant_id, scope, USER_BLOCK)
-        if not memories:
+        if not memories and (current is None or current.source == "edited"):
             return current
-        text = await self._compose(tenant_id, user_id, memories, current)
+        text = await self._compose(tenant_id, user_id, memories, current) if memories else ""
         if current is not None and text == current.text:
             return current
         async with self.uow_factory() as uow:

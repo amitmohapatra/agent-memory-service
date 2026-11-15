@@ -220,7 +220,15 @@ def test_custom_metadata_is_bounded_everywhere_it_appears(client: TestClient) ->
     too_many = {f"k{i}": i for i in range(METADATA_MAX_KEYS + 1)}
     too_deep = {"a": {"b": {"c": 1}}}
     too_big = {"blob": "x" * METADATA_MAX_BYTES}
-    for bad in (too_many, too_deep, too_big):
+    # feedback's metadata.args is bounded as tool arguments are; nowhere else is "args" special
+    nested_args = {"args": {"commands": ["ls"]}}
+    for bad in (too_many, too_deep, too_big, nested_args):
+        r = client.post(
+            "/v1/memories",
+            headers=HEADERS,
+            json={"scope": SCOPE, "content": "c", "custom_metadata": bad},
+        )
+        assert "body.custom_metadata" in _locs(r), r.text
         r = client.patch(
             "/v1/threads/thr_1", headers=HEADERS, json={"scope": SCOPE, "custom_metadata": bad}
         )
@@ -230,21 +238,22 @@ def test_custom_metadata_is_bounded_everywhere_it_appears(client: TestClient) ->
             "/v1/messages", headers=HEADERS, json={"scope": SCOPE, "messages": [message]}
         )
         assert "body.messages.0.custom_metadata" in _locs(r), r.text
-    # the scope's own metadata, on any route that carries a scope
-    r = client.post(
-        "/v1/recall",
-        headers=HEADERS,
-        json={"scope": {**SCOPE, "custom_metadata": too_deep}, "query": "q"},
-    )
-    assert "body.scope.custom_metadata" in _locs(r)
-    # the multipart form: parsed by hand, bounded by the same rule
-    r = client.post(
-        "/v1/documents",
-        headers=HEADERS,
-        files={"file": ("a.txt", b"hello", "text/plain")},
-        data={"scope": json.dumps(SCOPE), "custom_metadata": json.dumps(too_deep)},
-    )
-    assert r.status_code == 422 and "custom_metadata" in r.text
+    for bad in (too_deep, nested_args):
+        # the scope's own metadata, on any route that carries a scope
+        r = client.post(
+            "/v1/recall",
+            headers=HEADERS,
+            json={"scope": {**SCOPE, "custom_metadata": bad}, "query": "q"},
+        )
+        assert "body.scope.custom_metadata" in _locs(r)
+        # the multipart form: parsed by hand, bounded by the same rule
+        r = client.post(
+            "/v1/documents",
+            headers=HEADERS,
+            files={"file": ("a.txt", b"hello", "text/plain")},
+            data={"scope": json.dumps(SCOPE), "custom_metadata": json.dumps(bad)},
+        )
+        assert r.status_code == 422 and "custom_metadata" in r.text
     # a flat object of objects is the allowed shape
     ok = {"source": "upload", "tags": ["a", "b"], "meta": {"k": 1}}
     assert TypeAdapter(CustomMetadata).validate_python(ok) == ok

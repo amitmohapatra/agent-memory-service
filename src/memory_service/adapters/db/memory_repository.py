@@ -312,6 +312,23 @@ class SqlMemoryRepository:
         by_id = {r.memory_id: _to_domain(r) for r in rows if not _invalid_derived(r)}
         return [by_id[i] for i in memory_ids if i in by_id]
 
+    async def scope_users(
+        self, tenant_id: str, memory_ids: Sequence[str], *, memory_types: Sequence[str]
+    ) -> set[str]:
+        if not memory_ids:
+            return set()
+        users = await self.s.scalars(
+            select(MemoryRow.user_id)
+            .where(
+                MemoryRow.tenant_id == tenant_id,
+                MemoryRow.memory_id.in_(list(memory_ids)),
+                MemoryRow.memory_type.in_(list(memory_types)),
+                MemoryRow.user_id.is_not(None),
+            )
+            .distinct()
+        )
+        return {str(u) for u in users.all()}
+
     async def visibility_keys(self, tenant_id: str, memory_id: str) -> list[str]:
         r = await self.s.get(MemoryRow, memory_id)
         if r is None or r.tenant_id != tenant_id or r.deleted_at is not None:
@@ -628,6 +645,7 @@ class SqlMemoryRepository:
         tenant_id: str,
         *,
         scope_keys: Sequence[str],
+        audience_keys: Sequence[str] = (),
         memory_types: Sequence[str] | None = None,
         current_only: bool = True,
         before: tuple[datetime, str] | None = None,
@@ -635,14 +653,20 @@ class SqlMemoryRepository:
     ) -> list[CanonicalMemory]:
         """Newest created first. The page holds ``limit`` valid rows: a derived row that has
         lapsed is skipped and replaced by the next one, so fewer than ``limit`` rows means
-        the scope is exhausted (the keyset is ``(created_at, memory_id)``, which never moves)."""
-        if not scope_keys:
+        the scope is exhausted (the keyset is ``(created_at, memory_id)``, which never moves).
+        An anchor is ``ix_memories_tenant_scope``'s range and an audience key
+        ``ix_memories_visibility_keys``' (GIN containment); one statement either way."""
+        if not scope_keys and not audience_keys:
             return []
+        held = or_(
+            MemoryRow.scope_key.in_(list(scope_keys)),
+            *(MemoryRow.visibility_keys.contains([key]) for key in audience_keys),
+        )
         out: list[CanonicalMemory] = []
         while len(out) < limit:
             stmt = select(MemoryRow).where(
                 MemoryRow.tenant_id == tenant_id,
-                MemoryRow.scope_key.in_(list(scope_keys)),
+                held,
                 MemoryRow.deleted_at.is_(None),
             )
             if current_only:

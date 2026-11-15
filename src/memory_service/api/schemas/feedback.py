@@ -7,7 +7,7 @@ from typing import Annotated, Any
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
-from memory_service.api.validation import CustomMetadata, bounded_json
+from memory_service.api.validation import FeedbackMetadata, bounded_json
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.feedback import (
     COMMENT_MAX_CHARS,
@@ -130,7 +130,7 @@ class FeedbackRequest(BaseModel):
         description="What the verdict points at, e.g. the memories an answer cited (at most"
         " 50); each must be readable by the caller.",
     )
-    metadata: CustomMetadata = Field(default_factory=dict)
+    metadata: FeedbackMetadata = Field(default_factory=dict)
     created_at: UtcDateTime | None = Field(
         default=None,
         description="Accepted for the contracts shape and ignored: the stored instant is the "

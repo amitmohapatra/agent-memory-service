@@ -117,7 +117,8 @@ await ctx.forget(memory.memory_id)  # soft delete + index removal; idempotent
 ```
 
 `memories` is the audit view — "what do we hold about this user, thread or run" — and it is not
-ranked. The ranked, query-driven view is `recall` ([context.md](context.md)).
+ranked. For a user it holds what they said in any of their conversations too (a statement is
+anchored in its thread, ADR 0036, with the user as its audience), never another participant's. The ranked, query-driven view is `recall` ([context.md](context.md)).
 
 ### Archived is not forgotten
 
@@ -133,7 +134,8 @@ memory = await ctx.advanced.memories.restore(memory_id)  # CURRENT and re-indexe
 ```
 
 The same people who may forget a memory may restore it (its owner, the user an agent acts for,
-or a tenant admin). Restoring a memory that is not archived returns it unchanged; one that was
+or a tenant admin: a request sent with the tenant's admin key, whoever it acts for, or a user
+the tenant made its admin). Restoring a memory that is not archived returns it unchanged; one that was
 forgotten stays forgotten (`404`).
 
 ### Forgetting takes what was derived from it

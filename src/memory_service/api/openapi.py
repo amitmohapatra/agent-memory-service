@@ -8,7 +8,8 @@ from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from fastapi.routing import APIRoute
 
-from memory_service.api.errors import Problem, error_responses
+from memory_service.api.deadline import budgets, route_class, timeout_detail
+from memory_service.api.errors import PROBLEM_MEDIA_TYPE, Problem, error_responses
 from memory_service.api.headers import (
     CACHE_CONTROL_HEADER,
     CORRELATION_ID_HEADER,
@@ -24,7 +25,7 @@ from memory_service.api.headers import (
     RETRY_AFTER_HEADER,
     TRACE_ID_HEADER,
 )
-from memory_service.config.constants import HEADERS, PROJECT_URL
+from memory_service.config.constants import HEADERS, OVERLOAD, PROJECT_URL
 from memory_service.observability.tracing import TRACEPARENT_HEADER
 
 TITLE = "trellis-memory API"
@@ -273,6 +274,27 @@ def _document_responses(path: str, method: str, op: dict[str, Any]) -> None:
                 example["instance"] = path
 
 
+def _document_timeout(path: str, method: str, op: dict[str, Any]) -> None:
+    """Attach the ``504 TIMEOUT`` the deadline middleware (``api/deadline.py``) answers when
+    the operation runs past its route class's budget, to every operation that has one:
+    retryable, with ``Retry-After``, its detail the middleware's own (the budget is the
+    default's: ``OVERLOAD``)."""
+    kind = route_class(method.upper(), path)
+    if kind is None:
+        return
+    detail = timeout_detail(kind, budgets(OVERLOAD)[kind])
+    response = error_responses(504)[504]
+    response["description"] = (
+        f"{detail}: nothing is promised about a write it interrupted, so retry it with the "
+        "same Idempotency-Key after Retry-After"
+        if kind == "write"
+        else f"{detail}; retry after Retry-After"
+    )
+    response["headers"] = _response_header_refs([RETRY_AFTER_HEADER])
+    response["content"][PROBLEM_MEDIA_TYPE]["example"].update(detail=detail, instance=path)
+    op.setdefault("responses", {}).setdefault("504", response)
+
+
 def takes_idempotency_key(method: str, op: dict[str, Any]) -> bool:
     """Whether the operation is a write that honours ``Idempotency-Key`` (every write goes
     through ``api/idempotent.run_idempotent``), as opposed to a GET or a read-only POST."""
@@ -385,6 +407,7 @@ def custom_openapi(app: FastAPI, *, version: str) -> dict[str, Any]:
         for method, op in methods.items():
             if method not in ("get", "post", "put", "patch", "delete"):
                 continue
+            _document_timeout(path, method, op)
             if path.startswith(OPS_PREFIXES):
                 # the probes and the scrape answer before any key exists
                 op["security"] = []

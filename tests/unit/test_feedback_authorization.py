@@ -14,6 +14,7 @@ from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.feedback import (
     REPLACED_REASON,
     Feedback,
+    FeedbackProjection,
     FeedbackSource,
     FeedbackTargetKind,
     FeedbackVerdict,
@@ -22,7 +23,7 @@ from memory_service.domain.feedback import (
 )
 from memory_service.domain.grounding import ClaimReport, GroundingReport
 from memory_service.domain.memory import CanonicalMemory, Scope, TemporalState
-from memory_service.domain.tools import RunOutcome, ToolInvocation, stable_hash
+from memory_service.domain.tools import RunOutcome, ToolDescriptor, ToolInvocation, stable_hash
 from memory_service.modules.feedback.service import CALL_RECORD_CHECKS, FeedbackService
 from memory_service.modules.feedback.votes import ALREADY_COUNTED_REASON, is_vote
 from memory_service.modules.grounding.judge import judge_run
@@ -65,13 +66,15 @@ class _FeedbackRepo:
         self.rows[(feedback.tenant_id, feedback.feedback_id)] = feedback
         return True
 
-    async def set_review(self, tenant_id, feedback_id, review) -> None:
+    def _set(self, tenant_id, feedback_id, **changed) -> None:
         row = self.rows[(tenant_id, feedback_id)]
-        self.rows[(tenant_id, feedback_id)] = row.model_copy(update={"review": review})
+        self.rows[(tenant_id, feedback_id)] = row.model_copy(update=changed)
+
+    async def set_review(self, tenant_id, feedback_id, review) -> None:
+        self._set(tenant_id, feedback_id, review=review)
 
     async def set_projection(self, tenant_id, feedback_id, projection) -> None:
-        row = self.rows[(tenant_id, feedback_id)]
-        self.rows[(tenant_id, feedback_id)] = row.model_copy(update={"projection": projection})
+        self._set(tenant_id, feedback_id, projection=projection)
 
     async def pending_on(
         self,
@@ -143,6 +146,7 @@ def _same_voter(r: Feedback, user_id, agent_id) -> bool:
 class _Uow:
     def __init__(self) -> None:
         self.feedback = _FeedbackRepo()
+        self.tools = _Run()  # an empty catalog: where intake reads a tool's redact paths
         self.jobs: list = []
         self.locks: list[str] = []
 
@@ -651,6 +655,7 @@ class _Run:
         self.confidence = {"mem_1": 0.9}
         self.calls: list[ToolInvocation] = []
         self.counted: list[tuple[str, str, str]] = []
+        self.catalog: dict[str, ToolDescriptor] = {}
 
     async def outcome(self, tenant_id, run_id):
         return self.outcomes.get(run_id)
@@ -669,6 +674,9 @@ class _Run:
 
     async def invocations_for_run(self, tenant_id, run_id) -> list:
         return [c for c in self.calls if c.run_id == run_id]
+
+    async def by_name(self, tenant_id, name, *, workspace_id=None) -> ToolDescriptor | None:
+        return self.catalog.get(name)
 
     async def count_verdict(self, *_: object) -> None:
         return None
@@ -1093,6 +1101,90 @@ async def test_another_agents_decision_on_the_same_interrupt_does_not_stop_this_
     mine = await service.project("acme", "fb_a", attempt=CALL_RECORD_CHECKS)
     assert mine is not None and mine.action is ProjectionAction.TOOL_CALL_COUNTED
     assert counted == [("intruder", "rejections"), ("ops", "approvals")]
+
+
+async def test_a_decision_keeps_the_hash_and_the_tools_redacted_arguments() -> None:
+    """SEC-R-10: what a projected decision keeps of the call is the hash of its raw arguments
+    and the copy the tool's ``redact`` paths leave. A decision counted before the hash was
+    kept (its raw arguments still stored) spends its call all the same, and a hash the client
+    sends is not believed: the one kept is of the arguments it sent."""
+    service, run, uow = _projecting()
+    run.catalog["transfer_stock"] = ToolDescriptor(
+        tenant_id="acme", name="transfer_stock", redact=["to"]
+    )
+    run.calls.append(_transfer())
+    ctx = OWNER.model_copy(update={"agent_id": "ops", "agent_run_id": "run_7"})
+    counted = FeedbackProjection(
+        action=ProjectionAction.TOOL_CALL_COUNTED, projected_at=datetime(2026, 9, 1, tzinfo=UTC)
+    )
+    earlier = _decision(FeedbackVerdict.APPROVE, "fb_earlier", interrupt_id="int_0")
+    await uow.feedback.add(
+        earlier.model_copy(
+            update={"agent_id": "ops", "agent_run_id": "run_7", "projection": counted}
+        )
+    )
+
+    async def decided(feedback_id: str, **metadata) -> Feedback:
+        record = _decision(FeedbackVerdict.APPROVE, feedback_id, interrupt_id=feedback_id)
+        record = record.model_copy(update={"metadata": {**record.metadata, **metadata}})
+        await service.submit(uow, ctx, record)
+        await service.project("acme", feedback_id, attempt=CALL_RECORD_CHECKS)
+        return uow.feedback.rows[("acme", feedback_id)]
+
+    spent = await decided("fb_spent")  # the one recorded call backs the earlier approval
+    assert spent.projection is not None and spent.projection.action is ProjectionAction.NONE
+    assert spent.metadata["args"] == {**ARGS, "to": "[redacted]"}
+    assert spent.metadata["args_hash"] == stable_hash(ARGS)
+
+    other = {**ARGS, "to": "S99"}  # never recorded, sent with the recorded call's hash
+    forged = await decided("fb_forged", args=other, args_hash=stable_hash(ARGS))
+    assert forged.projection is not None
+    assert forged.projection.reason == "the run recorded no call of that tool with those arguments"
+    assert forged.metadata["args_hash"] == stable_hash(other)
+
+    run.calls.append(_transfer(step=1))
+    backed = await decided("fb_backed")
+    assert backed.projection is not None
+    assert backed.projection.action is ProjectionAction.TOOL_CALL_COUNTED
+    assert backed.metadata["args"] == {**ARGS, "to": "[redacted]"}
+    again = await decided("fb_again")  # compared by the hash the backed one kept
+    assert again.projection is not None and again.projection.action is ProjectionAction.NONE
+
+
+async def test_a_decision_is_stored_as_its_tool_redacts_it_before_it_is_projected() -> None:
+    """SEC-R-10 at intake: the row a decision is stored as holds the tool's redacted copy of
+    the call's arguments (and of an edit's replacement) and the hash of what was sent, from
+    the POST on, projected or not. A hash the client sends is never stored as the call's. A
+    tool the catalog does not hold declared nothing to redact: its arguments are kept as its
+    recorded call keeps them (``ToolService.record``)."""
+    service, run, uow = _projecting()
+    run.catalog["transfer_stock"] = ToolDescriptor(
+        tenant_id="acme", name="transfer_stock", redact=["to"]
+    )
+    ctx = OWNER.model_copy(update={"agent_id": "ops", "agent_run_id": "run_7"})
+    kept = {**ARGS, "to": "[redacted]"}
+
+    async def stored(record: Feedback) -> Feedback:
+        await service.submit(uow, ctx, record)
+        return uow.feedback.rows[("acme", record.feedback_id)]
+
+    approved = await stored(_decision(FeedbackVerdict.APPROVE, "fb_a", interrupt_id="i_a"))
+    assert approved.projection is None
+    assert approved.metadata["args"] == kept
+    assert approved.metadata["args_hash"] == stable_hash(ARGS)
+    edit = _decision(FeedbackVerdict.REJECT, "fb_e", interrupt_id="i_e").model_copy(
+        update={"verdict": FeedbackVerdict.EDIT, "correction": {**ARGS, "to": "S99"}}
+    )
+    edited = await stored(edit)
+    assert (edited.metadata["args"], edited.correction) == (kept, kept)
+    claimed = _decision(FeedbackVerdict.APPROVE, "fb_c", interrupt_id="i_c")
+    claimed = claimed.model_copy(update={"metadata": {"tool": "transfer_stock", "args_hash": "x"}})
+    assert "args_hash" not in (await stored(claimed)).metadata
+    unknown = _decision(FeedbackVerdict.REJECT, "fb_u", interrupt_id="i_u")
+    unknown = unknown.model_copy(
+        update={"metadata": {**unknown.metadata, "tool": "uncatalogued_tool"}}
+    )
+    assert (await stored(unknown)).metadata["args"] == ARGS
 
 
 def test_a_context_naming_a_run_must_name_its_agent() -> None:

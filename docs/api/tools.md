@@ -210,7 +210,10 @@ an id field, the entity is `identified_by` the id. That is how "Acme" becomes `s
 
 A verdict on a tool call (`POST /v1/feedback` with `target_kind: tool_call`, `metadata.tool` and,
 ideally, `metadata.args`; an `edit`'s correction stands in for the arguments) is counted per
-(agent, tool, argument shape). The shape is value-free: each argument with its kind, numbers by
+(agent, tool, argument shape). `metadata.args` is the call's arguments as they were, bounded as a
+recorded call's are (64 KiB serialised, any depth: a shell call's `{"commands": [...]}` or an
+object argument is fine); the rest of `metadata` keeps the custom-metadata bounds (32 keys in all,
+2 levels, 8 KiB). The shape is value-free: each argument with its kind, numbers by
 order of magnitude (`amount:num:1e4,supplier:str`). With at least 5 decisions, 95% approved
 suggests `auto_approve` and 50% or fewer `always_ask`. Nothing applies them on its own.
 
@@ -321,7 +324,14 @@ sequenceDiagram
 | each tool call | `POST /v1/tools/invocations` | `tool`, `args`, `output`, `status` (ok, error, timeout, rejected, cancelled), `error_class`, `latency_ms`, `task`, `step` | `clients/memory.py::record_tool` |
 | on demand, mid-run | `POST /v1/tools/hints` | `task`, `available` (the run's tool names) | the `tool_search` memory tool |
 
-Arguments are redacted per the catalog entry's `redact` list before they are stored.
+Arguments are redacted per the catalog entry's `redact` list before they are stored. The same
+holds for a decision on a call: the feedback record is stored, and answered from the
+`POST` on, with `metadata.args` (and an edit's replacement arguments, `correction`) as the
+tool redacts them, and `metadata.args_hash`, the one-way hash of the arguments as sent, which
+a recorded call carries too and decisions are matched by (an `args_hash` the client sends is
+not kept). The paths are the tool's catalog entry, so a decision sent before its call is
+recorded is redacted all the same; a tool the catalog does not hold declared nothing to
+redact, and its arguments are kept as its recorded call keeps them.
 
 ### What comes back
 

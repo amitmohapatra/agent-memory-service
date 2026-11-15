@@ -340,6 +340,10 @@ class SqlMessageRepository:
                 tool_call_id=message.tool_call_id,
             )
         )
+        if message.attachments:
+            # the attachment rows reference the message: no relationship tells the flush to
+            # write the message first, so it is written before them
+            await self.s.flush()
         for att in message.attachments:
             self.s.add(
                 MessageAttachmentRow(
@@ -353,6 +357,18 @@ class SqlMessageRepository:
                 )
             )
         await self.s.flush()
+
+    async def delete_thread(self, tenant_id: str, thread_id: str) -> int:
+        result = await self.s.execute(
+            update(MessageRow)
+            .where(
+                MessageRow.tenant_id == tenant_id,
+                MessageRow.thread_id == thread_id,
+                MessageRow.deleted_at.is_(None),
+            )
+            .values(deleted_at=func.now())
+        )
+        return _rowcount(result)
 
     async def get(self, tenant_id: str, message_id: str) -> Message | None:
         r = await self.s.get(MessageRow, message_id)

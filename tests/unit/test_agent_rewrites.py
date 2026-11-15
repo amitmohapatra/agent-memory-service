@@ -159,6 +159,51 @@ def test_what_a_person_said_is_told_apart_from_an_agents_note() -> None:
     assert not said_by_a_person(record), "an event the agent recorded is the agent's"
 
 
+def test_a_reading_of_the_users_words_stays_theirs_whoever_wrote_the_row() -> None:
+    """BUG-M1: a harness relaying the turn owns what is read out of it (``agent:<u>/<a>``),
+    and the reading is no ``said`` turn; where it came from is recorded with it."""
+    relayed = {"owner": "agent:u1/harness", "subject": None, "predicate": None}
+    reading = _memory(
+        "Prefers one-sentence answers.",
+        memory_type=MemoryType.PREFERENCE,
+        system_metadata={"category": "preference", "said_by_user": True},
+        **relayed,
+    )
+    assert said_by_a_person(reading)
+    inferred = _memory(
+        "The user seems to prefer short answers.",
+        memory_type=MemoryType.AGENT,
+        system_metadata={"category": "stated", "said_by_user": False},
+        **relayed,
+    )
+    assert not said_by_a_person(inferred)
+
+
+async def test_a_version_the_user_writes_of_a_relayed_reading_is_their_words() -> None:
+    """The user restating a reading a harness relayed keeps its owner (``_authorship``); the
+    new version is the user's words, which the agent may not retract unasked."""
+    reading = _memory(
+        "Prefers one-sentence answers.",
+        owner="agent:u1/analyst",
+        memory_type=MemoryType.PREFERENCE,
+        subject=None,
+        predicate=None,
+        system_metadata={"category": "preference", "said_by_user": False},
+    )
+    uow = _Uow([reading])
+    service = MemoryService(_Authz())  # type: ignore[arg-type]
+    mine = await service.supersede(
+        uow,  # type: ignore[arg-type]
+        USER,
+        reading.memory_id,
+        content="Prefers answers of three sentences.",
+        reason="changed my mind",
+    )
+    assert mine.owner_principal == "agent:u1/analyst" and said_by_a_person(mine)
+    with pytest.raises(ScopeDenied):
+        await _tools(uow).call(RUN, "memory_forget", {"id": mine.memory_id})
+
+
 # --- an agent run's tools -------------------------------------------------------------------
 
 

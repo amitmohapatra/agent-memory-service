@@ -8,6 +8,7 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
+from memory_service.api.deadline import route_class
 from memory_service.api.openapi import UNKEYED_POSTS
 
 pytestmark = pytest.mark.contract
@@ -171,3 +172,36 @@ def test_every_request_instant_is_read_as_utc(client: TestClient) -> None:
             }
             if "date-time" in formats:
                 assert "UTC" in param.get("description", ""), f"{method} {path} {param['name']}"
+
+
+def test_every_operation_with_a_deadline_documents_its_504(client: TestClient) -> None:
+    """The deadline middleware answers ``504 TIMEOUT`` (retryable, with ``Retry-After``) when
+    an operation runs past its route class's budget; every operation it covers says so, in the
+    middleware's own words, and the ones it does not (uploads, probes, the scrape) do not."""
+    schema = client.get("/openapi.json").json()
+    details = {
+        "read": "The request exceeded its 5 s read deadline",
+        "write": "The request exceeded its 15 s write deadline",
+        "verify": "The request exceeded its 15 s verify deadline",
+    }
+    covered = 0
+    for method, path, op in _operations(schema):
+        kind = route_class(method.upper(), path)
+        where = f"{method.upper()} {path}"
+        if kind is None:
+            assert "504" not in op["responses"], where
+            continue
+        covered += 1
+        response = op["responses"].get("504")
+        assert response is not None, where
+        assert "Retry-After" in response["headers"], where
+        problem = response["content"]["application/problem+json"]
+        assert problem["schema"] == {"$ref": "#/components/schemas/Problem"}, where
+        example = problem["example"]
+        assert (example["status"], example["code"], example["retryable"]) == (
+            504,
+            "TIMEOUT",
+            True,
+        ), where
+        assert (example["detail"], example["instance"]) == (details[kind], path), where
+    assert covered == 69  # every operation but the upload, the two probes and the scrape

@@ -221,3 +221,30 @@ def test_two_tenants_using_the_same_identifiers_share_nothing(client) -> None:
     assert (
         client.get(f"/v1/graph/entities/{ours[0]['entity_id']}", headers=globex).status_code == 404
     )
+
+
+def test_feedback_on_a_memory_is_read_only_by_who_may_read_the_memory(client) -> None:
+    """A judgement on a memory says what the memory is about, so it is as private as the
+    memory: its author reads it back by id, another user of the tenant gets 404 for it,
+    exactly as for the memory itself."""
+    ann = {**H, "X-Trellis-Tenant": "acme", "X-Trellis-User": "ann"}
+    bob = {**H, "X-Trellis-Tenant": "acme", "X-Trellis-User": "bob"}
+    created = client.post(
+        "/v1/memories",
+        headers=ann,
+        json={"content": "Ann's salary is 91,000.", "visibility": "USER", "scope": {}},
+    )
+    assert created.status_code == 201, created.text
+    memory_id = created.json()["memory_id"]
+    judged = client.post(
+        "/v1/feedback",
+        headers=ann,
+        json={"target_kind": "memory", "target_id": memory_id, "verdict": "confirm"},
+    )
+    assert judged.status_code == 201, judged.text
+    feedback_id = judged.json()["feedback_id"]
+    assert client.get(f"/v1/feedback/{feedback_id}", headers=ann).status_code == 200
+    assert client.get(f"/v1/memories/{memory_id}", headers=bob).status_code in (403, 404)
+    hidden = client.get(f"/v1/feedback/{feedback_id}", headers=bob)
+    assert hidden.status_code == 404, hidden.text
+    assert "salary" not in hidden.text

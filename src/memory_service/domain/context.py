@@ -57,6 +57,14 @@ class MemoryExecutionContext(BaseModel):
     tenant_id: str = Field(..., description="Tenant boundary. Mandatory; never inferred.")
     workspace_id: str | None = Field(default=None, description="Workspace inside the tenant.")
     user_id: str | None = Field(default=None, description="End user on whose behalf we act.")
+    administers_tenant: bool = Field(
+        default=False,
+        # never serialized: a context stored for later work (a profile's source context)
+        # comes back without the authority of the request that stored it
+        exclude=True,
+        description="The request's credential is the tenant's administrator (ADR 0021): "
+        "an `admin` key, or the platform's. Read by `AuthorizationService.is_tenant_admin`.",
+    )
 
     # --- conversation lineage ------------------------------------------
     thread_id: str | None = Field(

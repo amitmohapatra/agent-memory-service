@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_service.adapters.db.orm import (
@@ -112,6 +112,50 @@ def _edge(r: ContextEdgeRow) -> ContextEdge:
     )
 
 
+#: ``release_thread``: the live documents a thread held (uploaded into it, or attached by
+#: one of its messages) that nothing else holds - no audience wider than a thread (only
+#: ``thread:`` and the owner's ``principal:`` keys), no live thread of their own, no live
+#: message of another live thread attaching them - marked deleted in one statement.
+_RELEASE_THREAD = text(
+    """
+    UPDATE documents AS d
+    SET deleted_at = now(), revision = d.revision + 1, updated_at = now()
+    WHERE d.tenant_id = :tenant
+      AND d.deleted_at IS NULL
+      AND (
+        d.thread_id = :thread
+        OR d.document_id IN (
+          SELECT a.document_id FROM message_attachments AS a
+          JOIN messages AS m ON m.message_id = a.message_id
+          WHERE m.tenant_id = :tenant AND m.thread_id = :thread
+        )
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM jsonb_array_elements_text(d.visibility_keys) AS k
+        WHERE k NOT LIKE 'thread:%' AND k NOT LIKE 'principal:%'
+      )
+      AND (
+        d.thread_id IS NULL
+        OR d.thread_id = :thread
+        OR NOT EXISTS (
+          SELECT 1 FROM threads AS own
+          WHERE own.thread_id = d.thread_id AND own.deleted_at IS NULL
+        )
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM message_attachments AS a
+        JOIN messages AS m ON m.message_id = a.message_id
+        JOIN threads AS t ON t.thread_id = m.thread_id
+        WHERE a.document_id = d.document_id
+          AND m.thread_id <> :thread
+          AND m.deleted_at IS NULL
+          AND t.deleted_at IS NULL
+      )
+    RETURNING d.document_id
+    """
+)
+
+
 class SqlDocumentRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.s = session
@@ -155,6 +199,23 @@ class SqlDocumentRepository:
         if r is None or r.tenant_id != tenant_id or r.deleted_at is not None:
             return None
         return _doc(r)
+
+    async def release_thread(
+        self, tenant_id: str, thread_id: str
+    ) -> list[tuple[Document, list[str]]]:
+        released = list(
+            (
+                await self.s.execute(_RELEASE_THREAD, {"tenant": tenant_id, "thread": thread_id})
+            ).scalars()
+        )
+        if not released:
+            return []
+        rows = await self.s.scalars(
+            select(DocumentRow).where(
+                DocumentRow.tenant_id == tenant_id, DocumentRow.document_id.in_(released)
+            )
+        )
+        return [(_doc(r), list(r.visibility_keys or [])) for r in rows.all()]
 
     async def find_by_checksum(self, tenant_id: str, checksum: str) -> Document | None:
         r = await self.s.scalar(

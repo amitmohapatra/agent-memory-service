@@ -204,3 +204,154 @@ async def test_a_memory_forgetting_archived_is_restored(app, running) -> None:
             .advanced.memories.restore(ack.memory_id)
         )
     assert theirs.value.status == 404
+
+
+# ------------------------------------------------------------------ erasure by the tenant admin
+
+BADGE = "My badge number is B4242."
+
+
+async def _team(app):
+    """A tenant whose two users share the finance workspace: the admin, the harness, and a
+    second tenant's admin."""
+    admin, harness = await _tenant(app)
+    await admin.tenant.workspaces.create("Finance", workspace_id="finance")
+    for user in ("user:u1", "user:u2"):
+        await admin.tenant.workspaces.set_member("finance", user)
+    other_admin, _ = await _tenant(app, "globex")
+    return admin, harness, other_admin
+
+
+@pytest.mark.covers("memory.forget_memory")
+@pytest.mark.covers_error("memory.forget_memory")
+async def test_the_tenants_admin_key_forgets_a_memory_it_did_not_write(app, running) -> None:
+    """MEM-05b. docs/api/memory.md: forgetting needs "its owner, the user an agent acts for, or a tenant
+    admin", and docs/api/feedback.md names the tenant admin "the tenant's admin key ... or a
+    tenant admin user". The key's role was never consulted: only an authorization tuple of
+    the principal it acted as."""
+    admin, harness, other_admin = await _team(app)
+    shared = await harness.bind(user_id="u2", workspace_id="finance").remember(
+        "The finance close runs on the third working day.", visibility="WORKSPACE"
+    )
+    teammate = harness.bind(user_id="u1", workspace_id="finance")
+    assert (await teammate.advanced.memories.get(shared.memory_id)).memory_id == shared.memory_id
+
+    with pytest.raises(MemoryError) as plain:  # a service key acting for a teammate is no admin
+        await teammate.forget(shared.memory_id)
+    assert plain.value.status == 403
+    with pytest.raises(MemoryError) as foreign:  # another tenant's admin names this tenant
+        await other_admin.bind(tenant_id="acme", user_id="u1").forget(shared.memory_id)
+    assert foreign.value.status == 403
+    assert (await teammate.advanced.memories.get(shared.memory_id)).memory_id == shared.memory_id
+
+    await admin.bind(user_id="u1", workspace_id="finance").forget(shared.memory_id)
+    for reader in (teammate, harness.bind(user_id="u2", workspace_id="finance")):
+        with pytest.raises(MemoryError) as gone:
+            await reader.advanced.memories.get(shared.memory_id)
+        assert gone.value.status == 404
+
+
+@pytest.mark.covers("memory.forget_memory", "threads.delete_thread")
+@pytest.mark.covers_error("feedback.list_feedback")
+async def test_erasing_a_user_with_the_admin_key_leaves_nothing_any_read_returns(
+    app, running
+) -> None:
+    """MEM-05b. Erasing a user with what the API offers: the tenant admin forgets every memory
+    held about them and deletes their conversation. No read the user (or their agent) makes
+    returns what they said."""
+    admin, harness, _ = await _team(app)
+    chat = harness.bind(user_id="u1", thread_id="thr-erase").agent("concierge")
+    await chat.history.add([("USER", BADGE)])
+    container = app.state.container
+    running.portal.call(container.tasks.drain)
+    held = await _held_about(app, running, "u1")
+    assert held, "the turn was read into memories"
+    await harness.bind(user_id="u1").feedback("memory", held[0], "confirm")
+
+    eraser = admin.bind(user_id="u1")
+    for memory_id in held:
+        await eraser.forget(memory_id)
+    await admin.bind(user_id="u1", thread_id="thr-erase").history.delete()
+    running.portal.call(container.tasks.drain)
+
+    assert not await _held_about(app, running, "u1")
+    for reader in (harness.bind(user_id="u1"), harness.bind(user_id="u1").agent("concierge")):
+        assert "B4242" not in (await reader.context("my badge number")).rendered
+        for kind in ("memory", "message", "episode", "summary"):
+            found = await reader.search("badge number", kinds=[kind], limit=50)
+            assert not any("B4242" in item.text for item in found), kind
+        assert not any("B4242" in m.content for m in (await reader.advanced.memories.page()).items)
+        for memory_id in held:
+            with pytest.raises(MemoryError) as gone:
+                await reader.advanced.memories.get(memory_id)
+            assert gone.value.status == 404
+            with pytest.raises(MemoryError) as no_feedback:
+                await reader.feedback.page_for("memory", memory_id)
+            assert no_feedback.value.status == 404
+
+
+async def _held_about(app, running, user: str) -> list[str]:
+    """The live memories that carry ``user``'s visibility key, from the store: every scope."""
+    from sqlalchemy import text  # noqa: PLC0415
+
+    async def read() -> list[str]:
+        async with app.state.container.database.engine.begin() as conn:
+            rows = await conn.execute(
+                text(
+                    "SELECT memory_id FROM memories WHERE tenant_id = 'acme'"
+                    " AND visibility_keys::text LIKE :key AND deleted_at IS NULL"
+                    " AND superseded_by IS NULL"
+                ),
+                {"key": f'%"user:acme/{user}"%'},
+            )
+            return [r.memory_id for r in rows]
+
+    return running.portal.call(read)
+
+
+# ------------------------------------------------------------------ the user's inventory
+
+
+@pytest.mark.covers("memory.list_memories", "messages.create_messages")
+async def test_the_users_inventory_lists_what_they_said_in_a_chat(app, running) -> None:
+    """MEM-03b (BUG-M3). ``GET /v1/memories`` is "what do we hold about this user"
+    (docs/api/memory.md), and a statement said in a conversation is anchored in that thread
+    (ADR 0036) with the user as its audience: the inventory listed by anchor, so it held none
+    of them. A teammate's statements in the same team thread are never the user's."""
+    admin, harness, _ = await _team(app)
+    # a team's admins reach its threads: u2 writes in the thread u1 opened
+    await admin.tenant.workspaces.set_member("finance", "user:u2", role="admin")
+    in_team = {"workspace_id": "finance", "thread_id": "thr-team"}
+    await harness.bind(user_id="u1", **in_team).agent("concierge").history.add([("USER", BADGE)])
+    await (
+        harness.bind(user_id="u2", **in_team)
+        .agent("concierge")
+        .history.add([("USER", "My desk phone extension is 7781.")])
+    )
+    running.portal.call(app.state.container.tasks.drain)
+
+    for reader in (harness.bind(user_id="u1"), harness.bind(user_id="u1", workspace_id="finance")):
+        held = [m.content for m in (await reader.advanced.memories.page(limit=100)).items]
+        assert any("B4242" in c for c in held), held
+        assert not any("7781" in c for c in held), "a teammate's statement is not the user's"
+    theirs = [m.content for m in (await harness.bind(user_id="u2").advanced.memories.page()).items]
+    assert any("7781" in c for c in theirs) and not any("B4242" in c for c in theirs)
+
+
+@pytest.mark.covers("memory.list_memories")
+async def test_the_users_inventory_pages_without_a_gap_or_a_repeat(app, running) -> None:
+    """The cursor walks the user's anchors and what they said in their chats as one keyset:
+    every memory once, newest first, at a page size below, at and above what is held."""
+    _, harness, _ = await _team(app)
+    for n in range(3):
+        chat = harness.bind(user_id="u1", thread_id=f"thr-{n}").agent("concierge")
+        await chat.history.add([("USER", f"My locker number is L{n}0{n}.")])
+    await harness.bind(user_id="u1").remember("I prefer aisle seats.", visibility="USER")
+    running.portal.call(app.state.container.tasks.drain)
+    user = harness.bind(user_id="u1")
+    everything = [m.memory_id for m in (await user.advanced.memories.page(limit=200)).items]
+    assert len(everything) == len(set(everything))
+    assert sum("locker" in m.content for m in (await user.advanced.memories.page()).items) >= 3
+    for size in (1, len(everything) - 1, len(everything), len(everything) + 1):
+        walked = [m.memory_id async for m in user.advanced.memories.iter(page_size=size)]
+        assert walked == everything, size
