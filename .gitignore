@@ -62,3 +62,8 @@ benchmark/results/*_judged*.json
 benchmark/results/overhaul/*.json
 # a marker a local Qdrant start-up writes into the working directory
 .qdrant-initialized
+
+# stray files: merge leftovers, local agent settings
+*.orig
+*.rej
+.claude/settings.local.json
