@@ -162,3 +162,84 @@ async def test_a_failing_model_keeps_the_deterministic_summary() -> None:
         summaries = EntitySummaries(store, gw.assist(uses=["summaries"]), GraphSettings())
         await summaries.refresh("acme", ["ent_acme_corp"])
     assert store.entities["ent_acme_corp"].summary == "Acme Corp (ORG): operates in Germany"
+
+
+THREAD = ["thread:acme/t1"]
+
+
+def _cited(document_id: str) -> EvidenceRef:
+    return EvidenceRef(
+        source_type="document_chunk", source_id="chk_1", document_id=document_id, observed_at=NOW
+    )
+
+
+def _told_by(document_id: str, r: Relation) -> Relation:
+    return r.model_copy(update={"document_id": document_id, "evidence": [_cited(document_id)]})
+
+
+async def check_a_gone_documents_graph_is_forgotten(store) -> None:
+    """``forget_document`` on any store (the PostgreSQL test calls this too): doc_a's facts
+    and the ``invalidated_by`` edge quoting one go; Westfalen (only doc_a named it) and
+    doc_a's own document entity (no relation) go; Acme and Germany, which a memory's fact
+    still holds, stay without doc_a's evidence or summary; doc_b is untouched."""
+    both = [*MINE, *THREAD]
+    await store.upsert_entities(
+        [
+            entity("Acme Corp", keys=both).model_copy(
+                update={"evidence": [_cited("doc_a"), _cited("doc_b")]}
+            ),
+            entity("Westfalen", keys=THREAD).model_copy(update={"evidence": [_cited("doc_a")]}),
+            entity("Germany", keys=both, kind="PLACE"),
+            entity("Globex"),
+            entity("Report", keys=THREAD).model_copy(
+                update={"entity_id": "ent_doc_a", "canonical_name": "doc:doc_a"}
+            ),
+        ]
+    )
+    await store.upsert_relations(
+        [
+            _told_by("doc_a", relation("rel_a1", "ent_acme_corp", "acquired", "ent_westfalen")),
+            _told_by("doc_a", relation("rel_a2", "ent_acme_corp", "operates_in", "ent_germany")),
+            relation("rel_m1", "ent_acme_corp", "operates_in", "ent_germany"),
+            _told_by("doc_b", relation("rel_b1", "ent_acme_corp", "acquired", "ent_globex")),
+        ]
+    )
+    await store.invalidate("rel_a2", reason="contradicted", at=NOW, by="rel_m1")
+    await store.set_summary("acme", "ent_acme_corp", summary="Acme acquired Westfalen", source="x")
+
+    forgotten = await store.forget_document("acme", "doc_a")
+
+    assert forgotten.kept == ["ent_acme_corp", "ent_germany"]
+    assert set(forgotten.audience) == set(both)
+    left = await store.get_entities(
+        "acme", ["ent_acme_corp", "ent_westfalen", "ent_germany", "ent_doc_a"], scope_keys=both
+    )
+    by_id = {e.entity_id: e for e in left}
+    assert set(by_id) == {"ent_acme_corp", "ent_germany"}
+    assert [e.document_id for e in by_id["ent_acme_corp"].evidence] == ["doc_b"]
+    assert by_id["ent_acme_corp"].summary == ""
+    [facts] = await store.summary_sources("acme", ["ent_acme_corp"], limit=10)
+    assert facts.summary_source == ""
+    held = await store.entity_relations(
+        "acme", "ent_acme_corp", scope_keys=both, current=True, limit=10
+    )
+    history = await store.entity_relations(
+        "acme", "ent_acme_corp", scope_keys=both, current=False, limit=10
+    )
+    assert {r.relation_id for r in held + history} == {"rel_m1", "rel_b1"}
+    assert (
+        await store.relations_for_document(
+            "acme", "doc_a", scope_keys=both, include_invalidated=True
+        )
+        == []
+    )
+    [kept] = await store.relations_for_document("acme", "doc_b", scope_keys=both)
+    assert kept.relation_id == "rel_b1"
+    # forgetting again finds nothing: idempotent, as a retried job is
+    again = await store.forget_document("acme", "doc_a")
+    assert again.kept == [] and again.audience == []
+
+
+async def test_a_gone_documents_graph_is_forgotten() -> None:
+    """MEM-05: a deleted thread's document leaves nothing in the graph."""
+    await check_a_gone_documents_graph_is_forgotten(MemoryGraphStore())

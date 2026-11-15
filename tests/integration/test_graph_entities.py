@@ -11,7 +11,13 @@ from memory_service.domain.ids import new_id
 from memory_service.modules.graph.summaries import EntitySummaries
 from memory_service.modules.llm.assist import LLMAssist
 from tests.integration.test_graph import U1, U2, _observe
-from tests.unit.test_graph_entities import MINE, entity, relation, seeded
+from tests.unit.test_graph_entities import (
+    MINE,
+    check_a_gone_documents_graph_is_forgotten,
+    entity,
+    relation,
+    seeded,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -54,6 +60,11 @@ async def test_postgres_search_relations_and_summary_sources(container) -> None:
     assert await summaries.refresh("acme", ["ent_acme_corp"]) == 0
     [stored] = await store.get_entities("acme", ["ent_acme_corp"], scope_keys=MINE)
     assert stored.summary == "Acme Corp (ORG): operates in Germany"
+
+
+async def test_postgres_forgets_a_gone_documents_graph(container) -> None:
+    """MEM-05: the PostgreSQL store forgets a gone document as the in-memory one does."""
+    await check_a_gone_documents_graph_is_forgotten(container.graph_store)
 
 
 async def test_the_hop_limit_is_spent_on_new_edges(container) -> None:

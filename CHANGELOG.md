@@ -366,6 +366,16 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **A deleted thread's documents leave nothing in the knowledge graph** (service, MEM-05).
+  Deleting a thread took the documents only it held out of `/v1/context`, search and the
+  document read, but the graph facts built from them stayed: `GET /v1/graph/entities` still
+  found their entities, and an entity's profile and summary still quoted them. The document
+  index job a deletion queues now runs the graph's side too: the document's facts and the
+  `invalidated_by` edges quoting them are deleted, so are the entities only those facts held
+  (the document's own entity among them), and an entity another source still holds loses the
+  evidence taken from the document and has its summary written again from the facts left
+  (without a model). A document another live thread still holds keeps its facts. No route
+  or schema changed.
 - **A profile line goes with the memory it was learned from** (service). The pinned `user`
   block is composed from the user's USER and PREFERENCE memories, but forgetting one left its
   line: the index job queued `profile.refresh` only for memories it could still read (a
