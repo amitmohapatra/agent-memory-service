@@ -376,6 +376,16 @@ each entry says which one moved. Decisions behind each change are in the
   evidence taken from the document and has its summary written again from the facts left
   (without a model). A document another live thread still holds keeps its facts. No route
   or schema changed.
+- **A model that thinks before it answers no longer returns nothing on the short calls**
+  (service). The output limit of a model call was the size of its answer alone, so a model
+  that thinks first spent the limit on the thinking and came back with no text. Measured on
+  one LoCoMo conversation with every model use on: 269 of 510 turn restatements, 94 of 284
+  summaries and 10 of 13 conflict checks failed this way, and none of the calls that named
+  1,536 tokens or more. Every request now carries the answer's size plus 8,000 tokens of
+  room for thinking (`LLMTuning.thinking_room`), still capped by the model profile's
+  `max_output_tokens`. A model that does not think stops where its answer ends, so the room
+  costs it nothing. Confirmed live (one LoCoMo conversation, every use on): failed calls
+  went from 309 of 1,493 to 0 of 1,370.
 - **A profile line goes with the memory it was learned from** (service). The pinned `user`
   block is composed from the user's USER and PREFERENCE memories, but forgetting one left its
   line: the index job queued `profile.refresh` only for memories it could still read (a
