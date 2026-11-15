@@ -25,6 +25,7 @@ def _block(row: ProfileBlockRow) -> ProfileBlock:
         source_query=row.source_query,
         source_context=row.source_context,
         refresh_due_at=row.refresh_due_at,
+        appended_from=row.appended_from,
     )
 
 
@@ -82,6 +83,7 @@ class SqlProfileRepository:
                     "source_query",
                     "source_context",
                     "refresh_due_at",
+                    "appended_from",
                 )
             }
             | {"version": ProfileBlockRow.version + 1},

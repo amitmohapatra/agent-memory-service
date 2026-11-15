@@ -56,6 +56,11 @@ class ProfileBlock(BaseModel):
     source_context: dict[str, Any] | None = None
     #: when the job answers it next
     refresh_due_at: datetime | None = None
+    #: the lines the profile job appended to an edited block, each with the memory it was
+    #: learned from: such a line leaves with that memory (derived data follows its source).
+    #: A line is the job's only while it reads exactly as the job wrote it; once a person or
+    #: an agent changes or removes it, it is theirs (``lines_kept``). Internal, never served.
+    appended_from: dict[str, str] = Field(default_factory=dict)
 
 
 def block_scope(block: str, ctx: MemoryExecutionContext) -> str:
@@ -87,6 +92,13 @@ def profile_scopes(ctx: MemoryExecutionContext) -> dict[str, str]:
     if ctx.workspace_id:
         scopes["workspace"] = f"workspace:{ctx.workspace_id}"
     return scopes
+
+
+def lines_kept(text: str, appended_from: dict[str, str]) -> dict[str, str]:
+    """The job's lines ``text`` still holds as the job wrote them: an edit that changed or
+    removed one made it the editor's."""
+    held = set(text.splitlines())
+    return {line: memory_id for line, memory_id in appended_from.items() if line in held}
 
 
 class ThreadSummary(BaseModel):
