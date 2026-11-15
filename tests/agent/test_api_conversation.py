@@ -351,3 +351,42 @@ async def test_a_deleted_threads_grant_and_graph_facts_end_for_every_reader(app,
     for reader in readers:
         assert not await reader.advanced.graph.entities("Northwind Systems"), reader
         assert await reader.advanced.graph.entities("Contoso Holdings"), reader
+
+
+@pytest.mark.covers("threads.delete_thread", "documents.upload_document", "graph.search_entities")
+async def test_a_kept_documents_audience_moves_to_the_live_threads_that_hold_it(
+    app, running
+) -> None:
+    """MEM-07. A document uploaded in a thread that is deleted, and attached in a live one,
+    keeps its facts there: its audience moves from the deleted thread to the live threads
+    that hold it, so its graph facts and its passages are found from the live thread, as
+    from the user's whole scope, and none of it through the deleted thread's grant (which
+    ended, MEM-06)."""
+    harness = await _harness(app)
+    chat = harness.bind(user_id="u1", thread_id="thr-deals")
+    kept = await chat.advanced.documents.add(("contoso.txt", CONTOSO_NOTE, "text/plain"))
+    holder = harness.bind(user_id="u1", thread_id="thr-holder")
+    attachment = {
+        "filename": "contoso.txt",
+        "media_type": "text/plain",
+        "size_bytes": kept.size_bytes,
+        "checksum": kept.checksum,
+        "document_id": kept.document_id,
+    }
+    await holder.history.add([{"role": "USER", "content": "the deal", "attachments": [attachment]}])
+    container = app.state.container
+    running.portal.call(container.tasks.drain)
+    # the deleted thread's own document until then: read in it, not in the holder
+    assert await chat.advanced.graph.entities("Contoso Holdings")
+    assert not await holder.advanced.graph.entities("Contoso Holdings")
+
+    await chat.history.delete()
+    running.portal.call(container.tasks.drain)
+
+    for reader in (holder, harness.bind(user_id="u1")):
+        [contoso] = await reader.advanced.graph.entities("Contoso Holdings", limit=1)
+        assert (await reader.advanced.graph.entity(contoso.entity_id)).relations
+        found = await reader.search("Contoso Holdings acquired Fabrikam", kinds=["chunk"])
+        assert any("Fabrikam" in item.text for item in found), found
+    elsewhere = harness.bind(user_id="u1", thread_id="thr-other")
+    assert not await elsewhere.advanced.graph.entities("Contoso Holdings")

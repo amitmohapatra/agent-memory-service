@@ -243,3 +243,70 @@ async def check_a_gone_documents_graph_is_forgotten(store) -> None:
 async def test_a_gone_documents_graph_is_forgotten() -> None:
     """MEM-05: a deleted thread's document leaves nothing in the graph."""
     await check_a_gone_documents_graph_is_forgotten(MemoryGraphStore())
+
+
+async def check_a_documents_audience_moves(store) -> None:
+    """``move_document`` on any store (the PostgreSQL test calls this too): doc_a's facts
+    carry exactly the new audience (the live thread that holds it), the deleted thread's key
+    gone; every entity it named, and its own document entity, gains the new audience
+    besides what it had; a memory's fact and doc_b's facts keep theirs."""
+    held = ["thread:acme/t2"]
+    await store.upsert_entities(
+        [
+            entity("Acme Corp", keys=MINE),
+            entity("Westfalen", keys=THREAD),
+            entity("Globex", keys=THREAD),
+            entity("Report", keys=THREAD).model_copy(
+                update={"entity_id": "ent_doc_a", "canonical_name": "doc:doc_a"}
+            ),
+        ]
+    )
+    await store.upsert_relations(
+        [
+            _told_by(
+                "doc_a",
+                relation("rel_a1", "ent_acme_corp", "acquired", "ent_westfalen", keys=THREAD),
+            ),
+            relation("rel_m1", "ent_acme_corp", "operates_in", "ent_westfalen"),
+            _told_by(
+                "doc_b", relation("rel_b1", "ent_westfalen", "acquired", "ent_globex", keys=THREAD)
+            ),
+        ]
+    )
+
+    assert await store.move_document("acme", "doc_a", held) == [
+        "ent_acme_corp",
+        "ent_doc_a",
+        "ent_westfalen",
+    ]
+
+    [moved] = await store.relations_for_document("acme", "doc_a", scope_keys=held)
+    assert moved.relation_id == "rel_a1" and moved.visibility_keys == held
+    assert await store.relations_for_document("acme", "doc_a", scope_keys=THREAD) == []
+    [other] = await store.relations_for_document("acme", "doc_b", scope_keys=THREAD)
+    assert other.visibility_keys == THREAD
+    found = await store.get_entities(
+        "acme",
+        ["ent_acme_corp", "ent_westfalen", "ent_globex", "ent_doc_a"],
+        scope_keys=[*MINE, *THREAD, *held],
+    )
+    keys = {e.entity_id: sorted(e.visibility_keys) for e in found}
+    assert keys == {
+        "ent_acme_corp": sorted([*MINE, *held]),
+        "ent_westfalen": sorted([*THREAD, *held]),
+        "ent_globex": THREAD,
+        "ent_doc_a": sorted([*THREAD, *held]),
+    }
+    mine = await store.entity_relations(
+        "acme", "ent_acme_corp", scope_keys=MINE, current=True, limit=10
+    )
+    assert [r.relation_id for r in mine] == ["rel_m1"]
+    # moving again to the same audience changes nothing: idempotent, as a retried job is
+    await store.move_document("acme", "doc_a", held)
+    [again] = await store.relations_for_document("acme", "doc_a", scope_keys=held)
+    assert again.visibility_keys == held
+
+
+async def test_a_documents_audience_moves() -> None:
+    """MEM-07: a kept document's facts move to the live threads that hold it."""
+    await check_a_documents_audience_moves(MemoryGraphStore())

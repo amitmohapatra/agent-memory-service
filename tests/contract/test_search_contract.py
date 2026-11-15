@@ -157,3 +157,29 @@ async def test_record_ids_lists_what_the_filter_matches(store) -> None:
         store.contract_collection, SearchFilter(tenant_id="acme", must={"document_id": "doc-9"})
     )
     assert sorted(found) == ids
+
+
+async def test_set_visibility_moves_exactly_the_matching_records_audience(store) -> None:
+    """How a kept document's passages move to the live threads that hold it: every record of
+    the document carries the new audience, readable by it and no longer by the old one;
+    another document's records keep theirs."""
+    moved, kept = uuid.uuid4().hex, uuid.uuid4().hex
+    old, new = ["thread:acme/gone"], ["thread:acme/held"]
+    await store.upsert(
+        [
+            _record(store, moved, "acme", 0.4, document_id="doc-1", visibility_keys=old),
+            _record(store, kept, "acme", 0.4, document_id="doc-2", visibility_keys=old),
+        ]
+    )
+    await store.set_visibility(
+        store.contract_collection,
+        SearchFilter(tenant_id="acme", must={"document_id": "doc-1"}),
+        new,
+    )
+
+    async def readable_by(keys: list[str]) -> list[str]:
+        flt = SearchFilter(tenant_id="acme", must_any={"visibility_keys": keys})
+        return await store.record_ids(store.contract_collection, flt)
+
+    assert await readable_by(new) == [moved]
+    assert await readable_by(old) == [kept]
