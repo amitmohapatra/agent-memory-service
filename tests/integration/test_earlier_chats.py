@@ -39,6 +39,10 @@ WORKED_OUT = (
 FRIDAY_ASK = "What was that reorder number you worked out on Monday for the Merino Hoodie?"
 #: the same agent's answer for another user
 BOBS = "For your stores, the north reorder quantity for the Merino Hoodie is 555 units."
+#: The figures as said, not bare digits: a rendered context and a search result carry ids
+#: (``msg_01M7...7137AAA...``) whose random part can hold "137" or "555" by chance.
+FIGURE = "137 units"
+BOBS_FIGURE = "555 units"
 
 
 def _chat(user: str = "ann", workspace: str = "ws1") -> MemoryExecutionContext:
@@ -151,11 +155,11 @@ async def test_another_user_of_the_same_agent_gets_nothing(container, uow_factor
 
     bobs_friday = _chat("bob")
     bundle = await _context(container, bobs_friday, FRIDAY_ASK)
-    assert "137" not in bundle.render() and "555" in bundle.render(), "bob's own chat only"
-    assert "137" not in str(await _searched(container, bobs_friday, FRIDAY_ASK))
+    assert FIGURE not in bundle.render() and BOBS_FIGURE in bundle.render(), "bob's own chat only"
+    assert FIGURE not in str(await _searched(container, bobs_friday, FRIDAY_ASK))
 
     anns = await _context(container, _chat(), FRIDAY_ASK)
-    assert "555" not in anns.render() and "555" not in str(
+    assert BOBS_FIGURE not in anns.render() and BOBS_FIGURE not in str(
         await _searched(container, _chat(), FRIDAY_ASK)
     )
 
@@ -164,29 +168,29 @@ async def test_another_workspace_of_the_same_user_reads_nothing(container, uow_f
     """Like a project's chats: the earlier conversations of the request's workspace only."""
     await _monday(container, uow_factory, workspace="ws1")
     elsewhere = _chat(workspace="ws2")
-    assert "137" not in (await _context(container, elsewhere, FRIDAY_ASK)).render()
-    assert "137" not in str(await _searched(container, elsewhere, FRIDAY_ASK))
+    assert FIGURE not in (await _context(container, elsewhere, FRIDAY_ASK)).render()
+    assert FIGURE not in str(await _searched(container, elsewhere, FRIDAY_ASK))
     explicit = await container.services["agent_tools"].call(
         elsewhere, "memory_search", {"query": FRIDAY_ASK, "kinds": ["message", "episode"]}
     )
-    assert "137" not in str(explicit)
+    assert FIGURE not in str(explicit)
 
 
 async def test_a_deleted_chat_is_never_used(container, uow_factory) -> None:
     monday = await _monday(container, uow_factory)
     friday = _chat()
-    assert "137" in (await _context(container, friday, FRIDAY_ASK)).render()  # cached now
+    assert FIGURE in (await _context(container, friday, FRIDAY_ASK)).render()  # cached now
 
     async with uow_factory() as uow:
         await container.services["conversation"].delete_thread(uow, monday, monday.thread_id)
         await uow.commit()
     await container.tasks.drain()
 
-    assert "137" not in (await _context(container, friday, FRIDAY_ASK)).render(), (
+    assert FIGURE not in (await _context(container, friday, FRIDAY_ASK)).render(), (
         "not from the cached bundle either"
     )
-    assert "137" not in str(await _searched(container, friday, FRIDAY_ASK))
-    assert "137" not in (await _context(container, _chat(), FRIDAY_ASK)).render()
+    assert FIGURE not in str(await _searched(container, friday, FRIDAY_ASK))
+    assert FIGURE not in (await _context(container, _chat(), FRIDAY_ASK)).render()
 
 
 async def test_a_corrected_answer_comes_back_marked_corrected(container, uow_factory) -> None:
