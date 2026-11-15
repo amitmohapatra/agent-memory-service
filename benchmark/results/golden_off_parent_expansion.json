@@ -1,0 +1,392 @@
+{
+  "ablation": {
+    "parent_expansion": false
+  },
+  "budgets_ms": {
+    "cached_context_p95": 75,
+    "context_bundle_p95": 400,
+    "recall_p95": 300
+  },
+  "corpus": {
+    "documents": 50,
+    "index_seconds": 176.89,
+    "indexed_points": 948
+  },
+  "latency_ms": {
+    "context_cached_p50": 15.38,
+    "context_cached_p95": 32.74,
+    "context_cold_p50": 1256.16,
+    "context_cold_p95": 2781.72,
+    "mean_recall": 2030.02,
+    "recall_p50": 1262.0,
+    "recall_p95": 7788.67,
+    "samples": 30
+  },
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "unknown",
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    },
+    "machine": "x86_64",
+    "memory_gb": 5.8,
+    "models": {
+      "bge-reranker-v2-m3": {
+        "repo": "BAAI/bge-reranker-v2-m3",
+        "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+      },
+      "deberta-v3-base-mnli-fever-anli": {
+        "repo": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
+      },
+      "embedding": {
+        "repo": "ibm-granite/granite-embedding-english-r2",
+        "revision": "47ea694b257b703fee9253d75c2b1f2985180498"
+      },
+      "embedding-small": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "embeddinggemma-300m": {
+        "repo": "google/embeddinggemma-300m",
+        "revision": null
+      },
+      "gliner-relex": {
+        "repo": "knowledgator/gliner-relex-large-v1",
+        "revision": null
+      },
+      "gliner2-base": {
+        "repo": "fastino/gliner2-base-v1",
+        "revision": "8437ba583a733d87f56ae902f3b197934eedd58e"
+      },
+      "granite-embedding-reranker-english-r2": {
+        "repo": "ibm-granite/granite-embedding-reranker-english-r2",
+        "revision": "d09d3d6971b689bf9c23839e45a470874d46e13a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "late-interaction": {
+        "repo": "answerdotai/answerai-colbert-small-v1",
+        "revision": "934fa8bb4ce2284f4c2baa232d81aca4d076fa5e"
+      },
+      "ms-marco-MiniLM-L6-v2": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "qwen3-embedding-0.6b": {
+        "repo": "Qwen/Qwen3-Embedding-0.6B",
+        "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+      },
+      "reranker": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "sparse": {
+        "repo": "Qdrant/Splade_PP_en_v1",
+        "revision": null
+      }
+    },
+    "packages": {
+      "docling": "2.127.0",
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "timestamp": "2026-09-20T13:23:22.156391+00:00"
+  },
+  "providers": {
+    "embedding": "st-granite-embedding-small-english-r2-torch-d384",
+    "representative": true,
+    "reranker": "ce-ms-marco-MiniLM-L6-v2",
+    "search": "QdrantSearchStore",
+    "sparse": "bm25-v1-k1.2-b0.75"
+  },
+  "quality": {
+    "critical_evidence_group_recall": 0.9412,
+    "critical_questions": 17,
+    "critical_recall_at_k": 0.9804,
+    "evidence_group_recall": 0.9444,
+    "k": 20,
+    "note": "salted copies are exact duplicates of the golden documents (near-duplicate crowding): identical chunks collapse on text_hash and graph facts are de-duplicated per triple, so secondary evidence groups survive. Informational; the release gate is tests/eval on the un-duplicated corpus.",
+    "per_question": [
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "definition": 4,
+          "ebitda_result": 1,
+          "litigation_footnote": 3,
+          "restructuring_savings": 10
+        },
+        "id": "ebitda_multi_hop",
+        "missing": [],
+        "query_type": {
+          "expected": "DOCUMENT_MULTI_HOP",
+          "observed": "DOCUMENT_MULTI_HOP"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "revenue_text": 1
+        },
+        "id": "revenue_decline_driver",
+        "missing": [],
+        "query_type": {
+          "expected": "TEMPORAL",
+          "observed": "TEMPORAL"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "table": 2
+        },
+        "id": "revenue_table",
+        "missing": [],
+        "query_type": {
+          "expected": "TEMPORAL",
+          "observed": "TEMPORAL"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "section8": 1
+        },
+        "id": "restructuring_details",
+        "missing": [],
+        "query_type": {
+          "expected": "GENERAL_SEMANTIC",
+          "observed": "GENERAL_SEMANTIC"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "footnote": 1
+        },
+        "id": "footnote_effect",
+        "missing": [],
+        "query_type": {
+          "expected": "GENERAL_SEMANTIC",
+          "observed": "GENERAL_SEMANTIC"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "definition": 1
+        },
+        "id": "definition_lookup",
+        "missing": [],
+        "query_type": {
+          "expected": "GENERAL_SEMANTIC",
+          "observed": "GENERAL_SEMANTIC"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "table2": 1
+        },
+        "id": "ebitda_reconciliation_table",
+        "missing": [],
+        "query_type": {
+          "expected": "GENERAL_SEMANTIC",
+          "observed": "GENERAL_SEMANTIC"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "integration": 9,
+          "margin_result": 1,
+          "warranty_footnote": 4
+        },
+        "id": "distractor_margin",
+        "missing": [],
+        "query_type": {
+          "expected": "DOCUMENT_MULTI_HOP",
+          "observed": "DOCUMENT_MULTI_HOP"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "section9": 1
+        },
+        "id": "distractor_acquisition",
+        "missing": [],
+        "query_type": {
+          "expected": "GENERAL_SEMANTIC",
+          "observed": "GENERAL_SEMANTIC"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": false,
+        "first_rank": {
+          "note12": 1
+        },
+        "id": "depreciation_policy",
+        "missing": [],
+        "query_type": {
+          "expected": "GENERAL_SEMANTIC",
+          "observed": "GENERAL_SEMANTIC"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "table": 1
+        },
+        "id": "segments_table",
+        "missing": [],
+        "query_type": {
+          "expected": "ENTITY_RELATION",
+          "observed": "ENTITY_RELATION"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "sensors": 2
+        },
+        "id": "sensors_segment",
+        "missing": [],
+        "query_type": {
+          "expected": "GENERAL_SEMANTIC",
+          "observed": "GENERAL_SEMANTIC"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "definition": 1,
+          "value": 2
+        },
+        "id": "arr_alias",
+        "missing": [],
+        "query_type": {
+          "expected": "TEMPORAL",
+          "observed": "TEMPORAL"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "board": 2
+        },
+        "id": "approval",
+        "missing": [],
+        "query_type": {
+          "expected": "ENTITY_RELATION",
+          "observed": "ENTITY_RELATION"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "section9": 1
+        },
+        "id": "synergies",
+        "missing": [],
+        "query_type": {
+          "expected": "GENERAL_SEMANTIC",
+          "observed": "GENERAL_SEMANTIC"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": false,
+        "critical": true,
+        "first_rank": {
+          "definition": 2,
+          "integration": 5,
+          "warranty": null
+        },
+        "id": "margin_exclusions",
+        "missing": [
+          "warranty"
+        ],
+        "query_type": {
+          "expected": "ENTITY_RELATION",
+          "observed": "ENTITY_RELATION"
+        },
+        "recall": 0.6667
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "overview": 1
+        },
+        "id": "apac_operator",
+        "missing": [],
+        "query_type": {
+          "expected": "ENTITY_RELATION",
+          "observed": "ENTITY_RELATION"
+        },
+        "recall": 1.0
+      },
+      {
+        "complete": true,
+        "critical": true,
+        "first_rank": {
+          "acme_revenue": 2,
+          "globex_revenue": 6
+        },
+        "id": "cross_document",
+        "missing": [],
+        "query_type": {
+          "expected": "DOCUMENT_MULTI_HOP",
+          "observed": "DOCUMENT_MULTI_HOP"
+        },
+        "recall": 1.0
+      }
+    ],
+    "questions": 18,
+    "recall_at_k": 0.9815,
+    "routing_accuracy": 1.0
+  }
+}

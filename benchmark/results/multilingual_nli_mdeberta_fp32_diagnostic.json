@@ -1,0 +1,1987 @@
+{
+  "spec": {
+    "id": "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7",
+    "local_dir": "mdeberta-multilingual",
+    "model_path": "/Users/ricky/usage_data/ams-agent-capabilities/.bench_data/models/mdeberta-multilingual",
+    "revision": "b5113eb38ab63efdd7f280f8c144ea8b13f978ce",
+    "runtime": "onnx",
+    "graph_file": "onnx/model.onnx",
+    "batch_size": 8,
+    "max_length": 512,
+    "threads": 2
+  },
+  "model_fingerprint": "nli-onnx-9c4fa74cd6e43a6647ed8eeb",
+  "dataset": {
+    "dataset": "facebook/xnli",
+    "revision": "b8dd5d7af51114dbda02c0e3f6133f332186418e",
+    "split": "test",
+    "source_sha256": "599e3a0191403f19cbe802afdf69841152000b41eaed725e4f463d432c0ffb49",
+    "total_original_rows": 5010,
+    "selection": "30 examples per label, smallest SHA256(xnli-screen-v1:<row index>), selected before model predictions; diagnostic English-only subset, selected to compare precision after int8 screen",
+    "selected_ids": [
+      25,
+      46,
+      100,
+      135,
+      137,
+      166,
+      221,
+      241,
+      300,
+      328,
+      342,
+      392,
+      504,
+      775,
+      795,
+      851,
+      956,
+      958,
+      971,
+      977,
+      981,
+      1002,
+      1088,
+      1156,
+      1245,
+      1278,
+      1280,
+      1312,
+      1388,
+      1541,
+      1670,
+      1826,
+      1844,
+      2015,
+      2022,
+      2056,
+      2131,
+      2198,
+      2224,
+      2422,
+      2627,
+      2673,
+      2702,
+      2709,
+      2726,
+      2758,
+      2794,
+      2919,
+      2934,
+      2964,
+      3021,
+      3023,
+      3029,
+      3107,
+      3150,
+      3183,
+      3272,
+      3293,
+      3308,
+      3417,
+      3438,
+      3469,
+      3644,
+      3657,
+      3706,
+      3760,
+      3769,
+      3839,
+      3856,
+      3955,
+      3970,
+      3993,
+      4000,
+      4016,
+      4029,
+      4068,
+      4132,
+      4135,
+      4217,
+      4219,
+      4277,
+      4342,
+      4373,
+      4528,
+      4535,
+      4547,
+      4559,
+      4726,
+      4817,
+      4836
+    ]
+  },
+  "dataset_sha256": "43d6a461badadc00f245e042a60d462d1bbf777c52e06792a57bd34f08ad6326",
+  "platform": "macOS-12.7.6-x86_64-i386-64bit",
+  "runtime": {
+    "python": "3.12.14",
+    "platform": "macOS-12.7.6-x86_64-i386-64bit",
+    "cpu_count": 4,
+    "packages": {
+      "onnxruntime": "1.19.2",
+      "tokenizers": "0.22.2",
+      "numpy": "2.5.3",
+      "torch": "not-installed",
+      "transformers": "5.15.1"
+    }
+  },
+  "llm_calls": 0,
+  "complete": true,
+  "expected_pairs": 90,
+  "records": [
+    {
+      "id": "25:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9908201098442078,
+        "neutral": 0.008457617834210396,
+        "contradiction": 0.0007222964195534587
+      },
+      "latency_ms": 217.3237019451335
+    },
+    {
+      "id": "46:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.0007750479853712022,
+        "neutral": 0.9989774227142334,
+        "contradiction": 0.0002475852379575372
+      },
+      "latency_ms": 234.36426499392837
+    },
+    {
+      "id": "100:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.005674210377037525,
+        "neutral": 0.9825432896614075,
+        "contradiction": 0.011782470159232616
+      },
+      "latency_ms": 116.43048992846161
+    },
+    {
+      "id": "135:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.0002442978147882968,
+        "neutral": 0.9994688630104065,
+        "contradiction": 0.00028685893630608916
+      },
+      "latency_ms": 118.96517197601497
+    },
+    {
+      "id": "137:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 6.43719540676102e-05,
+        "neutral": 0.0006567179225385189,
+        "contradiction": 0.9992789626121521
+      },
+      "latency_ms": 110.30178004875779
+    },
+    {
+      "id": "166:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.0016434831777587533,
+        "neutral": 0.9923039078712463,
+        "contradiction": 0.006052693817764521
+      },
+      "latency_ms": 154.72562704235315
+    },
+    {
+      "id": "221:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.0006827675388194621,
+        "neutral": 0.9986629486083984,
+        "contradiction": 0.0006543313502334058
+      },
+      "latency_ms": 97.32783795334399
+    },
+    {
+      "id": "241:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9469636082649231,
+        "neutral": 0.03374868631362915,
+        "contradiction": 0.019287727773189545
+      },
+      "latency_ms": 113.1030119722709
+    },
+    {
+      "id": "300:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 0.00023742057965137064,
+        "neutral": 0.0013758793938905,
+        "contradiction": 0.9983867406845093
+      },
+      "latency_ms": 97.63620200101286
+    },
+    {
+      "id": "328:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9955653548240662,
+        "neutral": 0.003674623556435108,
+        "contradiction": 0.0007600137614645064
+      },
+      "latency_ms": 111.50659597478807
+    },
+    {
+      "id": "342:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.7818821668624878,
+        "neutral": 0.20919452607631683,
+        "contradiction": 0.00892330426722765
+      },
+      "latency_ms": 160.0637020310387
+    },
+    {
+      "id": "392:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 4.904284651274793e-05,
+        "neutral": 0.0005333797889761627,
+        "contradiction": 0.9994175434112549
+      },
+      "latency_ms": 160.59310303535312
+    },
+    {
+      "id": "504:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.36992162466049194,
+        "neutral": 0.6041563153266907,
+        "contradiction": 0.025922005996108055
+      },
+      "latency_ms": 153.39130000211298
+    },
+    {
+      "id": "775:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 8.805745892459527e-05,
+        "neutral": 0.0007520618382841349,
+        "contradiction": 0.9991599321365356
+      },
+      "latency_ms": 126.36296695563942
+    },
+    {
+      "id": "795:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 0.00016344846517313272,
+        "neutral": 0.0005216064164415002,
+        "contradiction": 0.9993149042129517
+      },
+      "latency_ms": 116.54406494926661
+    },
+    {
+      "id": "851:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 0.0001194354408653453,
+        "neutral": 0.0016097159823402762,
+        "contradiction": 0.9982708692550659
+      },
+      "latency_ms": 161.61780804395676
+    },
+    {
+      "id": "956:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.013613555580377579,
+        "neutral": 0.9618252515792847,
+        "contradiction": 0.024561172351241112
+      },
+      "latency_ms": 139.54474299680442
+    },
+    {
+      "id": "958:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 4.572465331875719e-05,
+        "neutral": 0.0005707871750928462,
+        "contradiction": 0.9993834495544434
+      },
+      "latency_ms": 124.73690300248563
+    },
+    {
+      "id": "971:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.0002831864112522453,
+        "neutral": 0.8920302391052246,
+        "contradiction": 0.1076865941286087
+      },
+      "latency_ms": 142.00893498491496
+    },
+    {
+      "id": "977:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.00038006732938811183,
+        "neutral": 0.543022632598877,
+        "contradiction": 0.45659729838371277
+      },
+      "latency_ms": 195.42593590449542
+    },
+    {
+      "id": "981:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.010761618614196777,
+        "neutral": 0.979282021522522,
+        "contradiction": 0.009956316091120243
+      },
+      "latency_ms": 129.32169996201992
+    },
+    {
+      "id": "1002:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9752375483512878,
+        "neutral": 0.022920649498701096,
+        "contradiction": 0.001841889345087111
+      },
+      "latency_ms": 106.81232903152704
+    },
+    {
+      "id": "1088:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 0.0005218624137341976,
+        "neutral": 0.1455845832824707,
+        "contradiction": 0.8538935780525208
+      },
+      "latency_ms": 165.19113001413643
+    },
+    {
+      "id": "1156:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 5.808796049677767e-05,
+        "neutral": 0.02356393076479435,
+        "contradiction": 0.9763779640197754
+      },
+      "latency_ms": 234.78146106936038
+    },
+    {
+      "id": "1245:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.00031645389390178025,
+        "neutral": 0.9949861764907837,
+        "contradiction": 0.004697417840361595
+      },
+      "latency_ms": 192.14029191061854
+    },
+    {
+      "id": "1278:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.17300842702388763,
+        "neutral": 0.8259260654449463,
+        "contradiction": 0.0010655022924765944
+      },
+      "latency_ms": 77.73627794813365
+    },
+    {
+      "id": "1280:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9538124799728394,
+        "neutral": 0.04581064730882645,
+        "contradiction": 0.0003769617760553956
+      },
+      "latency_ms": 74.19383304659277
+    },
+    {
+      "id": "1312:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.0005370863946154714,
+        "neutral": 0.9993608593940735,
+        "contradiction": 0.00010207948798779398
+      },
+      "latency_ms": 121.88567908015102
+    },
+    {
+      "id": "1388:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 0.010039078071713448,
+        "neutral": 0.01091073453426361,
+        "contradiction": 0.9790502190589905
+      },
+      "latency_ms": 208.85798695962876
+    },
+    {
+      "id": "1541:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.47183874249458313,
+        "neutral": 0.5045026540756226,
+        "contradiction": 0.023658577352762222
+      },
+      "latency_ms": 113.96490409970284
+    },
+    {
+      "id": "1670:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9655985832214355,
+        "neutral": 0.032681699842214584,
+        "contradiction": 0.0017197680426761508
+      },
+      "latency_ms": 161.18771804030985
+    },
+    {
+      "id": "1826:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.000506460084579885,
+        "neutral": 0.9984973669052124,
+        "contradiction": 0.0009961123578250408
+      },
+      "latency_ms": 129.97129606083035
+    },
+    {
+      "id": "1844:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.0004401565238367766,
+        "neutral": 0.9987409710884094,
+        "contradiction": 0.0008188412757590413
+      },
+      "latency_ms": 298.54233493097126
+    },
+    {
+      "id": "2015:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 4.47691127192229e-05,
+        "neutral": 0.0028727746102958918,
+        "contradiction": 0.9970824122428894
+      },
+      "latency_ms": 246.312425006181
+    },
+    {
+      "id": "2022:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 0.00034927972592413425,
+        "neutral": 0.0013470224803313613,
+        "contradiction": 0.9983036518096924
+      },
+      "latency_ms": 248.0336690787226
+    },
+    {
+      "id": "2056:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.0005191793898120522,
+        "neutral": 0.9991905093193054,
+        "contradiction": 0.0002903087006416172
+      },
+      "latency_ms": 244.1086550243199
+    },
+    {
+      "id": "2131:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.862878680229187,
+        "neutral": 0.1084599494934082,
+        "contradiction": 0.028661420568823814
+      },
+      "latency_ms": 304.73686195909977
+    },
+    {
+      "id": "2198:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9925351142883301,
+        "neutral": 0.00723437312990427,
+        "contradiction": 0.000230474368436262
+      },
+      "latency_ms": 102.46303502935916
+    },
+    {
+      "id": "2224:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.00015463809540960938,
+        "neutral": 0.999687910079956,
+        "contradiction": 0.0001574737689225003
+      },
+      "latency_ms": 176.3622040161863
+    },
+    {
+      "id": "2422:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.00021424100850708783,
+        "neutral": 0.9996626377105713,
+        "contradiction": 0.00012306969438213855
+      },
+      "latency_ms": 102.62078803498298
+    },
+    {
+      "id": "2627:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 5.228746522334404e-05,
+        "neutral": 0.0009329484310001135,
+        "contradiction": 0.9990147352218628
+      },
+      "latency_ms": 144.54258896876127
+    },
+    {
+      "id": "2673:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9410779476165771,
+        "neutral": 0.05705846846103668,
+        "contradiction": 0.0018636009190231562
+      },
+      "latency_ms": 204.93024494498968
+    },
+    {
+      "id": "2702:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9926909804344177,
+        "neutral": 0.006784804165363312,
+        "contradiction": 0.0005242927582003176
+      },
+      "latency_ms": 274.55753996036947
+    },
+    {
+      "id": "2709:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 7.661368726985529e-05,
+        "neutral": 0.0009963358752429485,
+        "contradiction": 0.9989270567893982
+      },
+      "latency_ms": 127.28935002814978
+    },
+    {
+      "id": "2726:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.0007676550303585827,
+        "neutral": 0.9988586902618408,
+        "contradiction": 0.0003737018851097673
+      },
+      "latency_ms": 246.7061310308054
+    },
+    {
+      "id": "2758:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9885332584381104,
+        "neutral": 0.00989023968577385,
+        "contradiction": 0.0015765146818012
+      },
+      "latency_ms": 142.8222069516778
+    },
+    {
+      "id": "2794:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.0001262231671717018,
+        "neutral": 0.9985313415527344,
+        "contradiction": 0.0013424366479739547
+      },
+      "latency_ms": 196.18221698328853
+    },
+    {
+      "id": "2919:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9832304120063782,
+        "neutral": 0.016375688835978508,
+        "contradiction": 0.000393981346860528
+      },
+      "latency_ms": 110.27520906645805
+    },
+    {
+      "id": "2934:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9972934126853943,
+        "neutral": 0.0021268499549478292,
+        "contradiction": 0.0005797120393253863
+      },
+      "latency_ms": 121.76369095686823
+    },
+    {
+      "id": "2964:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.00020935268548782915,
+        "neutral": 0.999057948589325,
+        "contradiction": 0.0007326651248149574
+      },
+      "latency_ms": 218.6525610741228
+    },
+    {
+      "id": "3021:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 0.0001000711927190423,
+        "neutral": 0.00878059957176447,
+        "contradiction": 0.9911193251609802
+      },
+      "latency_ms": 132.20220000948757
+    },
+    {
+      "id": "3023:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.0018250416032969952,
+        "neutral": 0.9980480670928955,
+        "contradiction": 0.00012688447895925492
+      },
+      "latency_ms": 127.4172980338335
+    },
+    {
+      "id": "3029:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 6.380210834322497e-05,
+        "neutral": 0.00038240294088609517,
+        "contradiction": 0.9995537400245667
+      },
+      "latency_ms": 175.6617659702897
+    },
+    {
+      "id": "3107:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.998200535774231,
+        "neutral": 0.0014980626292526722,
+        "contradiction": 0.00030141291790641844
+      },
+      "latency_ms": 422.3433459410444
+    },
+    {
+      "id": "3150:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 0.00015337257354985923,
+        "neutral": 0.006380628794431686,
+        "contradiction": 0.9934659600257874
+      },
+      "latency_ms": 200.96777891740203
+    },
+    {
+      "id": "3183:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.09905995428562164,
+        "neutral": 0.9007250070571899,
+        "contradiction": 0.00021509382349904627
+      },
+      "latency_ms": 157.50979410950094
+    },
+    {
+      "id": "3272:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 0.002791188657283783,
+        "neutral": 0.004096918739378452,
+        "contradiction": 0.9931119680404663
+      },
+      "latency_ms": 162.3874120414257
+    },
+    {
+      "id": "3293:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9524301886558533,
+        "neutral": 0.04721245914697647,
+        "contradiction": 0.0003573256835807115
+      },
+      "latency_ms": 184.7932799719274
+    },
+    {
+      "id": "3308:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.0006704597035422921,
+        "neutral": 0.9723343253135681,
+        "contradiction": 0.0269952192902565
+      },
+      "latency_ms": 183.26959805563092
+    },
+    {
+      "id": "3417:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 0.00029437473858706653,
+        "neutral": 0.009498107247054577,
+        "contradiction": 0.9902074933052063
+      },
+      "latency_ms": 107.56857506930828
+    },
+    {
+      "id": "3438:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9961875081062317,
+        "neutral": 0.0018707242561504245,
+        "contradiction": 0.0019417721778154373
+      },
+      "latency_ms": 295.73155799880624
+    },
+    {
+      "id": "3469:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 0.011157453991472721,
+        "neutral": 0.005659706424921751,
+        "contradiction": 0.9831827878952026
+      },
+      "latency_ms": 295.1681889826432
+    },
+    {
+      "id": "3644:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.02970779687166214,
+        "neutral": 0.9578227996826172,
+        "contradiction": 0.012469402514398098
+      },
+      "latency_ms": 114.97957597021013
+    },
+    {
+      "id": "3657:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.998314619064331,
+        "neutral": 0.0014445212436839938,
+        "contradiction": 0.00024091533850878477
+      },
+      "latency_ms": 115.51933793816715
+    },
+    {
+      "id": "3706:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9976281523704529,
+        "neutral": 0.002219761721789837,
+        "contradiction": 0.00015208109107334167
+      },
+      "latency_ms": 116.75774003379047
+    },
+    {
+      "id": "3760:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9992571473121643,
+        "neutral": 0.00047683389857411385,
+        "contradiction": 0.0002660094469320029
+      },
+      "latency_ms": 176.35065701324493
+    },
+    {
+      "id": "3769:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.8184975385665894,
+        "neutral": 0.18095451593399048,
+        "contradiction": 0.0005480073159560561
+      },
+      "latency_ms": 187.04879994038492
+    },
+    {
+      "id": "3839:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 7.09223750163801e-05,
+        "neutral": 0.0002790902799461037,
+        "contradiction": 0.9996500015258789
+      },
+      "latency_ms": 264.83094098512083
+    },
+    {
+      "id": "3856:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9760180711746216,
+        "neutral": 0.023722417652606964,
+        "contradiction": 0.000259449181612581
+      },
+      "latency_ms": 276.50360797997564
+    },
+    {
+      "id": "3955:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 7.903903315309435e-05,
+        "neutral": 0.0006145873921923339,
+        "contradiction": 0.999306321144104
+      },
+      "latency_ms": 194.1527749877423
+    },
+    {
+      "id": "3970:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.1686026006937027,
+        "neutral": 0.7819188237190247,
+        "contradiction": 0.04947860538959503
+      },
+      "latency_ms": 261.48883905261755
+    },
+    {
+      "id": "3993:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.00021983573969919235,
+        "neutral": 0.5225288271903992,
+        "contradiction": 0.4772512912750244
+      },
+      "latency_ms": 178.45306592062116
+    },
+    {
+      "id": "4000:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 8.713644638191909e-05,
+        "neutral": 0.0005796789191663265,
+        "contradiction": 0.9993332028388977
+      },
+      "latency_ms": 118.16330801229924
+    },
+    {
+      "id": "4016:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 0.00033255619928240776,
+        "neutral": 0.00047144756535999477,
+        "contradiction": 0.9991959929466248
+      },
+      "latency_ms": 95.54255101829767
+    },
+    {
+      "id": "4029:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.004452650900930166,
+        "neutral": 0.5896920561790466,
+        "contradiction": 0.40585529804229736
+      },
+      "latency_ms": 117.55109904333949
+    },
+    {
+      "id": "4068:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.023267338052392006,
+        "neutral": 0.6169727444648743,
+        "contradiction": 0.3597598969936371
+      },
+      "latency_ms": 125.38057507481426
+    },
+    {
+      "id": "4132:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9957322478294373,
+        "neutral": 0.003989336080849171,
+        "contradiction": 0.00027844039141200483
+      },
+      "latency_ms": 166.15200496744365
+    },
+    {
+      "id": "4135:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.0026460944209247828,
+        "neutral": 0.9972866773605347,
+        "contradiction": 6.728641892550513e-05
+      },
+      "latency_ms": 176.09250894747674
+    },
+    {
+      "id": "4217:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.01989177241921425,
+        "neutral": 0.9570451378822327,
+        "contradiction": 0.023063037544488907
+      },
+      "latency_ms": 107.76888206601143
+    },
+    {
+      "id": "4219:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 0.06621026992797852,
+        "neutral": 0.09563512355089188,
+        "contradiction": 0.8381545543670654
+      },
+      "latency_ms": 140.49379411153495
+    },
+    {
+      "id": "4277:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.0044003562070429325,
+        "neutral": 0.9925112724304199,
+        "contradiction": 0.0030884449370205402
+      },
+      "latency_ms": 249.87006606534123
+    },
+    {
+      "id": "4342:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9976498484611511,
+        "neutral": 0.0018667645053938031,
+        "contradiction": 0.00048344628885388374
+      },
+      "latency_ms": 188.0825610132888
+    },
+    {
+      "id": "4373:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9893357157707214,
+        "neutral": 0.010091295465826988,
+        "contradiction": 0.0005730732809752226
+      },
+      "latency_ms": 85.56708798278123
+    },
+    {
+      "id": "4528:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.19480863213539124,
+        "neutral": 0.8037042617797852,
+        "contradiction": 0.001487072091549635
+      },
+      "latency_ms": 131.51177496183664
+    },
+    {
+      "id": "4535:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.06571085751056671,
+        "neutral": 0.9127415418624878,
+        "contradiction": 0.02154749073088169
+      },
+      "latency_ms": 212.9107560031116
+    },
+    {
+      "id": "4547:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9981955885887146,
+        "neutral": 0.0016586340498179197,
+        "contradiction": 0.00014582615403924137
+      },
+      "latency_ms": 93.74530497007072
+    },
+    {
+      "id": "4559:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "entailment",
+      "predicted": "entailment",
+      "probabilities": {
+        "entailment": 0.9904590845108032,
+        "neutral": 0.009461965411901474,
+        "contradiction": 7.901388744357973e-05
+      },
+      "latency_ms": 144.31153296027333
+    },
+    {
+      "id": "4726:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 0.00010543595271883532,
+        "neutral": 0.0015516403364017606,
+        "contradiction": 0.9983428716659546
+      },
+      "latency_ms": 383.4216760005802
+    },
+    {
+      "id": "4817:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "neutral",
+      "predicted": "neutral",
+      "probabilities": {
+        "entailment": 0.00019836596038658172,
+        "neutral": 0.9994083642959595,
+        "contradiction": 0.00039327159174717963
+      },
+      "latency_ms": 253.29216802492738
+    },
+    {
+      "id": "4836:en:same",
+      "language": "en",
+      "mode": "same",
+      "label": "contradiction",
+      "predicted": "contradiction",
+      "probabilities": {
+        "entailment": 0.04849328473210335,
+        "neutral": 0.1866360455751419,
+        "contradiction": 0.7648706436157227
+      },
+      "latency_ms": 243.64551494363695
+    }
+  ],
+  "limitations": [
+    "Classification accuracy, not LoCoMo answer accuracy or end-to-end RAG quality.",
+    "One-pair sequential CPU component latency; not concurrent HTTP request latency.",
+    "Public NLI may overlap training; the sample size and language coverage limit claims."
+  ],
+  "source_sha256": {
+    "__about__.py": "91447944015cec709e8aa7655f7e9d64e1e4508e7023a57fe3746911c0fc6fed",
+    "__init__.py": "708e0ad88efdb9577ca4ecf1f5d4bb4bacb99ef55a5bd3d84f993caf1cbe3c5f",
+    "__main__.py": "8c645bc391dd6feb6784100d7804d9a02757c0c0ad21f62204339a73097212b5",
+    "adapters/__init__.py": "a20caaa5e6dd2ddb9215312cd464b8dfe630c3ed9e4d3aebce8f47a662eb49ba",
+    "adapters/authz/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "adapters/authz/memory_provider.py": "bafacbe5d95dcaf323acb827d9c60e853828d7e8a6d45573b2d7486bd5874025",
+    "adapters/authz/model.py": "8ed1ffb42a943f4c12d0be7f3a4278b9577f9d013824ffaea42afb971991f9d3",
+    "adapters/authz/openfga_provider.py": "7823e560eaeacc7635b2a63a961f75552d324d079596e85de7027617257dbc43",
+    "adapters/blob/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "adapters/blob/filesystem.py": "0e3a19786264998a7f548b507bfcb87efbd3f6e10c9aa4b4c81650f9fcd59f90",
+    "adapters/blob/gcs.py": "695e1c8f8b6f08e43de919b010f3b99ede174fe3f4c4c2cacae0a08d6be54931",
+    "adapters/blob/memory.py": "aa433340de93289be044f9a8be4164b17e14184ca5b9ef8e86eef921ba04004f",
+    "adapters/cache/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "adapters/cache/memory_cache.py": "98020d24f8ee22098024bf27b89bcd38b1e375ee740eeca1eb3c0be11c5ac360",
+    "adapters/cache/redis_cache.py": "a703a217c7b0467b038f3f78790cda78ea3e02a55751a7e07db9bfc3678d7362",
+    "adapters/db/__init__.py": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "adapters/db/brief_repository.py": "b301e26e0af3f16386508a25f17e00759cd943406e519c7c375429e3e3bf4675",
+    "adapters/db/credential_repository.py": "181cbca91da5f33c459043b88701c458e9b97be5d83e4ec70c8452469255e2c7",
+    "adapters/db/document_repository.py": "3c36351355b60e141d7a08420cced1a4be29fa8f877f4c34da323aac0afa1dbb",
+    "adapters/db/engine.py": "a401a465f85c9bc6a02d262ff0f1670611ce761c452771f3aa8223c87f514c23",
+    "adapters/db/memory_repository.py": "a401eefb7172d0ed0a75c54ba5de96ec05953a4a77da91d9da1bd860e4eb73fa",
+    "adapters/db/orm.py": "b6fc054abc68db7f1d0944dd7f487698097a46d52bf85eb9faf42ba848779182",
+    "adapters/db/repositories.py": "ef5614ac84c69ebe4d0a8f0b8884e96a07026fa2cead59375d8da51046402797",
+    "adapters/db/tool_repository.py": "c861592b512d57ea2c8e3d3def2d10bbaed1bd99439c340b14c668bfdfc31e4b",
+    "adapters/db/uow.py": "1b8ab1337f0bbddd61009b94fbf4c07d1a4f2dacf8a1f279fc8639ceede6db29",
+    "adapters/graph/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "adapters/graph/memory_store.py": "d5204332dcc8a29729cf88b32bb82615d6d0f8b8ee7ec77f70d67630003319ae",
+    "adapters/graph/postgres_store.py": "29f0107baa22ef15ac773842742c3f6be503804abd6aeb461bb56de92b4cb21f",
+    "adapters/models/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "adapters/models/_precision.py": "9402fa49a79b3efcf10dedaa6788c7919cb7422ee9e4d3b924bf19b40b78b90e",
+    "adapters/models/_runner.py": "b48008ef58f71373ab9f3f045888e434c3d2b5215b6aacddf939c7fd453e97f5",
+    "adapters/models/credential_cipher.py": "b00d9d38b197fe4773412ab6366a4984201ced3a4e5a1588c42851da76874cd9",
+    "adapters/models/embeddings.py": "bc2983e34ccba54cd438161d8648e16ed62e2bc6e9403de9eddcc3ab2a51fde8",
+    "adapters/models/hindsight.py": "98d2e9274a03fa1da9a80eeb42e1a718df0b8358f493271c9ce0e948e7a65224",
+    "adapters/models/llm.py": "9702535de9f3f45b27cc7dcabb07f9dda34b2070be8cb6152feb659f60e31889",
+    "adapters/models/nli.py": "616641076c2177467149dab78d07858ce9a30aec35532fc860b99dc5344e061b",
+    "adapters/models/onnx_nli.py": "4da5923b8968b315433c36192aa194ee45d0ceb2d1294db24ffd85f3fdef04c8",
+    "adapters/models/rerankers.py": "ab2b233d6fb6ae20cf359afb6038afcb504d1a20a6f1efa5a56b7b8afd501ed0",
+    "adapters/models/sparse.py": "da687b2926729f3dd51db18c0d7a088d808d32846eb8a374d453172bf00b9e5e",
+    "adapters/parsers/__init__.py": "e49fcea63529547fe884ac6d4a840fa2d59e8bd74ed1a98ee1b9fa942a0b54bf",
+    "adapters/parsers/builtin.py": "ab27fd0336a868c232c309247d57a458c3d68ff2d2851e09477c5f5f52d3a3e3",
+    "adapters/parsers/docling_parser.py": "f9d1f2fe9e576c857d9655c14fb369dfab8b7aff1cd455e1eb22ea3850d6c088",
+    "adapters/search/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "adapters/search/qdrant_store.py": "512a63946c159e479a0cca87d4565b22b63b6f3e24533cb9b952e3559ce2c6dc",
+    "adapters/tasks/__init__.py": "de392f814a77bab9625264baa771f25502598904efba481f907e5e57999e5ff4",
+    "adapters/tasks/inline_queue.py": "3f59540aa7aa0c593bd6ef7a6593d266f6cab17e8c3ea8140d8cf48a94aadee1",
+    "adapters/tasks/procrastinate_queue.py": "0df4bf07a27c84821b8a3fb877dde3160c710ec3753c99e9d3f7594bbeb60116",
+    "adapters/tasks/procrastinate_schema.py": "6906c2397b7c0e8eeb16d02990069ea9f1dbf6f3fa74e17be1ee574ae65a54f8",
+    "adapters/wiring.py": "47990d59179fc1725305146d22e59c5f4ff908f7ea4d1fea056a30d1b3cad680",
+    "api/__init__.py": "0d54f8df8c2ef4869eecf37a0c82d83cc82ca05a4bd8a70e8d29cba77944dada",
+    "api/app.py": "00f40958a8846ce03039dea4343feeb7fd525880af7318722558ad68fd9c6f3b",
+    "api/deps.py": "7e3d1cb2ae7af2e8178aa3b126c4514cb58bb7ddb119b95fb7b9033c118ac0ee",
+    "api/errors.py": "1358ef8f58df686b54d133ab00cd5989347c20a37a4077faea2a3e4e68ba89a1",
+    "api/idempotent.py": "d4d3352966ba67cbadb1bcd85cacdabe5472dc6d23059f10088d884580a1dcbe",
+    "api/middleware.py": "c3551ff3c4cfcb29c11873988e5d108242eb1609eb628d2d46d92992db9b19d4",
+    "api/openapi.py": "bd8ec39f10e71ea86a58a02810b9009eb99ad5c17a8b70dbc81022e2e177c9bf",
+    "api/routers/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "api/routers/ops.py": "bd4ed801479a9e987a0040906d4e80ec9f1c6b3789437ce610c0561abad4010a",
+    "api/routers/v1/__init__.py": "64171c506bf6ffe68c73aa852c7a3ab096e5ac870f7824752a556516c5eb472c",
+    "api/routers/v1/agent_credentials.py": "d5b0f22c4b0ad9b34d26c59c23b5ac3563378b013eed275cdcc7e73dee6df77b",
+    "api/routers/v1/briefs.py": "21409f0247d2ea45187a6253a30ac65113f7a2216e60bee2f28884c5081d1fff",
+    "api/routers/v1/conversation.py": "5b785d1be6c92181250708b399ea20ceb99291f28cefe361b1874e6eeaa5307d",
+    "api/routers/v1/files.py": "133714a88e2038517438fa0519e916ae0e6215662b0db8b049eb03b15a4a64d2",
+    "api/routers/v1/graph.py": "ce1f1d11cbea38b1c5e062141b768f1d93cef3bb2ef632a8ddd7d8349e7c5e2d",
+    "api/routers/v1/grounding.py": "0aa24afbbe8a605a494e77f77a136263907208d57a08457396a9d8beda0f041a",
+    "api/routers/v1/memory.py": "37607bb268c2448b090cb6f1329717522767747202f4f8e52361084cba41bc6e",
+    "api/routers/v1/retrieval.py": "667ddfa8fe8c92bff0d102bedb807b3c4ffc9c863c9dde0fecabd9cd4bdafbd4",
+    "api/routers/v1/tools.py": "ad87b266cc421014632226ad56e0791743c093a5de1d47f5d919003bcee3cdbe",
+    "api/schemas/__init__.py": "47299586bd5a73ad4ee241e1f7dc80fb3c822e4a7c626377869863945b09e381",
+    "api/schemas/context.py": "ea12de232e6674af0e8aca2f6b840e8fd99b180b5e76849b52fe54d08d76cf4c",
+    "api/schemas/conversation.py": "b37beba13faf145c4a0072894aec2e85b0f9ce5cfcd40316c5b56539407734a0",
+    "api/validation.py": "4096c9a423000708f0d744b1bf815bff939f01c004720d19b37a7d16a99668a8",
+    "application/__init__.py": "f20af94c09dfa5782a3cdfd504a5dbdf10010ef2c980204e2bfc52129494cebb",
+    "application/container.py": "72f1ca82bb7814ee2567595f03dc0c20796c4aac231fb2ed3695d43d1399ad75",
+    "config/__init__.py": "f78d14f5800a118f6490702defd8fdab0883ab564d3f0f8a7f6981668acc39d3",
+    "config/constants.py": "f65637cbecd19345a58bfe2446014eebec1da345b29841f87241d18f6727a10b",
+    "config/registry.py": "900fea7295929650649d4cb909bafabdf6fc47944d1e0e99e88b253796725b5d",
+    "config/settings.py": "99736bea97ba694897d80f83416d6fb44b78d25e64d3f106a9432d30ac1fdf02",
+    "domain/__init__.py": "9eb3d163f520849537b8d56e56b14080a1e38370e00baadceaa38b77535ac62d",
+    "domain/briefs.py": "f4858a2da608688d094549a34d93bd2242765400fc36cc584658ae138a40f06f",
+    "domain/context.py": "80282a1dde9e7408fe5fb8eb245fa04f0c39701d3537701d772824657f2025e3",
+    "domain/context_bundle.py": "ce841c523a6ec30aa54586afb6296f1d45ab842c19fb6778f6ac2df88cf8bcf4",
+    "domain/conversation.py": "e441124990a50d772001ffca61660a21cae5e65b9f48b2c3f6eeb7ca9b4d9ecb",
+    "domain/documents.py": "92af72ff641ab9a21b312178b54d571ef68793f1ec4a06f808dabb22c6faead9",
+    "domain/enums.py": "cec8d5c7eb2234d8f7f6fa10afbb1f68734ed079bc8cb23a8e35c43d94ec9282",
+    "domain/errors.py": "e67ad042f119485bb73cc178b362e97ed6f1966000d57e9ada52e0fbb356ac81",
+    "domain/evidence.py": "0dd461800b1666a166a380f27d1da255954659bf8d369b8ba3261163e9c0e672",
+    "domain/graph.py": "63a777c162b532d2935fac6675ac67080673aea7ba5f4b186c4eee6b808e5a58",
+    "domain/grounding.py": "27391d0cc454cd34327b2785b32d3f880201e8bc94289855dba601e51a351977",
+    "domain/ids.py": "28e0b9dba171d82f5806987ec565655422dfaf459e949f2b587808f901b84861",
+    "domain/memory.py": "4aa604e7b5aacaefc8c658c4fb5fa841b24b49c531d8577ecae34fc0d6f66cbb",
+    "domain/observation.py": "f71d79aebec155f89bd08cea7725ab97fcfc8e268e15ba59c1320b87dcad6e3f",
+    "domain/revisions.py": "4a2f84225515d4aec095cf1c095003d56851bde4fd018526c176dc0a2e7a7392",
+    "domain/text.py": "7db5755be417a41912c2d465998f1519a00fe9f51b57defec5db5362cd07c1a2",
+    "domain/tools.py": "99e9f6ebeeda3b734511866604e04780d466c09215e0e0ca0a21c2a33027847e",
+    "modules/__init__.py": "026968e4e7c11b7404b675511777afac253f588b1747b0389988ac088be11eb9",
+    "modules/archive/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "modules/archive/segments.py": "2918dbbd84bb8046c08183f291e74854ae2798497b6112f78ca5a751b2418307",
+    "modules/archive/service.py": "417a56aa72b767669fd5868d6bf1011fd78ad8fd98618d8835d5fb732950a9a9",
+    "modules/auth/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "modules/auth/authentication.py": "67d91f18be4ae7a48a02e2dd3c15470af3668cdd7e63cad75147842fdd175e1b",
+    "modules/authz/__init__.py": "961269d42a779bd35293a05ed895ad3c5e18826ce4384cea9307e4721b6ff988",
+    "modules/authz/scope.py": "495cf94b1a40f436e2123025bd168ecb8b889f16f0b115a78faf72210ac7c750",
+    "modules/authz/service.py": "b891a4e2104e09f9f8160b32fe72731df9cb679f17dd7bf5e32c56acf93317c9",
+    "modules/authz/visibility.py": "4328f6c6e2f7be89be0febb1fab191897cd44357e6771de71e265c818c412905",
+    "modules/briefs/__init__.py": "0ad0c58e1a590baed4974a9e139fc664db1b00e2927074fa2ddb863e592986f8",
+    "modules/briefs/service.py": "57c915223fec949453f1b89e16160f4b1a98b8b483a08b51466d694890b709e3",
+    "modules/context/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "modules/context/builder.py": "61435bf6e51a796d74f970a4cef3ed8590ef2588997c117fab8f4bb74b138e06",
+    "modules/context/evidence.py": "2f20e24080a77d5359f35cfdfb3389bd383cc96ecd93d5cae496a8761933cd16",
+    "modules/context/expansion.py": "47dec36877a7aee8502b0548b9e6b6b260f705c9a6b20e227afb78475fa13dff",
+    "modules/context/semantic_cache.py": "d40cdc23cac1940c00b1c61ed588a90d2c08e933aafdf7554c287fdebda0519b",
+    "modules/context/summaries.py": "8ad6229e2d4e5c3f5413108de92da14effe97dbcace08c37210274432afdf96f",
+    "modules/conversation/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "modules/conversation/service.py": "f54bf312591a510a95bc5a3c645e75157aed7d513179a646bbffc7da41b27087",
+    "modules/graph/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "modules/graph/document_facts.py": "7b0b1ea88f6df285940363b6d0673c398f661b37d0e8b0f139f3c29ba756219b",
+    "modules/graph/invalidation.py": "8028c0623ba386ffb868162719d11a71797ebf02dd238451e8ed5ccf74b78050",
+    "modules/graph/native.py": "6466ecc880b5542528dba722abef6f2fa910d684a779e9f295a4f026c3b38cfe",
+    "modules/graph/retrieval.py": "6708d0f388ce36b3dc631d0fb335ddd2d4b7c32efdb94048c305bf415ddc2548",
+    "modules/graph/service.py": "d3a57a26b5088009e57c7fdfc75a69ec3873a692da1f880db02fcdc2c4d3da71",
+    "modules/grounding/__init__.py": "496ae8c89542f86a12ddd5a8a091440d58d8b0a0867c8930ac03a9577c2c07d8",
+    "modules/grounding/cascade.py": "313d030bf07a779cb05ebca7278a13c8c83fd2f7dd3e7bbcbd054da4f6d203ac",
+    "modules/grounding/lexical.py": "3c99069b277ad3df613d0c21e1b1693faa88dc830daa75afbad174055d230cf7",
+    "modules/idempotency/__init__.py": "78c29627fff658644e43923a1a02323d560961a04cb585f945ac8ab1be12a6ee",
+    "modules/idempotency/service.py": "c0a933de1e21e9c69bf21672c2e7a11153444d6ef6d24e047193487dbdf8766b",
+    "modules/ingestion/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "modules/ingestion/chunking.py": "af87ed0026a0bb89a21baa445cc7e287935f054405d164bb024f3019b31b6f83",
+    "modules/ingestion/context_graph.py": "29f5e3714187f1c8d7053cb4762a6f701de3ffc74c1f2d298c95c0717a72ec01",
+    "modules/ingestion/hierarchy.py": "0182181303985b41b6406af2954fcc6c622ceaa3a456ce4e64e6d6ae7c951f58",
+    "modules/ingestion/service.py": "1bab3752e7a6e509cddcb2c7bc941e73c2050ed287450f9dd643c05bce769b28",
+    "modules/jobs/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "modules/jobs/registry.py": "b5f57d3260daa8ca4a057718e996bb9404cb15ca7f8fdb19b4a19f0cd2fd5ed9",
+    "modules/llm/__init__.py": "7cc5a839b41ba5a8fa90501cd26fce77c2d7fba9ac7e7df0d3e832ccb7c17229",
+    "modules/llm/assist.py": "b50174fdca4d173e4960fbbd3d0a541eb0081683a6d4f6ee05021ab5dfe62d62",
+    "modules/llm/cost.py": "7f72ab89e5a3bab6cc35c638023cdc3f4c9743671c6a4f66226a80a3f49239c1",
+    "modules/llm/credentials.py": "65ce8bf9518c747fb821942f5b2f2d2f3860670caf613930a490dead14b49e4c",
+    "modules/llm/policy.py": "bf62c6be198dae0b115202be169a150ffffc13c0567a3ee4939a30cc53ec0818",
+    "modules/memory/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "modules/memory/admission.py": "e1a6e92d3cae6d365eb5892a75df86764db21bc4afddfcf498477baa16964c76",
+    "modules/memory/derived.py": "1ca536009cab8c39c6e16c29422bad3143bd956874ff8b2fd9ae9463842f827b",
+    "modules/memory/ephemeral.py": "ce238792c09627b8af5db4182951578679d069b21b200f4d89b9ae643305dd04",
+    "modules/memory/forgetting.py": "dd40c8fbd3b61fe80a4939332f8c3714ded7c7201d6009b7165d60eb51d467c7",
+    "modules/memory/landing.py": "052347ebb2aace55d9f80e0984ef1762562f0e2bc66030bdb82dc8e493d97713",
+    "modules/memory/narrative.py": "50a0d4f26e13380594e461b5213070e0c5ede8d1157b3f72e1a3935ec08e0d10",
+    "modules/memory/native.py": "74815939a281294f02a28c76ba1ea71f8d7aa57a51cab89e3d98f11da1e55303",
+    "modules/memory/pipeline.py": "b9dcce684b9822b3eb30275343b06ca091a7007e2c3aaecc4365e0c653e1cb30",
+    "modules/memory/reflection.py": "b9f5fa9a71db196b54a8b185481adc54300316a976c67a1b7eadfef5ff7800a1",
+    "modules/memory/revisions.py": "c5f7dd2aa9bc8f425e68ff69113be67e6ffbf75ae61db806aa463adde5253f57",
+    "modules/memory/service.py": "8cb590c8aa391d6847a925890343a6f84916088ca18152bbb6f049e4d9cb4036",
+    "modules/rag/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "modules/rag/indexer.py": "d0d0fa8480482c5610d020e7e81a6ba14171b91954cfd2705337a769b558d3bd",
+    "modules/retrieval/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "modules/retrieval/engine.py": "0d322939104d5e35f934ce4dfa0e8b6329e54226ba67fde1458aa2b12908ce6b",
+    "modules/retrieval/memory_queries.py": "737cdcee4544fdf4260d371aab8303b1bb16b739fad72e617f5313473a4852e2",
+    "modules/retrieval/router.py": "030affc1a2524ef00b356a861331d0387f30f32e8381b24dcfcda7956d46eb17",
+    "modules/retrieval/source_turns.py": "9b135de81d1039d5d5662b1999b11c1574b490f622386d4e2f022e125cf5da54",
+    "modules/tools/__init__.py": "386c3ada1b7a36619d21dc58aa36a721d6ee9e2c7f47234e8f0a5a621f537fee",
+    "modules/tools/patterns.py": "b585d026bcb8e28f23a0488e83c910439d9f1a769aa4bf577e4d572b1797851b",
+    "modules/tools/procedures.py": "4de1deac76ffd641e86d9112a42392271de7a779fcf4fa5db731b791cb41b681",
+    "modules/tools/service.py": "0b045fa34bc29bc3c3516db5901b98c1fb74dff8776d10497afd6982e5c2ae65",
+    "modules/tools/trajectories.py": "d28b2a18af45e1ff9c8bd34a7288defa4ae913625871c984302f21185b73fbb7",
+    "modules/working_memory/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "modules/working_memory/hot_thread.py": "5119727b2d5f796b7734468fe89ef30ed2e91c5cce969e2631f8c0ae7b21d4bc",
+    "observability/__init__.py": "7bbea3c67749f67993b4d668c68cc4bdeaf02283d351bed00d0eb2daf909e41e",
+    "observability/logging.py": "eec7473ab6229d8fdcc3486630c7396f27a5f0b12d4f98a80df6fed983c1c8fd",
+    "observability/metrics.py": "ddb9755a6005deeaa734108d63f6098835fb3af92c606d34351ef4435a234597",
+    "observability/timings.py": "f69731636ed06d7df0edf3d2bae975c9af298ac50018f456f3c05646bd13b804",
+    "observability/tracing.py": "ccccc22112eb7271e0eddb55855cefd573dfde6c79ddba8c7af02c1c20bf5702",
+    "ports/__init__.py": "e5daa961ad8ab70e25a531ce9721e70e16d47f631fcee7dae429f389014bd800",
+    "ports/authorization.py": "8981234a9bce757437a428950a279eeca04c72d4f1e35186e844b79d0337b169",
+    "ports/blob.py": "04d48c884b74febe2b7795e10ff0104baba400d35d7a97509daa4d2b44b2f3f2",
+    "ports/briefs.py": "74f81badd550390fb6dec04f1c6d815d7670c3626b717e8873fd698f6946275e",
+    "ports/cache.py": "5adc3463b7b14d9480f891728dcf29dcdb7c974777695a5d9121d0944d91a74b",
+    "ports/context.py": "4e5cb1f08c2c5621550bef30bd5f711c42442c19d80680e43d2419b3a2c70f10",
+    "ports/credentials.py": "f133422140ff1247ee4ecd367bc06c7e544df6e16f6d7b6a6c9b429709b07bf6",
+    "ports/intelligence.py": "48209fc7f3e7f3d05bf443a6125038b001d5f1279b641ef97928b6a04aebb953",
+    "ports/models.py": "52f752baac56a948d1c564507016c04999ae66ce6e2459b73ad7fb68a4794094",
+    "ports/repositories.py": "e1242fb529890414dc1874248ba8250ae4c3d6ad5619e4d86c832f074024969c",
+    "ports/search.py": "e629436d02707e8fa687d76caf25346edd75f7dcd07b1308e2e297059ee5023f",
+    "ports/tasks.py": "1c5b8149047e18adf2b5db150d53daed3e9f3f74fd0446192d51385e418d2143",
+    "ports/uow.py": "d493a35c07d95fd9aad4c8c52f0c4e8491b892fe4081fc728b94620f2e9781dd",
+    "tools/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tools/download_models.py": "3bbd0f1b262760b261dcf20770c57072c4daf9c53f3ecf7e9aa8ad9135a3ab8d",
+    "tools/ensure_queue_schema.py": "f49894dad1043956586322b6ae3138508cc3bb3b84509aefd0133f57f56adbf3",
+    "tools/export_openapi.py": "52b18818c1414da6ea55e055c3be94ee5c8108db94dcb3b0f8a6e5834300adff",
+    "tools/onboard.py": "e5541867b1b786387d2180ec3eea2e0aaed286b0f507361f008d9e2e8469b21c",
+    "tools/reindex.py": "6bea1f210d73f45c2c9faf8f8546c6b3263985a46c90685e681af35112ceb4ea",
+    "worker.py": "d76a6ba78286c4deb2d93978655c98711f5c5bf0ef907e5a3ed3bfbcc232430c"
+  },
+  "grounding": {
+    "dataset_sha256": "f5f282a8adb1553ff855560fd2ea3b36158ff54ce0e305679835b6d95450d7c6",
+    "cases": 40,
+    "correct": 36,
+    "rows": [
+      {
+        "id": "verbatim-01",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "supported"
+        ],
+        "ok": true,
+        "latency_ms": 287.4448869843036
+      },
+      {
+        "id": "verbatim-02",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "supported"
+        ],
+        "ok": true,
+        "latency_ms": 290.9503160044551
+      },
+      {
+        "id": "verbatim-03",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "supported"
+        ],
+        "ok": true,
+        "latency_ms": 218.20297499652952
+      },
+      {
+        "id": "verbatim-04",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "supported"
+        ],
+        "ok": true,
+        "latency_ms": 165.12556991074234
+      },
+      {
+        "id": "verbatim-05",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "supported"
+        ],
+        "ok": true,
+        "latency_ms": 285.7940719695762
+      },
+      {
+        "id": "verbatim-06",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "supported"
+        ],
+        "ok": true,
+        "latency_ms": 133.93493695184588
+      },
+      {
+        "id": "verbatim-07",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "supported"
+        ],
+        "ok": true,
+        "latency_ms": 246.58276000991464
+      },
+      {
+        "id": "verbatim-08",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "supported"
+        ],
+        "ok": true,
+        "latency_ms": 155.02420300617814
+      },
+      {
+        "id": "paraphrase-01",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "unsupported"
+        ],
+        "ok": false,
+        "latency_ms": 317.3372889868915
+      },
+      {
+        "id": "paraphrase-02",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "unsupported"
+        ],
+        "ok": false,
+        "latency_ms": 140.65028505865484
+      },
+      {
+        "id": "paraphrase-03",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "supported"
+        ],
+        "ok": true,
+        "latency_ms": 144.46518407203257
+      },
+      {
+        "id": "paraphrase-04",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "supported"
+        ],
+        "ok": true,
+        "latency_ms": 117.26122698746622
+      },
+      {
+        "id": "paraphrase-05",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "supported"
+        ],
+        "ok": true,
+        "latency_ms": 133.41069093439728
+      },
+      {
+        "id": "paraphrase-06",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "supported"
+        ],
+        "ok": true,
+        "latency_ms": 170.11947801802307
+      },
+      {
+        "id": "citation-01",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "supported"
+        ],
+        "ok": true,
+        "latency_ms": 159.61893904022872
+      },
+      {
+        "id": "citation-02",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "supported"
+        ],
+        "ok": true,
+        "latency_ms": 158.49081298802048
+      },
+      {
+        "id": "citation-03",
+        "expected": [
+          "unsupported"
+        ],
+        "predicted": [
+          "contradicted"
+        ],
+        "ok": false,
+        "latency_ms": 330.8425539871678
+      },
+      {
+        "id": "citation-04",
+        "expected": [
+          "unsupported"
+        ],
+        "predicted": [
+          "unsupported"
+        ],
+        "ok": true,
+        "latency_ms": 0.20758796017616987
+      },
+      {
+        "id": "citation-05",
+        "expected": [
+          "unsupported"
+        ],
+        "predicted": [
+          "unsupported"
+        ],
+        "ok": true,
+        "latency_ms": 0.1624060096219182
+      },
+      {
+        "id": "citation-06",
+        "expected": [
+          "unsupported"
+        ],
+        "predicted": [
+          "unsupported"
+        ],
+        "ok": true,
+        "latency_ms": 101.06853407341987
+      },
+      {
+        "id": "number-01",
+        "expected": [
+          "contradicted"
+        ],
+        "predicted": [
+          "contradicted"
+        ],
+        "ok": true,
+        "latency_ms": 388.6801250046119
+      },
+      {
+        "id": "number-02",
+        "expected": [
+          "contradicted"
+        ],
+        "predicted": [
+          "contradicted"
+        ],
+        "ok": true,
+        "latency_ms": 353.1974459765479
+      },
+      {
+        "id": "number-03",
+        "expected": [
+          "contradicted"
+        ],
+        "predicted": [
+          "contradicted"
+        ],
+        "ok": true,
+        "latency_ms": 186.94765190593898
+      },
+      {
+        "id": "number-04",
+        "expected": [
+          "contradicted"
+        ],
+        "predicted": [
+          "contradicted"
+        ],
+        "ok": true,
+        "latency_ms": 366.8753489619121
+      },
+      {
+        "id": "number-05",
+        "expected": [
+          "contradicted"
+        ],
+        "predicted": [
+          "contradicted"
+        ],
+        "ok": true,
+        "latency_ms": 351.5313540119678
+      },
+      {
+        "id": "number-06",
+        "expected": [
+          "contradicted"
+        ],
+        "predicted": [
+          "contradicted"
+        ],
+        "ok": true,
+        "latency_ms": 158.50451693404466
+      },
+      {
+        "id": "negation-01",
+        "expected": [
+          "contradicted"
+        ],
+        "predicted": [
+          "contradicted"
+        ],
+        "ok": true,
+        "latency_ms": 115.41369801852852
+      },
+      {
+        "id": "negation-02",
+        "expected": [
+          "contradicted"
+        ],
+        "predicted": [
+          "contradicted"
+        ],
+        "ok": true,
+        "latency_ms": 148.85039906948805
+      },
+      {
+        "id": "negation-03",
+        "expected": [
+          "contradicted"
+        ],
+        "predicted": [
+          "contradicted"
+        ],
+        "ok": true,
+        "latency_ms": 90.4728090390563
+      },
+      {
+        "id": "negation-04",
+        "expected": [
+          "contradicted"
+        ],
+        "predicted": [
+          "contradicted"
+        ],
+        "ok": true,
+        "latency_ms": 156.49809304159135
+      },
+      {
+        "id": "polarity-01",
+        "expected": [
+          "contradicted"
+        ],
+        "predicted": [
+          "contradicted"
+        ],
+        "ok": true,
+        "latency_ms": 192.66162102576345
+      },
+      {
+        "id": "polarity-02",
+        "expected": [
+          "contradicted"
+        ],
+        "predicted": [
+          "contradicted"
+        ],
+        "ok": true,
+        "latency_ms": 143.08873598929495
+      },
+      {
+        "id": "polarity-03",
+        "expected": [
+          "contradicted"
+        ],
+        "predicted": [
+          "contradicted"
+        ],
+        "ok": true,
+        "latency_ms": 106.37976904399693
+      },
+      {
+        "id": "unrelated-01",
+        "expected": [
+          "unsupported"
+        ],
+        "predicted": [
+          "unsupported"
+        ],
+        "ok": true,
+        "latency_ms": 257.4071791023016
+      },
+      {
+        "id": "unrelated-02",
+        "expected": [
+          "unsupported"
+        ],
+        "predicted": [
+          "unsupported"
+        ],
+        "ok": true,
+        "latency_ms": 291.3840690162033
+      },
+      {
+        "id": "unrelated-03",
+        "expected": [
+          "unsupported"
+        ],
+        "predicted": [
+          "unsupported"
+        ],
+        "ok": true,
+        "latency_ms": 173.90938301105052
+      },
+      {
+        "id": "unused-01",
+        "expected": [
+          "contradicted"
+        ],
+        "predicted": [
+          "unsupported"
+        ],
+        "ok": false,
+        "latency_ms": 198.16654699388891
+      },
+      {
+        "id": "unused-02",
+        "expected": [
+          "contradicted"
+        ],
+        "predicted": [
+          "contradicted"
+        ],
+        "ok": true,
+        "latency_ms": 213.01170904189348
+      },
+      {
+        "id": "structure-01",
+        "expected": [
+          "supported",
+          "contradicted",
+          "unsupported"
+        ],
+        "predicted": [
+          "supported",
+          "contradicted",
+          "unsupported"
+        ],
+        "ok": true,
+        "latency_ms": 905.3410330088809
+      },
+      {
+        "id": "structure-02",
+        "expected": [
+          "supported"
+        ],
+        "predicted": [
+          "supported"
+        ],
+        "ok": true,
+        "latency_ms": 163.060691091232
+      }
+    ],
+    "latency_ms": {
+      "p50": 170.12,
+      "p95": 366.88,
+      "p99": 905.34,
+      "max": 905.34,
+      "samples": 40
+    }
+  },
+  "summary": {
+    "same/en": {
+      "pairs": 90,
+      "accuracy": 0.8555555555555555,
+      "confusion": {
+        "entailment": {
+          "entailment": 25,
+          "neutral": 4,
+          "contradiction": 1
+        },
+        "neutral": {
+          "entailment": 2,
+          "neutral": 27,
+          "contradiction": 1
+        },
+        "contradiction": {
+          "entailment": 0,
+          "neutral": 5,
+          "contradiction": 25
+        }
+      },
+      "pair_latency_ms": {
+        "p50": 157.51,
+        "p95": 295.73,
+        "p99": 383.42,
+        "max": 422.34,
+        "samples": 90
+      }
+    }
+  }
+}

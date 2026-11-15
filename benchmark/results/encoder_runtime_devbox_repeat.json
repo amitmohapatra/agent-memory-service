@@ -1,0 +1,53 @@
+{
+  "benchmark": "encoder_runtime",
+  "generated_at": "2026-09-22T19:53:28+00:00",
+  "provenance": {
+    "caveat": "A 4-core Docker VM without AVX2. Absolute milliseconds here describe this box and nothing else; only the ratios between the three runners travel to the 8 vCPU target VM, and even those move with AVX2/AVX-512.",
+    "cosine_texts": 50,
+    "cpu_count": 4,
+    "model": "ibm-granite/granite-embedding-small-english-r2",
+    "model_dir": "/models/granite-embedding-small-english-r2",
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.41",
+    "processor": "unknown",
+    "queries": 40,
+    "threads": 2,
+    "versions": {
+      "onnxruntime": "1.30.0",
+      "sentence-transformers": "6.0.1",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0"
+    },
+    "warmups": 5
+  },
+  "runners": {
+    "onnx_fp32": {
+      "dimension": 384,
+      "encodes": 40,
+      "fingerprint": "onnx-granite-embedding-small-english-r2-model-d384",
+      "mean_ms": 24.18,
+      "min_cosine_vs_torch": 1.0,
+      "p50_ms": 19.46,
+      "p95_ms": 52.03,
+      "speedup_vs_torch_fp32": 3.37
+    },
+    "onnx_int8": {
+      "dimension": 384,
+      "encodes": 40,
+      "fingerprint": "onnx-granite-embedding-small-english-r2-model_qint8-d384",
+      "mean_ms": 26.01,
+      "min_cosine_vs_torch": 0.966638,
+      "p50_ms": 23.09,
+      "p95_ms": 50.91,
+      "speedup_vs_torch_fp32": 3.14
+    },
+    "torch_fp32": {
+      "dimension": 384,
+      "encodes": 40,
+      "fingerprint": "st-granite-embedding-small-english-r2-torch-d384",
+      "mean_ms": 81.6,
+      "p50_ms": 80.71,
+      "p95_ms": 111.32,
+      "speedup_vs_torch_fp32": 1.0
+    }
+  }
+}

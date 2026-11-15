@@ -1,0 +1,529 @@
+{
+  "ablation": {
+    "rerank": false
+  },
+  "comparable_to_published": false,
+  "dataset": {
+    "corpus_size": 300,
+    "full_corpus": false,
+    "name": "BeIR/scifact",
+    "queries": 21,
+    "source": "https://huggingface.co/datasets/BeIR/scifact",
+    "split": "test"
+  },
+  "distinct_documents_per_candidates": "182/292",
+  "embedding_provider": "sentence_transformers",
+  "index_seconds": 0.0,
+  "k": 10,
+  "ndcg_at_10": 0.901,
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "unknown",
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    },
+    "machine": "x86_64",
+    "memory_gb": 5.8,
+    "models": {
+      "bge-reranker-v2-m3": {
+        "repo": "BAAI/bge-reranker-v2-m3",
+        "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+      },
+      "deberta-v3-base-mnli-fever-anli": {
+        "repo": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
+      },
+      "embedding": {
+        "repo": "ibm-granite/granite-embedding-english-r2",
+        "revision": "47ea694b257b703fee9253d75c2b1f2985180498"
+      },
+      "embedding-small": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "embeddinggemma-300m": {
+        "repo": "google/embeddinggemma-300m",
+        "revision": null
+      },
+      "gliner-relex": {
+        "repo": "knowledgator/gliner-relex-large-v1",
+        "revision": null
+      },
+      "gliner2-base": {
+        "repo": "fastino/gliner2-base-v1",
+        "revision": "8437ba583a733d87f56ae902f3b197934eedd58e"
+      },
+      "granite-embedding-reranker-english-r2": {
+        "repo": "ibm-granite/granite-embedding-reranker-english-r2",
+        "revision": "d09d3d6971b689bf9c23839e45a470874d46e13a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "late-interaction": {
+        "repo": "answerdotai/answerai-colbert-small-v1",
+        "revision": "934fa8bb4ce2284f4c2baa232d81aca4d076fa5e"
+      },
+      "ms-marco-MiniLM-L6-v2": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "qwen3-embedding-0.6b": {
+        "repo": "Qwen/Qwen3-Embedding-0.6B",
+        "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+      },
+      "reranker": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "sparse": {
+        "repo": "Qdrant/Splade_PP_en_v1",
+        "revision": null
+      }
+    },
+    "packages": {
+      "docling": "2.127.0",
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "timestamp": "2026-09-20T08:13:38.439953+00:00"
+  },
+  "query_p50_ms": 382.2,
+  "query_p95_ms": 794.2,
+  "recall_at_10": 1.0,
+  "records": [
+    {
+      "hit": true,
+      "ms": 548.9,
+      "ndcg": 1.0,
+      "query": "TNFAIP3 is a tumor suppressor in glioblastoma.",
+      "ranked": [
+        "33370",
+        "470625",
+        "831167",
+        "1243475",
+        "207972",
+        "1032372",
+        "1241113"
+      ],
+      "relevant": [
+        "33370"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 364.1,
+      "ndcg": 0.3562,
+      "query": "5% of perinatal mortality is due to low birth weight.",
+      "ranked": [
+        "1263446",
+        "581832",
+        "356218",
+        "1456068",
+        "202259",
+        "1606628",
+        "103007"
+      ],
+      "relevant": [
+        "1606628"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 249.6,
+      "ndcg": 1.0,
+      "query": "cSMAC formation enhances weak ligand signalling.",
+      "ranked": [
+        "306006",
+        "994800",
+        "5836",
+        "1044552",
+        "1225513",
+        "1410197",
+        "1196631",
+        "1322614",
+        "226488"
+      ],
+      "relevant": [
+        "306006"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 794.2,
+      "ndcg": 1.0,
+      "query": "Autophagy declines in aged organisms.",
+      "ranked": [
+        "1084345",
+        "1605196",
+        "982650",
+        "615047",
+        "516867",
+        "1344498",
+        "752423",
+        "797114",
+        "1281769"
+      ],
+      "relevant": [
+        "1084345"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 838.3,
+      "ndcg": 1.0,
+      "query": "Chenodeosycholic acid treatment increases whole-body energy expenditure.",
+      "ranked": [
+        "1568684",
+        "1428830",
+        "1365188",
+        "1507222",
+        "597790",
+        "1590744",
+        "797114",
+        "520579",
+        "712078"
+      ],
+      "relevant": [
+        "1568684"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 327.9,
+      "ndcg": 1.0,
+      "query": "Chenodeosycholic acid treatment reduces whole-body energy expenditure.",
+      "ranked": [
+        "1568684",
+        "1365188",
+        "597790",
+        "1428830",
+        "1507222",
+        "1590744",
+        "797114",
+        "712078",
+        "520579"
+      ],
+      "relevant": [
+        "1568684"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 385.3,
+      "ndcg": 0.6131,
+      "query": "Chronic aerobic exercise alters endothelial function, improving vasodilating mechanisms mediated by NO.",
+      "ranked": [
+        "1122279",
+        "752423",
+        "79447",
+        "118568",
+        "1360607",
+        "1590744"
+      ],
+      "relevant": [
+        "10697096",
+        "1122279"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 325.5,
+      "ndcg": 1.0,
+      "query": "Cold exposure increases BAT recruitment.",
+      "ranked": [
+        "970012",
+        "1568684",
+        "1507222",
+        "519974",
+        "496873",
+        "120626",
+        "751192",
+        "597790",
+        "791050"
+      ],
+      "relevant": [
+        "970012"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 531.2,
+      "ndcg": 1.0,
+      "query": "Cold exposure reduces BAT recruitment.",
+      "ranked": [
+        "970012",
+        "1568684",
+        "1507222",
+        "519974",
+        "496873",
+        "751192",
+        "597790",
+        "120626",
+        "885056"
+      ],
+      "relevant": [
+        "970012"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 421.8,
+      "ndcg": 1.0,
+      "query": "Ethanol stress decreases the expression of IBP in bacteria.",
+      "ranked": [
+        "1148122",
+        "471735",
+        "418246",
+        "799586",
+        "33370",
+        "1103795",
+        "643765",
+        "493346",
+        "1122279"
+      ],
+      "relevant": [
+        "1148122"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 300.2,
+      "ndcg": 1.0,
+      "query": "Exposure to fine particulate air pollution is relate to anxiety prevalence.",
+      "ranked": [
+        "791050",
+        "471921",
+        "641459",
+        "275294",
+        "463533",
+        "649951",
+        "1606628",
+        "991139"
+      ],
+      "relevant": [
+        "791050"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 333.6,
+      "ndcg": 0.6131,
+      "query": "Gene expression does not vary appreciably across genetically identical cells.",
+      "ranked": [
+        "464511",
+        "680949",
+        "1067605",
+        "279052",
+        "735130",
+        "831167",
+        "503050",
+        "253672",
+        "18670",
+        "857189"
+      ],
+      "relevant": [
+        "12804937",
+        "464511"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 437.0,
+      "ndcg": 1.0,
+      "query": "IgA plasma cells that are specific for transglutaminase 2 accumulate in the duodenal mucosa on commencement of a gluten-free diet.",
+      "ranked": [
+        "1471041",
+        "1365188",
+        "1022115",
+        "597790",
+        "1522647",
+        "735130",
+        "1265945",
+        "1449692",
+        "857189",
+        "301866"
+      ],
+      "relevant": [
+        "1471041"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 418.6,
+      "ndcg": 1.0,
+      "query": "Immune complex triggered cell death leads to extracellular release of neutrophil protein HMGB1.",
+      "ranked": [
+        "1049501",
+        "364522",
+        "381602",
+        "1605392",
+        "935034",
+        "878526",
+        "1103795",
+        "1127562",
+        "1196631",
+        "72159"
+      ],
+      "relevant": [
+        "1049501"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 382.2,
+      "ndcg": 1.0,
+      "query": "Ivermectin is used to treat lymphatic filariasis.",
+      "ranked": [
+        "1215116",
+        "1495563",
+        "1349033",
+        "602760",
+        "1428830",
+        "1287809",
+        "1173667",
+        "341324",
+        "374902"
+      ],
+      "relevant": [
+        "1215116"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 240.8,
+      "ndcg": 1.0,
+      "query": "Ivermectin is used to treat onchocerciasis.",
+      "ranked": [
+        "1215116",
+        "1349033",
+        "1495563",
+        "341324",
+        "1428830",
+        "1287809",
+        "1173667",
+        "374902",
+        "708425"
+      ],
+      "relevant": [
+        "1215116"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 346.4,
+      "ndcg": 1.0,
+      "query": "Nanoparticles can be targeted against specific cell types by incorporating aptamers into lipid nanoparticles.",
+      "ranked": [
+        "1469751",
+        "169264",
+        "293661",
+        "878526",
+        "719812",
+        "797114",
+        "36474",
+        "33370",
+        "1196631"
+      ],
+      "relevant": [
+        "1469751"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 413.5,
+      "ndcg": 0.3392,
+      "query": "Obesity is determined solely by environmental factors.",
+      "ranked": [
+        "1180972",
+        "275294",
+        "120626",
+        "1428840",
+        "680949",
+        "79447",
+        "195352",
+        "1456068"
+      ],
+      "relevant": [
+        "1180972",
+        "19307912",
+        "27393799",
+        "29025270",
+        "3315558"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 420.6,
+      "ndcg": 1.0,
+      "query": "Participating in six months of physical activity improves cognitive functioning.",
+      "ranked": [
+        "1642727",
+        "1428830",
+        "752423",
+        "1084345",
+        "704526",
+        "1360607",
+        "641459",
+        "520579"
+      ],
+      "relevant": [
+        "1642727"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 379.1,
+      "ndcg": 1.0,
+      "query": "Albendazole is used to treat lymphatic filariasis.",
+      "ranked": [
+        "1215116",
+        "602760",
+        "1495563",
+        "1349033",
+        "1287809",
+        "341324",
+        "1428830",
+        "1173667"
+      ],
+      "relevant": [
+        "1215116"
+      ]
+    },
+    {
+      "hit": true,
+      "ms": 363.5,
+      "ndcg": 1.0,
+      "query": "Podocytes are motile and migrate in the presence of injury.",
+      "ranked": [
+        "123859",
+        "1241113",
+        "469066",
+        "464511",
+        "927561",
+        "1412089",
+        "92499",
+        "323030",
+        "935034",
+        "825728"
+      ],
+      "relevant": [
+        "123859"
+      ]
+    }
+  ],
+  "representative": true,
+  "unmapped_candidates": 0
+}

@@ -1,0 +1,2039 @@
+{
+  "ablation": {},
+  "abstention_measurable": true,
+  "abstention_rate_on_adversarial": 0.0,
+  "answer_recall_at_k": 0.1967,
+  "by_category": {
+    "adversarial": {
+      "n": 18,
+      "score": 0.0
+    },
+    "multi_hop": {
+      "n": 10,
+      "score": 0.0
+    },
+    "open_domain": {
+      "n": 3,
+      "score": 0.0
+    },
+    "single_hop": {
+      "n": 31,
+      "score": 0.1935
+    },
+    "temporal": {
+      "n": 17,
+      "score": 0.3529
+    }
+  },
+  "caveats": [
+    "models.nli.provider='lexical' is a stand-in, not the entailment model; grounding results are not representative."
+  ],
+  "dataset": {
+    "conversations": 2,
+    "name": "LoCoMo (snap-research/locomo)",
+    "questions": 79
+  },
+  "embedding_provider": "sentence_transformers",
+  "evidence_recall": 0.3607,
+  "judge_failures": 79,
+  "judged": true,
+  "k": 10,
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "unknown",
+    "llm": {
+      "enabled": true,
+      "fast_model": "gemini/gemini-3.6-flash",
+      "gateway_version": "<!doctype html>\n<html lang=\"en\" suppressHydrationWarning>\n\t<head>\n\t\t<meta charse",
+      "model": "gemini/gemini-3.6-flash",
+      "provider": "bifrost",
+      "uses": [
+        "grounding_judge"
+      ]
+    },
+    "machine": "x86_64",
+    "memory_gb": 5.8,
+    "models": {
+      "bge-reranker-v2-m3": {
+        "repo": "BAAI/bge-reranker-v2-m3",
+        "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+      },
+      "deberta-v3-base-mnli-fever-anli": {
+        "repo": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
+      },
+      "embedding": {
+        "repo": "ibm-granite/granite-embedding-english-r2",
+        "revision": "47ea694b257b703fee9253d75c2b1f2985180498"
+      },
+      "embedding-small": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "embeddinggemma-300m": {
+        "repo": "google/embeddinggemma-300m",
+        "revision": null
+      },
+      "gliner-relex": {
+        "repo": "knowledgator/gliner-relex-large-v1",
+        "revision": null
+      },
+      "gliner2-base": {
+        "repo": "fastino/gliner2-base-v1",
+        "revision": "8437ba583a733d87f56ae902f3b197934eedd58e"
+      },
+      "granite-embedding-reranker-english-r2": {
+        "repo": "ibm-granite/granite-embedding-reranker-english-r2",
+        "revision": "d09d3d6971b689bf9c23839e45a470874d46e13a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "late-interaction": {
+        "repo": "answerdotai/answerai-colbert-small-v1",
+        "revision": "934fa8bb4ce2284f4c2baa232d81aca4d076fa5e"
+      },
+      "ms-marco-MiniLM-L6-v2": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "qwen3-embedding-0.6b": {
+        "repo": "Qwen/Qwen3-Embedding-0.6B",
+        "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+      },
+      "reranker": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "sparse": {
+        "repo": "Qdrant/Splade_PP_en_v1",
+        "revision": null
+      }
+    },
+    "packages": {
+      "docling": "2.127.0",
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "timestamp": "2026-09-20T04:00:14.849285+00:00"
+  },
+  "query_p50_ms": 3642.6,
+  "query_p95_ms": 7190.0,
+  "records": [
+    {
+      "abstained": false,
+      "answer": "clarinet and violin",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3571,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "What instruments does Melanie play?",
+      "rendered_chars": 1235,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "pottery, camping, painting, swimming",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4062,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "What activities does Melanie partake in?",
+      "rendered_chars": 1462,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "counseling or mental health for Transgender people",
+      "answer_overlap": 0.2,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5263,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "What career path has Caroline decided to persue?",
+      "rendered_chars": 1433,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": 2,
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5217,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "How many times has Melanie gone to the beach in 2023?",
+      "rendered_chars": 1459,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "beach, mountains, forest",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.6207,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "Where has Melanie camped?",
+      "rendered_chars": 1429,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Running, pottery",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 25.5}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What does Melanie do to destress?",
+      "rendered_chars": 1258,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": 2022,
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3871,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 19.5}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "When did Melanie's friend adopt a child?",
+      "rendered_chars": 1378,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "The week before 23 August 2023",
+      "answer_overlap": 0.2,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5238,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 11.1}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "When did Caroline draw a self-portrait?",
+      "rendered_chars": 1548,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": 2022,
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3714,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 5.1}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "When did Melanie read the book \"nothing is impossible\"?",
+      "rendered_chars": 1245,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "2 July 2023",
+      "answer_overlap": 0.6667,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5938,
+      "hit": true,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "When did Melanie sign up for a pottery class?",
+      "rendered_chars": 1306,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "The week before 6 July 2023",
+      "answer_overlap": 0.4,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3939,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 26.3}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "When did Caroline have a picnic?",
+      "rendered_chars": 1446,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "two weekends before 17 July 2023",
+      "answer_overlap": 0.3333,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5152,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 19.1}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "When did Melanie go camping in July?",
+      "rendered_chars": 1434,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "June 2023",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5484,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 13.1}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "When is Melanie planning on going camping?",
+      "rendered_chars": 1384,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "LIkely no; though she likes reading, she wants to be a counselor",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "open_domain",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3421,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 7.1}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "Would Caroline pursue writing as a career option?",
+      "rendered_chars": 1370,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Thoughtful, authentic, driven",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "open_domain",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5714,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 1.1}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What personality traits might Melanie say Caroline has?",
+      "rendered_chars": 1443,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Likely no; since this one went badly",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "open_domain",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4643,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "Would Melanie go on another roadtrip soon?",
+      "rendered_chars": 1261,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "LGBTQ+ individuals",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.8182,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 24.6}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What type of individuals does the adoption agency Caroline is considering support?",
+      "rendered_chars": 1485,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Her mental health",
+      "answer_overlap": 0.6667,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.6111,
+      "hit": true,
+      "judged": {
+        "detail": "{'retry_after_seconds': 18.6}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What does Melanie say running has been great for?",
+      "rendered_chars": 1093,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Sweden",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5152,
+      "hit": true,
+      "judged": {
+        "detail": "{'retry_after_seconds': 12.3}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What country is Caroline's grandma from?",
+      "rendered_chars": 1385,
+      "status": "COMPLETE",
+      "strict_substring": true
+    },
+    {
+      "abstained": false,
+      "answer": "guinea pig",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3333,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 6.3}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What pet does Caroline have?",
+      "rendered_chars": 1271,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "many people wanting to create loving homes for children in need",
+      "answer_overlap": 0.125,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3421,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 0.3}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What did Caroline see at the council meeting for adoption?",
+      "rendered_chars": 1447,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "mental health",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.1852,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "What did the charity race raise awareness for?",
+      "rendered_chars": 1388,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "therapeutic methods and how to best work with trans people",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2917,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 26.7}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What was discussed in the LGBTQ+ counseling workshop?",
+      "rendered_chars": 1517,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "by carving out some me-time each day for activities like running, reading, or playing the violin",
+      "answer_overlap": 0.1538,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4286,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 20.7}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "How does Melanie prioritize self-care?",
+      "rendered_chars": 1456,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "In Melanie's slipper",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.1667,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 13.4}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "Where did Oliver hide his bone once?",
+      "rendered_chars": 1110,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Ed Sheeran",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3333,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 7.4}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "Who is Melanie a fan of in terms of modern music?",
+      "rendered_chars": 1274,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "She was happy and thankful",
+      "answer_overlap": 0.3333,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4857,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 1.4}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What was Melanie's reaction to her children enjoying the Grand Canyon?",
+      "rendered_chars": 1395,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Horseback riding",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3333,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "What activity did Caroline used to do with her dad?",
+      "rendered_chars": 1346,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "she thinks Caroline is doing something amazing and will be an awesome mom",
+      "answer_overlap": 0.125,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4762,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 26.1}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What does Melanie think about Caroline's decision to adopt?",
+      "rendered_chars": 1431,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "warmth and happiness",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4516,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 20.1}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What do sunflowers represent according to Caroline?",
+      "rendered_chars": 1361,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.8182,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 14.1}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "Why did Melanie choose the adoption agency?",
+      "rendered_chars": 1367,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2812,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 8.1}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What precautionary sign did Caroline see at the caf\u00e9?",
+      "rendered_chars": 1282,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2857,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 2.1}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "Who is Caroline a fan of in terms of modern music?",
+      "rendered_chars": 1239,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.8,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "What did Caroline do after the road trip to relax?",
+      "rendered_chars": 1381,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4194,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 26.2}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "Why did Caroline choose to use colors and patterns in her pottery project?",
+      "rendered_chars": 1439,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4828,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 20.2}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What did Caroline realize after her charity race?",
+      "rendered_chars": 1463,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.6667,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 14.2}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What is Melanie excited about in her adoption process?",
+      "rendered_chars": 1450,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3636,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 8.2}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What does Caroline do to keep herself busy during her pottery break?",
+      "rendered_chars": 1434,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3704,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 2.2}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What activity did Melanie used to do with her dad?",
+      "rendered_chars": 1266,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "six months",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.6667,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "How long did it take for Jon to open his studio?",
+      "rendered_chars": 1360,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "worked with an artist to make unique fashion pieces, made limited-edition sweatshirts, got some new offers and promotions for online store, developed a video presentation showing how to style her pieces",
+      "answer_overlap": 0.3478,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4333,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 26.3}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "How did Gina promote her clothes store?",
+      "rendered_chars": 1264,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Rome",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4643,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 20.3}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "Which city have both Jean and John visited?",
+      "rendered_chars": 1050,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Yes",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.8462,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 14.3}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "Did Jon and Gina both participate in dance competitions?",
+      "rendered_chars": 1313,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "June, 2023",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.6129,
+      "hit": true,
+      "judged": {
+        "detail": "{'retry_after_seconds': 8.3}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "When did Gina develop a video presentation to teach how to style her fashion pieces? ",
+      "rendered_chars": 1367,
+      "status": "COMPLETE",
+      "strict_substring": true
+    },
+    {
+      "abstained": false,
+      "answer": "A few years ago",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 2.3}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "When did Gina get her tattoo?",
+      "rendered_chars": 1259,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "April, 2023",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2941,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "When did Jon start expanding his studio's social media presence?",
+      "rendered_chars": 1359,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "15 June, 2023",
+      "answer_overlap": 0.6667,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.7333,
+      "hit": true,
+      "judged": {
+        "detail": "{'retry_after_seconds': 26.0}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "When did Jon receive mentorship to promote his venture?",
+      "rendered_chars": 1092,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "June 2023",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.1852,
+      "hit": true,
+      "judged": {
+        "detail": "{'retry_after_seconds': 20.0}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "When did Gina design a limited collection of hoodies?",
+      "rendered_chars": 1192,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "10 May, 2023",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5172,
+      "hit": true,
+      "judged": {
+        "detail": "{'retry_after_seconds': 14.0}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "When did Gina interview for a design internship?",
+      "rendered_chars": 1254,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": " 23 July, 2023",
+      "answer_overlap": 0.3333,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3333,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 8.0}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "When did Gina mention Shia Labeouf?",
+      "rendered_chars": 1190,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "28 January 2023",
+      "answer_overlap": 0.6667,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.375,
+      "hit": true,
+      "judged": {
+        "detail": "{'retry_after_seconds': 2.0}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "When was Jon in Paris?",
+      "rendered_chars": 1238,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "February, 2023",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3846,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "When did Gina team up with a local artist for some cool designs?",
+      "rendered_chars": 1233,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "21 July 2023",
+      "answer_overlap": 0.3333,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3043,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 26.5}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "When did Jon and Gina decide to collaborate to create dance content?",
+      "rendered_chars": 1326,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "They are performing at the festival",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.1333,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 20.5}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What do the dancers in the photo represent?",
+      "rendered_chars": 1192,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "cozy and comfortable",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 14.5}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What did Gina want her customers to feel in her store?",
+      "rendered_chars": 1250,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "His positivity and determination",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3214,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 8.5}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "According to Gina, what makes Jon a perfect mentor and guide?",
+      "rendered_chars": 1246,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Contemporary",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.7333,
+      "hit": true,
+      "judged": {
+        "detail": "{'retry_after_seconds': 2.5}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What is Gina's favorite style of dance?",
+      "rendered_chars": 1239,
+      "status": "COMPLETE",
+      "strict_substring": true
+    },
+    {
+      "abstained": false,
+      "answer": "hard work's paying off",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.35,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "What did Jon say about Gina's progress with her store?",
+      "rendered_chars": 1255,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "\"Finding Freedom\"",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3529,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 26.9}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What kind of dance piece did Gina's team perform to win first place?",
+      "rendered_chars": 1263,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "build relationships with customers, create a strong brand image, stay positive",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.1471,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 20.9}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What advice does Gina give to Jon about running a successful business?",
+      "rendered_chars": 1290,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "It's the key to making them feel welcome and coming back",
+      "answer_overlap": 0.1429,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2692,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 14.9}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What did Jon say about creating a special experience for customers?",
+      "rendered_chars": 1361,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "by dancing",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5238,
+      "hit": true,
+      "judged": {
+        "detail": "{'retry_after_seconds': 8.9}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "How do Jon and Gina both like to destress?",
+      "rendered_chars": 1253,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "a dance studio",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.7692,
+      "hit": true,
+      "judged": {
+        "detail": "{'retry_after_seconds': 2.9}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What is Jon working on opening?",
+      "rendered_chars": 1295,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Glad",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.6364,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "What is Jon's attitude towards being part of the dance festival?",
+      "rendered_chars": 1235,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Hoodies",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3333,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 26.7}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What did Gina make a limited edition line of?",
+      "rendered_chars": 1247,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "They look graceful",
+      "answer_overlap": 0.3333,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.1905,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 20.7}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What does Gina say about the dancers in the photo?",
+      "rendered_chars": 1312,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "making them want to come back",
+      "answer_overlap": 0.2,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 14.7}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What did Gina say about creating an experience for her customers?",
+      "rendered_chars": 1402,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "He lost his job and decided to start his own business to share his passion.",
+      "answer_overlap": 0.3,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.619,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 8.7}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "Why did Jon decide to start his dance studio?",
+      "rendered_chars": 1304,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "The store is doing great.",
+      "answer_overlap": 0.6667,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4286,
+      "hit": true,
+      "judged": {
+        "detail": "{'retry_after_seconds': 2.7}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "How is Gina's store doing?",
+      "rendered_chars": 1267,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "The Lean Startup",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "What book is Jon currently reading?",
+      "rendered_chars": 1137,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3043,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 26.8}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "Where is Jon's fashion internship?",
+      "rendered_chars": 1297,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5556,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 20.8}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "Why did Gina shut down her bank account?",
+      "rendered_chars": 1250,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3143,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 14.8}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What temporary job did Jon take to cover expenses?",
+      "rendered_chars": 1200,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4444,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 8.8}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What was Jon's favorite dancing memory?",
+      "rendered_chars": 1161,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.35,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 2.8}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What book is Gina currently reading?",
+      "rendered_chars": 1191,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3929,
+      "hit": false,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your curren'}",
+        "error": "LLMCallFailed: llm gateway returned 429"
+      },
+      "question": "What did Gina receive from a dance contest?",
+      "rendered_chars": 1323,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2857,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 25.4}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What temporary job did Gina take to cover expenses?",
+      "rendered_chars": 1204,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 19.4}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What did Jon want his customers to feel in her store?",
+      "rendered_chars": 1198,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3636,
+      "hit": false,
+      "judged": {
+        "detail": "{'retry_after_seconds': 13.4}",
+        "error": "DependencyUnavailable: llm circuit open"
+      },
+      "question": "What is Gina's attitude towards participating in the dance festival?",
+      "rendered_chars": 1218,
+      "status": "COMPLETE",
+      "strict_substring": false
+    }
+  ],
+  "representative": true,
+  "scoring": {
+    "answer_overlap_hit": 0.6,
+    "evidence_overlap_hit": 0.5,
+    "note": "answers were generated from each bundle and graded by a model, the way LoCoMo is scored; the overlap figures below are kept as a second opinion. Per-question detail is in `records`; rescore from it rather than re-running."
+  },
+  "strict_recall": 0.0492,
+  "total_seconds": 1117.5
+}

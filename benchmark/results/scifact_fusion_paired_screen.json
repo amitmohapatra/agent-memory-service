@@ -1,0 +1,43 @@
+{
+  "complete": true,
+  "input_sha256": {
+    "benchmark/results/scifact_dense_granite.json": "e0b5a049cc9c4e3050399ae4e7c6eac41d329f2dd325688bc4af3c96d80b5330",
+    "benchmark/results/scifact_dense_e5.json": "d408393dbe7f04a1ada912f9b5439ebd568be9985da19fcd840c3f088ac23f09",
+    "benchmark/results/scifact_granite_e5_fusion_screen.json": "95ec1193e2ddd7f0c168475f220f4b91f169d7655b259653e41c812a226417a1"
+  },
+  "dataset_sha256": "76232844a3c0695fd19ad697856a605ea9cbf9aaf00798da470658432995c8ad",
+  "bootstrap": {
+    "samples": 10000,
+    "seed": 20260927,
+    "unit": "query",
+    "interval": "percentile 95%, paired"
+  },
+  "metrics": {
+    "ndcg@10": {
+      "mean_delta": 0.01200182955294186,
+      "ci95": [
+        -0.0025575520576145406,
+        0.02675748019086911
+      ],
+      "wins": 45,
+      "losses": 37,
+      "ties": 218
+    },
+    "recall@10": {
+      "mean_delta": 0.001,
+      "ci95": [
+        -0.016666666666666666,
+        0.019333333333333334
+      ],
+      "wins": 4,
+      "losses": 5,
+      "ties": 291
+    }
+  },
+  "limitations": [
+    "One predeclared test-set screen; not a held-out promotion result.",
+    "Correlated topic queries may reduce effective sample size.",
+    "No runtime latency or generated answer measurement."
+  ],
+  "script_sha256": "908385d8ebc7664d998a994522474dcb91552ae2f609319112ef708fb19bf685"
+}

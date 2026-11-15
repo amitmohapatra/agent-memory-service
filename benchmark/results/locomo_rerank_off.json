@@ -1,0 +1,2538 @@
+{
+  "ablation": {
+    "rerank": false
+  },
+  "abstention_measurable": false,
+  "abstention_rate_on_adversarial": 0.0,
+  "answer_recall_at_k": 0.163,
+  "by_category": {
+    "adversarial": {
+      "n": 28,
+      "score": 0.0
+    },
+    "multi_hop": {
+      "n": 16,
+      "score": 0.0625
+    },
+    "open_domain": {
+      "n": 4,
+      "score": 0.0
+    },
+    "single_hop": {
+      "n": 46,
+      "score": 0.1087
+    },
+    "temporal": {
+      "n": 26,
+      "score": 0.3462
+    }
+  },
+  "caveats": [
+    "abstention_rate_on_adversarial is NOT a measurement: the NLI cascade scores generated claims and models.llm.enabled=false, so only the lexical overlap gate can abstain, and LoCoMo adversarial questions always share terms with the conversation. Re-run with generation enabled to score category 5.",
+    "models.nli.provider='lexical' is a stand-in, not the entailment model; grounding results are not representative."
+  ],
+  "dataset": {
+    "conversations": 2,
+    "name": "LoCoMo (snap-research/locomo)",
+    "questions": 120
+  },
+  "embedding_provider": "sentence_transformers",
+  "evidence_recall": 0.413,
+  "k": 10,
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "unknown",
+    "llm": {
+      "enabled": false,
+      "provider": "disabled"
+    },
+    "machine": "x86_64",
+    "memory_gb": 5.8,
+    "models": {
+      "bge-reranker-v2-m3": {
+        "repo": "BAAI/bge-reranker-v2-m3",
+        "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+      },
+      "deberta-v3-base-mnli-fever-anli": {
+        "repo": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
+      },
+      "embedding": {
+        "repo": "ibm-granite/granite-embedding-english-r2",
+        "revision": "47ea694b257b703fee9253d75c2b1f2985180498"
+      },
+      "embedding-small": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "embeddinggemma-300m": {
+        "repo": "google/embeddinggemma-300m",
+        "revision": null
+      },
+      "gliner-relex": {
+        "repo": "knowledgator/gliner-relex-large-v1",
+        "revision": null
+      },
+      "gliner2-base": {
+        "repo": "fastino/gliner2-base-v1",
+        "revision": "8437ba583a733d87f56ae902f3b197934eedd58e"
+      },
+      "granite-embedding-reranker-english-r2": {
+        "repo": "ibm-granite/granite-embedding-reranker-english-r2",
+        "revision": "d09d3d6971b689bf9c23839e45a470874d46e13a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "late-interaction": {
+        "repo": "answerdotai/answerai-colbert-small-v1",
+        "revision": "934fa8bb4ce2284f4c2baa232d81aca4d076fa5e"
+      },
+      "ms-marco-MiniLM-L6-v2": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "qwen3-embedding-0.6b": {
+        "repo": "Qwen/Qwen3-Embedding-0.6B",
+        "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+      },
+      "reranker": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "sparse": {
+        "repo": "Qdrant/Splade_PP_en_v1",
+        "revision": null
+      }
+    },
+    "packages": {
+      "docling": "2.127.0",
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "timestamp": "2026-09-19T23:04:04.469484+00:00"
+  },
+  "query_p50_ms": 529.4,
+  "query_p95_ms": 821.3,
+  "records": [
+    {
+      "abstained": false,
+      "answer": "clarinet and violin",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3889,
+      "hit": false,
+      "question": "What instruments does Melanie play?",
+      "rendered_chars": 1277,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "pottery, camping, painting, swimming",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5238,
+      "hit": false,
+      "question": "What activities does Melanie partake in?",
+      "rendered_chars": 1635,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "counseling or mental health for Transgender people",
+      "answer_overlap": 0.2,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5263,
+      "hit": false,
+      "question": "What career path has Caroline decided to persue?",
+      "rendered_chars": 1520,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": 2,
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5217,
+      "hit": false,
+      "question": "How many times has Melanie gone to the beach in 2023?",
+      "rendered_chars": 1554,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "beach, mountains, forest",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.6552,
+      "hit": false,
+      "question": "Where has Melanie camped?",
+      "rendered_chars": 1633,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Running, pottery",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5,
+      "hit": false,
+      "question": "What does Melanie do to destress?",
+      "rendered_chars": 1337,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "abstract art",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5625,
+      "hit": false,
+      "question": "What kind of art does Caroline make?",
+      "rendered_chars": 1488,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Summer Sounds, Matt Patterson",
+      "answer_overlap": 0.25,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5,
+      "hit": false,
+      "question": "What musical artists/bands has Melanie seen?",
+      "rendered_chars": 1352,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Horse, sunset, sunrise",
+      "answer_overlap": 0.3333,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.7619,
+      "hit": false,
+      "question": "What has Melanie painted?",
+      "rendered_chars": 1365,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "sunset",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.0,
+      "hit": true,
+      "question": "What did Melanie paint recently?",
+      "rendered_chars": 1331,
+      "status": "COMPLETE",
+      "strict_substring": true
+    },
+    {
+      "abstained": false,
+      "answer": 2022,
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3429,
+      "hit": false,
+      "question": "When did Melanie read the book \"nothing is impossible\"?",
+      "rendered_chars": 1303,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "2 July 2023",
+      "answer_overlap": 0.6667,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5312,
+      "hit": true,
+      "question": "When did Melanie sign up for a pottery class?",
+      "rendered_chars": 1332,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "The week before 6 July 2023",
+      "answer_overlap": 0.4,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3636,
+      "hit": false,
+      "question": "When did Caroline have a picnic?",
+      "rendered_chars": 1488,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "two weekends before 17 July 2023",
+      "answer_overlap": 0.3333,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4848,
+      "hit": false,
+      "question": "When did Melanie go camping in July?",
+      "rendered_chars": 1461,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "4 years",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5128,
+      "hit": false,
+      "question": "How long has Caroline had her current group of friends for?",
+      "rendered_chars": 1557,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "10 July 2023",
+      "answer_overlap": 0.6667,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4909,
+      "hit": true,
+      "question": "When did Caroline go to the LGBTQ conference?",
+      "rendered_chars": 1491,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "The Tuesday before 20 July 2023",
+      "answer_overlap": 0.4,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5814,
+      "hit": false,
+      "question": "When did Caroline join a new activist group?",
+      "rendered_chars": 1434,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "13 August",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3714,
+      "hit": false,
+      "question": "When is Melanie's daughter's birthday?",
+      "rendered_chars": 1322,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "24 August 2023",
+      "answer_overlap": 0.6667,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.7895,
+      "hit": true,
+      "question": "When did Melanie make a plate in pottery class?",
+      "rendered_chars": 1316,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": 2022,
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.381,
+      "hit": false,
+      "question": "When did Melanie paint a sunrise?",
+      "rendered_chars": 1306,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": 2022,
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4194,
+      "hit": false,
+      "question": "When did Melanie's friend adopt a child?",
+      "rendered_chars": 1376,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Likely no",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "open_domain",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3864,
+      "hit": false,
+      "question": "Would Caroline still want to pursue counseling as a career if she hadn't received support growing up?",
+      "rendered_chars": 1500,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "National park; she likes the outdoors",
+      "answer_overlap": 0.2,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "open_domain",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2973,
+      "hit": false,
+      "question": "Would Melanie be more interested in going to a national park or a theme park?",
+      "rendered_chars": 1394,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "LIkely no; though she likes reading, she wants to be a counselor",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "open_domain",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3684,
+      "hit": false,
+      "question": "Would Caroline pursue writing as a career option?",
+      "rendered_chars": 1438,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Psychology, counseling certification",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "open_domain",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5263,
+      "hit": false,
+      "question": "What fields would Caroline be likely to pursue in her educaton?",
+      "rendered_chars": 1423,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Strength and motivation",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4737,
+      "hit": false,
+      "question": "What do Melanie's family give her?",
+      "rendered_chars": 1339,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "therapeutic methods and how to best work with trans people",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2917,
+      "hit": false,
+      "question": "What was discussed in the LGBTQ+ counseling workshop?",
+      "rendered_chars": 1591,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "LGBTQ+ individuals",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.8182,
+      "hit": false,
+      "question": "What type of individuals does the adoption agency Caroline is considering support?",
+      "rendered_chars": 1513,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "working with trans people, helping them accept themselves and supporting their mental health",
+      "answer_overlap": 0.3636,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2708,
+      "hit": false,
+      "question": "What kind of counseling and mental health services is Caroline interested in pursuing?",
+      "rendered_chars": 1466,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "They were scared but resilient",
+      "answer_overlap": 0.3333,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4762,
+      "hit": false,
+      "question": "How did Melanie's children handle the accident?",
+      "rendered_chars": 1459,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "she thinks Caroline is doing something amazing and will be an awesome mom",
+      "answer_overlap": 0.125,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4762,
+      "hit": false,
+      "question": "What does Melanie think about Caroline's decision to adopt?",
+      "rendered_chars": 1665,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "7 years",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2857,
+      "hit": false,
+      "question": "How long has Melanie been creating art?",
+      "rendered_chars": 1403,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "mental health",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3333,
+      "hit": false,
+      "question": "What did the charity race raise awareness for?",
+      "rendered_chars": 1481,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Went on a nature walk or hike",
+      "answer_overlap": 0.25,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.8,
+      "hit": false,
+      "question": "What did Melanie do after the road trip to relax?",
+      "rendered_chars": 1424,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "in awe of the universe",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.381,
+      "hit": false,
+      "question": "How did Melanie feel while watching the meteor shower?",
+      "rendered_chars": 1424,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "a cup with a dog face on it",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.64,
+      "hit": false,
+      "question": "What kind of pot did Mel and her kids make with clay?",
+      "rendered_chars": 1326,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "To de-stress and clear her mind",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.7273,
+      "hit": false,
+      "question": "What is Melanie's reason for getting into running?",
+      "rendered_chars": 1380,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "her own journey and the support she received, and how counseling improved her life",
+      "answer_overlap": 0.1111,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2727,
+      "hit": false,
+      "question": "What motivated Caroline to pursue counseling?",
+      "rendered_chars": 1546,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "love, faith, and strength",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4545,
+      "hit": false,
+      "question": "What does Caroline's necklace symbolize?",
+      "rendered_chars": 1569,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "pots",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4516,
+      "hit": false,
+      "question": "What did Mel and her kids make during the pottery workshop?",
+      "rendered_chars": 1430,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Grateful and thankful for her family",
+      "answer_overlap": 0.25,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5714,
+      "hit": false,
+      "question": "How did Melanie feel after the accident?",
+      "rendered_chars": 1388,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "It was a transgender poetry reading where transgender people shared their stories.",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3333,
+      "hit": false,
+      "question": "What was the poetry reading that Caroline attended about?",
+      "rendered_chars": 1407,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Ed Sheeran",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3333,
+      "hit": false,
+      "question": "Who is Melanie a fan of in terms of modern music?",
+      "rendered_chars": 1434,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Melanie's daughter",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3714,
+      "hit": false,
+      "question": "Whose birthday did Melanie celebrate recently?",
+      "rendered_chars": 1586,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "They remind her to appreciate the small moments and were a part of her wedding decor",
+      "answer_overlap": 0.5556,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.6786,
+      "hit": false,
+      "question": "Why are flowers important to Melanie?",
+      "rendered_chars": 1324,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "She got hurt and had to take a break from pottery.",
+      "answer_overlap": 0.1667,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2188,
+      "hit": false,
+      "question": "What setback did Melanie face in October 2023?",
+      "rendered_chars": 1637,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2188,
+      "hit": false,
+      "question": "What setback did Caroline face recently?",
+      "rendered_chars": 1459,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.6667,
+      "hit": false,
+      "question": "What is Melanie excited about in her adoption process?",
+      "rendered_chars": 1524,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2917,
+      "hit": false,
+      "question": "Where did Oscar hide his bone once?",
+      "rendered_chars": 1400,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2083,
+      "hit": false,
+      "question": "What kind of counseling workshop did Melanie attend recently?",
+      "rendered_chars": 1395,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4516,
+      "hit": false,
+      "question": "Why did Caroline choose to use colors and patterns in her pottery project?",
+      "rendered_chars": 1401,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.25,
+      "hit": false,
+      "question": "What is Caroline's hand-painted bowl a reminder of?",
+      "rendered_chars": 1474,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5714,
+      "hit": false,
+      "question": "How did Caroline feel about her family after the accident?",
+      "rendered_chars": 1430,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3214,
+      "hit": false,
+      "question": "Which song motivates Melanie to be courageous?",
+      "rendered_chars": 1482,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5455,
+      "hit": false,
+      "question": "What is Caroline's reason for getting into running?",
+      "rendered_chars": 1425,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5238,
+      "hit": false,
+      "question": "How did Caroline's children handle the accident?",
+      "rendered_chars": 1498,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3333,
+      "hit": false,
+      "question": "What was the poetry reading that Melanie attended about?",
+      "rendered_chars": 1500,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5152,
+      "hit": false,
+      "question": "What was grandma's gift to Melanie?",
+      "rendered_chars": 1385,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4,
+      "hit": false,
+      "question": "What did Caroline and her family do while camping?",
+      "rendered_chars": 1438,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5172,
+      "hit": false,
+      "question": "What did Caroline realize after her charity race?",
+      "rendered_chars": 1456,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "six months",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.6667,
+      "hit": false,
+      "question": "How long did it take for Jon to open his studio?",
+      "rendered_chars": 1336,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "worked with an artist to make unique fashion pieces, made limited-edition sweatshirts, got some new offers and promotions for online store, developed a video presentation showing how to style her pieces",
+      "answer_overlap": 0.5217,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.6774,
+      "hit": false,
+      "question": "How did Gina promote her clothes store?",
+      "rendered_chars": 1429,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Rome",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5357,
+      "hit": false,
+      "question": "Which city have both Jean and John visited?",
+      "rendered_chars": 1349,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Yes",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.8462,
+      "hit": false,
+      "question": "Did Jon and Gina both participate in dance competitions?",
+      "rendered_chars": 1394,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "She always loved fashion trends and finding unique pieces and she lost her job so decided it was time to start her own business.",
+      "answer_overlap": 0.375,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5,
+      "hit": false,
+      "question": "Why did Gina decide to start her own clothing store?",
+      "rendered_chars": 1335,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "By the water, with natural light and Marley flooring",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2941,
+      "hit": false,
+      "question": "What Jon thinks the ideal dance studio should look like?",
+      "rendered_chars": 1271,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "April, 2023",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2549,
+      "hit": false,
+      "question": "When did Jon start expanding his studio's social media presence?",
+      "rendered_chars": 1450,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "15 June, 2023",
+      "answer_overlap": 0.6667,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.8,
+      "hit": true,
+      "question": "When did Jon receive mentorship to promote his venture?",
+      "rendered_chars": 1312,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "June 2023",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3704,
+      "hit": true,
+      "question": "When did Gina design a limited collection of hoodies?",
+      "rendered_chars": 1440,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "10 May, 2023",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5172,
+      "hit": true,
+      "question": "When did Gina interview for a design internship?",
+      "rendered_chars": 1352,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "A few years ago",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.24,
+      "hit": false,
+      "question": "When did Gina get her tattoo?",
+      "rendered_chars": 1352,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "28 January 2023",
+      "answer_overlap": 0.6667,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4,
+      "hit": true,
+      "question": "When was Jon in Paris?",
+      "rendered_chars": 1319,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "February, 2023",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4615,
+      "hit": false,
+      "question": "When did Gina team up with a local artist for some cool designs?",
+      "rendered_chars": 1340,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "20 June, 2023",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4545,
+      "hit": true,
+      "question": "When Jon is planning to open his dance studio?",
+      "rendered_chars": 1304,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "21 July 2023",
+      "answer_overlap": 0.3333,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3611,
+      "hit": false,
+      "question": "When did Gina go to a dance class with a group of friends?",
+      "rendered_chars": 1310,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "29 January, 2023",
+      "answer_overlap": 0.3333,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.6389,
+      "hit": false,
+      "question": "When did Gina launch an ad campaign for her store?",
+      "rendered_chars": 1308,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "July 2023",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.625,
+      "hit": false,
+      "question": "When did Gina start being recognized by fashion editors?",
+      "rendered_chars": 1510,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "May, 2023",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2745,
+      "hit": false,
+      "question": "When did Jon host a dance competition?",
+      "rendered_chars": 1297,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "May, 2023",
+      "answer_overlap": 0.5,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.35,
+      "hit": false,
+      "question": "When did Jon start reading \"The Lean Startup\"?",
+      "rendered_chars": 1448,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "19 January, 2023",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.68,
+      "hit": true,
+      "question": "When Jon has lost his job as a banker?",
+      "rendered_chars": 1290,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": " 23 July, 2023",
+      "answer_overlap": 0.3333,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3333,
+      "hit": false,
+      "question": "When did Gina mention Shia Labeouf?",
+      "rendered_chars": 1359,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "\"Finding Freedom\"",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2353,
+      "hit": false,
+      "question": "What kind of dance piece did Gina's team perform to win first place?",
+      "rendered_chars": 1333,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "build relationships with customers, create a strong brand image, stay positive",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.1471,
+      "hit": false,
+      "question": "What advice does Gina give to Jon about running a successful business?",
+      "rendered_chars": 1283,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "It's the key to making them feel welcome and coming back",
+      "answer_overlap": 0.1429,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2692,
+      "hit": false,
+      "question": "What did Jon say about creating a special experience for customers?",
+      "rendered_chars": 1427,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "by dancing",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5714,
+      "hit": false,
+      "question": "How do Jon and Gina both like to destress?",
+      "rendered_chars": 1339,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "a dance studio",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.7692,
+      "hit": true,
+      "question": "What is Jon working on opening?",
+      "rendered_chars": 1456,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "magical",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4286,
+      "hit": false,
+      "question": "How does Gina describe the feeling that dance brings?",
+      "rendered_chars": 1337,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "excited",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5263,
+      "hit": true,
+      "question": "How does Jon feel about the opening night of his dance studio?",
+      "rendered_chars": 1256,
+      "status": "COMPLETE",
+      "strict_substring": true
+    },
+    {
+      "abstained": false,
+      "answer": "Let's live it up and make some great memories",
+      "answer_overlap": 0.4286,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5714,
+      "hit": false,
+      "question": "What does Gina say to Jon about the grand opening?",
+      "rendered_chars": 1421,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Glad",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.6364,
+      "hit": false,
+      "question": "What is Jon's attitude towards being part of the dance festival?",
+      "rendered_chars": 1211,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Contemporary",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5333,
+      "hit": true,
+      "question": "What is Gina's favorite style of dance?",
+      "rendered_chars": 1309,
+      "status": "COMPLETE",
+      "strict_substring": true
+    },
+    {
+      "abstained": false,
+      "answer": "They look graceful",
+      "answer_overlap": 0.3333,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.1905,
+      "hit": false,
+      "question": "What does Gina say about the dancers in the photo?",
+      "rendered_chars": 1442,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "To clear his mind",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4231,
+      "hit": false,
+      "question": "What did Jon take a trip to Rome for?",
+      "rendered_chars": 1346,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Contemporary",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5238,
+      "hit": false,
+      "question": "What is Jon's favorite style of dance?",
+      "rendered_chars": 1221,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "The store is doing great.",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5,
+      "hit": true,
+      "question": "How is Gina's store doing?",
+      "rendered_chars": 1286,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "To set goals, track achievements, and find areas for improvement",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3478,
+      "hit": false,
+      "question": "How does Jon use the clipboard with a notepad attached to it?",
+      "rendered_chars": 1259,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "One-on-one mentoring and training",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3043,
+      "hit": false,
+      "question": "What is Jon offering to the dancers at his dance studio?",
+      "rendered_chars": 1271,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "cozy and comfortable",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4,
+      "hit": false,
+      "question": "What did Gina want her customers to feel in her store?",
+      "rendered_chars": 1313,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Hoodies",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2963,
+      "hit": false,
+      "question": "What did Gina make a limited edition line of?",
+      "rendered_chars": 1396,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "amazing",
+      "answer_overlap": 1.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5,
+      "hit": true,
+      "question": "How does Gina describe the studio that Jon has opened?",
+      "rendered_chars": 1388,
+      "status": "COMPLETE",
+      "strict_substring": true
+    },
+    {
+      "abstained": false,
+      "answer": "Freedom and expressing herself through dance",
+      "answer_overlap": 0.2,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.24,
+      "hit": false,
+      "question": "What does Gina's tattoo symbolize?",
+      "rendered_chars": 1329,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "personal style and customer comfort",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3529,
+      "hit": false,
+      "question": "What made Gina choose the furniture and decor for her store?",
+      "rendered_chars": 1261,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "fashion department of an international company",
+      "answer_overlap": 0.25,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3913,
+      "hit": false,
+      "question": "Where is Gina's fashion internship?",
+      "rendered_chars": 1472,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "savor all the good vibes",
+      "answer_overlap": 0.25,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3793,
+      "hit": false,
+      "question": "What does Jon plan to do at the grand opening of his dance studio?",
+      "rendered_chars": 1270,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Winning first place at a regionals dance competition",
+      "answer_overlap": 0.3333,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3704,
+      "hit": false,
+      "question": "What was Gina's favorite dancing memory?",
+      "rendered_chars": 1254,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "hard work's paying off",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.35,
+      "hit": false,
+      "question": "What did Jon say about Gina's progress with her store?",
+      "rendered_chars": 1260,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4706,
+      "hit": false,
+      "question": "What kind of dance piece did Jon's team perform to win first place?",
+      "rendered_chars": 1266,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4,
+      "hit": false,
+      "question": "What did Jon want his customers to feel in her store?",
+      "rendered_chars": 1218,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3478,
+      "hit": false,
+      "question": "How does Gina use the clipboard with a notepad attached to it?",
+      "rendered_chars": 1220,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4348,
+      "hit": false,
+      "question": "Where is Gina's HR internship?",
+      "rendered_chars": 1268,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2857,
+      "hit": false,
+      "question": "What temporary job did Gina take to cover expenses?",
+      "rendered_chars": 1374,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.35,
+      "hit": false,
+      "question": "What book is Gina currently reading?",
+      "rendered_chars": 1329,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4444,
+      "hit": false,
+      "question": "What was Jon's favorite dancing memory?",
+      "rendered_chars": 1202,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3214,
+      "hit": false,
+      "question": "Why did Jon combine his clothing business with dance?",
+      "rendered_chars": 1197,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2368,
+      "hit": false,
+      "question": "What did Jon find for his clothing store on 1 February, 2023?",
+      "rendered_chars": 1334,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": true,
+      "evidence_overlap": 0.6842,
+      "hit": false,
+      "question": "What kind of professional experience did Jon get accepted for on May 23, 2023?",
+      "rendered_chars": 1347,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3043,
+      "hit": false,
+      "question": "Where is Jon's fashion internship?",
+      "rendered_chars": 1380,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4231,
+      "hit": false,
+      "question": "What did Jon take a trip to Barcelona for?",
+      "rendered_chars": 1308,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2308,
+      "hit": false,
+      "question": "What did Jon design for his store?",
+      "rendered_chars": 1130,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 1,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3636,
+      "hit": false,
+      "question": "What is Gina's attitude towards participating in the dance festival?",
+      "rendered_chars": 1287,
+      "status": "COMPLETE",
+      "strict_substring": false
+    }
+  ],
+  "representative": true,
+  "scoring": {
+    "answer_overlap_hit": 0.6,
+    "evidence_overlap_hit": 0.5,
+    "note": "generation is disabled, so answers are not judged - these are token-recall proxies over the retrieved bundle. Per-question overlaps are in `records`; rescore from them rather than re-running."
+  },
+  "strict_recall": 0.0435,
+  "total_seconds": 294.0
+}

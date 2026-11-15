@@ -1,0 +1,268 @@
+{
+  "ablation": {},
+  "abstention_measurable": true,
+  "abstention_rate_on_adversarial": 1.0,
+  "answer_recall_at_k": 0.25,
+  "by_category": {
+    "adversarial": {
+      "n": 1,
+      "score": 1.0
+    },
+    "multi_hop": {
+      "n": 1,
+      "score": 0.0
+    },
+    "open_domain": {
+      "n": 1,
+      "score": 0.0
+    },
+    "single_hop": {
+      "n": 1,
+      "score": 1.0
+    },
+    "temporal": {
+      "n": 1,
+      "score": 0.0
+    }
+  },
+  "caveats": [
+    "1 of 5 judged calls failed; those questions fell back to token overlap. Scores are a mixture of two different metrics and should not be compared with a clean run.",
+    "models.nli.provider='lexical' is a stand-in, not the entailment model; grounding results are not representative."
+  ],
+  "dataset": {
+    "conversations": 1,
+    "name": "LoCoMo (snap-research/locomo)",
+    "questions": 5
+  },
+  "embedding_provider": "sentence_transformers",
+  "evidence_recall": 0.25,
+  "judge_failures": 1,
+  "judged": true,
+  "k": 10,
+  "provenance": {
+    "cpu_count": 4,
+    "git_commit": "unknown",
+    "llm": {
+      "enabled": true,
+      "fast_model": "gemini/gemini-3.6-flash",
+      "gateway_version": "<!doctype html>\n<html lang=\"en\" suppressHydrationWarning>\n\t<head>\n\t\t<meta charse",
+      "model": "gemini/gemini-3.6-flash",
+      "provider": "bifrost",
+      "uses": [
+        "grounding_judge"
+      ]
+    },
+    "machine": "x86_64",
+    "memory_gb": 5.8,
+    "models": {
+      "bge-reranker-v2-m3": {
+        "repo": "BAAI/bge-reranker-v2-m3",
+        "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+      },
+      "deberta-v3-base-mnli-fever-anli": {
+        "repo": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
+      },
+      "embedding": {
+        "repo": "ibm-granite/granite-embedding-english-r2",
+        "revision": "47ea694b257b703fee9253d75c2b1f2985180498"
+      },
+      "embedding-small": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "embeddinggemma-300m": {
+        "repo": "google/embeddinggemma-300m",
+        "revision": null
+      },
+      "gliner-relex": {
+        "repo": "knowledgator/gliner-relex-large-v1",
+        "revision": null
+      },
+      "gliner2-base": {
+        "repo": "fastino/gliner2-base-v1",
+        "revision": "8437ba583a733d87f56ae902f3b197934eedd58e"
+      },
+      "granite-embedding-reranker-english-r2": {
+        "repo": "ibm-granite/granite-embedding-reranker-english-r2",
+        "revision": "d09d3d6971b689bf9c23839e45a470874d46e13a"
+      },
+      "granite-embedding-small-english-r2": {
+        "repo": "ibm-granite/granite-embedding-small-english-r2",
+        "revision": "2ab6fa8ea2d674564defd37171ae19079b864b33"
+      },
+      "late-interaction": {
+        "repo": "answerdotai/answerai-colbert-small-v1",
+        "revision": "934fa8bb4ce2284f4c2baa232d81aca4d076fa5e"
+      },
+      "ms-marco-MiniLM-L6-v2": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "qwen3-embedding-0.6b": {
+        "repo": "Qwen/Qwen3-Embedding-0.6B",
+        "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+      },
+      "reranker": {
+        "repo": "cross-encoder/ms-marco-MiniLM-L6-v2",
+        "revision": "233902d25c440f23af6f7d6e94d2946bac0bee0a"
+      },
+      "sparse": {
+        "repo": "Qdrant/Splade_PP_en_v1",
+        "revision": null
+      }
+    },
+    "packages": {
+      "docling": "2.127.0",
+      "fastapi": "0.141.1",
+      "fastembed": "0.8.0",
+      "onnxruntime": "1.30.0",
+      "procrastinate": "3.9.0",
+      "qdrant-client": "1.19.0",
+      "sentence-transformers": "6.0.1",
+      "sqlalchemy": "2.0.53",
+      "torch": "2.14.0+cpu",
+      "transformers": "5.17.0",
+      "zstandard": "0.25.0"
+    },
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "timestamp": "2026-09-22T09:01:32.435608+00:00"
+  },
+  "query_p50_ms": 709.5,
+  "query_p95_ms": 1386.5,
+  "records": [
+    {
+      "abstained": false,
+      "answer": "clarinet and violin",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "multi_hop",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3889,
+      "hit": false,
+      "judged": {
+        "abstained": true,
+        "correct": false,
+        "produced": "I don't know."
+      },
+      "question": "What instruments does Melanie play?",
+      "rendered_chars": 1277,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "The week before 6 July 2023",
+      "answer_overlap": 0.4,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "temporal",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.3636,
+      "hit": false,
+      "judged": {
+        "abstained": true,
+        "correct": false,
+        "produced": "I don't know."
+      },
+      "question": "When did Caroline have a picnic?",
+      "rendered_chars": 1488,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "Yes, since she collects classic children's books",
+      "answer_overlap": 0.2857,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "open_domain",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.4,
+      "hit": false,
+      "judged": {
+        "abstained": true,
+        "correct": false,
+        "produced": "I don't know."
+      },
+      "question": "Would Caroline likely have Dr. Seuss books on her bookshelf?",
+      "rendered_chars": 1345,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "He got into an accident",
+      "answer_overlap": 0.6667,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "single_hop",
+      "conversation": 0,
+      "evidence_hit": true,
+      "evidence_overlap": 0.5,
+      "hit": true,
+      "judged": {
+        "detail": "{'status': 429, 'body': '{\"is_bifrost_error\":false,\"status_code\":429,\"error\":{\"type\":\"RESOURCE_EXHAUSTED\",\"code\":\"429\",\"message\":\"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\\\n* Quota exceeded for metric",
+        "error": "LLMCallFailed: llm gateway rate limited the request"
+      },
+      "question": "What happened to Melanie's son on their road trip?",
+      "rendered_chars": 1307,
+      "status": "COMPLETE",
+      "strict_substring": false
+    },
+    {
+      "abstained": false,
+      "answer": "",
+      "answer_overlap": 0.0,
+      "bundle": {
+        "graph_facts": 0,
+        "knowledge": 0,
+        "memories": 12,
+        "summaries": 0
+      },
+      "category": "adversarial",
+      "conversation": 0,
+      "evidence_hit": false,
+      "evidence_overlap": 0.2083,
+      "hit": true,
+      "judged": {
+        "abstained": true,
+        "correct": true,
+        "produced": "I don't know."
+      },
+      "question": "What kind of counseling workshop did Melanie attend recently?",
+      "rendered_chars": 1395,
+      "status": "COMPLETE",
+      "strict_substring": false
+    }
+  ],
+  "representative": true,
+  "scoring": {
+    "answer_overlap_hit": 0.6,
+    "evidence_overlap_hit": 0.5,
+    "note": "answers were generated from each bundle and graded by a model, the way LoCoMo is scored; the overlap figures below are kept as a second opinion. Per-question detail is in `records`; rescore from it rather than re-running."
+  },
+  "strict_recall": 0.0,
+  "total_seconds": 228.0
+}
