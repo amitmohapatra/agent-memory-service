@@ -620,11 +620,14 @@ class EndpointLLM:
         temperature: float,
         extra: dict[str, Any],
     ) -> tuple[dict[str, Any], str, float, Any]:
-        """One request on ``connection``, shaped by ``choice``'s profile: its output ceiling
-        caps the budget, and the sdk sends a reasoning model ``max_completion_tokens`` and no
-        temperature. No tools and so no ``tool_choice``, which an endpoint may refuse without
-        them (400); a reply that calls a tool anyway is refused (``_completion``)."""
+        """One request on ``connection``, shaped by ``choice``'s profile. Its output limit is
+        the answer's size (``max_tokens``) plus room for the model's thinking
+        (``LLMTuning.thinking_room``), capped by the profile's output ceiling; the sdk sends a
+        reasoning model ``max_completion_tokens`` and no temperature. No tools and so no
+        ``tool_choice``, which an endpoint may refuse without them (400); a reply that calls
+        a tool anyway is refused (``_completion``)."""
         model, profile = choice.model, choice.profile
+        max_tokens += self.tuning.thinking_room
         if profile.max_output_tokens is not None:
             max_tokens = min(max_tokens, profile.max_output_tokens)
         gateway = self._gateway(connection, profile)

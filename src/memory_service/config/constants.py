@@ -519,14 +519,21 @@ class LLMTuning:
         "chunk_context",
         "memory_restatement",
     )
-    #: A reasoning model spends its output budget thinking before it emits anything, so too
-    #: small a ceiling returns 200 OK with an empty string.
+    #: The most text a call's answer may be (the long uses below aside). The request's limit
+    #: is this answer size plus ``thinking_room``.
     max_tokens: int = 1024
     #: The ceiling of the uses whose answer is long: ``reflection``, under which consolidation
     #: writes a person's beliefs. A model that reasons before it answers spent ~750 hidden
     #: tokens on ~300 of answer (Haiku, measured), so 1024 cut those answers off.
     long_uses: tuple[str, ...] = ("reflection",)
     long_max_tokens: int = 4096
+    #: Added to every request's output limit, on top of the answer's size. A model that
+    #: thinks before it answers spends the limit on the thinking, so a call that named 50 or
+    #: 500 tokens came back 200 OK with no text: measured on one conversation, 269 of 510
+    #: restatements, 94 of 284 summaries and 10 of 13 conflict checks, and none of the calls
+    #: that named 1,536 or more. A model that does not think stops where its answer ends, so
+    #: the room costs it nothing.
+    thinking_room: int = 8000
     timeout_seconds: float = 30.0
     #: retries on 429/5xx/timeouts; the sleeps sit outside the request timeout
     max_retries: int = 2
