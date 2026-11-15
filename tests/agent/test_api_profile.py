@@ -97,3 +97,31 @@ async def test_a_profile_line_goes_with_the_memory_it_was_learned_from(app, runn
     await user.forget(tea.memory_id)  # the last one: nothing of theirs is left to learn from
     running.portal.call(container.tasks.drain)
     assert _user_block(await user.profile()) == ""
+
+
+@pytest.mark.covers("profile.edit_profile_block", "memory.forget_memory")
+async def test_a_line_written_into_the_profile_by_hand_outlives_the_memory_it_repeats(
+    app, running
+) -> None:
+    """MEM-05. A line a person or an agent writes into the block is their own statement, not
+    derived from a memory: docs/api/profile.md, "Once a person or an agent has edited the
+    block, ... an edit is never lost or undone", and ``ProfileService.refresh_user``, "An
+    edited block keeps its edit (a person's or an agent's words, not derived)". Forgetting the
+    memory the line repeats leaves it (a learned line goes:
+    ``test_a_profile_line_goes_with_the_memory_it_was_learned_from``); the editor removes it
+    by editing."""
+    _, harness = await _tenant(app)
+    user = harness.bind(user_id="u1")
+    seats = await user.remember("I prefer window seats.", memory_type="PREFERENCE")
+    container = app.state.container
+    running.portal.call(container.tasks.drain)
+    assert _user_block(await user.profile()) == "- I prefer window seats."
+
+    written = await user.profile.edit("user", "- I prefer window seats.\n- Call me Sam.")
+    await user.forget(seats.memory_id)
+    running.portal.call(container.tasks.drain)
+    assert _user_block(await user.profile()) == written.text
+    assert "window seats" in (await user.context("seat preference")).rendered
+
+    await user.profile.edit("user", "", old="- I prefer window seats.\n")
+    assert _user_block(await user.profile()) == "- Call me Sam."
