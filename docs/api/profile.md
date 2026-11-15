@@ -31,11 +31,16 @@ forgotten): with the tenant's model (use `summaries`) it writes a concise profil
 `name: value` line per fact; without one, a line per memory. It is composed from the memories
 held now, so a forgotten memory's line leaves with the next refresh, and a user with none left
 gets an empty block. Once a person or an agent has edited the block, the job only appends facts
-learned after the edit, so an edit is never lost or undone (and a line appended from a memory
-since forgotten stays: an edited block is the editor's text). A line written into the block by
-hand is the editor's own statement, not derived from a memory, even when it repeats one: forgetting
-that memory leaves the line, and the editor removes it with another edit. `name: value` lines
-are also what tool hints fill an argument of the same name from.
+learned after the edit, so an edit is never lost or undone. Each line it appends records the
+memory it was learned from, and leaves with that memory: when the memory is forgotten, replaced
+or archived, the next refresh removes the line and keeps every other line of the block. A line
+written into the block by hand is the editor's own statement, not derived from a memory, even
+when it repeats one: forgetting that memory leaves the line, and the editor removes it with
+another edit. A line the job appended is the job's only while it reads exactly as the job wrote
+it: once a person or an agent changes it, it is theirs, and stays like any line they wrote (a
+whole-block write that resends a job's line unchanged leaves it the job's). A block edited before
+the job recorded its lines' memories keeps all of them as the editor's. `name: value` lines are
+also what tool hints fill an argument of the same name from.
 
 ## Thread summaries
 
