@@ -44,7 +44,7 @@ _READ_ERRORS = error_responses(401, 403, 404, 422, 503)
 
 
 def _service(container):  # type: ignore[no-untyped-def]
-    return container.services["tenancy"]
+    return container.services.tenancy
 
 
 def _without_token(body: dict) -> dict:
@@ -88,9 +88,9 @@ async def issue_key(
         )
 
         async def after_commit() -> None:
-            container.services["tenant_registry"].observe_key(issued.key.key_id, tenant_id)
+            container.services.tenant_registry.observe_key(issued.key.key_id, tenant_id)
             # a "no such key" marker may be cached from an earlier guess at this id
-            await container.services["api_keys"].forget_missing(issued.key.key_id)
+            await container.services.api_keys.forget_missing(issued.key.key_id)
 
         return 201, IssuedKeyResponse.issued(issued).model_dump(mode="json"), after_commit
 
@@ -134,7 +134,7 @@ async def list_keys(
 ) -> list[ApiKeyResponse]:
     position = decode_cursor(cursor, fields={"created_at": datetime, "key_id": str})
     after = (position["created_at"], position["key_id"]) if position else None
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         keys = await _service(container).list_keys(uow, tenant_id, after=after, limit=limit + 1)
     items, next_cursor = page(
         keys,
@@ -158,7 +158,7 @@ async def update_key(
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
 ) -> Response:
-    verifier = container.services["api_keys"]
+    verifier = container.services.api_keys
 
     async def handler(uow):  # type: ignore[no-untyped-def]
         key = await _service(container).set_may_act_as(uow, tenant_id, key_id, body.may_act_as)
@@ -190,7 +190,7 @@ async def update_key(
 async def revoke_key(
     request: Request, key_id: KeyIdPath, container: ContainerDep, tenant_id: AdministeredTenantDep
 ) -> Response:
-    verifier = container.services["api_keys"]
+    verifier = container.services.api_keys
 
     async def handler(uow):  # type: ignore[no-untyped-def]
         revoked = await _service(container).revoke_key(uow, tenant_id, key_id)
@@ -204,7 +204,7 @@ async def revoke_key(
             if revoked:
                 # only a key of this tenant: another tenant's key id must not be touched here
                 await verifier.invalidate(key_id)
-                container.services["tenant_registry"].forget_key(key_id)
+                container.services.tenant_registry.forget_key(key_id)
 
         return NO_CONTENT, {}, after_commit
 
@@ -269,7 +269,7 @@ async def list_workspaces(
     limit: Annotated[int, limit_query(500, "workspaces")] = 100,
 ) -> list[WorkspaceResponse]:
     position = decode_cursor(cursor, fields=("workspace_id",))
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         workspaces = await _service(container).list_workspaces(
             uow, tenant_id, after=position["workspace_id"] if position else "", limit=limit + 1
         )
@@ -289,7 +289,7 @@ async def list_workspaces(
 async def get_workspace(
     workspace_id: WorkspaceIdPath, container: ContainerDep, tenant_id: AdministeredTenantDep
 ) -> WorkspaceResponse:
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         return WorkspaceResponse.of(
             await _service(container).get_workspace(uow, tenant_id, workspace_id)
         )
@@ -308,7 +308,7 @@ async def delete_workspace(
     container: ContainerDep,
     tenant_id: AdministeredTenantDep,
 ) -> Response:
-    verifier = container.services["api_keys"]
+    verifier = container.services.api_keys
 
     async def handler(uow):  # type: ignore[no-untyped-def]
         revoked = await _service(container).delete_workspace(uow, tenant_id, workspace_id)
@@ -319,7 +319,7 @@ async def delete_workspace(
         async def after_commit() -> None:
             for key_id in revoked:
                 await verifier.invalidate(key_id)
-                container.services["tenant_registry"].forget_key(key_id)
+                container.services.tenant_registry.forget_key(key_id)
 
         return NO_CONTENT, {}, after_commit
 
@@ -349,7 +349,7 @@ async def list_members(
     limit: Annotated[int, limit_query(500, "members")] = 100,
 ) -> list[WorkspaceMemberResponse]:
     position = decode_cursor(cursor, fields=("principal",))
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         members = await _service(container).members(
             uow,
             tenant_id,
@@ -464,8 +464,8 @@ async def list_reads(
     position = decode_cursor(cursor, fields={"before": datetime})
     if position is not None:
         before = position["before"]
-    await container.services["read_audit"].flush()
-    async with container.services["uow_factory"]() as uow:
+    await container.services.read_audit.flush()
+    async with container.services.uow_factory() as uow:
         entries = await uow.read_audit.list(tenant_id, after=since, before=before, limit=limit + 1)
     items = entries[:limit]
     next_cursor = (
