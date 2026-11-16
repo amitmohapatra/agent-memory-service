@@ -72,6 +72,7 @@ from memory_service.domain.memory import (
 )
 from memory_service.domain.predicates import is_single_valued
 from memory_service.domain.script import Script, detect_script, script_of
+from memory_service.domain.text import STOP_WORDS
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.ports.models import EmbeddingProvider, NLIProvider
 from memory_service.ports.uow import UnitOfWork
@@ -445,10 +446,8 @@ def _calendar() -> frozenset[str]:
 @lru_cache(maxsize=1)
 def _function_words() -> frozenset[str]:
     """Words that never label a thing ("is 40 units", "bis 14:00", "के 3")."""
-    from memory_service.modules.memory.native import _STOP
-
     generic = _vocab_json().get("stopwords", [])
-    return frozenset({*_STOP, *generic, *_EXTRA_FUNCTION})
+    return frozenset({*STOP_WORDS, *generic, *_EXTRA_FUNCTION})
 
 
 #: Copulas, prepositions and pronouns the packs' stopword lists leave out.

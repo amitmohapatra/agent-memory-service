@@ -19,7 +19,7 @@ from memory_service.domain.revisions import (
     audience_revision_keys,
     document_revision_keys,
 )
-from memory_service.domain.text import unicode_tokens
+from memory_service.domain.text import STOP_WORDS, unicode_tokens
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.graph.native import VALUE_TYPES, NativeGraphEnrichment
@@ -27,7 +27,6 @@ from memory_service.modules.graph.summaries import EntitySummaries
 from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import document_identity, model_call_policy
-from memory_service.modules.memory.native import _STOP as _STOP_WORDS
 from memory_service.modules.memory.revisions import memory_revision_keys
 from memory_service.observability.logging import get_logger
 from memory_service.observability.metrics import stage_seconds
@@ -44,7 +43,7 @@ why what how when where who whom which did does do is are was were tell show exp
 give list describe compare because despite
 """
 _QUESTION_WORDS = frozenset(_QUESTION_TEXT.split())
-_IGNORE = _STOP_WORDS | _QUESTION_WORDS
+_IGNORE = STOP_WORDS | _QUESTION_WORDS
 LLM_MAX_CANDIDATES = 200
 LLM_MAX_QUERY_NAMES = 12
 _RESOLUTION_SCHEMA: dict[str, Any] = {

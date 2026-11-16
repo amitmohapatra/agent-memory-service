@@ -39,7 +39,12 @@ from memory_service.domain.memory import CanonicalMemory, lasting, unverified_re
 from memory_service.domain.observation import Observation
 from memory_service.domain.predicates import is_single_valued
 from memory_service.domain.subjects import SubjectVerdict
-from memory_service.domain.text import ACKNOWLEDGEMENT, SENTENCE_BREAK, normalise_number
+from memory_service.domain.text import (
+    ACKNOWLEDGEMENT,
+    SENTENCE_BREAK,
+    STOP_WORDS,
+    normalise_number,
+)
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.statements import (
     RULE_KINDS,
@@ -60,13 +65,6 @@ from memory_service.ports.models import EmbeddingProvider, NLIProvider, Provider
 
 _WORD = re.compile(r"[a-z0-9](?:[a-z0-9'+\-./@]*[a-z0-9])?")
 _NUMBER = re.compile(r"\d+(?:[.,\u066b\u066c\uff0e\uff0c]\d+)*")
-_STOP_WORDS = """
-a an the and or but if then of to in on at by for with from as is are was were be been
-being it its this that these those there here i me my we our you your they them he she
-his her do does did done have has had having not no so than too very can will would
-should could may might must shall into onto about please
-"""
-_STOP = frozenset(_STOP_WORDS.split())
 _NEGATION = frozenset(
     {"not", "no", "never", "none", "nobody", "nothing", "neither", "nor", "n't", "cannot"}
 )
@@ -100,7 +98,7 @@ def normalized_hash(text: str) -> str:
 
 
 def tokens(text: str) -> set[str]:
-    return {w for w in _WORD.findall(text.lower()) if w not in _STOP and len(w) > 1}
+    return {w for w in _WORD.findall(text.lower()) if w not in STOP_WORDS and len(w) > 1}
 
 
 def jaccard(a: set[str], b: set[str]) -> float:

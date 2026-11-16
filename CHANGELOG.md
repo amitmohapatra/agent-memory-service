@@ -52,6 +52,10 @@ each entry says which one moved. Decisions behind each change are in the
   asserts any other tenant gets `403 SCOPE_DENIED`. **To upgrade a deployed `jwt` service
   that sets no `TENANT_CLAIM`: set `SINGLE_TENANT` to its tenant.** `dev` and `test` are
   unchanged ([configuration.md](docs/configuration.md#production-guards)).
+- **The shared stop-word set is public** (service; no behaviour changed). The graph and
+  context modules imported `modules/memory/native.py`'s private `_STOP`; it is
+  `domain.text.STOP_WORDS` now, the same 73 words. An architecture test refuses a new import
+  of another module's private name and lists the seven that remain.
 - **Four per-item database loops are one batch each** (service; outcomes unchanged). The
   retention sweep forgot a batch of up to 500 memories one at a time (a write and the
   dependents' statement each); it forgets the batch in three statements

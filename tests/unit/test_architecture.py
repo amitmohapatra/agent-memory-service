@@ -592,3 +592,41 @@ def test_memory_state_is_written_by_the_memory_module_alone() -> None:
             ):
                 found.add((where.as_posix(), node.attr))
     assert found == MEMORY_WRITERS_OUTSIDE_MEMORY, sorted(found ^ MEMORY_WRITERS_OUTSIDE_MEMORY)
+
+
+#: Private names of ``modules/memory/replacement.py`` that other modules still import.
+#: Shrink this; never grow it.
+PRIVATE_NAMES_IMPORTED_ACROSS_MODULES = frozenset(
+    {
+        "modules/context/coverage.py: _NOUN_CAPITALISING",
+        "modules/context/coverage.py: _function_words",
+        "modules/context/coverage.py: _marked",
+        "modules/context/coverage.py: _vocab_json",
+        "modules/context/standing.py: _function_words",
+        "modules/retrieval/slots.py: _function_words",
+        "modules/retrieval/slots.py: _marked",
+    }
+)
+
+
+def test_no_module_imports_another_modules_private_name() -> None:
+    """A leading underscore says "this file's": ``modules/memory/native.py``'s ``_STOP`` was
+    imported by the graph and context modules, so the name could not change where it was
+    defined. What two modules share is public, in ``domain`` or on the owning module."""
+    offenders: set[str] = set()
+    for path in (SRC / "modules").rglob("*.py"):
+        package = path.relative_to(SRC / "modules").parts[0]
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not (isinstance(node, ast.ImportFrom) and node.module):
+                continue
+            source = node.module.split(".")
+            if source[:2] != ["memory_service", "modules"] or source[2:3] == [package]:
+                continue
+            offenders |= {
+                f"{path.relative_to(SRC).as_posix()}: {alias.name}"
+                for alias in node.names
+                if alias.name.startswith("_")
+            }
+    assert offenders == PRIVATE_NAMES_IMPORTED_ACROSS_MODULES, sorted(
+        offenders ^ PRIVATE_NAMES_IMPORTED_ACROSS_MODULES
+    )
