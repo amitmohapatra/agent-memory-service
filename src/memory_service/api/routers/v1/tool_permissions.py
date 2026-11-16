@@ -95,7 +95,7 @@ class ToolPermissionsResponse(BaseModel):
 
 
 def _service(container) -> ToolPermissions:  # type: ignore[no-untyped-def]
-    return container.services["tool_permissions"]
+    return container.services.tool_permissions
 
 
 @router.get(
