@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from memory_service.application.services import Services
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.tools import ToolHints
 from memory_service.modules.agent_tools.service import AgentTools, ToolSearchArgs
@@ -205,7 +206,7 @@ async def test_the_tool_search_agent_tool_is_guarded_by_the_stored_never_rule() 
     service, _ = _service([_never_at_s40()])
     tools = AgentTools(
         lambda: _HintsUow([]),
-        {"authz": _Authz(), "profile": _Profile(), "tool_hints": service},
+        Services(authz=_Authz(), profile=_Profile(), tool_hints=service),
     )
     found = await tools._tool_search(
         CTX, ToolSearchArgs(task=STOCK_RULE_TASK), ["create_stock_rule"]
@@ -221,7 +222,7 @@ class _Sections:
     tools = ContextSections.tools
 
     def __init__(self, hints: ToolHintsService) -> None:
-        self.services = {"tool_hints": hints}
+        self.services = Services(tool_hints=hints)
 
     async def gather(self, *_: object, **__: object) -> Pinned:
         return Pinned()

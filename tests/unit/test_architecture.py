@@ -188,6 +188,7 @@ PORT_RECEIVERS: dict[str, frozenset[str]] = {
     "MemoryIntelligenceProvider": frozenset({"provider"}),
     "NLIProvider": frozenset({"nli"}),
     "OutboxRepository": frozenset({"repo"}),
+    "OutboxSweeper": frozenset({"relay"}),
     "SearchStore": frozenset({"store", "search"}),
     "SparseEncoder": frozenset({"sparse"}),
     "TaskQueue": frozenset({"tasks", "queue", "task_queue"}),

@@ -52,6 +52,12 @@ each entry says which one moved. Decisions behind each change are in the
   asserts any other tenant gets `403 SCOPE_DENIED`. **To upgrade a deployed `jwt` service
   that sets no `TENANT_CLAIM`: set `SINGLE_TENANT` to its tenant.** `dev` and `test` are
   unchanged ([configuration.md](docs/configuration.md#production-guards)).
+- **`Container.services` is typed** (service; no behaviour changed). It was a
+  `dict[str, Any]` of about fifty string keys: a misspelt key was a `KeyError` in a request,
+  and nothing read from it had a type. It is `application.services.Services` now, one
+  declared attribute per service (`container.services.memory`), which the type checker reads.
+  Reading and writing by name (`container.services["memory"]`) still works for the callers
+  not yet moved, and a name that is not a service is refused where it is written.
 - **`docs/ARCHITECTURE.md` says what the code does** (documentation). Three claims were
   false: that the service does not import `trellis.contracts` (it imports `Endpoint` and
   `ModelProfile`), that `api` depends on `application` only (it imports the modules, ports and

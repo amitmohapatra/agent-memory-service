@@ -15,6 +15,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypedDict
 
+from memory_service.application.services import Services
 from memory_service.config import constants
 from memory_service.config.constants import (
     OVERLOAD,
@@ -220,7 +221,7 @@ class Container:
     graph_enrichment: Any = None
     document_parser: Any = None
     database: Any = None
-    services: dict[str, Any] = field(default_factory=dict)
+    services: Services = field(default_factory=Services)
     #: set when shutdown begins; readiness reports the process down from then on
     closing: bool = False
     #: the last readiness answer and when it was taken (monotonic seconds)

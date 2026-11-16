@@ -7,7 +7,7 @@ from __future__ import annotations
 import functools
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Final, Literal
+from typing import TYPE_CHECKING, Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic import ValidationError as PydanticValidationError
@@ -20,6 +20,9 @@ from memory_service.modules.context.views import hints_view
 from memory_service.modules.retrieval.engine import PointInTime
 from memory_service.modules.retrieval.search import SearchKind, default_kinds
 from memory_service.observability.logging import get_logger
+
+if TYPE_CHECKING:
+    from memory_service.application.services import Services
 
 log = get_logger(__name__)
 
@@ -180,7 +183,7 @@ BY_NAME: Final = {tool.name: tool for tool in TOOLS}
 
 
 class AgentTools:
-    def __init__(self, uow_factory: Any, services: dict[str, Any]) -> None:
+    def __init__(self, uow_factory: Any, services: Services) -> None:
         self.uow_factory = uow_factory
         self.services = services
 
@@ -221,7 +224,7 @@ class AgentTools:
     # ------------------------------------------------------------------ memory
     async def _memory_search(self, ctx: MemoryExecutionContext, args: MemorySearchArgs) -> Any:
         observed = (args.time_from, args.time_to) if args.time_from or args.time_to else None
-        found = await self.services["search"].search(
+        found = await self.services.search.search(
             ctx,
             args.query,
             kinds=args.kinds or default_kinds(args.query),
@@ -234,7 +237,7 @@ class AgentTools:
 
     async def _memory_remember(self, ctx: MemoryExecutionContext, args: MemoryRememberArgs) -> Any:
         async with self.uow_factory() as uow:
-            ack = await self.services["memory"].remember(
+            ack = await self.services.memory.remember(
                 uow,
                 ctx,
                 content=args.content,
@@ -246,24 +249,24 @@ class AgentTools:
         return {"id": ack.memory_id, "deduplicated": ack.deduplicated}
 
     async def _memory_update(self, ctx: MemoryExecutionContext, args: MemoryUpdateArgs) -> Any:
-        memory_id = await self.services["bundle_records"].resolve(ctx, args.id)
+        memory_id = await self.services.bundle_records.resolve(ctx, args.id)
         async with self.uow_factory() as uow:
-            new = await self.services["memory"].supersede(
+            new = await self.services.memory.supersede(
                 uow, ctx, memory_id, content=args.content, reason="updated by the agent"
             )
             await uow.commit()
         return {"id": new.memory_id, "supersedes": memory_id}
 
     async def _memory_forget(self, ctx: MemoryExecutionContext, args: MemoryForgetArgs) -> Any:
-        memory_id = await self.services["bundle_records"].resolve(ctx, args.id)
+        memory_id = await self.services.bundle_records.resolve(ctx, args.id)
         async with self.uow_factory() as uow:
-            forgotten = await self.services["memory"].forget(uow, ctx, memory_id)
+            forgotten = await self.services.memory.forget(uow, ctx, memory_id)
             await uow.commit()
         return {"id": memory_id, "forgotten": forgotten is not None}
 
     async def _profile_edit(self, ctx: MemoryExecutionContext, args: ProfileEditArgs) -> Any:
         async with self.uow_factory() as uow:
-            block = await self.services["profile"].edit(uow, ctx, args.block, args.old, args.new)
+            block = await self.services.profile.edit(uow, ctx, args.block, args.old, args.new)
             await uow.commit()
         return {"block": block.block, "text": block.text, "version": block.version}
 
@@ -271,10 +274,10 @@ class AgentTools:
     async def _tool_search(
         self, ctx: MemoryExecutionContext, args: ToolSearchArgs, toolbox: Sequence[str] | None
     ) -> Any:
-        visibility = await self.services["authz"].visibility(ctx)
+        visibility = await self.services.authz.visibility(ctx)
         async with self.uow_factory() as uow:
-            profile = await self.services["profile"].blocks(uow, ctx)
-        hints = await self.services["tool_hints"].hints(
+            profile = await self.services.profile.blocks(uow, ctx)
+        hints = await self.services.tool_hints.hints(
             ctx,
             args.task,
             available=toolbox,
