@@ -109,7 +109,7 @@ async def call_agent_tool(
     ctx = build_context(request, container, body.scope)
 
     async def call() -> CallResponse:
-        result = await container.services["agent_tools"].call(
+        result = await container.services.agent_tools.call(
             ctx, name, body.args, toolbox=body.toolbox
         )
         return CallResponse(result=result)
