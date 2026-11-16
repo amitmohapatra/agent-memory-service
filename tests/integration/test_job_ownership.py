@@ -68,3 +68,22 @@ async def test_a_job_with_no_tenant_is_reported_as_ownerless(container, uow_fact
     async with uow_factory() as uow:
         dispatched, owner = await uow.outbox.dispatcher_of(job_id)
     assert dispatched is True and owner is None
+
+
+async def test_an_outbox_row_is_read_by_its_tenant_or_when_it_has_none(uow_factory) -> None:
+    """What the ``obx_`` read of the route asks: the row, unless it is another tenant's."""
+    async with uow_factory() as uow:
+        ids = {
+            tenant: await uow.outbox.add(
+                JobSpec(task_name="noop", queue=Queue.CHAT_FAST, payload={}, tenant_id=tenant)
+            )
+            for tenant in (TENANT, OTHER, None)
+        }
+        await uow.outbox.mark_failed(ids[TENANT], error="boom", dead=True)
+        mine = await uow.outbox.get(TENANT, ids[TENANT])
+        assert mine is not None and mine.spec.tenant_id == TENANT
+        assert (mine.spec.task_name, mine.attempts, mine.last_error) == ("noop", 1, "boom")
+        assert await uow.outbox.get(TENANT, ids[OTHER]) is None
+        ownerless = await uow.outbox.get(TENANT, ids[None])
+        assert ownerless is not None and ownerless.spec.tenant_id is None
+        assert await uow.outbox.get(TENANT, 999_999_999) is None

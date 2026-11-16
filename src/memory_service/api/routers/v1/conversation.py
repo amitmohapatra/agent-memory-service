@@ -378,38 +378,36 @@ def _queue(name: str | None) -> Queue | None:
 )
 async def get_job(job_id: JobIdPath, ctx: HeaderContextDep, container: ContainerDep) -> JobResponse:
     """Accepts outbox references (``obx_<n>``) and task-queue ids."""
+    # A job that belongs to no tenant is the service's own periodic work. Its status is
+    # readable by whoever names its id; its error is not: it is the service's, and may quote
+    # any tenant's data.
     if job_id.startswith("obx_"):
-        from memory_service.adapters.db.orm import OutboxRow
-
-        async with container.database.session() as session:
-            row = await session.get(OutboxRow, int(job_id[4:]))
-        if row is None or (row.tenant_id and row.tenant_id != ctx.tenant_id):
+        async with container.services["uow_factory"]() as uow:
+            entry = await uow.outbox.get(ctx.tenant_id, int(job_id[4:]))
+        if entry is None:
             raise NotFound("Job not found")
-        if row.job_id is None:
-            return JobResponse(
-                job_id=job_id,
-                task_name=row.task_name,
-                queue=_queue(row.queue),
-                status=JobStatus.PENDING,
-                attempts=row.attempts,
-                last_error=row.last_error,
-            )
-        info = await container.tasks.get(row.job_id) if container.tasks is not None else None
+        spec = entry.spec
+        info = (
+            await container.tasks.get(entry.job_id)
+            if entry.job_id is not None and container.tasks is not None
+            else None
+        )
         if info is None:
             return JobResponse(
                 job_id=job_id,
-                task_name=row.task_name,
-                queue=_queue(row.queue),
+                task_name=spec.task_name,
+                queue=_queue(spec.queue),
                 status=JobStatus.PENDING,
-                attempts=row.attempts,
+                attempts=entry.attempts,
+                last_error=entry.last_error if spec.tenant_id and entry.job_id is None else None,
             )
         return JobResponse(
             job_id=job_id,
-            task_name=row.task_name,
-            queue=_queue(row.queue),
+            task_name=spec.task_name,
+            queue=_queue(spec.queue),
             status=info.status,
             attempts=info.attempts,
-            last_error=info.last_error,
+            last_error=info.last_error if spec.tenant_id else None,
         )
     # A task-queue id carries no tenant of its own. Procrastinate ids are sequential
     # integers and the TaskQueue port never modelled a tenant, so this branch used to hand
@@ -434,5 +432,5 @@ async def get_job(job_id: JobIdPath, ctx: HeaderContextDep, container: Container
         queue=_queue(info.queue),
         status=info.status,
         attempts=info.attempts,
-        last_error=info.last_error,
+        last_error=info.last_error if owner else None,
     )

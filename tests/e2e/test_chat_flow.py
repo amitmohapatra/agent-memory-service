@@ -204,6 +204,39 @@ def test_validation_errors(client) -> None:
     assert client.get("/v1/jobs/nope", headers=H).status_code == 404
 
 
+def _failed_outbox_job(client, container, tenant: str | None) -> str:
+    """An outbox row of ``tenant`` whose dispatch failed with an error; its ``obx_`` id."""
+    from memory_service.ports.tasks import JobSpec, Queue
+
+    async def _write() -> int:
+        async with container.services["uow_factory"]() as uow:
+            outbox_id = await uow.outbox.add(
+                JobSpec(task_name="noop", queue=Queue.CHAT_FAST, payload={}, tenant_id=tenant)
+            )
+            await uow.outbox.mark_failed(outbox_id, error="boom", dead=True)
+            await uow.commit()
+        return outbox_id
+
+    return f"obx_{client.portal.call(_write)}"
+
+
+def test_an_outbox_job_is_read_by_its_tenant_alone(client, container) -> None:
+    mine = client.get(f"/v1/jobs/{_failed_outbox_job(client, container, 'acme')}", headers=H)
+    assert mine.status_code == 200, mine.text
+    assert (mine.json()["status"], mine.json()["last_error"]) == ("PENDING", "boom")
+    theirs = _failed_outbox_job(client, container, "globex")
+    assert client.get(f"/v1/jobs/{theirs}", headers=H).status_code == 404
+
+
+def test_the_services_own_job_does_not_show_its_error_to_a_tenant(client, container) -> None:
+    """A row with no tenant is the service's periodic work: any tenant may read its status by
+    counting ids, and its error is the service's, about data that may be another tenant's."""
+    job = client.get(f"/v1/jobs/{_failed_outbox_job(client, container, None)}", headers=H)
+    assert job.status_code == 200, job.text
+    assert job.json()["task_name"] == "noop" and job.json()["attempts"] == 1
+    assert job.json()["last_error"] is None
+
+
 def test_patching_a_thread_creates_it_and_converges(client) -> None:
     thread_id = new_id("thread")
     body = {"scope": {}, "title": "Q3"}

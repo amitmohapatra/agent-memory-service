@@ -424,5 +424,7 @@ class JobResponse(BaseModel):
     )
     attempts: int = Field(default=0, description="How many times it has run so far.")
     last_error: str | None = Field(
-        default=None, description="Why the last attempt failed, when one did."
+        default=None,
+        description="Why the last attempt failed, when one did. Always null for a job that "
+        "belongs to no tenant (the service's own periodic work).",
     )

@@ -46,6 +46,7 @@ class OutboxEntry(BaseModel):
     attempts: int = 0
     dispatched_at: datetime | None = None
     job_id: str | None = None
+    last_error: str | None = None
 
 
 @runtime_checkable
@@ -352,6 +353,11 @@ class OutboxRepository(Protocol):
         post-commit fast path, which knows exactly which rows it wrote and must not be given
         a window that a backlog or a concurrent dispatcher can push them out of.
         """
+        ...
+
+    async def get(self, tenant_id: str, outbox_id: int) -> OutboxEntry | None:
+        """The row ``tenant_id`` may read: its own, or one that belongs to no tenant (the
+        service's own periodic work). Dispatched and dead rows included."""
         ...
 
     async def mark_dispatched(self, outbox_id: int, *, job_id: str) -> None: ...

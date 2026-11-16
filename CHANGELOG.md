@@ -388,6 +388,13 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **`GET /v1/jobs/{job_id}` no longer shows a tenant the error of the service's own job**
+  (service). A job that belongs to no tenant (periodic work) is readable by any tenant that
+  names its id, and its `last_error`, which can quote any tenant's data, came with it.
+  `last_error` is now always `null` for such a job; its status, task name and attempts are
+  unchanged, and so is everything about a tenant's own job. The route reads the outbox
+  through its repository (`OutboxRepository.get`) and no longer opens a database session of
+  its own.
 - **A deleted thread's grant ends with it** (service, MEM-06). Deleting a thread left its
   authorization tuples in place, so every scope of its owner (and of the agent that created
   it) still listed it: a read naming no thread, or the deleted thread, still reached what was
