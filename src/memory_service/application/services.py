@@ -2,8 +2,9 @@
 
 ``wire_adapters`` builds them in stages, so a service is an attribute that exists once its
 stage has run: reading one that was not wired raises ``AttributeError``, and a caller for
-which a service is optional asks ``get``. Reading and writing by name
-(``services["memory"]``) is kept for the callers written against the dictionary this
+which a service is optional asks ``get``. The service reads attributes only
+(tests/unit/test_services.py). Reading and writing by name (``services["memory"]``) is kept
+for the test suite and the benchmarks, which were written against the dictionary this
 replaced; an unknown name is refused where it is written.
 """
 

@@ -2,7 +2,7 @@
 
 It was a ``dict[str, Any]`` of about fifty string keys, so a misspelt key was a ``KeyError``
 in a request and nothing a service returned had a type. The names are declared once now; the
-by-name access stays for the callers still written against the dictionary.
+by-name access stays for the tests and benchmarks written against the dictionary.
 """
 
 from __future__ import annotations
@@ -63,3 +63,22 @@ def test_every_service_wiring_names_is_declared() -> None:
     assert assigned and assigned <= Services.names(), sorted(assigned - Services.names())
     unwired = Services.names() - assigned - {"extra_reconcilers", "extra_task_registrars"}
     assert not unwired, f"declared and never wired: {sorted(unwired)}"
+
+
+def test_the_service_reads_services_by_attribute() -> None:
+    """``services["name"]`` is ``Any`` and unchecked; nothing under ``src`` goes back to it."""
+    import re
+    from pathlib import Path
+
+    import memory_service
+
+    src = Path(memory_service.__file__).parent
+    by_name = re.compile(r"services\[[\"']")
+    offenders = [
+        f"{path.relative_to(src)}:{number}"
+        for path in sorted(src.rglob("*.py"))
+        if path != src / "application" / "services.py"
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if by_name.search(line)
+    ]
+    assert not offenders, "\n".join(offenders)

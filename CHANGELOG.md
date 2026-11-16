@@ -56,8 +56,9 @@ each entry says which one moved. Decisions behind each change are in the
   `dict[str, Any]` of about fifty string keys: a misspelt key was a `KeyError` in a request,
   and nothing read from it had a type. It is `application.services.Services` now, one
   declared attribute per service (`container.services.memory`), which the type checker reads.
-  Reading and writing by name (`container.services["memory"]`) still works for the callers
-  not yet moved, and a name that is not a service is refused where it is written.
+  Wiring, every router, the job registry and the operator tools read attributes, and a test
+  keeps `services["..."]` out of `src`. Reading and writing by name still works for the test
+  suite and the benchmarks; a name that is not a service is refused where it is written.
 - **`docs/ARCHITECTURE.md` says what the code does** (documentation). Three claims were
   false: that the service does not import `trellis.contracts` (it imports `Endpoint` and
   `ModelProfile`), that `api` depends on `application` only (it imports the modules, ports and
