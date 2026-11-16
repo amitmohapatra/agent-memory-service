@@ -556,3 +556,39 @@ def test_the_default_image_can_honour_the_default_configuration() -> None:
             f"documents.parser defaults to {default_parser!r} but the default image builds "
             f"extras {sorted(extras)} — the deployment cannot honour its own default"
         )
+
+
+#: ``MemoryRepository`` methods that write a memory's content or state.
+MEMORY_STATE_WRITES = frozenset({"add", "update", "forget", "forget_many", "set_status"})
+#: Who else writes memories through the unit of work, and why. Shrink this; never grow it:
+#: a new transition belongs on ``MemoryService``.
+MEMORY_WRITERS_OUTSIDE_MEMORY = frozenset(
+    {
+        # retention deletes a tenant's expired memories in batches, as no principal
+        ("modules/tenancy/retention.py", "forget_many"),
+        # the operator's backfill rewrites rows an earlier build stored (make backfill)
+        ("tools/backfill.py", "update"),
+    }
+)
+
+
+def test_memory_state_is_written_by_the_memory_module_alone() -> None:
+    """``UnitOfWork`` hands every repository to every module, so "no module writes another
+    module's tables" held only by convention: feedback closed, corrected and re-opened
+    memories with its own copies of the transitions ``modules/memory`` owns, on its own
+    locking protocol. A write to ``uow.memories`` from outside ``modules/memory`` is refused
+    here unless it is listed above."""
+    found: set[tuple[str, str]] = set()
+    for path in SRC.rglob("*.py"):
+        where = path.relative_to(SRC)
+        if where.parts[0] == "adapters" or where.parts[:2] == ("modules", "memory"):
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (
+                isinstance(node, ast.Attribute)
+                and node.attr in MEMORY_STATE_WRITES
+                and isinstance(node.value, ast.Attribute)
+                and node.value.attr == "memories"
+            ):
+                found.add((where.as_posix(), node.attr))
+    assert found == MEMORY_WRITERS_OUTSIDE_MEMORY, sorted(found ^ MEMORY_WRITERS_OUTSIDE_MEMORY)
