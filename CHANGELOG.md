@@ -395,6 +395,9 @@ each entry says which one moved. Decisions behind each change are in the
   unchanged, and so is everything about a tenant's own job. The route reads the outbox
   through its repository (`OutboxRepository.get`) and no longer opens a database session of
   its own.
+- **A malformed job id is a `404`, not a `500`** (service). `GET /v1/jobs/obx_abc` and an
+  `obx_` number too long for the database (`obx_99999999999999999999`) answered `500`; they
+  answer `404 NOT_FOUND` like any other id that names no job.
 - **A deleted thread's grant ends with it** (service, MEM-06). Deleting a thread left its
   authorization tuples in place, so every scope of its owner (and of the agent that created
   it) still listed it: a read naming no thread, or the deleted thread, still reached what was

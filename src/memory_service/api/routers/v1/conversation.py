@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Annotated, Any
 
 import orjson
@@ -364,6 +365,10 @@ async def get_message(
 # --------------------------------------------------------------------------- jobs
 
 
+#: An outbox reference: ``job_outbox.outbox_id`` is a bigint, which 18 digits always fit.
+_OUTBOX_REFERENCE = re.compile(r"obx_([0-9]{1,18})")
+
+
 def _queue(name: str | None) -> Queue | None:
     """The queue a job runs on; ``None`` when the queue no longer reports one."""
     return Queue(name) if name in {q.value for q in Queue} else None
@@ -382,8 +387,11 @@ async def get_job(job_id: JobIdPath, ctx: HeaderContextDep, container: Container
     # readable by whoever names its id; its error is not: it is the service's, and may quote
     # any tenant's data.
     if job_id.startswith("obx_"):
+        reference = _OUTBOX_REFERENCE.fullmatch(job_id)
+        if reference is None:
+            raise NotFound("Job not found")
         async with container.services["uow_factory"]() as uow:
-            entry = await uow.outbox.get(ctx.tenant_id, int(job_id[4:]))
+            entry = await uow.outbox.get(ctx.tenant_id, int(reference[1]))
         if entry is None:
             raise NotFound("Job not found")
         spec = entry.spec

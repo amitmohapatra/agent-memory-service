@@ -202,6 +202,8 @@ def test_validation_errors(client) -> None:
     assert r.status_code == 422 and r.json()["code"] == "VALIDATION"
     assert client.get("/v1/jobs/obx_999999", headers=H).status_code == 404
     assert client.get("/v1/jobs/nope", headers=H).status_code == 404
+    for malformed in ("obx_abc", "obx_", "obx_-1", "obx_1.5", "obx_" + "9" * 20):
+        assert client.get(f"/v1/jobs/{malformed}", headers=H).status_code == 404, malformed
 
 
 def _failed_outbox_job(client, container, tenant: str | None) -> str:
