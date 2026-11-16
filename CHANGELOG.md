@@ -52,6 +52,12 @@ each entry says which one moved. Decisions behind each change are in the
   asserts any other tenant gets `403 SCOPE_DENIED`. **To upgrade a deployed `jwt` service
   that sets no `TENANT_CLAIM`: set `SINGLE_TENANT` to its tenant.** `dev` and `test` are
   unchanged ([configuration.md](docs/configuration.md#production-guards)).
+- **The API package imports no adapter** (service; no behaviour changed). `api/errors.py`
+  imported the database driver's error mapping from `adapters.db.errors`, which put
+  sqlalchemy and psycopg behind the API although the architecture test bans them there. The
+  mapping now reaches the API as an `ErrorTranslator` from `application.container`
+  (`error_translators()`), and a new architecture test refuses any import of
+  `memory_service.adapters` under `api/`.
 - **Internal cleanup, no behaviour, route, field or SDK call changed** (service). Job task
   names are defined once, in `modules/jobs/names.py`, and imported from there. Access keys
   are built through `visibility_keys` and `domain.context.agent_principal` (tool learning

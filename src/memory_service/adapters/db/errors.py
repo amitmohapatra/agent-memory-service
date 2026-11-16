@@ -3,8 +3,9 @@
 A route that meets PostgreSQL going away should answer the 503 a client retries, not the
 500 a client gives up on; a statement the server stopped at ``statement_timeout`` is a 504
 the same request may pass on a quieter database. The API layer may not import the driver
-(tests/unit/test_architecture.py), so the reading lives here and ``api/errors.py`` installs
-it as the handler for :data:`DATABASE_ERRORS`. Anything else the driver raises - an
+or this package (tests/unit/test_architecture.py), so the reading lives here and reaches
+``api/errors.py`` as an ``ErrorTranslator`` (``adapters.error_translators``), installed as
+the handler for :data:`DATABASE_ERRORS`. Anything else the driver raises - an
 integrity error a repository did not translate, a programming error - stays a 500: it is a
 bug, and retrying it changes nothing.
 

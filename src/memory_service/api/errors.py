@@ -16,6 +16,7 @@ handlers below and the two responses the middleware writes before a route runs (
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from typing import Any, Final
 
 from fastapi import FastAPI, Request
@@ -24,8 +25,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from memory_service.adapters.db.errors import DATABASE_ERRORS, database_error
 from memory_service.api.headers import RETRY_AFTER_HEADER, correlation_headers
+from memory_service.application.container import ErrorTranslator
 from memory_service.config.constants import MAX_BODY_BYTES
 from memory_service.domain.enums import ErrorCode
 from memory_service.domain.errors import MemoryServiceError
@@ -254,22 +255,29 @@ def _domain_problem(request: Request, exc: MemoryServiceError) -> ProblemRespons
     )
 
 
-def install_error_handlers(app: FastAPI) -> None:
+def install_error_handlers(app: FastAPI, translators: Sequence[ErrorTranslator]) -> None:
+    """``translators`` read the providers' own exceptions (the database driver's), which
+    this package may not import."""
+
     @app.exception_handler(MemoryServiceError)
     async def _domain_error(request: Request, exc: MemoryServiceError) -> ProblemResponse:
         return _domain_problem(request, exc)
 
-    async def _database_error(request: Request, exc: Exception) -> ProblemResponse:
-        # PostgreSQL away, the pool exhausted, a statement stopped at its budget: a 503 or
-        # 504 the client retries. Anything else the driver raises is a bug and stays the 500
-        # the unhandled handler below writes.
-        failure = database_error(exc)
-        if failure is None:
-            raise exc
-        return _domain_problem(request, failure)
+    def _translated(translator: ErrorTranslator) -> Any:
+        async def _provider_error(request: Request, exc: Exception) -> ProblemResponse:
+            # PostgreSQL away, the pool exhausted, a statement stopped at its budget: a 503
+            # or 504 the client retries. Anything else the driver raises is a bug and stays
+            # the 500 the unhandled handler below writes.
+            failure = translator.translate(exc)
+            if failure is None:
+                raise exc
+            return _domain_problem(request, failure)
 
-    for database_exception in DATABASE_ERRORS:
-        app.add_exception_handler(database_exception, _database_error)
+        return _provider_error
+
+    for translator in translators:
+        for provider_exception in translator.exceptions:
+            app.add_exception_handler(provider_exception, _translated(translator))
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(request: Request, exc: RequestValidationError) -> ProblemResponse:

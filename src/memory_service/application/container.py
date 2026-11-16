@@ -30,6 +30,7 @@ from memory_service.config.constants import (
 )
 from memory_service.config.registry import Registries, get_registries
 from memory_service.config.settings import Settings
+from memory_service.domain.errors import MemoryServiceError
 from memory_service.domain.fiscal import parse_calendar
 from memory_service.observability.logging import get_logger
 from memory_service.ports.tasks import Queue, worker_pools
@@ -344,6 +345,23 @@ def process_shape(settings: Settings, role: Literal["api", "worker"]) -> Process
         "queue_workers": len(pools),
         "jobs": sum(slots for _, slots in pools),
     }
+
+
+@dataclass(frozen=True)
+class ErrorTranslator:
+    """What a provider's exceptions mean to a client: ``translate`` reads one of
+    ``exceptions`` as the domain error it stands for, or ``None`` when it is a bug."""
+
+    exceptions: tuple[type[Exception], ...]
+    translate: Callable[[BaseException], MemoryServiceError | None]
+
+
+def error_translators() -> tuple[ErrorTranslator, ...]:
+    """The adapters' translators, for the API to install: it may not import a provider, and
+    its handlers are registered before a container exists."""
+    from memory_service.adapters import error_translators as adapters_translators
+
+    return adapters_translators()
 
 
 async def build_container(

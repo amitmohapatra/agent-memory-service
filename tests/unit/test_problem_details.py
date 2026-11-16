@@ -104,9 +104,10 @@ def _failing_app(error: Exception) -> TestClient:
     from fastapi import FastAPI
 
     from memory_service.api.errors import install_error_handlers
+    from memory_service.application.container import error_translators
 
     app = FastAPI()
-    install_error_handlers(app)
+    install_error_handlers(app, error_translators())
 
     @app.get("/boom")
     async def boom() -> None:

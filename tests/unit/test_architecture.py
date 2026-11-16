@@ -123,6 +123,19 @@ def test_domain_does_not_import_application_adapters_or_frameworks() -> None:
     assert not offenders, "\n".join(offenders)
 
 
+def test_api_does_not_import_adapters() -> None:
+    """``api`` reaches a provider through ``application`` and the ports alone. The ban on
+    provider SDKs above reads direct imports, so ``api/errors.py`` importing
+    ``adapters.db.errors`` put sqlalchemy and psycopg behind the API without tripping it."""
+    offenders = [
+        f"{path.relative_to(SRC)}: {name}"
+        for path in (SRC / "api").rglob("*.py")
+        for name in sorted(_dotted_imports(path))
+        if name == "memory_service.adapters" or name.startswith("memory_service.adapters.")
+    ]
+    assert not offenders, "\n".join(offenders)
+
+
 def test_ports_are_protocols_not_implementations() -> None:
     for path in (SRC / "ports").rglob("*.py"):
         if path.name == "__init__.py":
