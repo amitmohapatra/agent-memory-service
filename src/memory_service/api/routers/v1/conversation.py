@@ -90,7 +90,7 @@ def _message_response(m: Message) -> MessageResponse:
 
 
 def _service(container) -> ConversationService:  # type: ignore[no-untyped-def]
-    return container.services["conversation"]
+    return container.services.conversation
 
 
 async def _hydrate(archive, message: Message) -> Message:  # type: ignore[no-untyped-def]
@@ -153,7 +153,7 @@ async def patch_thread(
 async def get_thread(
     thread_id: ThreadIdPath, ctx: ThreadContextDep, container: ContainerDep
 ) -> ThreadResponse:
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         thread = await _service(container).get_thread(uow, ctx, thread_id)
         summary = await uow.summaries.latest(ctx.tenant_id, thread_id)
     return _thread_response(thread, summary)
@@ -212,7 +212,7 @@ async def list_messages(
     if position is not None:
         before_sequence = position["before_sequence"] or None
     archive = container.services.get("archive_service")
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         rows = await _service(container).list_messages(
             uow,
             ctx,
@@ -358,7 +358,7 @@ def _first_message_job(body: dict[str, Any]) -> str | None:
 async def get_message(
     message_id: MessageIdPath, ctx: HeaderContextDep, container: ContainerDep
 ) -> MessageResponse:
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         message = await _service(container).get_message(uow, ctx, message_id)
     return _message_response(await _hydrate(container.services.get("archive_service"), message))
 
@@ -382,7 +382,7 @@ async def _outbox_job(
     reference = _OUTBOX_REFERENCE.fullmatch(job_id)
     if reference is None:
         raise NotFound("Job not found")
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         entry = await uow.outbox.get(ctx.tenant_id, int(reference[1]))
     if entry is None:
         raise NotFound("Job not found")
@@ -435,7 +435,7 @@ async def get_job(job_id: JobIdPath, ctx: HeaderContextDep, container: Container
     # dispatched is not found. The null-tenant case is allowed through exactly as the
     # ``obx_`` branch above allows it: those rows are the service's own periodic work and
     # belong to no tenant.
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         dispatched, owner = await uow.outbox.dispatcher_of(job_id)
     if not dispatched or (owner and owner != ctx.tenant_id):
         raise NotFound("Job not found")
