@@ -38,6 +38,7 @@ from memory_service.api.schemas.conversation import (
     ThreadSummaryBody,
     ToolCallBody,
 )
+from memory_service.application.container import Container
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.conversation import Attachment, Message, MessageToolCall, Thread
 from memory_service.domain.enums import ArchiveStatus, JobStatus
@@ -374,6 +375,42 @@ def _queue(name: str | None) -> Queue | None:
     return Queue(name) if name in {q.value for q in Queue} else None
 
 
+async def _outbox_job(
+    job_id: str, ctx: MemoryExecutionContext, container: Container
+) -> JobResponse:
+    """The job an outbox reference (``obx_<n>``) names, as its tenant may see it."""
+    reference = _OUTBOX_REFERENCE.fullmatch(job_id)
+    if reference is None:
+        raise NotFound("Job not found")
+    async with container.services["uow_factory"]() as uow:
+        entry = await uow.outbox.get(ctx.tenant_id, int(reference[1]))
+    if entry is None:
+        raise NotFound("Job not found")
+    spec = entry.spec
+    info = (
+        await container.tasks.get(entry.job_id)
+        if entry.job_id is not None and container.tasks is not None
+        else None
+    )
+    if info is None:
+        return JobResponse(
+            job_id=job_id,
+            task_name=spec.task_name,
+            queue=_queue(spec.queue),
+            status=JobStatus.PENDING,
+            attempts=entry.attempts,
+            last_error=entry.last_error if spec.tenant_id and entry.job_id is None else None,
+        )
+    return JobResponse(
+        job_id=job_id,
+        task_name=spec.task_name,
+        queue=_queue(spec.queue),
+        status=info.status,
+        attempts=info.attempts,
+        last_error=info.last_error if spec.tenant_id else None,
+    )
+
+
 @router.get(
     "/jobs/{job_id}",
     response_model=JobResponse,
@@ -387,36 +424,7 @@ async def get_job(job_id: JobIdPath, ctx: HeaderContextDep, container: Container
     # readable by whoever names its id; its error is not: it is the service's, and may quote
     # any tenant's data.
     if job_id.startswith("obx_"):
-        reference = _OUTBOX_REFERENCE.fullmatch(job_id)
-        if reference is None:
-            raise NotFound("Job not found")
-        async with container.services["uow_factory"]() as uow:
-            entry = await uow.outbox.get(ctx.tenant_id, int(reference[1]))
-        if entry is None:
-            raise NotFound("Job not found")
-        spec = entry.spec
-        info = (
-            await container.tasks.get(entry.job_id)
-            if entry.job_id is not None and container.tasks is not None
-            else None
-        )
-        if info is None:
-            return JobResponse(
-                job_id=job_id,
-                task_name=spec.task_name,
-                queue=_queue(spec.queue),
-                status=JobStatus.PENDING,
-                attempts=entry.attempts,
-                last_error=entry.last_error if spec.tenant_id and entry.job_id is None else None,
-            )
-        return JobResponse(
-            job_id=job_id,
-            task_name=spec.task_name,
-            queue=_queue(spec.queue),
-            status=info.status,
-            attempts=info.attempts,
-            last_error=info.last_error if spec.tenant_id else None,
-        )
+        return await _outbox_job(job_id, ctx, container)
     # A task-queue id carries no tenant of its own. Procrastinate ids are sequential
     # integers and the TaskQueue port never modelled a tenant, so this branch used to hand
     # back any tenant's task_name, queue, status, attempts and schedule to whoever named an
