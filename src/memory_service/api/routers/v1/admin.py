@@ -30,7 +30,7 @@ _READ_ERRORS = error_responses(401, 403, 404, 422, 503)
 
 
 def _service(container):  # type: ignore[no-untyped-def]
-    return container.services["tenancy"]
+    return container.services.tenancy
 
 
 def _without_token(body: dict[str, Any]) -> dict[str, Any]:
@@ -70,9 +70,9 @@ async def create_tenant(
         )
 
         async def after_commit() -> None:
-            await container.services["api_keys"].forget_missing(admin.key.key_id)
+            await container.services.api_keys.forget_missing(admin.key.key_id)
             try:
-                await container.services["tenant_registry"].observe(tenant)
+                await container.services.tenant_registry.observe(tenant)
             except Exception as exc:  # the refresh loop repairs this within a minute
                 log.warning(
                     "tenant_registry.observe_failed", tenant_id=tenant.tenant_id, error=str(exc)
@@ -108,7 +108,7 @@ async def list_tenants(
 ) -> list[TenantResponse]:
     position = decode_cursor(cursor, fields=("tenant_id",))
     start = position["tenant_id"] if position else ""
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         tenants = await _service(container).list_tenants(uow, after=start, limit=limit + 1)
     items, next_cursor = page(tenants, limit=limit, position=lambda t: {"tenant_id": t.tenant_id})
     link_next(request, response, next_cursor)
@@ -124,7 +124,7 @@ async def list_tenants(
 async def get_tenant(
     tenant_id: TenantIdPath, container: ContainerDep, _: PlatformDep
 ) -> TenantResponse:
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         return TenantResponse.of(await _service(container).get_tenant(uow, tenant_id))
 
 
@@ -145,7 +145,7 @@ async def update_tenant(
     container: ContainerDep,
     _: PlatformDep,
 ) -> Response:
-    verifier = container.services["api_keys"]
+    verifier = container.services.api_keys
 
     async def handler(uow):  # type: ignore[no-untyped-def]
         tenant, _changed = await _service(container).update_tenant(
@@ -169,7 +169,7 @@ async def update_tenant(
             if body.status is not None:
                 await verifier.invalidate_tenant(tenant_id)
             try:
-                await container.services["tenant_registry"].observe(tenant)
+                await container.services.tenant_registry.observe(tenant)
             except Exception as exc:  # the refresh loop repairs this within a minute
                 log.warning("tenant_registry.observe_failed", tenant_id=tenant_id, error=str(exc))
 
