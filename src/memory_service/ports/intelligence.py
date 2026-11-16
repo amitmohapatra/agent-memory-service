@@ -189,9 +189,10 @@ class Relation(BaseModel):
     """A bitemporal fact: subject -predicate-> object, true over [valid_from, valid_to)
     (valid time) and known from ``observed_at`` until ``invalidated_at`` (knowledge time).
 
-    A relation is never deleted: a replaced or withdrawn fact keeps its row, gets a status
-    (SUPERSEDED when it stopped being true, INVALIDATED when it was never right) and an
-    ``invalidated_by`` edge that names the winning fact and the reason.
+    A relation is never deleted: a replaced or withdrawn fact keeps its row and gets a status
+    (SUPERSEDED when it stopped being true, INVALIDATED when it was never right). The stores
+    close relations as SUPERSEDED (``supersede_for_memory``); nothing writes INVALIDATED or
+    an ``invalidated_by`` edge today, and the read filters honour both.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -357,26 +358,8 @@ class GraphStore(Protocol):
         """
         ...
 
-    async def supersede(self, relation_id: str, *, by: str, at: datetime) -> None: ...
-
     async def supersede_for_memory(self, tenant_id: str, memory_id: str, *, at: datetime) -> int:
         """Retire every CURRENT relation derived from a memory that is no longer current."""
-        ...
-
-    async def invalidate(
-        self,
-        relation_id: str,
-        *,
-        reason: str,
-        at: datetime,
-        by: str | None = None,
-        status: str = "INVALIDATED",
-        attributes: dict[str, Any] | None = None,
-    ) -> Relation | None:
-        """Close a relation without deleting it and record why: the row keeps its history,
-        gets ``status`` and ``invalidated_at``, and — when ``by`` names the winning fact —
-        an ``invalidated_by`` edge (relation -> relation) carries ``reason``, the winner,
-        the loser and ``attributes`` (which fact won and why). Returns the edge."""
         ...
 
     async def delete_for_document(self, tenant_id: str, document_id: str) -> int: ...

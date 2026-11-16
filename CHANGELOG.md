@@ -52,6 +52,13 @@ each entry says which one moved. Decisions behind each change are in the
   asserts any other tenant gets `403 SCOPE_DENIED`. **To upgrade a deployed `jwt` service
   that sets no `TENANT_CLAIM`: set `SINGLE_TENANT` to its tenant.** `dev` and `test` are
   unchanged ([configuration.md](docs/configuration.md#production-guards)).
+- **`GraphStore.supersede` and `GraphStore.invalidate` are removed** (service; no behaviour
+  changed). No module called either; the architecture test that requires every port method to
+  have a caller matched bare method names, so `MemoryService.supersede` and
+  `verifier.invalidate` kept them alive. The test now counts a call only on a name the port is
+  held under, and lists the eight other methods that check exposed (`UNCALLED_PORT_METHODS`).
+  The graph's `INVALIDATED` status and `invalidated_by` predicate stay honoured by the read
+  filters; nothing writes them (guide chapters 3 and 5 say "not built").
 - **The API package imports no adapter** (service; no behaviour changed). `api/errors.py`
   imported the database driver's error mapping from `adapters.db.errors`, which put
   sqlalchemy and psycopg behind the API although the architecture test bans them there. The

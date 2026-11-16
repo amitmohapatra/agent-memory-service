@@ -150,34 +150,103 @@ UNCALLED_PORT_METHODS = frozenset(
     {
         # the knowledge-graph gate ADR 0016 requires (``kg_gate.json``: fact recall, false
         # facts, noise) reads every relation of a document through it (tests/eval/test_kg_gate.py)
-        "relations_for_document",
+        "GraphStore.relations_for_document",
+        # the benchmarks count a collection's points through it (benchmark/corpus.py)
+        "SearchStore.count",
+        # Found when the test began to read the receiver; each passed on another object's
+        # method of the same name. An adapter's own step declared on the port:
+        "TaskQueue.run_worker",  # ``run_pools`` calls it
+        "UnitOfWork.rollback",  # ``__aexit__`` calls it
+        "AuthorizationProvider.check",  # the in-memory ``batch_check`` calls it
+        # and three with no caller at all:
+        "AgentRunRepository.complete",
+        "BlobStore.list",
+        "MemoryRepository.set_status",
     }
 )
+
+
+#: The names a port is held under where the service calls it. A repository is held under its
+#: ``UnitOfWork`` attribute (read from the protocol); the names here are the other ports',
+#: and the two repositories a collaborator is handed directly.
+PORT_RECEIVERS: dict[str, frozenset[str]] = {
+    "AuthorizationProvider": frozenset({"provider"}),
+    "BlobStore": frozenset({"blob", "store"}),
+    "CacheProvider": frozenset({"cache"}),
+    "ContextReader": frozenset({"reader", "builder"}),
+    "ContextualExtractor": frozenset({"extractor"}),
+    "CredentialCipher": frozenset({"cipher"}),
+    "CredentialResolver": frozenset({"credentials", "resolver"}),
+    "DocumentParser": frozenset({"parser"}),
+    "EmbeddingProvider": frozenset({"embedding", "encoder", "spaces"}),
+    "GraphEnrichmentProvider": frozenset({"provider", "graph"}),
+    "GraphStore": frozenset({"store", "graph"}),
+    "IdempotencyRepository": frozenset({"repo"}),
+    "LLMProvider": frozenset({"provider"}),
+    "LLMUsageRecorder": frozenset({"usage"}),
+    "LateInteractionEncoder": frozenset({"late", "late_encoder", "encoder"}),
+    "MemoryIntelligenceProvider": frozenset({"provider"}),
+    "NLIProvider": frozenset({"nli"}),
+    "OutboxRepository": frozenset({"repo"}),
+    "SearchStore": frozenset({"store", "search"}),
+    "SparseEncoder": frozenset({"sparse"}),
+    "TaskQueue": frozenset({"tasks", "queue", "task_queue"}),
+    "UnitOfWork": frozenset({"uow"}),
+}
+
+
+def _receiver(node: ast.Attribute) -> str | None:
+    """The name ``node``'s attribute is read from: ``store`` in ``self.store.upsert`` and in
+    ``store.upsert``, ``reader`` in ``self.reader().build``."""
+    value = node.value.func if isinstance(node.value, ast.Call) else node.value
+    if isinstance(value, ast.Attribute):
+        return value.attr
+    return value.id if isinstance(value, ast.Name) else None
 
 
 def test_every_port_method_has_a_caller() -> None:
     """A port method nothing in the service calls is dead code its adapters keep alive, with
     whatever serves it: ``WorkspaceRepository.memberships_of`` kept an index of its own on
-    ``workspace_members`` (a write on every membership change) for no reader."""
-    declared: dict[str, str] = {}
+    ``workspace_members`` (a write on every membership change) for no reader.
+
+    A call counts for a port only when it is made on a name that port is held under. Any
+    attribute of the same name used to count, so ``GraphStore.supersede`` and ``invalidate``
+    lived on ``MemoryService.supersede`` and ``verifier.invalidate``, and
+    ``MemoryRepository.set_status`` on ``uow.documents.set_status``."""
+    held_as = {port: set(names) for port, names in PORT_RECEIVERS.items()}
+    uow = ast.parse((SRC / "ports" / "uow.py").read_text(encoding="utf-8"))
+    for node in ast.walk(uow):
+        if isinstance(node, ast.ClassDef) and node.name == "UnitOfWork":
+            for item in node.body:
+                if isinstance(item, ast.AnnAssign) and isinstance(item.annotation, ast.Name):
+                    assert isinstance(item.target, ast.Name)
+                    held_as.setdefault(item.annotation.id, set()).add(item.target.id)
+    declared: dict[tuple[str, str], str] = {}
     for path in (SRC / "ports").rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if isinstance(node, ast.ClassDef):
+            if isinstance(node, ast.ClassDef) and any(
+                isinstance(base, ast.Name) and base.id == "Protocol" for base in node.bases
+            ):
                 for item in node.body:
                     named = isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef)
                     if named and not item.name.startswith("_"):
-                        declared.setdefault(item.name, f"{path.name}:{node.name}")
-    called: set[str] = set()
+                        declared[(node.name, item.name)] = path.name
+    called: set[tuple[str | None, str]] = set()
     for path in SRC.rglob("*.py"):
         if "ports" in path.relative_to(SRC).parts:
             continue
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.Attribute):
-                called.add(node.attr)
-    uncalled = {name: where for name, where in declared.items() if name not in called}
-    assert set(uncalled) <= UNCALLED_PORT_METHODS, {
-        name: where for name, where in uncalled.items() if name not in UNCALLED_PORT_METHODS
+                called.add((_receiver(node), node.attr))
+    unheld = {port for port, _ in declared} - set(held_as)
+    assert not unheld, f"say in PORT_RECEIVERS what these ports are held as: {sorted(unheld)}"
+    uncalled = {
+        f"{port}.{method}": where
+        for (port, method), where in declared.items()
+        if f"{port}.{method}" not in UNCALLED_PORT_METHODS
+        and not any((name, method) in called for name in held_as[port])
     }
+    assert not uncalled, "\n".join(sorted(uncalled))
 
 
 def test_sdk_does_not_depend_on_service_internals() -> None:

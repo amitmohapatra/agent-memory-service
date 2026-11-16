@@ -278,10 +278,10 @@ The resolved dates are what the read side uses; chapter 4 has the details.
 
 The knowledge graph keeps its own temporal status per relation — `CURRENT`, `SUPERSEDED`,
 `RETRACTED`, `INVALIDATED` — with `as_of` (valid time) and `valid_at` (knowledge time) on the
-entity routes. **Built, not wired:** marking a relation `INVALIDATED` ("it was never right")
-with an `invalidated_by` edge is implemented in both graph stores (`GraphStore.invalidate`,
-`modules/graph/invalidation.py`) but no module calls it today; relations are closed only as
-`SUPERSEDED`, when their memory stops being current (chapter 5).
+entity routes. **Not built:** marking a relation `INVALIDATED` ("it was never right") with an
+`invalidated_by` edge. The read filters honour both (`modules/graph/invalidation.py`) and
+nothing writes them; relations are closed only as `SUPERSEDED`, when their memory stops
+being current (chapter 5).
 
 ---
 

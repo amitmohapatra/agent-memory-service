@@ -61,7 +61,6 @@ from memory_service.adapters.db.orm import GraphEntityRow, GraphRelationRow
 from memory_service.config.constants import DATABASE, GRAPH
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.graph import INVALIDATED_BY, GraphLayer, document_entity_name
-from memory_service.modules.graph.invalidation import invalidation_edge
 from memory_service.observability.metrics import stage_seconds
 from memory_service.observability.tracing import span
 from memory_service.ports.intelligence import (
@@ -575,20 +574,6 @@ class PostgresGraphStore:
                 )
                 await s.execute(stmt)
 
-    async def supersede(self, relation_id: str, *, by: str, at: datetime) -> None:
-        async with self.session() as s, s.begin():
-            await s.execute(
-                update(GraphRelationRow)
-                .where(GraphRelationRow.relation_id == relation_id)
-                .values(
-                    status="SUPERSEDED",
-                    superseded_by=by,
-                    valid_to=at,
-                    invalidated_at=at,
-                    updated_at=at,
-                )
-            )
-
     async def supersede_for_memory(self, tenant_id: str, memory_id: str, *, at: datetime) -> int:
         async with self.session() as s, s.begin():
             res = await s.execute(
@@ -602,39 +587,6 @@ class PostgresGraphStore:
                 .returning(GraphRelationRow.relation_id)
             )
             return len(res.scalars().all())
-
-    async def invalidate(
-        self,
-        relation_id: str,
-        *,
-        reason: str,
-        at: datetime,
-        by: str | None = None,
-        status: str = "INVALIDATED",
-        attributes: dict[str, Any] | None = None,
-    ) -> Relation | None:
-        async with self.session() as s, s.begin():
-            row = await s.get(GraphRelationRow, relation_id)
-            if row is None:
-                return None
-            row.status = status
-            row.invalidated_at = row.invalidated_at or at
-            row.attributes = {
-                **dict(row.attributes or {}),
-                "invalidation": {"reason": reason, "at": at.isoformat(), "by": by},
-            }
-            if status == "SUPERSEDED":
-                row.valid_to = row.valid_to or at
-                row.superseded_by = by or row.superseded_by
-            row.updated_at = at
-            winner = await s.get(GraphRelationRow, by) if by else None
-            if winner is None:
-                return None
-            edge = invalidation_edge(
-                _relation(row), _relation(winner), reason=reason, at=at, attributes=attributes
-            )
-        await self.upsert_relations([edge])
-        return edge
 
     async def delete_for_document(self, tenant_id: str, document_id: str) -> int:
         async with self.session() as s, s.begin():
