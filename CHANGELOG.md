@@ -41,6 +41,17 @@ each entry says which one moved. Decisions behind each change are in the
   asking call.
 
 ### Changed
+- **A deployed `jwt` service must say how the tenant is bound** (service). In `jwt` mode the
+  token names the calling service and the tenant arrives in `X-Trellis-Tenant`; with
+  `MEMORY__AUTHENTICATION__TENANT_CLAIM` unset nothing compared the two, so one token reached
+  every tenant by changing the header, and `staging` and `prod` started that way without a
+  word. They now refuse to start in `jwt` mode unless `TENANT_CLAIM` is set (a shared
+  deployment; unchanged for every deployment that sets it) or the new
+  `MEMORY__AUTHENTICATION__SINGLE_TENANT` names the one tenant the deployment serves (one
+  deployment per customer). With `SINGLE_TENANT` set, a `jwt` or development credential that
+  asserts any other tenant gets `403 SCOPE_DENIED`. **To upgrade a deployed `jwt` service
+  that sets no `TENANT_CLAIM`: set `SINGLE_TENANT` to its tenant.** `dev` and `test` are
+  unchanged ([configuration.md](docs/configuration.md#production-guards)).
 - **Internal cleanup, no behaviour, route, field or SDK call changed** (service). Job task
   names are defined once, in `modules/jobs/names.py`, and imported from there. Access keys
   are built through `visibility_keys` and `domain.context.agent_principal` (tool learning

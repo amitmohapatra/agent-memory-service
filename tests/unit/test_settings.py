@@ -133,7 +133,10 @@ def test_the_environment_surface_is_topology_and_credentials_only() -> None:
     # (``models.llm.model``, ``models.llm.profile.*``: facts about the operator's endpoint,
     # named differently on each one, which no constant can know), and the operator's choice
     # whether an agent's registered endpoint is called (``accept_agent_endpoints``).
-    assert len(leaves) <= 50, f"{len(leaves)} env fields: {leaves}"
+    # 50 -> 51 for ``authentication.single_tenant``: the one tenant a ``jwt`` deployment
+    # without ``tenant_claim`` serves. A fact about who the deployment is for, and what a
+    # deployed environment requires in place of the claim.
+    assert len(leaves) <= 51, f"{len(leaves)} env fields: {leaves}"
     for forbidden in (
         "prefetch_k",
         "final_k",
@@ -169,7 +172,7 @@ def test_the_blob_store_follows_from_where_the_service_runs(
     monkeypatch.setenv("MEMORY__BLOB__PROVIDER", "gcs")
     assert Settings(_env_file=None).blob_provider == "filesystem"
     monkeypatch.setenv("MEMORY__BLOB__PROVIDER", "filesystem")
-    jwt = {"jwt_jwks_url": "https://issuer/jwks"}
+    jwt = {"jwt_jwks_url": "https://issuer/jwks", "tenant_claim": "tenant"}
     for environment in ("staging", "prod"):
         deployed = Settings(
             _env_file=None, service={"environment": environment}, authentication=jwt

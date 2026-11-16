@@ -192,8 +192,10 @@ def _require_tenant_matches_credential(
     One credential reaches every tenant on the deployment by changing one header.
 
     That is sound where the tenant is a constant a gateway stamps, which is one deployment
-    per customer. On a SHARED deployment it makes the credential the entire boundary, so
-    ``authentication.tenant_claim`` names the claim that must agree with the header.
+    per customer: ``authentication.single_tenant`` names that tenant, and no other is
+    served. On a SHARED deployment it makes the credential the entire boundary, so
+    ``authentication.tenant_claim`` names the claim that must agree with the header. A
+    deployed ``jwt`` environment starts with one of the two set (``_production_guards``).
 
     Fails closed: with the setting on, a credential that carries no such claim is refused
     rather than trusted, so switching a deployment to trusted_dev keys cannot quietly turn
@@ -211,7 +213,12 @@ def _require_tenant_matches_credential(
                 "credential is not valid for this tenant", details={"field": HEADERS.tenant}
             )
         return
-    claim = container.settings.authentication.tenant_claim
+    authentication = container.settings.authentication
+    if authentication.single_tenant and tenant_id != authentication.single_tenant:
+        raise ScopeDenied(
+            "this deployment does not serve this tenant", details={"field": HEADERS.tenant}
+        )
+    claim = authentication.tenant_claim
     if not claim:
         return
     principal: ServicePrincipal | None = getattr(request.state, "service_principal", None)
