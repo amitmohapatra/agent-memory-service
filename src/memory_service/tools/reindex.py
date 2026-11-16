@@ -75,7 +75,7 @@ class ReindexReport:
 async def rebuild_search_index(
     container: Container, *, tenant_id: str | None = None, drop: bool = False
 ) -> ReindexReport:
-    indexer = container.services["indexer"]
+    indexer = container.services.indexer
     report = ReindexReport()
     if drop:
         report.dropped = await _drop(container, indexer, tenant_id)
@@ -222,7 +222,7 @@ async def prune_retired_collections(container: Container, *, dry_run: bool = Tru
     Defaults to reporting. Dropping vectors is not something a tool should do because it
     was run.
     """
-    indexer = container.services["indexer"]
+    indexer = container.services.indexer
     # every collection this build reads: tool search's too, which was once missing here and
     # so was "retired" and dropped while live
     live = {indexer.collection(base) for base in (KNOWLEDGE, MEMORIES, BELIEFS, TOOLS)}

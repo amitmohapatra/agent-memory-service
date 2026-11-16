@@ -69,8 +69,8 @@ async def restate_turns(
             except Exception as exc:
                 report.failures.append(f"memory {tenant_id}/{memory_id}: {exc}")
         if changed:
-            await container.services["indexer"].index_memories(tenant_id, changed)
-            await container.services["graph"].enrich_memories(tenant_id, changed)
+            await container.services.indexer.index_memories(tenant_id, changed)
+            await container.services.graph.enrich_memories(tenant_id, changed)
     log.info("restate.done", tenant_id=tenant_id, **report.as_dict())
     return report
 
@@ -98,7 +98,7 @@ async def _turns(
 
 async def _restate_one(container: Container, tenant_id: str, memory_id: str) -> bool:
     """Whether the model restated the turn (it is then stored, unindexed)."""
-    assist = container.services["llm_assist"]
+    assist = container.services.llm_assist
     async with container.database.session_factory() as session:
         row = await session.get(MemoryRow, memory_id)
         if row is None or row.tenant_id != tenant_id:

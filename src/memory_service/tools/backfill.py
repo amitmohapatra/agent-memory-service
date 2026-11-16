@@ -197,7 +197,7 @@ async def _statements(
 ) -> list[CanonicalMemory]:
     """The user's current statements said after ``after`` (an ISO instant), oldest first."""
     out: list[CanonicalMemory] = []
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         rows = await uow.memories.statements_of(
             tenant,
             principal,
@@ -325,7 +325,7 @@ async def _index_again(
     """``ids`` indexed again and their graph enrichment run again, as the write path's index
     job does: a memory no longer current takes its graph facts with it ("mentions" of an old
     value would come back as current)."""
-    indexer = container.services["indexer"]
+    indexer = container.services.indexer
     graph = container.services.get("graph")
     for start in range(0, len(ids), 200):
         chunk = list(ids[start : start + 200])
@@ -370,7 +370,7 @@ async def backfill_user(
     from memory_service.modules.memory.pipeline import bump_memory_revisions
     from memory_service.modules.memory.statements import StatementLabeller
 
-    pipeline = container.services["observation_pipeline"]
+    pipeline = container.services.observation_pipeline
     replacement = pipeline.replacement
     replacing = bool(replacement is not None and replacement.enabled)
     # the kinds only with the head that decides them, as on the write path
@@ -383,7 +383,7 @@ async def backfill_user(
     statements = await _statements(container, tenant, principal, after)
     touched: set[str] = {m.memory_id for m in statements}
     for n, said in enumerate(messages(statements), start=1):
-        async with container.services["uow_factory"]() as uow:
+        async with container.services.uow_factory() as uow:
             await uow.serialize(f"memory-user:{tenant}:{principal}")
             current = [
                 m
