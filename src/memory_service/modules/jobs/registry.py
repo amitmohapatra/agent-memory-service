@@ -13,12 +13,16 @@ from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.conversation.summary import TASK_EPISODE_INDEX, TASK_SUMMARY_REFRESH
 from memory_service.modules.feedback.service import TASK_FEEDBACK_PROJECT
 from memory_service.modules.jobs.names import (
+    TASK_ARCHIVE_STAGE,
     TASK_BELIEF_INDEX,
     TASK_CONSOLIDATE,
     TASK_DOCUMENT_MOVE,
     TASK_GRAPH_ENRICH_DOCUMENT,
     TASK_GRAPH_ENRICH_MEMORIES,
+    TASK_MEMORY_EXPIRE,
+    TASK_MEMORY_FORGET,
     TASK_MEMORY_INDEX,
+    TASK_PROCESS_OBSERVATION,
 )
 from memory_service.modules.llm.cost import llm_accounting
 from memory_service.modules.memory.connections import TASK_MEMORY_CONNECT
@@ -42,14 +46,10 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
-TASK_PROCESS_OBSERVATION = "memory.process_observation"
-TASK_ARCHIVE_STAGE = "archive.stage_message"
 TASK_OUTBOX_SWEEP = "system.outbox_sweep"
 TASK_IDEMPOTENCY_PURGE = "system.idempotency_purge"
 TASK_RECONCILE = "system.reconcile"
 TASK_ARCHIVE_PURGE = "archive.purge_payloads"
-TASK_MEMORY_EXPIRE = "memory.expire"
-TASK_MEMORY_FORGET = "memory.forget"
 TASK_MEMORY_REFLECT = "memory.reflect"
 
 

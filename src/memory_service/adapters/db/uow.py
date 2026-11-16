@@ -42,6 +42,7 @@ from memory_service.adapters.db.tool_repository import (
     SqlToolPermissionRepository,
     SqlToolRepository,
 )
+from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.memory.consolidation import sources_forgotten, sources_replaced
 from memory_service.modules.memory.revisions import touched_revisions
 from memory_service.observability.logging import get_logger
@@ -192,7 +193,7 @@ class SqlUnitOfWork:
             if ids:
                 await self.enqueue(
                     JobSpec(
-                        task_name="memory.index",
+                        task_name=TASK_MEMORY_INDEX,
                         queue=Queue.EMBEDDING,
                         payload={"tenant_id": tenant_id, "memory_ids": sorted(ids)},
                         tenant_id=tenant_id,

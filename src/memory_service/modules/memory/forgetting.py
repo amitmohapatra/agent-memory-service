@@ -29,8 +29,6 @@ from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 
 log = get_logger(__name__)
 
-TASK_MEMORY_FORGET = "memory.forget"
-
 
 def forgetting_score(memory: CanonicalMemory, *, now: datetime, half_life_days: float) -> float:
     touched = max(
