@@ -28,7 +28,6 @@ from memory_service.config.constants import (
     NLISettings,
     RetrievalSettings,
 )
-from memory_service.config.registry import Registries, get_registries
 from memory_service.config.settings import Settings
 from memory_service.domain.errors import MemoryServiceError
 from memory_service.domain.fiscal import parse_calendar
@@ -187,7 +186,6 @@ class Container:
     version: str
     overrides: Overrides = field(default_factory=Overrides)
     tuning: Tuning = field(default_factory=lambda: Tuning.resolve(Overrides()))
-    registries: Registries = field(default_factory=get_registries)
     #: processes of this kind in one pod (the API's uvicorn workers, or 1 for the job
     #: worker): what the pod's connection budget is divided by
     processes: int = 1

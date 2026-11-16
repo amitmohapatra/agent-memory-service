@@ -276,18 +276,15 @@ def _wire_archive(container: Container) -> None:
 
 
 def _wire_ingestion(container: Container) -> None:
-    from memory_service.adapters.parsers import register_parsers
+    from memory_service.adapters.parsers import build_parser
     from memory_service.adapters.parsers.builtin import BuiltinParser
     from memory_service.modules.ingestion.service import IngestionService
 
     cfg = container.tuning.documents
-    # The registry is the extension point: a new parser is one entry in adapters/parsers,
-    # not a branch here. This used to be a switch statement, which is precisely what
-    # config/registry.py says a provider must never require.
-    register_parsers(container.registries.document_parser)
+    # A new parser is one entry in adapters/parsers.PARSERS, not a branch here.
     builtin = BuiltinParser()
     wanted = "builtin" if container.overrides.document_parser == "builtin" else cfg.parser
-    parser = container.registries.document_parser.create(wanted)
+    parser = build_parser(wanted)
     if parser is None:
         # The chosen parser cannot run here (an image built without the docling extra).
         # Falling back to the builtin is the designed behaviour, not an accident, and

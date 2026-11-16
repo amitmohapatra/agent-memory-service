@@ -493,19 +493,20 @@ def test_the_parser_enum_and_the_parser_registry_agree() -> None:
     )
 
 
-def test_wiring_selects_providers_through_the_registry_not_a_switch() -> None:
-    """``config/registry.py`` calls itself the Open/Closed extension point: "adding a provider
-    means registering a factory, never editing a switch statement". It was dead code —
-    nothing registered, nothing created — while wiring grew the switch it forbids.
+def test_wiring_builds_the_parser_by_name_not_through_a_switch() -> None:
+    """``adapters/parsers.PARSERS`` is the registry: a new parser is one entry there, never a
+    branch in wiring. (A generic ``ProviderRegistry`` in ``config/`` used to stand between
+    the two: wiring copied ``PARSERS`` into it and read the same entry back.)"""
+    from memory_service.adapters.parsers import build_parser
+    from memory_service.domain.errors import ProviderNotConfigured
 
-    This pins the parser port, the first one converted. Extending the assertion to another
-    port is the intended way to make this true of the rest.
-    """
     source = (SRC / "adapters" / "wiring.py").read_text()
-    assert "registries.document_parser.create(" in source, (
-        "the document parser must be built through the registry"
-    )
+    assert "build_parser(" in source, "the document parser must be built by name from PARSERS"
     assert 'cfg.parser == "docling"' not in source, "the parser switch statement is back"
+    assert not (SRC / "config" / "registry.py").exists()
+    assert type(build_parser("builtin")).__name__ == "BuiltinParser"
+    with pytest.raises(ProviderNotConfigured, match="'nope' is not registered; known: "):
+        build_parser("nope")
 
 
 def test_the_memory_type_docs_match_what_the_pipeline_actually_produces() -> None:

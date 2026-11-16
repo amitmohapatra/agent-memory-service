@@ -52,6 +52,12 @@ each entry says which one moved. Decisions behind each change are in the
   asserts any other tenant gets `403 SCOPE_DENIED`. **To upgrade a deployed `jwt` service
   that sets no `TENANT_CLAIM`: set `SINGLE_TENANT` to its tenant.** `dev` and `test` are
   unchanged ([configuration.md](docs/configuration.md#production-guards)).
+- **`config/registry.py` is gone** (service; no behaviour changed). The generic
+  `ProviderRegistry` held one port: wiring copied the document parsers' table
+  (`adapters/parsers.PARSERS`) into it and read the same entry back, through a process-wide
+  singleton on the container. Wiring now calls `adapters.parsers.build_parser(name)`, which
+  raises `ProviderNotConfigured` for a name the table does not have. `Container.registries`,
+  `config.Registries` and `config.get_registries` are removed; ADR 0001 notes it.
 - **The shared stop-word set is public** (service; no behaviour changed). The graph and
   context modules imported `modules/memory/native.py`'s private `_STOP`; it is
   `domain.text.STOP_WORDS` now, the same 73 words. An architecture test refuses a new import
