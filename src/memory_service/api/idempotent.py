@@ -124,7 +124,7 @@ async def run_idempotent(
     ``location`` names the resource (201) or the job (202) the body identifies; a replay
     carries the same ``Location``. A 204 is written without a body and replayed as one.
     """
-    uow_factory = container.services["uow_factory"]
+    uow_factory = container.services.uow_factory
     if key is None:
         async with uow_factory() as uow:
             status, body, after_commit = await handler(uow)
@@ -132,7 +132,7 @@ async def run_idempotent(
         if after_commit is not None:
             await after_commit()
         return _respond(request, status, body, replayed=False, location=location)
-    idem: IdempotencyService = container.services["idempotency"]
+    idem: IdempotencyService = container.services.idempotency
     request_hash = idem.request_hash(payload)
     cached = await idem.lookup_cached(ctx.tenant_id, key, request_hash)
     if cached is not None:

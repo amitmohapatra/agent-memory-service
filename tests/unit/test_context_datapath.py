@@ -22,6 +22,7 @@ import pytest
 from memory_service.adapters.authz.memory_provider import MemoryAuthorizationProvider
 from memory_service.adapters.cache.memory_cache import MemoryCache
 from memory_service.api.schemas.context import ContextResponse
+from memory_service.application.services import Services
 from memory_service.config.constants import CONTEXT, FROZEN_MODELS, RETRIEVAL
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import ContextBundle, ConversationWindow
@@ -727,11 +728,11 @@ def test_the_context_route_sends_the_builder_bytes(settings: Any, overrides: Any
     class _Container:
         # `settings` because build_context reads authentication.tenant_claim to decide
         # whether the asserted tenant has to agree with the credential presenting it
-        services = {
-            "authenticator": _Authenticator(),
-            "context_builder": _Builder(),
-            "llm_assist": LLMAssist.disabled(),
-        }
+        services = Services(
+            authenticator=_Authenticator(),
+            context_builder=_Builder(),
+            llm_assist=LLMAssist.disabled(),
+        )
         settings = app_settings
 
     app = create_app(settings, overrides=overrides)

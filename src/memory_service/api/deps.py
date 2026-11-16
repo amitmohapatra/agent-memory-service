@@ -126,7 +126,7 @@ ContainerDep = Annotated[Container, Depends(get_container)]
 
 
 async def get_service_principal(request: Request, container: ContainerDep) -> ServicePrincipal:
-    authenticator: ServiceAuthenticator = container.services["authenticator"]
+    authenticator: ServiceAuthenticator = container.services.authenticator
     with span("auth"), stage_seconds.labels("auth").time():
         principal = await authenticator.authenticate(
             {k.lower(): v for k, v in request.headers.items()}
@@ -576,7 +576,7 @@ async def existing_administered_tenant(
     """:func:`administered_tenant`, which must exist when the header alone names it."""
     tenant_id = administered_tenant(request, principal, container)
     if credential_tenant(principal, container) != tenant_id:
-        async with container.services["uow_factory"]() as uow:
+        async with container.services.uow_factory() as uow:
             if await uow.tenants.get(tenant_id) is None:
                 raise NotFound("Tenant not found")
     elif principal.mode == "trusted_dev":
@@ -587,7 +587,7 @@ async def existing_administered_tenant(
 async def _onboard_development_tenant(container: Container, tenant_id: str) -> None:
     """A laptop's development tenant gets its row the first time it is administered, so
     issuing a key or creating a workspace in it works without onboarding it first."""
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         await uow.serialize(f"tenant-onboard:{tenant_id}")
         if await uow.tenants.get(tenant_id) is None:
             await uow.tenants.add(Tenant(tenant_id=tenant_id, name="Development"))
