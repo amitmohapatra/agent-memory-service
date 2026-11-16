@@ -1,7 +1,8 @@
 """Concurrent forgets of related memories on real PostgreSQL.
 
 A forget removes the memory and its twins (the same statement kept twice) and reinstates what
-it replaced, so two forgets of related memories touch the same rows. The capability eval's
+it replaced, so two forgets of related memories touch the same rows. A verdict that retracts
+a memory writes the same rows. The capability eval's
 purge forgets up to 16 memories at a time across users, and it failed with a deadlock on the
 ``memories`` update and with ``memory ... is not visible in this scope`` for a memory a twin's
 forget had just removed. Each forget here runs in its own transaction, as each
@@ -29,6 +30,7 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.errors import ScopeDenied
 from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.feedback import Feedback, FeedbackTargetKind, FeedbackVerdict
 from memory_service.domain.memory import CanonicalMemory, Scope, TemporalState
 from memory_service.modules.authz.visibility import readable_by
 from memory_service.modules.memory.native import normalized_hash
@@ -294,3 +296,79 @@ async def test_a_memory_outside_the_callers_scope_is_still_refused(container, uo
     with pytest.raises(ScopeDenied, match="not visible in this scope"):
         await _forget(container, uow_factory, _ctx("s1"), theirs)
     assert await _all_forgotten(uow_factory, [theirs]) == [theirs]
+
+
+async def _rejection(container, uow_factory, ctx: MemoryExecutionContext, memory_id: str) -> str:
+    """A stored, unprojected REJECT of ``memory_id``; its feedback id."""
+    record = Feedback(
+        tenant_id=TENANT,
+        target_kind=FeedbackTargetKind.MEMORY,
+        target_id=memory_id,
+        verdict=FeedbackVerdict.REJECT,
+    )
+    async with uow_factory() as uow:
+        stored, _ = await container.services["feedback"].submit(uow, ctx, record, trusted=True)
+        await uow.commit()
+    return stored.feedback_id
+
+
+def _pausing_projector(container, monkeypatch, pauses: list[tuple[asyncio.Event, asyncio.Event]]):
+    """Make each of the next ``feedback.project`` runs wait after its first memory write."""
+    feedback = container.services["feedback"]
+    real = feedback.uow_factory
+
+    @contextlib.asynccontextmanager
+    async def pausing():
+        async with real() as uow:
+            if pauses:
+                mine, theirs = pauses.pop(0)
+                _pause_after(uow.memories, "update", mine, theirs, wait=2)
+            yield uow
+
+    monkeypatch.setattr(feedback, "uow_factory", pausing)
+    return feedback
+
+
+async def test_a_retraction_and_a_forget_of_twins_do_not_deadlock(
+    container, uow_factory, monkeypatch
+) -> None:
+    """A rejected memory is retracted with its twins, and a forget of one of those twins
+    removes them all: the retraction took its own row first and the forget the lowest id."""
+    families = await _seed(uow_factory, ["x1"])
+    a, b, c = (m.memory_id for m in families["x1"][:3])
+    ctx = _ctx("x1")
+    rejected = await _rejection(container, uow_factory, ctx, b)
+    retract_in, forget_in = asyncio.Event(), asyncio.Event()
+    feedback = _pausing_projector(container, monkeypatch, [(retract_in, forget_in)])
+
+    async def forget() -> None:
+        async with uow_factory() as uow:
+            _pause_after(uow.memories, "lock", forget_in, retract_in, wait=2)
+            await container.services["memory"].forget(uow, ctx, a)
+            await uow.commit()
+
+    results = await asyncio.gather(
+        feedback.project(TENANT, rejected), forget(), return_exceptions=True
+    )
+    assert [r for r in results if isinstance(r, BaseException)] == []
+    assert await _all_forgotten(uow_factory, [a, b, c]) == []
+
+
+async def test_twins_rejected_at_once_do_not_deadlock(container, uow_factory, monkeypatch) -> None:
+    """Two verdicts, one on each twin: each retraction wrote its own row first and then the
+    other's. One retracts both; the other finds its memory already withdrawn."""
+    families = await _seed(uow_factory, ["x2"])
+    a, b, c = (m.memory_id for m in families["x2"][:3])
+    ctx = _ctx("x2")
+    first = await _rejection(container, uow_factory, ctx, b)
+    second = await _rejection(container, uow_factory, ctx, c)
+    b_in, c_in = asyncio.Event(), asyncio.Event()
+    feedback = _pausing_projector(container, monkeypatch, [(b_in, c_in), (c_in, b_in)])
+
+    results = await asyncio.gather(
+        feedback.project(TENANT, first), feedback.project(TENANT, second), return_exceptions=True
+    )
+    assert [r for r in results if isinstance(r, BaseException)] == []
+    async with uow_factory() as uow:
+        statuses = {m.temporal.status for m in await uow.memories.get_many(TENANT, [a, b, c])}
+    assert statuses == {TemporalStatus.RETRACTED}

@@ -192,6 +192,41 @@ async def test_a_correction_supersedes_the_memory_with_the_corrected_text(
         ).temporal.supersedes == memory.memory_id
 
 
+async def test_a_correction_and_a_supersede_leave_the_same_chain(container, uow_factory) -> None:
+    """One transition, whoever asks for it: the owner's supersede and then a correction of
+    the version it wrote each close the old row where the new one begins, and each new row
+    points back at the one it replaced - not at what that one replaced before it."""
+    first = await _first_memory(container, uow_factory)
+    async with uow_factory() as uow:
+        second = await container.services["memory"].supersede(
+            uow, ALICE, first.memory_id, content="Amit's timezone is Europe/Madrid.", reason="moved"
+        )
+        await uow.commit()
+    corrected = await _submit(
+        container,
+        uow_factory,
+        ALICE,
+        target_kind=FeedbackTargetKind.MEMORY,
+        target_id=second.memory_id,
+        verdict=FeedbackVerdict.CORRECT,
+        correction={"content": "Amit's timezone is Europe/Lisbon."},
+        reviewer="alice",
+    )
+    assert corrected.projection is not None and corrected.projection.superseded_by
+    async with uow_factory() as uow:
+        chain = await uow.memories.get_many(
+            "acme", [first.memory_id, second.memory_id, corrected.projection.superseded_by]
+        )
+    old, middle, new = sorted(chain, key=lambda m: m.temporal.since)
+    assert (old.memory_id, middle.memory_id) == (first.memory_id, second.memory_id)
+    for closed, replacement in ((old, middle), (middle, new)):
+        assert closed.temporal.status is TemporalStatus.SUPERSEDED
+        assert closed.temporal.superseded_by == replacement.memory_id
+        assert replacement.temporal.supersedes == closed.memory_id
+        assert closed.temporal.valid_to == replacement.temporal.since
+    assert new.temporal.status is TemporalStatus.CURRENT and new.temporal.valid_to is None
+
+
 async def test_feedback_visibility_follows_the_target_and_the_author(
     container, uow_factory
 ) -> None:

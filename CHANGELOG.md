@@ -401,6 +401,17 @@ each entry says which one moved. Decisions behind each change are in the
   unchanged, and so is everything about a tenant's own job. The route reads the outbox
   through its repository (`OutboxRepository.get`) and no longer opens a database session of
   its own.
+- **A verdict on a memory and a forget of its twin no longer deadlock** (service). A rejected
+  memory is retracted together with its twins (the same statement kept twice), and the
+  feedback projector wrote its own row first and the twins after, on advisory locks a forget
+  does not take. A forget of a twin, or a second verdict on one, took the same rows in another
+  order: PostgreSQL broke the deadlock by failing one of the two (the job was retried, a
+  `DELETE /v1/memories/{id}` answered `503`). Every change a verdict makes to a memory
+  (retract, lift a retraction, correct, reinforce) is now a `MemoryService` method that locks
+  the memory, its twins and what they replaced at once and in id order, as forget does, and
+  decides on what the rows hold under the lock. The feedback module's own copies of supersede
+  and retract (`modules/memory/revisions.py`) are gone; a correction links its new row
+  through the one `pipeline.supersede`. Outcomes are unchanged.
 - **A malformed job id is a `404`, not a `500`** (service). `GET /v1/jobs/obx_abc` and an
   `obx_` number too long for the database (`obx_99999999999999999999`) answered `500`; they
   answer `404 NOT_FOUND` like any other id that names no job.

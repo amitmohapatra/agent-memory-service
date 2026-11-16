@@ -59,9 +59,9 @@ stateDiagram-v2
 
 | Transition | Code | What changes |
 |---|---|---|
-| → `SUPERSEDED` | `supersede` in `modules/memory/pipeline.py` and `modules/memory/revisions.py` | status, `superseded_by`, `valid_to` closed; the new row gets `supersedes` |
+| → `SUPERSEDED` | `supersede` in `modules/memory/pipeline.py` (a correcting verdict reaches it through `MemoryService.correct`) | status, `superseded_by`, `valid_to` closed; the new row gets `supersedes` |
 | → `RETRACTED` by forgetting | `MemoryRepository.forget` (`adapters/db/memory_repository.py`) | status `RETRACTED` **and** `deleted_at` set; final from the API's point of view (`404`) |
-| → `RETRACTED` by a verdict | `retract` in `modules/memory/revisions.py`, from the feedback projector | status `RETRACTED`, `valid_to` closed; the row stays for the temporal view |
+| → `RETRACTED` by a verdict | `MemoryService.retract` (`modules/memory/service.py`), from the feedback projector | status `RETRACTED`, `valid_to` closed; the row stays for the temporal view |
 | → `EXPIRED` | `expire_due` in `adapters/db/memory_repository.py`, run by `memory.expire` | status `EXPIRED`; index entry removed by the `memory.index` job it enqueues |
 | → `ARCHIVED` | `ForgettingService.sweep` (`modules/memory/forgetting.py`) | status `ARCHIVED`, a `forgetting` record with the score and threshold |
 | `ARCHIVED` → `CURRENT` | `ForgettingService.restore` | status back, `restored_at` stamped, `access_count` + 1, re-indexed |
