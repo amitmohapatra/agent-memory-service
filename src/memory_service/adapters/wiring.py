@@ -8,7 +8,7 @@ overrides and takes the first branch of nothing.
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from memory_service.adapters.models._runner import configure_runners
 from memory_service.application.container import Dependency
@@ -20,6 +20,7 @@ from memory_service.observability.logging import get_logger
 if TYPE_CHECKING:
     from memory_service.application.container import Container
     from memory_service.config.settings import PoolPlan
+    from memory_service.ports.uow import UnitOfWorkFactory
     from trellis.contracts import Endpoint
 
 log = get_logger(__name__)
@@ -144,9 +145,12 @@ def _wire_uow(container: Container) -> None:
     from memory_service.adapters.db.uow import OutboxRelay, SqlUnitOfWorkFactory
 
     relay = OutboxRelay(container.database.session_factory, container.tasks)
-    container.services["outbox_relay"] = relay
-    container.services["uow_factory"] = SqlUnitOfWorkFactory(
-        container.database.session_factory, relay
+    container.services.outbox_relay = relay
+    # cast: the port declares its repositories as plain attributes, which a type checker
+    # holds invariant, so ``SqlUnitOfWork`` (whose attributes are the Sql repositories)
+    # does not match it structurally although every repository implements its port
+    container.services.uow_factory = cast(
+        "UnitOfWorkFactory", SqlUnitOfWorkFactory(container.database.session_factory, relay)
     )
 
 
@@ -170,7 +174,7 @@ async def _wire_authorization(container: Container) -> None:
 async def _prime_tenant_registry(container: Container) -> None:
     """Load quotas and suspensions before the first request; the loop keeps them current."""
     try:
-        await container.services["tenant_registry"].refresh()
+        await container.services.tenant_registry.refresh()
     except Exception as exc:  # the store may still be migrating; the loop retries
         log.warning("tenant_registry.prime_failed", error=str(exc))
 
@@ -186,17 +190,17 @@ def _wire_services(container: Container) -> None:
     from memory_service.modules.tenancy.service import TenancyService
 
     settings = container.settings
-    uow_factory = container.services["uow_factory"]
-    container.services["idempotency"] = IdempotencyService(container.cache)
+    uow_factory = container.services.uow_factory
+    container.services.idempotency = IdempotencyService(container.cache)
     registry = TenantRegistry(uow_factory, cache=container.cache)
     registry.start()
-    container.services["tenant_registry"] = registry
+    container.services.tenant_registry = registry
     container.add_closer("tenant_registry", registry.close)
     keys = ApiKeyVerifier(
         uow_factory, container.cache, known=registry.knows_key, remember=registry.remember_key
     )
-    container.services["api_keys"] = keys
-    container.services["authenticator"] = ServiceAuthenticator(settings.authentication, keys=keys)
+    container.services.api_keys = keys
+    container.services.authenticator = ServiceAuthenticator(settings.authentication, keys=keys)
     authz = AuthorizationService(
         container.authorization,
         container.cache,
@@ -204,12 +208,12 @@ def _wire_services(container: Container) -> None:
         cache_ttl_seconds=constants.CACHE.authz_ttl_seconds,
         decision_cache=constants.AUTHORIZATION.decision_cache,
     )
-    container.services["authz"] = authz
-    container.services["tenancy"] = TenancyService(authz)
-    container.services["retention"] = RetentionService(uow_factory)
+    container.services.authz = authz
+    container.services.tenancy = TenancyService(authz)
+    container.services.retention = RetentionService(uow_factory)
     audit = ReadAudit(uow_factory)
     audit.start()
-    container.services["read_audit"] = audit
+    container.services.read_audit = audit
     container.add_closer("read_audit", audit.close)
 
 
@@ -224,18 +228,18 @@ def _wire_conversation(container: Container) -> None:
         max_messages=constants.CACHE.hot_thread_max_messages,
         ttl_seconds=constants.CACHE.hot_thread_ttl_seconds,
     )
-    container.services["hot_thread"] = hot
-    container.services["conversation"] = ConversationService(
-        container.services["authz"], hot, archive_enabled=container.tuning.archive.enabled
+    container.services.hot_thread = hot
+    container.services.conversation = ConversationService(
+        container.services.authz, hot, archive_enabled=container.tuning.archive.enabled
     )
-    container.services["thread_summaries"] = ThreadSummaries(
-        container.services["uow_factory"], container.services["llm_assist"]
+    container.services.thread_summaries = ThreadSummaries(
+        container.services.uow_factory, container.services.llm_assist
     )
-    container.services["profile"] = ProfileService(
-        container.services["uow_factory"],
-        container.services["authz"],
-        container.services["llm_assist"],
-        reader=lambda: container.services["context_builder"],
+    container.services.profile = ProfileService(
+        container.services.uow_factory,
+        container.services.authz,
+        container.services.llm_assist,
+        reader=lambda: container.services.context_builder,
     )
 
 
@@ -267,8 +271,8 @@ async def _wire_blob(container: Container) -> None:
 def _wire_archive(container: Container) -> None:
     from memory_service.modules.archive.service import ArchiveService
 
-    container.services["archive_service"] = ArchiveService(
-        container.services["uow_factory"],
+    container.services.archive_service = ArchiveService(
+        container.services.uow_factory,
         container.blob,
         archive=container.tuning.archive,
         blob_settings=container.settings.blob,
@@ -291,17 +295,17 @@ def _wire_ingestion(container: Container) -> None:
         # /version reports the difference.
         parser = builtin
     container.document_parser = parser
-    container.services["ingestion"] = IngestionService(
-        container.services["uow_factory"],
-        container.services["authz"],
+    container.services.ingestion = IngestionService(
+        container.services.uow_factory,
+        container.services.authz,
         parser,
         container.blob,
-        conversation=container.services["conversation"],
+        conversation=container.services.conversation,
         settings=cfg,
         file_bucket=container.settings.blob.file_bucket,
         tenant_shards=container.tuning.archive.tenant_shards,
         fallback_parser=builtin,
-        assist=container.services["llm_assist"],
+        assist=container.services.llm_assist,
     )
 
 
@@ -411,23 +415,23 @@ def _wire_llm(container: Container) -> None:
     from memory_service.modules.llm.endpoints import EndpointResolver
     from memory_service.modules.llm.policies import LLMUsage, ModelPolicies
 
-    uow_factory = container.services["uow_factory"]
+    uow_factory = container.services.uow_factory
     cipher = AesCredentialCipher(envelope_settings(container.settings))
     credentials = ModelCredentials(uow_factory, cipher)
     policies = ModelPolicies(uow_factory)
     usage = LLMUsage(uow_factory)
     cfg = container.settings.llm
     resolver = EndpointResolver(cfg, credentials)
-    container.services["model_credentials"] = credentials
-    container.services["model_policies"] = policies
-    container.services["llm_usage"] = usage
-    container.services["llm_endpoints"] = resolver
-    container.services["endpoint_probe"] = (
+    container.services.model_credentials = credentials
+    container.services.model_policies = policies
+    container.services.llm_usage = usage
+    container.services.llm_endpoints = resolver
+    container.services.endpoint_probe = (
         _accept_endpoint if container.overrides.endpoint_probe == "accept" else HttpEndpointProbe()
     )
     if not cfg.enabled:
         container.llm = DisabledLLM()
-        container.services["llm_assist"] = LLMAssist.disabled()
+        container.services.llm_assist = LLMAssist.disabled()
         return
     llm = EndpointLLM(
         cfg,
@@ -438,7 +442,7 @@ def _wire_llm(container: Container) -> None:
         tuning=container.tuning.llm,
     )
     container.llm = llm
-    container.services["llm_assist"] = LLMAssist(llm, cfg, policies)
+    container.services.llm_assist = LLMAssist(llm, cfg, policies)
     if not cfg.operator_pays:
         # Registered endpoints are resolved only in their authenticated request/job scope.
         # An unauthenticated background health probe cannot represent them.
@@ -474,8 +478,8 @@ def _wire_nli(container: Container) -> None:
     if stand_in != "lexical":
         nli = OnnxNLI(FROZEN_MODELS.nli, threads=_model_threads(container))
     container.nli = nli
-    container.services["grounding"] = GroundingCascade(
-        nli, settings=container.tuning.nli, assist=container.services["llm_assist"]
+    container.services.grounding = GroundingCascade(
+        nli, settings=container.tuning.nli, assist=container.services.llm_assist
     )
 
 
@@ -495,7 +499,7 @@ def _wire_retrieval(container: Container) -> None:
     tuning = container.tuning
     dense = container.overrides.dense_model or FROZEN_MODELS.dense
     indexer = Indexer(
-        container.services["uow_factory"],
+        container.services.uow_factory,
         container.search,
         container.dense_spaces,
         container.sparse,
@@ -503,47 +507,47 @@ def _wire_retrieval(container: Container) -> None:
         late=container.late,
         batch_size=dense.batch_size,
         embedding_cache_ttl=constants.CACHE.embedding_ttl_seconds,
-        assist=container.services["llm_assist"],
+        assist=container.services.llm_assist,
     )
-    container.services["indexer"] = indexer
+    container.services.indexer = indexer
     container.dense_spaces.use_cache(
         container.cache, ttl_seconds=constants.CACHE.query_embedding_ttl_seconds
     )
     engine = RetrievalEngine(
-        container.services["uow_factory"],
-        container.services["authz"],
+        container.services.uow_factory,
+        container.services.authz,
         container.search,
         indexer,
         settings=tuning.retrieval,
-        assist=container.services["llm_assist"],
+        assist=container.services.llm_assist,
     )
-    container.services["retrieval"] = engine
+    container.services.retrieval = engine
     working = EphemeralMemory(
         container.cache, ttl_seconds=constants.CACHE.working_memory_ttl_seconds
     )
-    container.services["ephemeral_memory"] = working
+    container.services.ephemeral_memory = working
     searcher = Searcher(
-        container.services["uow_factory"],
+        container.services.uow_factory,
         engine,
-        container.services["conversation"],
-        container.services["llm_assist"],
+        container.services.conversation,
+        container.services.llm_assist,
     )
     builder = ContextBuilder(
-        container.services["uow_factory"],
+        container.services.uow_factory,
         engine,
-        container.services["conversation"],
+        container.services.conversation,
         container.cache,
         settings=tuning.context,
         retrieval=tuning.retrieval,
         cache_ttl_seconds=constants.CACHE.context_bundle_ttl_seconds,
         working=working,
-        assist=container.services["llm_assist"],
-        sections=ContextSections(container.services["uow_factory"], container.services),
+        assist=container.services.llm_assist,
+        sections=ContextSections(container.services.uow_factory, container.services),
         earlier_chats=searcher.earlier_chats,
     )
-    container.services["context_builder"] = builder
-    container.services["bundle_records"] = builder.records
-    container.services["search"] = searcher
+    container.services.context_builder = builder
+    container.services.bundle_records = builder.records
+    container.services.search = searcher
     # The builder buffers served-memory ids for up to access_flush_seconds and writes bundles
     # to the cache in the background. Without this, SIGTERM drops a whole window of both, per
     # worker, on every rolling deploy - for the counter the forgetting policy reads.
@@ -583,7 +587,7 @@ def _wire_memory(container: Container) -> None:
     provider = NativeMemoryIntelligence(
         cfg,
         container.embedding,
-        assist=container.services["llm_assist"],
+        assist=container.services.llm_assist,
         contextual_extractor=extractor,
         # the grounding cascade's NLI head decides what the lexicon leaves open (ADR 0037)
         # what the head leaves open the model reads in the gap-fill call (``gapfill``)
@@ -592,54 +596,54 @@ def _wire_memory(container: Container) -> None:
         # the same head reads a restatement in other words as the memory already held
         nli=container.nli,
     )
-    container.services["memory_provider"] = provider
-    container.services["observation_pipeline"] = ObservationPipeline(
-        container.services["uow_factory"],
+    container.services.memory_provider = provider
+    container.services.observation_pipeline = ObservationPipeline(
+        container.services.uow_factory,
         provider,
         settings=cfg,
         working=container.services.get("ephemeral_memory"),
         # consulted only for tenants that turned it on (Tenant.admission_gate, off by default)
         gate=AdmissionGate(cfg),
-        assist=container.services["llm_assist"],
+        assist=container.services.llm_assist,
         subjects=subjects,
         # a user's later statement against their earlier ones in any conversation (ADR
         # 0038): the grounding cascade's NLI head decides, the multilingual encoder relates
         replacement=CrossConversationReplacement(
             container.nli,
             _multilingual_encoder(container),
-            assist=container.services["llm_assist"],
+            assist=container.services.llm_assist,
         ),
         # what the model reads beyond the rules, one call a message, unless a Hindsight
         # server reads it (``NativeMemoryIntelligence.server_reads``)
         gapfill=GapFill(
-            container.services["llm_assist"],
+            container.services.llm_assist,
             container.embedding,
             container.nli,
             server_reads=provider.server_reads,
         ),
     )
-    container.services["memory"] = MemoryService(
-        container.services["authz"],
+    container.services.memory = MemoryService(
+        container.services.authz,
         fiscal=container.tuning.memory_intelligence.fiscal_calendar,
-        assist=container.services["llm_assist"],
+        assist=container.services.llm_assist,
     )
-    container.services["feedback"] = FeedbackService(
-        container.services["uow_factory"], container.services["authz"], container.services["memory"]
+    container.services.feedback = FeedbackService(
+        container.services.uow_factory, container.services.authz, container.services.memory
     )
-    container.services["forgetting"] = ForgettingService(
-        container.services["uow_factory"],
+    container.services.forgetting = ForgettingService(
+        container.services.uow_factory,
         settings=cfg,
         cache=container.cache,
         working_ttl_seconds=constants.CACHE.working_memory_ttl_seconds,
     )
-    container.services["reflection"] = ReflectionService(
-        container.services["uow_factory"], assist=container.services["llm_assist"]
+    container.services.reflection = ReflectionService(
+        container.services.uow_factory, assist=container.services.llm_assist
     )
-    container.services["consolidation"] = ConsolidationService(
-        container.services["uow_factory"], assist=container.services["llm_assist"]
+    container.services.consolidation = ConsolidationService(
+        container.services.uow_factory, assist=container.services.llm_assist
     )
-    container.services["connections"] = ConnectionService(
-        container.services["uow_factory"], assist=container.services["llm_assist"]
+    container.services.connections = ConnectionService(
+        container.services.uow_factory, assist=container.services.llm_assist
     )
 
 
@@ -655,25 +659,25 @@ def _wire_tools(container: Container) -> None:
     from memory_service.modules.tools.service import ToolMemoryService
     from memory_service.modules.tools.skills import LearnedSkills
 
-    uow_factory = container.services["uow_factory"]
-    container.services["tool_memory"] = ToolMemoryService(
-        container.services["authz"],
+    uow_factory = container.services.uow_factory
+    container.services.tool_memory = ToolMemoryService(
+        container.services.authz,
         blob=container.blob,
         blob_bucket=container.settings.blob.file_bucket,
     )
-    index = ToolIndex(uow_factory, container.services["indexer"], container.search)
-    container.services["tool_index"] = index
-    container.services["tool_hints"] = ToolHintsService(
+    index = ToolIndex(uow_factory, container.services.indexer, container.search)
+    container.services.tool_index = index
+    container.services.tool_hints = ToolHintsService(
         uow_factory,
         index,
         container.graph_store,
-        ProcedureMatcher(container.services["indexer"]),
-        engine=container.services["retrieval"],
+        ProcedureMatcher(container.services.indexer),
+        engine=container.services.retrieval,
     )
-    container.services["tool_learning"] = ToolLearning(uow_factory, container.graph_store)
-    container.services["agent_tools"] = AgentTools(uow_factory, container.services)
-    container.services["learned_skills"] = LearnedSkills(uow_factory)
-    container.services["tool_permissions"] = ToolPermissions(uow_factory)
+    container.services.tool_learning = ToolLearning(uow_factory, container.graph_store)
+    container.services.agent_tools = AgentTools(uow_factory, container.services)
+    container.services.learned_skills = LearnedSkills(uow_factory)
+    container.services.tool_permissions = ToolPermissions(uow_factory)
 
 
 def _wire_graph(container: Container) -> None:
@@ -703,23 +707,23 @@ def _wire_graph(container: Container) -> None:
     if stand_in.graph_enrichment == "disabled":
         container.graph_enrichment = None
         return
-    assist = container.services["llm_assist"]
+    assist = container.services.llm_assist
     provider = NativeGraphEnrichment(assist=assist)
     container.graph_enrichment = provider
     graph = GraphService(
-        container.services["uow_factory"],
+        container.services.uow_factory,
         container.graph_store,
         provider,
-        container.services["authz"],
+        container.services.authz,
         settings=container.tuning.graph,
         assist=assist,
     )
-    container.services["graph"] = graph
+    container.services.graph = graph
     if container.tuning.retrieval.graph:
-        engine = container.services["retrieval"]
+        engine = container.services.retrieval
         stage = GraphStage(
             graph,
-            container.services["uow_factory"],
+            container.services.uow_factory,
             max_facts=container.tuning.context.graph_facts_max,
         )
         engine.post_stages["graph"] = stage
@@ -731,12 +735,12 @@ def _wire_context_preservation(container: Container) -> None:
     from memory_service.modules.context.expansion import ExpansionStage
 
     settings = container.tuning.retrieval
-    engine = container.services["retrieval"]
-    expansion = ExpansionStage(container.services["uow_factory"], settings=settings)
+    engine = container.services.retrieval
+    expansion = ExpansionStage(container.services.uow_factory, settings=settings)
     if settings.parent_expansion or settings.neighbor_expansion or settings.definition_expansion:
         engine.post_stages["expansion"] = expansion
     if settings.evidence_verification:
         engine.post_stages["verify"] = VerificationStage(
-            container.services["uow_factory"], settings=settings
+            container.services.uow_factory, settings=settings
         )
-    container.services["expansion"] = expansion
+    container.services.expansion = expansion
