@@ -39,7 +39,7 @@ from memory_service.modules.tools.service import (
     store_output,
 )
 from memory_service.observability.logging import get_logger
-from memory_service.ports.tasks import JobSpec, Queue, TaskHandler
+from memory_service.ports.tasks import JobSpec, Queue, TaskHandler, TaskQueue
 
 if TYPE_CHECKING:
     from memory_service.application.container import Container
@@ -57,7 +57,7 @@ class _AccountedQueue:
     """Registers every handler inside its own LLM accounting scope, so a job's model tokens
     are counted and logged per job (and never leak into the request that ran it inline)."""
 
-    def __init__(self, queue: Any) -> None:
+    def __init__(self, queue: TaskQueue) -> None:
         self._queue = queue
 
     def register(self, name: str, queue: Queue, handler: TaskHandler, **kwargs: Any) -> None:

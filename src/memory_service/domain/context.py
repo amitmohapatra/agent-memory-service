@@ -48,6 +48,14 @@ def _validate_optional_id(value: str | None) -> str | None:
     return value
 
 
+def agent_principal(agent_id: str, user_id: str | None) -> str:
+    """An agent's principal: bound to the user it runs for, bare when it runs for none
+    (``MemoryExecutionContext.principal_id`` says why)."""
+    if user_id is not None:
+        return f"agent:{user_id}/{agent_id}"
+    return f"agent:{agent_id}"
+
+
 class MemoryExecutionContext(BaseModel):
     """Per-request identity, scope and lineage. Immutable once built."""
 
@@ -155,9 +163,7 @@ class MemoryExecutionContext(BaseModel):
         user to bind it to and nothing for a caller to impersonate their way into.
         """
         if self.agent_id is not None:
-            if self.user_id is not None:
-                return f"agent:{self.user_id}/{self.agent_id}"
-            return f"agent:{self.agent_id}"
+            return agent_principal(self.agent_id, self.user_id)
         if self.user_id is not None:
             return f"user:{self.user_id}"
         return "service:anonymous"

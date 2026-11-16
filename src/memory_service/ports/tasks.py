@@ -172,6 +172,12 @@ class TaskQueue(Protocol):
         finish must not stay half-done with nothing saying so."""
         ...
 
+    def register_periodic(
+        self, name: str, queue: Queue, handler: TaskHandler, *, cron: str
+    ) -> None:
+        """Register a handler that runs on ``cron``, with ``{"timestamp": ...}`` as payload."""
+        ...
+
     async def run_worker(
         self,
         queues: list[Queue] | None = None,

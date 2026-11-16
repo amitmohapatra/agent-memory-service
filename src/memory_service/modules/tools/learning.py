@@ -19,6 +19,8 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any, Final
 
+from memory_service.domain.context import agent_principal
+from memory_service.domain.enums import Visibility
 from memory_service.domain.feedback import FeedbackSource
 from memory_service.domain.revisions import RevisionKind, audience_revision_keys
 from memory_service.domain.tools import (
@@ -28,6 +30,7 @@ from memory_service.domain.tools import (
     agent_audience,
     stable_hash,
 )
+from memory_service.modules.authz.visibility import visibility_keys
 from memory_service.modules.tools.edges import tool_edges
 from memory_service.modules.tools.procedures import Procedure, decayed, mine_procedure
 from memory_service.modules.tools.trajectories import Trajectory, build_trajectory
@@ -91,16 +94,18 @@ def audience_of(call: ToolInvocation) -> tuple[str, str | None]:
     whichever user it ran for, with that agent's id; any other under its first visibility
     key."""
     key = call.visibility_keys[0]
-    if call.agent_id and key == _agent_private_key(call):
+    if call.agent_id and key == _agent_private_key(
+        call.tenant_id, call.agent_id, call.user_id or None
+    ):
         return agent_audience(call.tenant_id, call.agent_id), call.agent_id
     return key, None
 
 
-def _agent_private_key(call: ToolInvocation) -> str:
-    principal = (
-        f"agent:{call.user_id}/{call.agent_id}" if call.user_id else f"agent:{call.agent_id}"
+def _agent_private_key(tenant_id: str, agent_id: str, user_id: str | None) -> str:
+    [key] = visibility_keys(
+        tenant_id, Visibility.PRIVATE, owner_principal=agent_principal(agent_id, user_id)
     )
-    return f"principal:{call.tenant_id}/{principal}"
+    return key
 
 
 def contributors(calls: Sequence[ToolInvocation]) -> tuple[int, str | None]:
