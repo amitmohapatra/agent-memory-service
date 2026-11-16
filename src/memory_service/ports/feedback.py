@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
@@ -22,6 +23,10 @@ class FeedbackRepository(Protocol):
         ...
 
     async def get(self, tenant_id: str, feedback_id: str) -> Feedback | None: ...
+
+    async def get_many(self, tenant_id: str, feedback_ids: Sequence[str]) -> list[Feedback]:
+        """The records among ``feedback_ids`` that exist, in one query and no given order."""
+        ...
 
     async def list_for(
         self,
@@ -105,7 +110,8 @@ class FeedbackRepository(Protocol):
         ...
 
     async def review_counts(
-        self, tenant_id: str, *, user_id: str | None, agent_id: str | None
-    ) -> dict[str, int]:
-        """How one author's verdicts fared in review: pending, approved and dismissed."""
+        self, tenant_id: str, authors: Sequence[tuple[str | None, str | None]]
+    ) -> dict[tuple[str | None, str | None], dict[str, int]]:
+        """How each author's verdicts fared in review - pending, approved and dismissed - by
+        ``(user_id, agent_id)``, in one query. Every author asked for has an entry."""
         ...

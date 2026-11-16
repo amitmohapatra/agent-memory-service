@@ -103,7 +103,7 @@ take both clocks: `as_of` for valid time, `valid_at` for knowledge time.
 
 When a memory stops being current — superseded, expired, forgotten, archived — or is a model
 rewrite without verified entailment, the `memory.index` job closes its relations
-(`supersede_for_memory`, called from `GraphService.enrich_memories`).
+(`supersede_for_memories`, called from `GraphService.enrich_memories`).
 
 **Not built:** the invalidation path — closing a relation as `INVALIDATED` and writing an
 `invalidated_by` edge that records why it gave way. Re-extraction and contradictions do not

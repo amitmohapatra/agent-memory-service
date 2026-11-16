@@ -52,6 +52,16 @@ each entry says which one moved. Decisions behind each change are in the
   asserts any other tenant gets `403 SCOPE_DENIED`. **To upgrade a deployed `jwt` service
   that sets no `TENANT_CLAIM`: set `SINGLE_TENANT` to its tenant.** `dev` and `test` are
   unchanged ([configuration.md](docs/configuration.md#production-guards)).
+- **Four per-item database loops are one batch each** (service; outcomes unchanged). The
+  retention sweep forgot a batch of up to 500 memories one at a time (a write and the
+  dependents' statement each); it forgets the batch in three statements
+  (`MemoryRepository.forget_many`). A bulk review read each of up to 500 named votes on its
+  own; it reads them in one query (`FeedbackRepository.get_many`). The review queue counted
+  each author's verdicts with a query per author, up to 100 a page; one query counts them all
+  (`FeedbackRepository.review_counts` takes the authors). The `memory.index` job closed the
+  graph facts of each memory that is no longer current in a transaction of its own; one
+  statement closes them (`GraphStore.supersede_for_memories`, which replaces
+  `supersede_for_memory`), before the job's current memories are enriched.
 - **`GraphStore.supersede` and `GraphStore.invalidate` are removed** (service; no behaviour
   changed). No module called either; the architecture test that requires every port method to
   have a caller matched bare method names, so `MemoryService.supersede` and

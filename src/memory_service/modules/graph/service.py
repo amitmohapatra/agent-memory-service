@@ -167,17 +167,22 @@ class GraphService:
             span("graph.enrich_memories", tenant_id=tenant_id),
             stage_seconds.labels("graph.enrich").time(),
         ):
-            for mid in memory_ids:
-                if mid not in found and await self.store.supersede_for_memory(
-                    tenant_id, mid, at=now
-                ):
-                    # the memory is gone, and with it what its facts' audience was
-                    moved.add((RevisionKind.GRAPH, ""))
+            gone = [mid for mid in memory_ids if mid not in found]
+            closed = {
+                m.memory_id
+                for m in memories
+                if m.temporal.status.value != "CURRENT"
+                or unverified_representation(m.system_metadata)
+            }
+            retired = await self.store.supersede_for_memories(
+                tenant_id, [*gone, *sorted(closed)], at=now
+            )
+            if retired.intersection(gone):
+                # the memory is gone, and with it what its facts' audience was
+                moved.add((RevisionKind.GRAPH, ""))
             for m in memories:
-                if m.temporal.status.value != "CURRENT" or unverified_representation(
-                    m.system_metadata
-                ):
-                    if await self.store.supersede_for_memory(tenant_id, m.memory_id, at=now):
+                if m.memory_id in closed:
+                    if m.memory_id in retired:
                         moved |= memory_revision_keys(m)
                     continue
                 written = await self._enrich_memory(m, touched)

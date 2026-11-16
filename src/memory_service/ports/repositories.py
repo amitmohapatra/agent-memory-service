@@ -535,6 +535,11 @@ class MemoryRepository(Protocol):
 
     async def forget(self, tenant_id: str, memory_id: str) -> bool: ...
 
+    async def forget_many(self, tenant_id: str, memory_ids: Sequence[str]) -> list[str]:
+        """``forget`` for a batch, in a fixed number of statements. The ids forgotten: not
+        those already forgotten, another tenant's or unknown."""
+        ...
+
     async def lock(self, tenant_id: str, memory_ids: Sequence[str]) -> None:
         """Hold these rows (deleted ones too) for writing until the transaction ends, taken
         in ``memory_id`` order so writers of overlapping rows never wait on each other in a

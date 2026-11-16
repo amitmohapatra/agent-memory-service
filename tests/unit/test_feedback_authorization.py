@@ -62,9 +62,15 @@ class _FeedbackRepo:
 
     def __init__(self) -> None:
         self.rows: dict[tuple[str, str], Feedback] = {}
+        #: how many times ``get_many`` was asked
+        self.reads = 0
 
     async def get(self, tenant_id, feedback_id):
         return self.rows.get((tenant_id, feedback_id))
+
+    async def get_many(self, tenant_id, feedback_ids):
+        self.reads += 1
+        return [self.rows[(tenant_id, i)] for i in feedback_ids if (tenant_id, i) in self.rows]
 
     async def add(self, feedback) -> bool:
         self.rows[(feedback.tenant_id, feedback.feedback_id)] = feedback
@@ -472,6 +478,7 @@ async def test_bulk_approve_of_a_mix_decides_each_pending_vote_once() -> None:
         uow, "acme", feedback_ids=[a, b, a], approve=True, reviewed_by="key:admin", note="ok"
     )
     assert [f.feedback_id for f in decided] == [a] and not more
+    assert uow.feedback.reads == 1, "the named votes are read at once"
     assert [(f.feedback_id, f.review.state.value) for f in unchanged] == [(b, "dismissed")]
     assert len(uow.jobs) == 1, "one projection, for the one vote decided now"
     # the same call again decides nothing and schedules nothing

@@ -574,19 +574,23 @@ class PostgresGraphStore:
                 )
                 await s.execute(stmt)
 
-    async def supersede_for_memory(self, tenant_id: str, memory_id: str, *, at: datetime) -> int:
+    async def supersede_for_memories(
+        self, tenant_id: str, memory_ids: Sequence[str], *, at: datetime
+    ) -> set[str]:
+        if not memory_ids:
+            return set()
         async with self.session() as s, s.begin():
             res = await s.execute(
                 update(GraphRelationRow)
                 .where(
                     GraphRelationRow.tenant_id == tenant_id,
-                    GraphRelationRow.memory_id == memory_id,
+                    GraphRelationRow.memory_id.in_(list(memory_ids)),
                     GraphRelationRow.status == "CURRENT",
                 )
                 .values(status="SUPERSEDED", valid_to=at, invalidated_at=at, updated_at=at)
-                .returning(GraphRelationRow.relation_id)
+                .returning(GraphRelationRow.memory_id)
             )
-            return len(res.scalars().all())
+            return {memory_id for memory_id in res.scalars() if memory_id is not None}
 
     async def delete_for_document(self, tenant_id: str, document_id: str) -> int:
         async with self.session() as s, s.begin():

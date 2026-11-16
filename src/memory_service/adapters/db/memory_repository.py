@@ -700,6 +700,30 @@ class SqlMemoryRepository:
         self.forgotten.setdefault(tenant_id, set()).add(memory_id)
         return True
 
+    async def forget_many(self, tenant_id: str, memory_ids: Sequence[str]) -> list[str]:
+        if not memory_ids:
+            return []
+        rows = (
+            await self.s.scalars(
+                select(MemoryRow).where(
+                    MemoryRow.tenant_id == tenant_id,
+                    MemoryRow.memory_id.in_(list(memory_ids)),
+                    MemoryRow.deleted_at.is_(None),
+                )
+            )
+        ).all()
+        for r in rows:
+            r.deleted_at = datetime.now(r.created_at.tzinfo)
+            r.temporal_status = TemporalStatus.RETRACTED.value
+            r.revision += 1
+            r.indexed_at = None
+        # one flush: the rows' updates go to the server as one batch
+        await self.s.flush()
+        ids = [r.memory_id for r in rows]
+        await self._invalidate_dependents(tenant_id, ids)
+        self.forgotten.setdefault(tenant_id, set()).update(ids)
+        return ids
+
     async def lock(self, tenant_id: str, memory_ids: Sequence[str]) -> None:
         ids = sorted(set(memory_ids))
         if not ids:

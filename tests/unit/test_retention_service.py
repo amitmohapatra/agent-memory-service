@@ -21,7 +21,7 @@ def _memory(memory_id: str, age_days: int) -> SimpleNamespace:
 
 class _Memories:
     def __init__(self, rows: dict[str, list[SimpleNamespace]]) -> None:
-        self.rows, self.forgotten = rows, []
+        self.rows, self.forgotten, self.calls = rows, [], 0
 
     async def list_older_than(self, tenant_id: str, *, before: datetime, limit: int = 500):
         return sorted(
@@ -29,10 +29,11 @@ class _Memories:
             key=lambda m: m.created_at,
         )[:limit]
 
-    async def forget(self, tenant_id: str, memory_id: str) -> bool:
-        self.forgotten.append((tenant_id, memory_id))
-        self.rows[tenant_id] = [m for m in self.rows[tenant_id] if m.memory_id != memory_id]
-        return True
+    async def forget_many(self, tenant_id: str, memory_ids: list[str]) -> list[str]:
+        self.calls += 1
+        self.forgotten.extend((tenant_id, memory_id) for memory_id in memory_ids)
+        self.rows[tenant_id] = [m for m in self.rows[tenant_id] if m.memory_id not in memory_ids]
+        return list(memory_ids)
 
 
 class _Tenants:
@@ -96,6 +97,7 @@ async def test_tenants_without_a_policy_are_untouched_and_a_backlog_drains_in_ba
     )
     assert await service.sweep(now=NOW) == 5, "three batches in one run, each its own transaction"
     assert uow.commits == 3 and len(uow.jobs) == 3
+    assert uow.memories.calls == 3, "a batch is forgotten in one call, not one per memory"
     assert all(t == "acme" for t, _ in uow.memories.forgotten)
     assert await service.sweep(now=NOW) == 0
 
@@ -115,14 +117,14 @@ async def test_one_tenant_s_failure_does_not_skip_the_next() -> None:
     service, uow = _service(
         {"aaa": 7, "zzz": 7}, {"aaa": [_memory("a", 10)], "zzz": [_memory("z", 10)]}
     )
-    original = uow.memories.forget
+    original = uow.memories.forget_many
 
-    async def forget(tenant_id: str, memory_id: str) -> bool:
+    async def forget_many(tenant_id: str, memory_ids: list[str]) -> list[str]:
         if tenant_id == "aaa":
             raise RuntimeError("index away")
-        return await original(tenant_id, memory_id)
+        return await original(tenant_id, memory_ids)
 
-    uow.memories.forget = forget  # type: ignore[method-assign]
+    uow.memories.forget_many = forget_many  # type: ignore[method-assign]
     assert await service.sweep(now=NOW) == 1
     assert uow.memories.forgotten == [("zzz", "z")]
 

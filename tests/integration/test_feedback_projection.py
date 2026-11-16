@@ -530,7 +530,7 @@ async def test_a_dismissed_vote_is_kept_and_never_applied(container, uow_factory
         unchanged = await uow.memories.get("acme", memory.memory_id)
         outcome = await uow.tools.outcome("acme", "run_voted")
         # the author's record now shows the dismissal to whoever reviews their next vote
-        counts = await uow.feedback.review_counts("acme", user_id="alice", agent_id="helper")
+        [counts] = (await uow.feedback.review_counts("acme", [("alice", "helper")])).values()
     assert kept.review is not None and kept.review.state is ReviewState.DISMISSED
     assert kept.review.note == "answer was right"
     assert kept.projection is not None and kept.projection.action is ProjectionAction.NONE

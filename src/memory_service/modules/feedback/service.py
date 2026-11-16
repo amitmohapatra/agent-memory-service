@@ -438,14 +438,9 @@ class FeedbackService:
             ids = [f.feedback_id for f in found[:BULK_REVIEW_MAX]]
         # one lock order for every caller, so two bulk reviews never deadlock
         await uow.serialize(*(f"feedback:{tenant_id}:{i}" for i in sorted(ids)))
-        records: list[Feedback] = []
-        missing: list[str] = []
-        for feedback_id in ids:
-            record = await uow.feedback.get(tenant_id, feedback_id)
-            if record is None:
-                missing.append(feedback_id)
-            else:
-                records.append(record)
+        found_by_id = {r.feedback_id: r for r in await uow.feedback.get_many(tenant_id, ids)}
+        missing = [i for i in ids if i not in found_by_id]
+        records = [found_by_id[i] for i in ids if i in found_by_id]
         if missing:
             raise NotFound(
                 f"{len(missing)} feedback id(s) not found", details={"feedback_ids": missing}
@@ -510,13 +505,9 @@ class FeedbackService:
         newest first, each verdict with how its author's verdicts fared in review
         (pending / approved / dismissed)."""
         rows = await uow.feedback.list_pending(tenant_id, state=state, before=before, limit=limit)
-        history: dict[tuple[str | None, str | None], dict[str, int]] = {}
-        for r in rows:
-            author = (r.user_id, r.agent_id)
-            if author not in history:
-                history[author] = await uow.feedback.review_counts(
-                    tenant_id, user_id=r.user_id, agent_id=r.agent_id
-                )
+        history = await uow.feedback.review_counts(
+            tenant_id, list(dict.fromkeys((r.user_id, r.agent_id) for r in rows))
+        )
         return [(r, history[(r.user_id, r.agent_id)]) for r in rows]
 
     async def pending_by_target(

@@ -73,7 +73,7 @@ it: a conflict between two principals keeps both memories `CURRENT` and links th
 Each transition also bumps the revisions of every audience that could read the memory
 (`bump_memory_revisions`), so a cached context that showed the old state stops being served
 (chapter 10), and the `memory.index` job closes the memory's knowledge-graph relations
-(`supersede_for_memory`, chapter 5).
+(`supersede_for_memories`, chapter 5).
 
 ---
 

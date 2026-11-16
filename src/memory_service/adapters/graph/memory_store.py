@@ -212,15 +212,22 @@ class MemoryGraphStore:
         rels = [r for r in found.values() if r.subject_id in allowed and r.object_id in allowed]
         return GraphNeighborhood(entities=ents, relations=rels, visited=len(visited))
 
-    async def supersede_for_memory(self, tenant_id: str, memory_id: str, *, at: datetime) -> int:
-        n = 0
+    async def supersede_for_memories(
+        self, tenant_id: str, memory_ids: Sequence[str], *, at: datetime
+    ) -> set[str]:
+        retired: set[str] = set()
         for rid, r in list(self.relations.items()):
-            if r.tenant_id == tenant_id and r.memory_id == memory_id and r.status == "CURRENT":
+            if (
+                r.tenant_id == tenant_id
+                and r.memory_id is not None
+                and r.memory_id in memory_ids
+                and r.status == "CURRENT"
+            ):
                 self.relations[rid] = r.model_copy(
                     update={"status": "SUPERSEDED", "valid_to": at, "invalidated_at": at}
                 )
-                n += 1
-        return n
+                retired.add(r.memory_id)
+        return retired
 
     async def delete_for_document(self, tenant_id: str, document_id: str) -> int:
         gone = [

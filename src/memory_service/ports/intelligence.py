@@ -191,7 +191,7 @@ class Relation(BaseModel):
 
     A relation is never deleted: a replaced or withdrawn fact keeps its row and gets a status
     (SUPERSEDED when it stopped being true, INVALIDATED when it was never right). The stores
-    close relations as SUPERSEDED (``supersede_for_memory``); nothing writes INVALIDATED or
+    close relations as SUPERSEDED (``supersede_for_memories``); nothing writes INVALIDATED or
     an ``invalidated_by`` edge today, and the read filters honour both.
     """
 
@@ -358,8 +358,11 @@ class GraphStore(Protocol):
         """
         ...
 
-    async def supersede_for_memory(self, tenant_id: str, memory_id: str, *, at: datetime) -> int:
-        """Retire every CURRENT relation derived from a memory that is no longer current."""
+    async def supersede_for_memories(
+        self, tenant_id: str, memory_ids: Sequence[str], *, at: datetime
+    ) -> set[str]:
+        """Retire every CURRENT relation derived from memories that are no longer current, in
+        one statement. The memories that had one."""
         ...
 
     async def delete_for_document(self, tenant_id: str, document_id: str) -> int: ...

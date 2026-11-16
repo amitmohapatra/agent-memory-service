@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from memory_service.__about__ import __version__
 from memory_service.application.container import Container, Overrides, build_container
@@ -115,3 +115,20 @@ async def container(make_settings, tmp_path, request) -> AsyncIterator[Container
 @pytest.fixture
 def uow_factory(container: Container):
     return container.services["uow_factory"]
+
+
+@pytest.fixture
+def statements(container: Container) -> Iterator[list[str]]:
+    """Every SQL statement the container's engine runs while the test holds this list: for
+    asserting that a batch is one round trip, not one per item."""
+    seen: list[str] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany) -> None:  # type: ignore[no-untyped-def]
+        seen.append(" ".join(statement.split()))
+
+    engine = container.database.engine.sync_engine
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        yield seen
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
