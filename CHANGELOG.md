@@ -52,6 +52,11 @@ each entry says which one moved. Decisions behind each change are in the
   asserts any other tenant gets `403 SCOPE_DENIED`. **To upgrade a deployed `jwt` service
   that sets no `TENANT_CLAIM`: set `SINGLE_TENANT` to its tenant.** `dev` and `test` are
   unchanged ([configuration.md](docs/configuration.md#production-guards)).
+- **`docs/ARCHITECTURE.md` says what the code does** (documentation). Three claims were
+  false: that the service does not import `trellis.contracts` (it imports `Endpoint` and
+  `ModelProfile`), that `api` depends on `application` only (it imports the modules, ports and
+  domain too, and no adapter), and that no module touches another module's tables (enforced
+  for writes to memories; a convention for the rest).
 - **`config/registry.py` is gone** (service; no behaviour changed). The generic
   `ProviderRegistry` held one port: wiring copied the document parsers' table
   (`adapters/parsers.PARSERS`) into it and read the same entry back, through a process-wide
