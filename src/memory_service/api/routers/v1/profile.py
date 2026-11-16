@@ -109,8 +109,8 @@ class EditBlockRequest(BaseModel):
     responses=_ERRORS,
 )
 async def get_profile(ctx: HeaderContextDep, container: ContainerDep) -> ProfileResponse:
-    async with container.services["uow_factory"]() as uow:
-        blocks = await container.services["profile"].blocks(uow, ctx)
+    async with container.services.uow_factory() as uow:
+        blocks = await container.services.profile.blocks(uow, ctx)
     return ProfileResponse(blocks=[ProfileBlockBody.of(b) for b in blocks])
 
 
@@ -134,7 +134,7 @@ async def edit_profile_block(
     ctx = build_context(request, container, body.scope)
 
     async def handler(uow):  # type: ignore[no-untyped-def]
-        stored = await container.services["profile"].edit(
+        stored = await container.services.profile.edit(
             uow,
             ctx,
             block,
