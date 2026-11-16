@@ -234,7 +234,7 @@ async def recall(
     request: Request, body: RecallRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> RecallResponse:
     ctx = build_context(request, container, body.scope)
-    found = await container.services["search"].search(
+    found = await container.services.search.search(
         ctx,
         body.query,
         kinds=body.kinds,
@@ -272,8 +272,8 @@ async def context(
     request: Request, body: ContextRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> Response:
     ctx = build_context(request, container, body.scope)
-    async with container.services["llm_assist"].reading(ctx):
-        payload = await container.services["context_builder"].build_api(
+    async with container.services.llm_assist.reading(ctx):
+        payload = await container.services.context_builder.build_api(
             ctx,
             body.query,
             token_budget=body.token_budget,
