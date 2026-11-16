@@ -800,7 +800,7 @@ class FeedbackService:
         if record.verdict in AFFIRMING_VERDICTS:
             return await self._reinforce(uow, memory, now=now)
         if record.verdict is FeedbackVerdict.REJECT:
-            return await self._retract(uow, memory, record, now=now)
+            return await self._retract(uow, memory, now=now)
         if record.verdict in CORRECTING_VERDICTS:
             return await self._correct(uow, memory, record, now=now)
         raise AssertionError(f"unhandled verdict {record.verdict}")  # pragma: no cover
@@ -1040,7 +1040,7 @@ class FeedbackService:
         )
 
     async def _retract(
-        self, uow: UnitOfWork, memory: CanonicalMemory, record: Feedback, *, now: datetime
+        self, uow: UnitOfWork, memory: CanonicalMemory, *, now: datetime
     ) -> FeedbackProjection:
         # the same statement kept twice (a turn and a rule's reading in its words) is
         # withdrawn once: the twin left behind would still assert it

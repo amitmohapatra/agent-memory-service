@@ -12,7 +12,7 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ObservationKind
 from memory_service.domain.ids import content_hash
 from memory_service.domain.observation import Observation, ProcessingHints
-from memory_service.modules.conversation.service import TASK_PROCESS_OBSERVATION
+from memory_service.modules.jobs.names import TASK_PROCESS_OBSERVATION
 from memory_service.modules.jobs.registry import register_handlers
 from memory_service.ports.tasks import JobSpec, Queue
 

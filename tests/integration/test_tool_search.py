@@ -168,7 +168,7 @@ async def test_a_tool_first_seen_in_a_recorded_call_becomes_searchable(
 async def test_the_reindex_tool_rebuilds_tool_search_after_a_model_change(
     container, uow_factory
 ) -> None:
-    """A model change is a new, empty collection: ``memory-reindex`` fills it from the
+    """A model change is a new, empty collection: ``make reindex`` fills it from the
     catalog, every tenant's or one tenant's only."""
     from memory_service.tools.reindex import rebuild_search_index
 

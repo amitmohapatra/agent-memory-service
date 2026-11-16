@@ -91,7 +91,7 @@ The tables below stay empty until each step is run with real weights and real se
 
 1. **Real weights, real gates.** `make gates` and `make validate` with a real embedding
    model and reranker; compare every number against the sandbox column. Then
-   `make bench-embedding` and `make bench-reranker` to settle the defaults, and the public
+   `make bench-embedding` and `make bench-rerank-offline` to settle the defaults, and the public
    retrieval benchmarks so the numbers are comparable with the field and not only with
    ourselves. Docling against real PDFs with tables, footnotes and multi-column layout.
 2. **Real infrastructure.** `pytest -m docker` against a real OpenFGA and Qdrant server,

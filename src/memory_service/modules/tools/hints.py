@@ -559,12 +559,12 @@ class ToolHintsService:
             return None
         entity = sorted(typed, key=lambda e: (-e.mention_count, e.entity_id))[0]
         if _norm(arg).endswith("id"):
-            return await self._identifier(job, arg, entity)
+            return await self._identifier(job, entity)
         return Prefill(
             tool=job.tool.name, value=entity.name, source="graph", evidence_id=entity.entity_id
         )
 
-    async def _identifier(self, job: _Resolution, arg: str, entity: Any) -> Prefill | None:
+    async def _identifier(self, job: _Resolution, entity: Any) -> Prefill | None:
         assert self.graph is not None
         relations = await self.graph.entity_relations(
             job.ctx.tenant_id, entity.entity_id, scope_keys=job.scope_keys, current=True, limit=20
@@ -603,7 +603,7 @@ def _from_procedure(job: _Resolution, arg: str) -> Prefill | None:
     if binding is None:
         return None
     if binding.get("source_step") is not None:
-        return _from_earlier_step(job, arg, binding)
+        return _from_earlier_step(job, binding)
     literal = binding.get("literal")
     if literal is not None and not _names_another(job.task, literal):
         return Prefill(tool=job.tool.name, value=literal, source="procedure")
@@ -617,7 +617,7 @@ def _names_another(task: str, literal: Any) -> bool:
     return bool(named) and str(literal).casefold() not in named
 
 
-def _from_earlier_step(job: _Resolution, arg: str, binding: dict[str, Any]) -> Prefill | None:
+def _from_earlier_step(job: _Resolution, binding: dict[str, Any]) -> Prefill | None:
     assert job.plan is not None
     source_tool = job.plan.tools[int(binding["source_step"])]
     field_path = str(binding.get("source_field") or "")

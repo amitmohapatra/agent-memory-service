@@ -230,7 +230,6 @@ def _arms(
     *,
     dense: Mapping[VectorName, Sequence[float]],
     sparse: SparseVector | None,
-    flt: SearchFilter,
     qf: models.Filter,
     prefetch_limit: int,
     weights: Mapping[VectorName, float] | None,
@@ -695,7 +694,6 @@ class QdrantSearchStore:
         arms = _arms(
             dense=dense,
             sparse=sparse,
-            flt=flt,
             qf=qf,
             prefetch_limit=prefetch_limit,
             weights=weights,

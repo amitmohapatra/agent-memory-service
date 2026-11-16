@@ -2,6 +2,7 @@
 
 Adapters register factories under (port, provider_name). Configuration selects one.
 Adding a provider means registering a factory, never editing a switch statement.
+The document parsers are the one port wired this way (``adapters.wiring``).
 """
 
 from __future__ import annotations
@@ -43,25 +44,10 @@ class ProviderRegistry[T]:
 
 
 class Registries:
-    """All registries in one place so the composition root can wire providers."""
+    """The registries the composition root wires providers from."""
 
     def __init__(self) -> None:
-        self.cache: ProviderRegistry[Any] = ProviderRegistry("cache")
-        self.search: ProviderRegistry[Any] = ProviderRegistry("search")
-        self.blob: ProviderRegistry[Any] = ProviderRegistry("blob")
-        self.tasks: ProviderRegistry[Any] = ProviderRegistry("tasks")
-        self.authorization: ProviderRegistry[Any] = ProviderRegistry("authorization")
-        self.embedding: ProviderRegistry[Any] = ProviderRegistry("embedding")
-        self.sparse: ProviderRegistry[Any] = ProviderRegistry("sparse")
-        self.llm: ProviderRegistry[Any] = ProviderRegistry("llm")
-        self.memory_intelligence: ProviderRegistry[Any] = ProviderRegistry("memory_intelligence")
-        self.graph_store: ProviderRegistry[Any] = ProviderRegistry("graph_store")
-        self.graph_enrichment: ProviderRegistry[Any] = ProviderRegistry("graph_enrichment")
         self.document_parser: ProviderRegistry[Any] = ProviderRegistry("document_parser")
-        self.retrieval_strategy: ProviderRegistry[Any] = ProviderRegistry("retrieval_strategy")
-
-    def all(self) -> dict[str, ProviderRegistry[Any]]:
-        return {k: v for k, v in vars(self).items() if isinstance(v, ProviderRegistry)}
 
 
 _registries: Registries | None = None

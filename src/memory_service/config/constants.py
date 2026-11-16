@@ -760,8 +760,8 @@ class MemoryIntelligenceSettings(BaseModel):
     #: forty idle days and a never-recalled user fact in about ninety. They can still be
     #: forgotten explicitly (DELETE /v1/memories/{id}) and by tenant retention.
     forgetting_protect_core: bool = True
-    #: the deployment's retail calendar (``RetailSettings``): fiscal phrases in a memory are
-    #: resolved against it at ingest; None resolves calendar dates only
+    #: the deployment's retail calendar (``Settings.retail_calendar``): fiscal phrases in a
+    #: memory are resolved against it at ingest; None resolves calendar dates only
     fiscal_calendar: FiscalCalendar | None = None
 
 
@@ -827,7 +827,7 @@ class RetrievalSettings(BaseModel):
         default=2048, ge=64, description="query text beyond this is truncated before retrieval"
     )
     #: Search a query's retail planning shorthand with its expansion too ("WOS" and "weeks of
-    #: supply"; ``domain.glossary``). Set by ``RetailSettings.glossary``.
+    #: supply"; ``domain.glossary``). On when ``Settings.retail_calendar`` is set.
     retail_glossary: bool = False
     exact: bool = True
     bm25: bool = True

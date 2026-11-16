@@ -22,7 +22,7 @@ from memory_service.domain.ids import new_id
 from memory_service.domain.revisions import RevisionKind
 from memory_service.domain.tools import ToolDescriptor
 from memory_service.modules.context.sections import ToolsRequest
-from memory_service.modules.jobs.registry import TASK_MEMORY_INDEX
+from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from tests.integration.conftest import requires_pg
 
 pytestmark = [pytest.mark.integration, requires_pg]

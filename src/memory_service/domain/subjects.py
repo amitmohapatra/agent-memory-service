@@ -554,10 +554,10 @@ def _parse(text: str, learned: tuple[tuple[str, str], ...]) -> Subject:
         return Subject(text=text, identity=text)
     vocab = vocabulary().with_aliases(learned)
     items = _identifiers(_scan(text), vocab)
-    return _subject(text, _entries(items, vocab), vocab)
+    return _subject(text, _entries(items, vocab))
 
 
-def _subject(text: str, entries: list[_Entry], vocab: Vocabulary) -> Subject:
+def _subject(text: str, entries: list[_Entry]) -> Subject:
     words: list[str] = []
     sequence: list[str] = []
     loose: list[str] = []

@@ -1,5 +1,5 @@
 """Retail shorthand searched with its expansion (``domain.glossary``), and the switch that
-turns it on for a deployment (``RetailSettings``)."""
+turns it on for a deployment (``Settings.retail_calendar``)."""
 
 from __future__ import annotations
 

@@ -196,7 +196,7 @@ the queue pool.
 | `memory.index` | `embedding` | every memory change | 5 | index or remove, bump revisions, queue a profile refresh; the graph enrichment, queued with a model and run here without one |
 | `graph.enrich_memories` | `graph` | `memory.index`, with a model | 5 | the memories' entities and relations |
 | `document.parse` | `document-parse` | upload | 3 | parse, hierarchy, chunks, Document Context Graph |
-| `document.index` | `embedding` | parse | 5 | index chunks and summaries, mark the document `READY`, then the graph enrichment (queued with a model, run here without one); when it gives up, the document is `FAILED` ("index failed: ...") for `memory-reindex` to finish |
+| `document.index` | `embedding` | parse | 5 | index chunks and summaries, mark the document `READY`, then the graph enrichment (queued with a model, run here without one); when it gives up, the document is `FAILED` ("index failed: ...") for `make reindex` (`python -m memory_service.tools.reindex`) to finish |
 | `graph.enrich_document` | `graph` | `document.index`, with a model | 5 | the document's entities and relations |
 | `archive.stage_message` | `archive` | each message, 60 s coalesced per thread | 10 | compress, upload, verify, manifest (ADR 0006) |
 | `feedback.project` | `reconcile` | an applied verdict | 3 | apply it (chapter 6) |

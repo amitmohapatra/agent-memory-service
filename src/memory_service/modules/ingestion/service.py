@@ -65,7 +65,7 @@ class FileAck:
 
 
 #: How ``last_error`` starts when a document's index job gave up: its parse is done and its
-#: version is current, so ``memory-reindex`` picks it up (``tools/reindex.py``).
+#: version is current, so ``make reindex`` picks it up (``tools/reindex.py``).
 INDEX_FAILED: Final = "index failed"
 
 
@@ -381,7 +381,7 @@ class IngestionService:
     ) -> None:
         """The index job gave up (its retries spent, or past the job timeout): the document
         is FAILED with why, not left STAGED with nothing to say. Its parsed version stays;
-        ``memory-reindex`` indexes it and marks it READY. An index job of a version a later
+        ``make reindex`` indexes it and marks it READY. An index job of a version a later
         parse replaced leaves the status to that version's own job."""
         async with self.uow_factory() as uow:
             document = await uow.documents.get(tenant_id, document_id)

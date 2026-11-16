@@ -629,7 +629,7 @@ class _Reader:
         if shape.exception and evidence == "strong":
             return True  # "Don't reorder seasonal items unless the buyer approves it"
         if shape.condition is not None and evidence:
-            return self._conditional_certainty(s, work, shape, evidence)
+            return self._conditional_certainty(work, shape, evidence)
         if marked and self.cues["policy_subject"].at(s, self._past_fillers(s, start, end)):
             return False  # "We never ship hazardous goods on Fridays" / "We always look forward"
         if marked and evidence:
@@ -651,9 +651,7 @@ class _Reader:
             "occasion"
         ].search(work, start, end)
 
-    def _conditional_certainty(
-        self, s: str, work: str, shape: _Shape, evidence: str
-    ) -> bool | None:
+    def _conditional_certainty(self, work: str, shape: _Shape, evidence: str) -> bool | None:
         """An instruction under a condition. Sure when it is plainly addressed to the
         assistant on the user's behalf - the condition is the user's own request ("each time
         I upload a log"), the instruction names its recipient ("please alert the manager",

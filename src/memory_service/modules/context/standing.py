@@ -49,8 +49,6 @@ PREFERENCES_BLOCK: Final = "preferences"
 #: answered for that setup. Their own, in the workspace it was said in, current only (an
 #: earlier value or a superseded statement never comes back), the nearest ``ABOUT_MAX``.
 ABOUT_BLOCK: Final = "about_user"
-#: the sections this module writes (``sections.within_budget`` keeps them before the rest)
-BLOCKS: Final = frozenset({RULES_BLOCK, PREFERENCES_BLOCK, ABOUT_BLOCK})
 #: The first lines of the section are pinned with the profile, within the pinned sections'
 #: share of the budget: the nearest ``ABOUT_MAX`` of the ``ABOUT_SEARCH_K`` nearest, within
 #: ``ABOUT_CHARS``.

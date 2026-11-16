@@ -88,7 +88,7 @@ array items included, three levels deep, each distinct text once, at most 4,000 
 the `tools` search collection by a background job, so a tool whose purpose only an argument's
 description names is found. `periodic.tools_refresh` indexes what no job did: an entry with
 no record (one a recorded call created, a collection a model change made new) and one whose
-text a release changed; `memory-reindex` re-embeds the whole catalog. `required` defaults to
+text a release changed; `make reindex` re-embeds the whole catalog. `required` defaults to
 the input schema's.
 
 ## Recording a call

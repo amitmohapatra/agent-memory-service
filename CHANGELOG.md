@@ -41,6 +41,17 @@ each entry says which one moved. Decisions behind each change are in the
   asking call.
 
 ### Changed
+- **Internal cleanup, no behaviour, route, field or SDK call changed** (service). Job task
+  names are defined once, in `modules/jobs/names.py`, and imported from there. Access keys
+  are built through `visibility_keys` and `domain.context.agent_principal` (tool learning
+  and the episode indexer no longer build them by hand). The `TaskQueue` port declares
+  `register_periodic`, which both adapters implement. Unused code is gone: the provider
+  registries nothing registered into (`document_parser` stays), `slots.bridged_things`,
+  `standing.BLOCKS`, eight unused parameters of private functions, and unused test support
+  (`aclient`, `requires_redis`). Comments and docs name what exists (`Settings.retail_calendar`,
+  `make reindex`, `make bench-rerank-offline`; the SDK README's list of `Literal`s).
+- **The in-memory blob store honours generation preconditions** (service). A write whose
+  generation does not match is refused, as the filesystem store does.
 - **The OpenAPI document lists the `504` the request deadline answers** (service, contract).
   Every operation the deadline middleware covers (every one but `POST /v1/documents`, the
   probes and `/metrics`: 69 of 73) now documents `504` with the `Problem` schema, `code:

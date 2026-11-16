@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from memory_service.modules.memory.pipeline import TASK_MEMORY_INDEX
+from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.observability.logging import get_logger
 from memory_service.ports.tasks import JobSpec, Queue

@@ -138,7 +138,7 @@ async def get_service_principal(request: Request, container: ContainerDep) -> Se
 ServicePrincipalDep = Annotated[ServicePrincipal, Depends(get_service_principal)]
 
 
-def _header_scope(request: Request, container: Container) -> dict[str, Any]:
+def _header_scope(request: Request) -> dict[str, Any]:
     h = request.headers
     return {
         "tenant_id": require_one_value(h, HEADERS.tenant),
@@ -312,7 +312,7 @@ def build_context(
     request: Request, container: Container, body_scope: ScopeBody | None
 ) -> MemoryExecutionContext:
     """Merge trusted headers with body lineage into an immutable execution context."""
-    headers = _header_scope(request, container)
+    headers = _header_scope(request)
     body = body_scope or ScopeBody()
     for field in ("tenant_id", "workspace_id", "user_id"):
         header_value = headers[field]

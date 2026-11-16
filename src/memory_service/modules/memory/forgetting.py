@@ -20,7 +20,7 @@ from typing import Any
 from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.enums import TemporalStatus
 from memory_service.domain.memory import CanonicalMemory, lasting
-from memory_service.modules.memory.pipeline import TASK_MEMORY_INDEX
+from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.observability.logging import get_logger
 from memory_service.ports.cache import CacheProvider, CacheUnavailable

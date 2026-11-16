@@ -328,7 +328,7 @@ class AuthorizationService:
     # removed a grant, so a removed user kept live access (design/PRODUCT_DECISIONS.md, §4).
 
     @staticmethod
-    def _member_subject(tenant_id: str, principal: str) -> tuple[str, str]:
+    def _member_subject(principal: str) -> tuple[str, str]:
         """FGA subject for a workspace principal, and the revision id its scopes hang on."""
         kind, ident = parse_principal(principal)
         return f"{kind}:{ident}", ident
@@ -353,7 +353,7 @@ class AuthorizationService:
         in the same write (deleting a tuple that does not exist would fail the batch and
         fall back to one write per tuple)."""
         obj = f"workspace:{object_id(tenant_id, workspace_id)}"
-        subject, ident = self._member_subject(tenant_id, principal)
+        subject, ident = self._member_subject(principal)
         keep = RelationTuple(user=subject, relation=role, object=obj)
         drop = (
             [RelationTuple(user=subject, relation=previous, object=obj)]
@@ -372,7 +372,7 @@ class AuthorizationService:
         revisions: RevisionRepository | None = None,
     ) -> None:
         obj = f"workspace:{object_id(tenant_id, workspace_id)}"
-        subject, ident = self._member_subject(tenant_id, principal)
+        subject, ident = self._member_subject(principal)
         await self.provider.write(
             [], [RelationTuple(user=subject, relation=r, object=obj) for r in WORKSPACE_ROLES]
         )

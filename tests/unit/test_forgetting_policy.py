@@ -16,13 +16,13 @@ from memory_service.config.constants import MEMORY_INTELLIGENCE
 from memory_service.domain.enums import Lifetime, MemoryType, TemporalStatus
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.revisions import RevisionKind
+from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.memory.forgetting import (
     ForgettingReport,
     ForgettingService,
     forgetting_score,
     protected,
 )
-from memory_service.modules.memory.pipeline import TASK_MEMORY_INDEX
 from memory_service.ports.cache import CacheUnavailable
 from memory_service.ports.tasks import JobSpec, Queue
 

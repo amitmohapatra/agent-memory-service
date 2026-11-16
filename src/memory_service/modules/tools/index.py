@@ -6,8 +6,8 @@ Each record carries the ``text_hash`` of the text it was embedded from. A change
 entry is re-indexed by its own ``tools.index`` job; ``refresh`` (a periodic job) indexes the
 rest: an entry with no record (one a recorded call created, a job that gave up, a new
 collection after a model change) and one whose text a release changed, so an existing
-deployment picks the new text up by itself. ``rebuild`` (``memory-reindex``) re-embeds
-every entry.
+deployment picks the new text up by itself. ``rebuild`` (``make reindex``) re-embeds every
+entry.
 
 A tool record's audience is its catalog scope: ``tenant:<t>`` for a tenant-wide entry,
 ``workspace:<t>/<w>`` for a workspace's own; a search reads both, and a workspace's entry

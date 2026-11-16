@@ -83,7 +83,7 @@ async def test_a_document_whose_index_job_gives_up_is_failed_then_reindexed(
 ) -> None:
     """A document stays STAGED until its index job has embedded it; when that job gives up
     (retries spent, or past the job timeout on a large file) it is FAILED with why, not STAGED
-    forever, and ``memory-reindex`` indexes it and makes it READY."""
+    forever, and ``make reindex`` indexes it and makes it READY."""
     from memory_service.tools.reindex import rebuild_search_index
 
     register_handlers(container)

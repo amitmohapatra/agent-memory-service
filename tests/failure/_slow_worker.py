@@ -9,7 +9,7 @@ import asyncio
 import sys
 
 from memory_service.adapters.tasks.procrastinate_queue import ProcrastinateTaskQueue
-from memory_service.modules.jobs.registry import TASK_PROCESS_OBSERVATION
+from memory_service.modules.jobs.names import TASK_PROCESS_OBSERVATION
 from memory_service.ports.tasks import Queue
 
 
