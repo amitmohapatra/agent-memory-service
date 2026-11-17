@@ -431,7 +431,9 @@ class ToolHintsService:
         # the stored procedures, the catalog search and the standing rules are independent
         procedures, found, standing = await asyncio.gather(
             self.procedures(ctx, task, scope_keys, k=3, vectors=vectors),
-            self.index.search(ctx.tenant_id, ctx.workspace_id, task, vectors=vectors),
+            self.index.search(
+                ctx.tenant_id, ctx.workspace_id, task, vectors=vectors, available=available
+            ),
             self._standing(task, visibility, vectors),
         )
         profile = [*standing, *profile]

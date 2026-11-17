@@ -433,6 +433,11 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **Tool hints find a run's tools in a large catalog** (service). The catalog search took
+  its 32 best candidates from the tenant's whole catalog and only then kept the run's
+  `available` tools, so a catalog with many better-matching tools (other agents', or many
+  versions of one) left a run's hints empty. The search now ranks among the `available` tools
+  alone, filtered in the store (`ToolIndex.search(available=)`).
 - **`GET /v1/jobs/{job_id}` no longer shows a tenant the error of the service's own job**
   (service). A job that belongs to no tenant (periodic work) is readable by any tenant that
   names its id, and its `last_error`, which can quote any tenant's data, came with it.

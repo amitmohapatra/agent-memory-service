@@ -38,7 +38,9 @@ from memory_service.ports.uow import UnitOfWorkFactory
 log = get_logger(__name__)
 
 TOOLS: Final = "tools"
-#: Candidates one search asks the store for (before the caller's available set narrows them).
+#: Candidates one search asks the store for, among the caller's available tools when it names
+#: them (narrowed in the store: a tenant's catalog may hold thousands, and the best 32 of all of
+#: them may hold none of a run's).
 SEARCH_LIMIT: Final = 32
 _RRF_K: Final = 1
 #: Catalog entries one ``refresh`` page compares with their records.
@@ -218,9 +220,13 @@ class ToolIndex:
         *,
         vectors: QueryVectors | None = None,
         limit: int = SEARCH_LIMIT,
+        available: Sequence[str] | None = None,
     ) -> list[ToolMatch]:
-        """The tools found, best first, one per name. ``vectors`` are the task's, when a
+        """The tools found, best first, one per name; among ``available`` alone when given
+        (the store filters by name before it ranks). ``vectors`` are the task's, when a
         retrieval already encoded it (the pushed context): no second encode."""
+        if available is not None and not available:
+            return []
         await self.ensure()
         if vectors is None or not vectors.dense:
             vectors = await self.encode(task)
@@ -232,7 +238,10 @@ class ToolIndex:
             flt=SearchFilter(
                 tenant_id=tenant_id,
                 must={"kind": "tool"},
-                must_any={"visibility_keys": tool_audience(tenant_id, workspace_id)},
+                must_any={
+                    "visibility_keys": tool_audience(tenant_id, workspace_id),
+                    **({"text": sorted(set(available))} if available is not None else {}),
+                },
             ),
             limit=limit,
             prefetch_limit=limit,
