@@ -302,22 +302,61 @@ def _vectors():
     )
 
 
+def _admits(flt: Any, payload: dict[str, Any]) -> bool:
+    """Whether a store applying ``flt`` keeps a record of ``payload`` (Qdrant's reading:
+    every ``must`` and ``must_any`` entry, and one of the ``should_any`` ones)."""
+    if payload.get("tenant_id", flt.tenant_id) != flt.tenant_id:
+        return False
+    must = all(payload.get(k) == v for k, v in flt.must.items())
+
+    def any_of(key: str, values: list[str]) -> bool:
+        held = payload.get(key)
+        return any(h in values for h in held) if isinstance(held, list) else held in values
+
+    must_any = all(any_of(k, v) for k, v in flt.must_any.items())
+    should = not flt.should_any or any(any_of(k, v) for k, v in flt.should_any.items())
+    return must and must_any and should
+
+
 async def test_the_available_tools_are_filtered_on_an_indexed_keyword_field() -> None:
-    """``available`` narrows the search in the store: on ``tool_name``, a keyword payload
-    index, never on ``text`` (unindexed, and a whole memory's text in other collections)."""
+    """``available`` narrows the search in the store, on ``tool_name``, a keyword payload
+    index, besides the tenant and the audience, which stay required."""
     from memory_service.adapters.search.qdrant_store import _PAYLOAD_INDEXES
 
     store = _SearchStore([])
     index = ToolIndex(None, _NoEncoderIndexer(), store)  # type: ignore[arg-type]
     await index.search("acme", "ws1", "t", vectors=_vectors(), available=["b", "a", "b"])
     (flt,) = store.filters
-    assert flt.must_any["tool_name"] == ["a", "b"], "each name once"
-    assert "text" not in flt.must_any
-    assert {*flt.must, *flt.must_any, *flt.should_any} <= set(_PAYLOAD_INDEXES)
+    assert flt.should_any["tool_name"] == ["a", "b"], "each name once"
+    assert "tool_name" not in flt.must_any and "text" not in flt.must_any
+    assert {*flt.must, *flt.must_any} <= set(_PAYLOAD_INDEXES)
     assert _PAYLOAD_INDEXES["tool_name"] == "keyword"
+    assert flt.must == {"kind": "tool"}
+    assert flt.must_any["visibility_keys"] == ["tenant:acme", "workspace:acme/ws1"]
 
     assert await index.search("acme", "ws1", "t", vectors=_vectors(), available=[]) == []
     assert len(store.filters) == 1, "an empty set searches nothing"
+
+
+async def test_a_record_an_older_release_wrote_is_found_by_a_filtered_search() -> None:
+    """While releases are mixed, a worker of the earlier release writes layout-1 records
+    (no ``tool_name``) back over the moved ones on each refresh tick, and a record is not
+    moved until this release's next refresh or ``GET /v1/tools``. A search filtered on
+    ``tool_name`` alone found none of them and a run's hints came back empty. The search
+    matches the name in either field, ``tool_name`` or layout 1's ``text``, still inside the
+    tenant, the kind and the audience."""
+    store = _SearchStore([])
+    index = ToolIndex(None, _NoEncoderIndexer(), store)  # type: ignore[arg-type]
+    await index.search("acme", "ws1", "t", vectors=_vectors(), available=["crm-create"])
+    (flt,) = store.filters
+    audience = {"kind": "tool", "tenant_id": "acme", "visibility_keys": ["tenant:acme"]}
+    v1 = {**audience, "text": "crm-create", "text_hash": "abc"}
+    v2 = {**v1, "tool_name": "crm-create", "text_hash": "v2:abc"}
+    assert _admits(flt, v2)
+    assert _admits(flt, v1), "a layout-1 record is still found"
+    assert not _admits(flt, {**v1, "text": "other"}), "another tool is not"
+    assert not _admits(flt, {**v2, "tenant_id": "other"}), "nor another tenant's"
+    assert not _admits(flt, {**v2, "visibility_keys": ["workspace:acme/ws2"]}), "nor out of scope"
 
 
 async def test_a_record_carries_its_tool_name_and_its_layouts_hash() -> None:

@@ -449,12 +449,12 @@ each entry says which one moved. Decisions behind each change are in the
   layout in place, payload only (`SearchStore.set_payloads`), and so does `GET /v1/tools`
   for the entries it lists. That is the call a harness waits on before its first hints, so
   its wait ends at once instead of running out. Until a record is moved, a search naming
-  `available` does not find it: a harness process started before the deploy gets hints that
-  narrow nothing for at most that window, never an error. Upgrade the worker first, or with
-  the API: a worker of the earlier release reads a `v2:` record as stale, embeds it again and
-  writes it back without `tool_name` on each of its refresh ticks, so while one runs beside
-  this release the catalog is re-embedded every five minutes and its records drop out of a
-  filtered search until this release moves them again.
+  `available` matches it by the name layout 1 kept in `text` (either field, inside the
+  tenant, the kind and the audience), so hints are never empty for it. Upgrade the worker
+  first, or with the API: a worker of the earlier release reads a `v2:` record as stale,
+  embeds it again and writes it back without `tool_name` on each of its refresh ticks, so
+  while one runs beside this release the catalog is re-embedded every five minutes (its
+  records are still found, on `text`, until this release moves them again).
 - **Deadlines are kept and the connection pool holds under concurrent load** (service). Under a
   single process with a pool of 5 + 5, `/v1/verify` answered its 15 s deadline at up to 55 s
   and requests and jobs failed with "PostgreSQL connection pool exhausted". Causes and fixes:

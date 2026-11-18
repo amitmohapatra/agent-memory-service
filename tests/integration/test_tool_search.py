@@ -234,21 +234,43 @@ async def _as_an_earlier_release_wrote_them(container, uow_factory) -> list[Tool
 async def test_records_an_earlier_layout_wrote_are_moved_to_the_new_one_without_embedding(
     container, uow_factory, monkeypatch
 ) -> None:
-    """The window after a deploy: the old records have no ``tool_name``, so a search that
-    names the run's tools finds none of them. The periodic refresh moves them to the new
-    layout - payload only, the vectors are of the same text - and they are found again."""
+    """The window after a deploy: the old records have no ``tool_name``. The periodic refresh
+    moves them to the new layout - payload only, the vectors are of the same text."""
     await _publish(container, uow_factory)
-    await _as_an_earlier_release_wrote_them(container, uow_factory)
+    entries = await _as_an_earlier_release_wrote_them(container, uow_factory)
     index = container.services["tool_index"]
-    assert await _available(container, ["billing-adjust"]) == [], "not yet: no tool_name"
 
     async def no_embedding(texts, hashes):
         raise AssertionError("an unchanged text is not embedded again")
 
     monkeypatch.setattr(index.indexer, "embed_cached", no_embedding)
     await container.tasks.run_periodic("periodic.tools_refresh")
+    moved = await container.search.get(index.collection, [e.tool_id for e in entries])
+    assert {r.payload.get("text_hash") for r in moved} == {
+        record_hash(e.index_text()) for e in entries
+    }
     assert await _available(container, ["billing-adjust"]) == ["billing-adjust"]
     assert await index.refresh(force=True) == 0
+
+
+async def test_records_an_earlier_release_wrote_are_found_before_they_are_moved(
+    container, uow_factory
+) -> None:
+    """While releases are mixed, an earlier worker writes layout-1 records (no ``tool_name``)
+    back on each of its refresh ticks. A search naming the run's tools still finds them, by
+    the name layout 1 kept in ``text``, and only in the run's tenant and audience."""
+    await _publish(container, uow_factory)
+    await _as_an_earlier_release_wrote_them(container, uow_factory)
+    assert await _available(container, ["billing-adjust"]) == ["billing-adjust"]
+    assert await _available(container, ["billing-adjust", "billing-export"]) == [
+        "billing-adjust",
+        "billing-export",
+    ]
+    assert await _available(container, ["nobody-has-this"]) == []
+    found = await container.services["tool_index"].search(
+        "globex", "ws1", TASK, available=["billing-adjust"]
+    )
+    assert found == [], "never another tenant's"
 
 
 async def test_asking_whether_old_records_are_indexed_moves_them_there_and_then(

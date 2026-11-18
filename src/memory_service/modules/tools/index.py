@@ -14,6 +14,8 @@ in place, payload only (its vectors are of the same text): by ``refresh``, and b
 for the entries it is asked about, so a harness waiting for its tools to be indexed is not
 held until the next refresh tick. Layout 2 added ``tool_name``, the keyword payload index a
 search's ``available`` filter reads (layout 1 filtered on ``text``, which is not indexed).
+Until no release that writes layout 1 can be running, the filter also accepts the name in
+``text`` (``search``), so a record an earlier worker wrote back is still found.
 
 A tool record's audience is its catalog scope: ``tenant:<t>`` for a tenant-wide entry,
 ``workspace:<t>/<w>`` for a workspace's own; a search reads both, and a workspace's entry
@@ -285,6 +287,7 @@ class ToolIndex:
         if vectors is None or not vectors.dense:
             vectors = await self.encode(task)
         dense, sparse = vectors.dense, vectors.sparse
+        names = sorted(set(available)) if available is not None else None
         hits = await self.store.search_hybrid(
             self.collection,
             dense=dense,
@@ -292,11 +295,14 @@ class ToolIndex:
             flt=SearchFilter(
                 tenant_id=tenant_id,
                 must={"kind": "tool"},
-                must_any={
-                    "visibility_keys": tool_audience(tenant_id, workspace_id),
-                    # an indexed keyword field: a catalog of thousands is narrowed in the index
-                    **({"tool_name": sorted(set(available))} if available is not None else {}),
-                },
+                must_any={"visibility_keys": tool_audience(tenant_id, workspace_id)},
+                # ``tool_name`` is an indexed keyword field: a catalog of thousands is narrowed
+                # in the index. Or ``text``, the name as layout 1 stored it: while releases are
+                # mixed an earlier worker writes layout-1 records back on each refresh tick, and
+                # a record waits for this release's next refresh or ``indexed`` to be moved;
+                # filtered on ``tool_name`` alone, a run's hints were empty in the meantime.
+                # Both alternatives sit inside the tenant, kind and audience above.
+                should_any={"tool_name": names, "text": names} if names is not None else {},
             ),
             limit=limit,
             prefetch_limit=limit,

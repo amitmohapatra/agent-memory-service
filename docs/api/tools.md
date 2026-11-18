@@ -92,7 +92,10 @@ text a release changed; a record of unchanged text that an earlier release laid 
 differently is moved to the current layout in place, without embedding, by the refresh and
 by `GET /v1/tools` for the entries it lists (whose `indexed` is then `true`). `make reindex`
 re-embeds the whole catalog. A hints request's `available` tools are matched on the record's
-`tool_name`, a keyword payload index. `required` defaults to the input schema's.
+`tool_name`, a keyword payload index, or, for a record an earlier release laid out (which has
+none), on the name it kept in `text`, always within the tenant and the caller's audience; so
+hints are never emptied while releases are mixed. Upgrade the worker first, or with the API
+(see the CHANGELOG). `required` defaults to the input schema's.
 
 ## Recording a call
 
