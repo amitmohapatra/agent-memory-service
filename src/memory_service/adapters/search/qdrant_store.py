@@ -583,14 +583,21 @@ class QdrantSearchStore:
             raise DependencyUnavailable(f"qdrant set_payload failed: {type(exc).__name__}") from exc
 
     async def set_payloads(
-        self, collection: str, payloads: Mapping[str, Mapping[str, Any]]
+        self, collection: str, payloads: Mapping[str, Mapping[str, Any]], *, tenant_id: str
     ) -> None:
         if not payloads:
             return
-        # one request for the batch: a payload of its own per point
+        tenant = models.FieldCondition(key="tenant_id", match=models.MatchValue(value=tenant_id))
+        # one request for the batch: a payload of its own per point, selected by a filter on
+        # its id *and* the tenant, so an id of another tenant's point selects nothing
         operations: list[Any] = [
             models.SetPayloadOperation(
-                set_payload=models.SetPayload(payload=dict(fields), points=[point_id(record_id)])
+                set_payload=models.SetPayload(
+                    payload=dict(fields),
+                    filter=models.Filter(
+                        must=[models.HasIdCondition(has_id=[point_id(record_id)]), tenant]
+                    ),
+                )
             )
             for record_id, fields in payloads.items()
         ]

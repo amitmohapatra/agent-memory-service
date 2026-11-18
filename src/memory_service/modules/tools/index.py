@@ -184,10 +184,12 @@ class ToolIndex:
 
     async def _relayout(self, entries: Sequence[ToolDescriptor]) -> None:
         """Move records of the entries' current text to the current payload layout, in place:
-        no embedding, the vectors stay."""
-        await self.store.set_payloads(
-            self.collection, {e.tool_id: _payload(e, e.index_text()) for e in entries}
-        )
+        no embedding, the vectors stay. One write per tenant: the store bounds it by one."""
+        by_tenant: dict[str, dict[str, dict[str, object]]] = {}
+        for e in entries:
+            by_tenant.setdefault(e.tenant_id, {})[e.tool_id] = _payload(e, e.index_text())
+        for tenant_id, payloads in by_tenant.items():
+            await self.store.set_payloads(self.collection, payloads, tenant_id=tenant_id)
 
     async def refresh(self, *, force: bool = False) -> int:
         """Index every catalog entry that has no record, or whose record was embedded from

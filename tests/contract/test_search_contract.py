@@ -183,3 +183,26 @@ async def test_set_visibility_moves_exactly_the_matching_records_audience(store)
 
     assert await readable_by(new) == [moved]
     assert await readable_by(old) == [kept]
+
+
+async def test_set_payloads_writes_only_the_named_tenants_records(store) -> None:
+    """``set_payloads`` merges fields into records named by id, and an id names a point in a
+    collection every tenant shares. It is bounded by the tenant like every other write: a
+    caller that names another tenant's record id changes nothing of it."""
+    ours, theirs = uuid.uuid4().hex, uuid.uuid4().hex
+    await store.upsert(
+        [
+            _record(store, ours, "acme", 0.4, text_hash="old"),
+            _record(store, theirs, "globex", 0.4, text_hash="old"),
+        ]
+    )
+    await store.set_payloads(
+        store.contract_collection,
+        {ours: {"text_hash": "new"}, theirs: {"text_hash": "new"}},
+        tenant_id="acme",
+    )
+    held = {
+        r.record_id: r.payload.get("text_hash")
+        for r in await store.get(store.contract_collection, [ours, theirs])
+    }
+    assert held == {ours: "new", theirs: "old"}

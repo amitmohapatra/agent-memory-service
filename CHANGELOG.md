@@ -442,11 +442,16 @@ each entry says which one moved. Decisions behind each change are in the
   above matched the payload field `text`, which has no payload index (and holds a whole
   memory's text in the other collections), so Qdrant read every candidate's payload to apply
   it. Tool records now carry `tool_name`, a keyword payload index created on every
-  collection when a process first ensures it, and the filter reads it. Rollout: the record's
+  collection when a process first ensures it, and the filter reads it. While layout-1
+  records can still be written (below), the filter also accepts the name in `text`, so a
+  candidate whose `tool_name` does not match still has that field read (the tools
+  collection keeps its payload in memory); the `text` alternative goes when no release that
+  writes layout 1 can run. Rollout: the record's
   `text_hash` now names its payload layout (`v2:`), so records an earlier release wrote are
   stale. Nothing is re-embedded for them: the periodic `tools.refresh` (the worker's first
   tick after the deploy, within five minutes) moves a record of unchanged text to the new
-  layout in place, payload only (`SearchStore.set_payloads`), and so does `GET /v1/tools`
+  layout in place, payload only (`SearchStore.set_payloads`, bounded by the record's
+  tenant like every other store write), and so does `GET /v1/tools`
   for the entries it lists. That is the call a harness waits on before its first hints, so
   its wait ends at once instead of running out. Until a record is moved, a search naming
   `available` matches it by the name layout 1 kept in `text` (either field, inside the

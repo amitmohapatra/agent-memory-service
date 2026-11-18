@@ -270,12 +270,14 @@ class _SearchStore(_Store):
         super().__init__(records)
         self.filters: list[Any] = []
         self.patched: dict[str, dict[str, Any]] = {}
+        self.writes: list[tuple[str, list[str]]] = []
 
     async def search_hybrid(self, collection, *, flt, **kwargs):
         self.filters.append(flt)
         return []
 
-    async def set_payloads(self, collection, payloads) -> None:
+    async def set_payloads(self, collection, payloads, *, tenant_id) -> None:
+        self.writes.append((tenant_id, sorted(payloads)))
         for record_id, fields in payloads.items():
             self.patched[record_id] = dict(fields)
             self.records[record_id].payload.update(fields)
@@ -398,7 +400,7 @@ async def test_a_record_an_older_layout_wrote_is_rewritten_in_place_when_asked_a
 
 async def test_a_failed_rewrite_reads_as_not_indexed_yet() -> None:
     class _Failing(_SearchStore):
-        async def set_payloads(self, collection, payloads) -> None:
+        async def set_payloads(self, collection, payloads, *, tenant_id) -> None:
             raise RuntimeError("store away")
 
     old = ToolDescriptor(tenant_id="acme", tool_id="tol_a", name="store_demand")
@@ -440,11 +442,11 @@ async def test_a_failed_rewrite_of_one_page_does_not_stop_the_refresh(monkeypatc
         failures = 1
         upserted: list[str] = []
 
-        async def set_payloads(self, collection, payloads) -> None:
+        async def set_payloads(self, collection, payloads, *, tenant_id) -> None:
             if self.failures:
                 self.failures -= 1
                 raise RuntimeError("store away")
-            await super().set_payloads(collection, payloads)
+            await super().set_payloads(collection, payloads, tenant_id=tenant_id)
 
         async def upsert(self, records) -> None:
             self.upserted += [r.record_id for r in records]
@@ -474,3 +476,14 @@ async def test_a_failed_rewrite_of_one_page_does_not_stop_the_refresh(monkeypatc
     assert await index.refresh() == 1, "the failed page's record, a tick later"
     assert set(store.patched) == {"tol_a", "tol_c"}
     assert await index.refresh() == 0, "and done, trusted from then on"
+
+
+async def test_records_are_moved_in_place_one_tenant_at_a_time() -> None:
+    """The store bounds an in-place write by a tenant (``set_payloads(tenant_id=)``), and a
+    refresh pages every tenant's catalog: each tenant's records are written under its own."""
+    ours = ToolDescriptor(tenant_id="acme", tool_id="tol_a", name="store_demand")
+    theirs = ToolDescriptor(tenant_id="globex", tool_id="tol_b", name="store_demand")
+    store = _SearchStore([_record(ours, ours.index_text()), _record(theirs, theirs.index_text())])
+    index = ToolIndex(None, _NoEncoderIndexer(), store)  # type: ignore[arg-type]
+    assert await index.indexed([ours, theirs]) == {"tol_a", "tol_b"}
+    assert sorted(store.writes) == [("acme", ["tol_a"]), ("globex", ["tol_b"])]
