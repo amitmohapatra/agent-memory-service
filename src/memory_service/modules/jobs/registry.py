@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from memory_service.config.constants import TASKS
 from memory_service.domain.profile import PROFILE_MEMORY_TYPES
 from memory_service.domain.revisions import RevisionKind
+from memory_service.domain.work import background
 from memory_service.modules.conversation.summary import TASK_EPISODE_INDEX, TASK_SUMMARY_REFRESH
 from memory_service.modules.feedback.service import TASK_FEEDBACK_PROJECT
 from memory_service.modules.jobs.names import (
@@ -71,7 +72,8 @@ class _AccountedQueue:
 
 def _accounted(name: str, handler: TaskHandler) -> TaskHandler:
     async def run(payload: dict[str, Any]) -> Any:
-        with llm_accounting() as tokens:
+        # background work: a request waiting for the same in-process model goes first
+        with background(), llm_accounting() as tokens:
             try:
                 return await handler(payload)
             finally:

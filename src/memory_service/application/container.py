@@ -331,19 +331,27 @@ class ProcessShape(TypedDict):
     jobs: int
 
 
-def process_shape(settings: Settings, role: Literal["api", "worker"]) -> ProcessShape:
+#: What a process is: an API worker, the job worker, or one process that is both (a
+#: single-process stack: the API with the worker's pools running beside it).
+ProcessRole = Literal["api", "worker", "combined"]
+
+
+def process_shape(settings: Settings, role: ProcessRole) -> ProcessShape:
     """What a process of ``role`` sizes its connection pools for (``Container.processes``,
     ``queue_workers``, ``jobs``): an API worker shares its pod with ``service.workers - 1``
     others and runs no jobs; the job worker has its pod alone and runs every slot of
-    ``worker_pools_for`` at once, on one Procrastinate worker per pool."""
+    ``worker_pools_for`` at once, on one Procrastinate worker per pool. A ``combined``
+    process is the job worker whose request pool also holds an API process's own: sized as a
+    worker alone, its jobs took six of a pool of ten and every request it served shared the
+    other four."""
     if role == "api":
         return {"processes": settings.service.workers, "queue_workers": 0, "jobs": 0}
     pools = worker_pools_for(settings)
-    return {
-        "processes": 1,
-        "queue_workers": len(pools),
-        "jobs": sum(slots for _, slots in pools),
-    }
+    jobs = sum(slots for _, slots in pools)
+    if role == "combined":
+        api = settings.database.pool_plan(1)
+        jobs += api.main_size + api.main_overflow
+    return {"processes": 1, "queue_workers": len(pools), "jobs": jobs}
 
 
 @dataclass(frozen=True)
@@ -368,13 +376,14 @@ async def build_container(
     version: str,
     *,
     overrides: Overrides | None = None,
-    role: Literal["api", "worker"] = "api",
+    role: ProcessRole = "api",
 ) -> Container:
     """Wire providers for the configured environment.
 
     ``overrides`` swaps backing stores and models for in-process stand-ins and replaces frozen
     tuning; production never passes it. ``role`` says which process this is: an API worker
-    shares its pod with ``service.workers - 1`` others, the job worker has its pod alone.
+    shares its pod with ``service.workers - 1`` others, the job worker has its pod alone,
+    and a ``combined`` process serves the API and runs the worker's pools both.
     """
     from memory_service.adapters import wire_adapters
 

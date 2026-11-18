@@ -451,6 +451,28 @@ each entry says which one moved. Decisions behind each change are in the
   its wait ends at once instead of running out. Until a record is moved, a search naming
   `available` does not find it: a harness process started before the deploy gets hints that
   narrow nothing for at most that window, never an error.
+- **Deadlines are kept and the connection pool holds under concurrent load** (service). Under a
+  single process with a pool of 5 + 5, `/v1/verify` answered its 15 s deadline at up to 55 s
+  and requests and jobs failed with "PostgreSQL connection pool exhausted". Causes and fixes:
+  - A request cancelled at its deadline waited for its model call to leave the model's thread
+    (`SerialRunner.run`), so the 504 left when the model was done. It is now answered at once;
+    the model's permit still goes back only when the thread is out.
+  - A verify's NLI work was one job of up to forty claims' batches; a timed-out verify scored
+    all of them for nobody. It now runs a batch at a time under one permit and stops at the
+    next batch when cancelled (`SerialRunner.run_each`).
+  - Requests and jobs queued for one model in one FIFO, so a verify waited behind every
+    message job's statement labelling. A request waiting for a model now goes before a
+    waiting background job (`domain.work.background`, set for every job handler).
+  - A unit of work queued on an advisory lock held a pooled connection while it waited (eight
+    jobs of one user's chat: eight connections). Waiters now queue in the process without one;
+    only the head waits in PostgreSQL (`UnitOfWork.serialize`).
+  - The retrieval and graph visibility lookups held a connection across the scope cache and
+    the relationship store. The revisions are read in a unit of work of their own, closed
+    before those calls (`AuthorizationService.visibility(uow_factory=)`).
+  - A bundle's record, which `/v1/verify` reads, was written after the response, so a verify
+    sent at once could get "bundle not found". It is written before the bundle is returned.
+  - A process that serves the API and runs the worker's pools can be built as
+    `role="combined"`: its request pool holds the jobs' connections and an API process's own.
 - **`GET /v1/jobs/{job_id}` no longer shows a tenant the error of the service's own job**
   (service). A job that belongs to no tenant (periodic work) is readable by any tenant that
   names its id, and its `last_error`, which can quote any tenant's data, came with it.

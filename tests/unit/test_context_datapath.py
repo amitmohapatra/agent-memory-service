@@ -347,7 +347,10 @@ async def test_the_three_bundle_forms_are_written_in_one_pipelined_call() -> Non
     plain = cache.set
 
     async def no_set(key: str, value: bytes, *, ttl_seconds: int | None = None) -> None:
-        assert not key.startswith("ctx"), f"a bundle form was written on its own: {key}"
+        # the forms only: the handles record (``ctxrec``) and the run's latest bundle
+        # (``ctxrun``) are their own keys, written before the bundle is returned
+        form = key.split(":", 1)[0]
+        assert form not in {"ctx", "ctxf", "ctxp"}, f"a bundle form was written on its own: {key}"
         await plain(key, value, ttl_seconds=ttl_seconds)
 
     cache.mset = spy  # type: ignore[method-assign]

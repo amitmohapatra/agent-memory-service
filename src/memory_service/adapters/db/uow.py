@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from types import TracebackType
-from typing import TYPE_CHECKING, Self, cast
+from typing import TYPE_CHECKING, Final, Self, cast
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -42,6 +45,7 @@ from memory_service.adapters.db.tool_repository import (
     SqlToolPermissionRepository,
     SqlToolRepository,
 )
+from memory_service.config.constants import DATABASE
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.memory.consolidation import sources_forgotten, sources_replaced
 from memory_service.modules.memory.revisions import touched_revisions
@@ -104,6 +108,54 @@ class OutboxRelay:
         return job_id
 
 
+class _LocalQueue:
+    """A process-local queue in front of each advisory lock (``SqlUnitOfWork.serialize``).
+
+    ``pg_advisory_xact_lock`` waits on a connection: eight jobs of one user's chat queued on
+    the user's lock held eight pooled connections idle, and the request pool of ten had two
+    left for every request of the process (the scenario stack's "QueuePool limit of size 5
+    overflow 5 reached"). Here a unit of work waits for the key's head place without a
+    connection, takes the advisory lock, and hands the place on as soon as it holds it; the
+    next one then waits in PostgreSQL for the transaction to end. So a key holds at most two
+    of this process's connections however many wait on it.
+
+    Only an optimisation: the advisory lock still decides, across processes as within one.
+    So the wait here is bounded (``_HEAD_WAIT_SECONDS``): past it a unit of work goes on to
+    the advisory lock anyway, which keeps an inconsistent lock order across keys a deadlock
+    PostgreSQL detects instead of one this queue would hide forever."""
+
+    def __init__(self) -> None:
+        self._heads: dict[str, asyncio.Lock] = {}
+        self._users: dict[str, int] = {}
+
+    @asynccontextmanager
+    async def head(self, key: str) -> AsyncIterator[None]:
+        lock = self._heads.setdefault(key, asyncio.Lock())
+        self._users[key] = self._users.get(key, 0) + 1
+        held = False
+        try:
+            try:
+                async with asyncio.timeout(_HEAD_WAIT_SECONDS):
+                    await lock.acquire()
+                held = True
+            except TimeoutError:
+                log.warning("db.lock_queue_wait_exceeded", seconds=_HEAD_WAIT_SECONDS)
+            yield
+        finally:
+            if held:
+                lock.release()
+            self._users[key] -= 1
+            if not self._users[key]:
+                del self._users[key]
+                del self._heads[key]
+
+
+#: How long a unit of work queues in the process for a lock before it waits in PostgreSQL
+#: regardless (``_LocalQueue``): past the statement timeout nothing waits that long anyway.
+_HEAD_WAIT_SECONDS: Final = DATABASE.statement_timeout_ms / 1000
+_LOCAL_QUEUE = _LocalQueue()
+
+
 class SqlUnitOfWork:
     def __init__(
         self, session_factory: async_sessionmaker[AsyncSession], relay: OutboxRelay | None
@@ -113,8 +165,11 @@ class SqlUnitOfWork:
         self._session: AsyncSession | None = None
         self._pending_outbox: list[int] = []
         self._committed = False
+        #: the advisory locks this unit of work holds (``serialize``)
+        self._serialized: set[str] = set()
 
     async def __aenter__(self) -> Self:
+        self._serialized = set()
         self._session = self._session_factory()
         await self._session.__aenter__()
         await self._session.begin()
@@ -169,9 +224,16 @@ class SqlUnitOfWork:
     async def serialize(self, *keys: str) -> None:
         assert self._session is not None
         for key in keys:  # pg_advisory_xact_lock: released with the transaction
-            await self._session.execute(
-                text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": key}
-            )
+            if key in self._serialized:
+                continue  # held already (the lock is re-entrant; the local queue is not)
+            # The lock needs a connection to wait on: units of work of this process queue
+            # in the process first, so only the one at the head waits in PostgreSQL holding
+            # a connection (``_LocalQueue``). The advisory lock stays what decides.
+            async with _LOCAL_QUEUE.head(key):
+                await self._session.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": key}
+                )
+            self._serialized.add(key)
 
     async def enqueue(self, spec: JobSpec) -> int | None:
         outbox_id = await self.outbox.add(spec)

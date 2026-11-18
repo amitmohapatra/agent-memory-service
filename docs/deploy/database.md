@@ -41,6 +41,16 @@ refused at start (`ConnectionBudgetError`, naming both numbers); elsewhere it is
 the floor, and the worker logs a warning, once, naming both. Unset, a worker whose pools need
 more than 28 takes what they need.
 
+A process that serves the API *and* runs the job worker's pools (a single-process stack:
+`build_container(..., role="combined")`) adds an API process's own request pool to `jobs`:
+sized as a worker alone, its jobs held six of a request pool of ten and every request it
+served shared the other four.
+
+A unit of work that waits for an advisory lock (`UnitOfWork.serialize`: a thread's appends,
+a user's memory writes) queues inside its process first, without a connection; only the one
+at the head waits in PostgreSQL. Eight jobs of one user's chat used to hold eight pooled
+connections idle while they queued.
+
 Unset, a process keeps the pools it had before the budget existed: requests 8 + 8, graph
 4 + 4, queue 4 (28). Overflow counts against the budget because a burst is exactly when the
 budget matters. `tests/unit/test_process_model.py` asserts that a plan never exceeds its

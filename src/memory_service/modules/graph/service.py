@@ -535,5 +535,5 @@ class GraphService:
         )
 
     async def _visibility(self, ctx: MemoryExecutionContext) -> VisibilitySpecification:
-        async with self.uow_factory() as uow:
-            return await self.authz.visibility(ctx, revisions=uow.revisions)
+        # no connection held across the scope cache and the relationship store
+        return await self.authz.visibility(ctx, uow_factory=self.uow_factory)

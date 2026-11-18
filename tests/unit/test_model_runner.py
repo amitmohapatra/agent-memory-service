@@ -99,3 +99,137 @@ async def test_a_cancelled_caller_keeps_the_gate_until_the_model_is_out() -> Non
     finally:
         runner.close()
     assert body.peak == 1
+
+
+async def test_a_cancelled_caller_is_answered_at_once_while_the_model_stays_exclusive() -> None:
+    """A request past its deadline is cancelled while its encode is inside the model. It used
+    to wait there for the thread to come out (a 15 s verify deadline answered at 55 s under
+    load); the 504 goes out now, and the permit still goes back only when the thread is out,
+    so the next caller never enters beside the abandoned job."""
+    runner = SerialRunner("test")
+    body = Occupancy()
+    loop = asyncio.get_running_loop()
+    try:
+        first = asyncio.ensure_future(runner.run(body, 0.5))
+        await asyncio.sleep(0.05)  # inside the body
+        cancelled_at = loop.time()
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        assert loop.time() - cancelled_at < 0.2, "the caller did not wait out the model"
+        assert await runner.run(body, 0.0) == 2
+        assert loop.time() - cancelled_at >= 0.4, "the next caller waited for the model"
+    finally:
+        runner.close()
+    assert body.peak == 1
+
+
+async def test_batches_run_under_one_permit_in_order() -> None:
+    runner = SerialRunner("test")
+    try:
+        assert await runner.run_each(lambda batch: [x * 2 for x in batch], [[1, 2], [3]]) == [
+            [2, 4],
+            [6],
+        ]
+        assert await runner.run_each(lambda batch: batch, []) == []
+    finally:
+        runner.close()
+
+
+async def test_a_cancelled_batched_caller_stops_at_the_next_batch() -> None:
+    """A verify of forty claims is many model batches. Cancelled, it stops after the batch
+    inside the model instead of scoring the rest for a caller that is gone, so the requests
+    queued behind it get the model back."""
+    runner = SerialRunner("test")
+    body = Occupancy()
+    try:
+        many = asyncio.ensure_future(runner.run_each(body, [0.1] * 20))
+        await asyncio.sleep(0.15)
+        many.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await many
+        assert await runner.run(body, 0.0) <= 4, "at most the batch that was inside, then this"
+    finally:
+        runner.close()
+    assert body.peak == 1
+
+
+async def test_a_request_waiting_for_the_model_goes_before_background_jobs() -> None:
+    """The verify path and the statement labeller share one NLI model (and a query's encode
+    and the indexing jobs one encoder). FIFO put a request behind every message job queued
+    before it, so under a chat's write load a verify waited out its deadline behind work no
+    caller was waiting for. A request now enters before any background job still waiting;
+    the job behind it keeps its turn among the jobs."""
+    from memory_service.domain.work import background
+
+    runner = SerialRunner("test")
+    release = threading.Event()
+    order: list[str] = []
+
+    async def job(name: str) -> None:
+        with background():
+            await runner.run(order.append, name)
+
+    try:
+        inside = asyncio.ensure_future(runner.run(release.wait, 5))
+        await asyncio.sleep(0.05)
+        jobs = [asyncio.ensure_future(job(f"job{n}")) for n in range(3)]
+        await asyncio.sleep(0.02)
+        request = asyncio.ensure_future(runner.run(order.append, "request"))
+        await asyncio.sleep(0.02)
+        release.set()
+        await asyncio.gather(inside, request, *jobs)
+    finally:
+        release.set()
+        runner.close()
+    assert order == ["request", "job0", "job1", "job2"]
+
+
+async def test_a_cancelled_waiter_leaves_the_queue_and_the_gate_moves_on() -> None:
+    from memory_service.domain.work import background
+
+    runner = SerialRunner("test")
+    release = threading.Event()
+    try:
+        inside = asyncio.ensure_future(runner.run(release.wait, 5))
+        await asyncio.sleep(0.05)
+
+        async def job() -> str:
+            with background():
+                return await runner.run(lambda: "job")
+
+        gone = asyncio.ensure_future(runner.run(lambda: "gone"))
+        waiting = asyncio.ensure_future(job())
+        await asyncio.sleep(0.02)
+        assert runner.waiting == 2
+        gone.cancel()
+        await asyncio.sleep(0)
+        assert runner.waiting == 1
+        release.set()
+        assert await waiting == "job"
+        assert await inside is True
+        assert await runner.run(lambda: "after") == "after"
+        assert runner.waiting == 0
+    finally:
+        release.set()
+        runner.close()
+
+
+async def test_a_waiter_cancelled_as_the_permit_is_released_leaves_cleanly() -> None:
+    """A request's deadline fires while it waits, and the holder releases before the
+    cancelled waiter runs again: the release skips it, and its own clean-up must not trip
+    over the queue it is no longer in (it raised ``ValueError`` in place of the
+    cancellation: a 500 where the deadline's 504 belonged)."""
+    from memory_service.adapters.models._runner import _Gate
+
+    gate = _Gate()
+    await gate.acquire(job=False)
+    waiting = asyncio.ensure_future(gate.acquire(job=False))
+    await asyncio.sleep(0)
+    waiting.cancel()
+    gate.release()  # before the cancelled waiter has run
+    with pytest.raises(asyncio.CancelledError):
+        await waiting
+    assert not gate.locked()
+    await gate.acquire(job=True)
+    assert gate.locked()

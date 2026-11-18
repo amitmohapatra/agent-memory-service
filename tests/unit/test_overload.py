@@ -224,3 +224,52 @@ def test_only_postgres_is_wired_as_mandatory() -> None:
         Path(__file__).resolve().parents[2] / "src/memory_service/adapters/wiring.py"
     ).read_text()
     assert re.findall(r'name="(\w+)", mandatory=True', wiring) == ["postgres"]
+
+
+async def test_a_verify_past_its_deadline_is_answered_at_the_deadline_not_after_the_model() -> None:
+    """The verify path: its NLI batches are inside a model thread when the deadline fires. The
+    504 must leave at the deadline; it used to wait for every batch of the answer."""
+    from collections.abc import Sequence
+
+    from memory_service.adapters.models.nli import BatchedNLI
+    from memory_service.config.constants import FROZEN_MODELS
+    from memory_service.ports.models import NLIScore
+
+    class SlowNLI(BatchedNLI):
+        spec = FROZEN_MODELS.nli
+        _runner = SerialRunner("nli-test")
+        scored = 0
+
+        def _score_pairs(self, pairs: Sequence[tuple[str, str]]) -> list[NLIScore]:
+            import time
+
+            batches = -(-len(pairs) // self.spec.batch_size)  # what the ONNX scorer loops
+            time.sleep(0.05 * batches)
+            SlowNLI.scored += len(pairs)
+            return [NLIScore(entailment=1.0, neutral=0.0, contradiction=0.0) for _ in pairs]
+
+        def fingerprint(self) -> str:
+            return "slow"
+
+    nli = SlowNLI()
+    pairs = FROZEN_MODELS.nli.batch_size * 40  # forty batches: two seconds of model
+
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        await nli.entail_groups([(["premise"] * pairs, "claim")])
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"done"})
+
+    limits = OverloadTuning(verify_deadline_seconds=0.2)
+    transport = httpx.ASGITransport(app=DeadlineMiddleware(app, limits=limits))
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+            response = await client.post("/v1/verify")
+        took = loop.time() - started
+        assert response.status_code == 504
+        assert took < 0.5, f"answered {took:.2f} s after a 0.2 s deadline"
+        await asyncio.sleep(0.2)
+        assert SlowNLI.scored < pairs // 4, "the abandoned answer's batches were not all scored"
+    finally:
+        nli.close()
