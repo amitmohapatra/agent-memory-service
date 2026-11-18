@@ -44,7 +44,11 @@ more than 28 takes what they need.
 A process that serves the API *and* runs the job worker's pools (a single-process stack:
 `build_container(..., role="combined")`) adds an API process's own request pool to `jobs`:
 sized as a worker alone, its jobs held six of a request pool of ten and every request it
-served shared the other four.
+served shared the other four. That API pool is an API process's whole share of the budget
+(`pool_plan(1)`), so a `combined` process always needs more than `connection_budget` names:
+the worker's floor plus that share (56 for a budget of 40). It takes it with a warning, and
+in a deployed environment it is refused at start (`ConnectionBudgetError`), like any process
+whose floor is past its budget. It is for a single-process stack, not a deployment.
 
 A unit of work that waits for an advisory lock (`UnitOfWork.serialize`: a thread's appends,
 a user's memory writes) queues inside its process first, without a connection; only the one

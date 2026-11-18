@@ -165,7 +165,8 @@ class SqlUnitOfWork:
         self._session: AsyncSession | None = None
         self._pending_outbox: list[int] = []
         self._committed = False
-        #: the advisory locks this unit of work holds (``serialize``)
+        #: the advisory locks this unit of work's transaction holds (``serialize``); a commit
+        #: or a rollback releases them
         self._serialized: set[str] = set()
 
     async def __aenter__(self) -> Self:
@@ -277,6 +278,7 @@ class SqlUnitOfWork:
         with span("db.commit"), stage_seconds.labels("db.commit").time():
             await self._session.commit()
         self._committed = True
+        self._serialized.clear()  # the transaction's advisory locks went with it
         pending, self._pending_outbox = self._pending_outbox, []
         if pending and self._relay is not None:
             try:
@@ -288,6 +290,7 @@ class SqlUnitOfWork:
         if self._session is not None and self._session.in_transaction():
             await self._session.rollback()
         self._pending_outbox = []
+        self._serialized.clear()  # the transaction's advisory locks went with it
 
 
 class SqlUnitOfWorkFactory:

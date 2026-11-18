@@ -105,23 +105,34 @@ async def test_a_cancelled_caller_is_answered_at_once_while_the_model_stays_excl
     """A request past its deadline is cancelled while its encode is inside the model. It used
     to wait there for the thread to come out (a 15 s verify deadline answered at 55 s under
     load); the 504 goes out now, and the permit still goes back only when the thread is out,
-    so the next caller never enters beside the abandoned job."""
+    so the next caller never enters beside the abandoned job. The model is held until the
+    test lets it go, so nothing here depends on how long a sleep takes."""
     runner = SerialRunner("test")
-    body = Occupancy()
-    loop = asyncio.get_running_loop()
+    inside, release = threading.Event(), threading.Event()
+    entered: list[str] = []
+
+    def held() -> None:
+        entered.append("held")
+        inside.set()
+        release.wait(10)
+
     try:
-        first = asyncio.ensure_future(runner.run(body, 0.5))
-        await asyncio.sleep(0.05)  # inside the body
-        cancelled_at = loop.time()
+        first = asyncio.ensure_future(runner.run(held))
+        await asyncio.to_thread(inside.wait, 5)
         first.cancel()
         with pytest.raises(asyncio.CancelledError):
-            await first
-        assert loop.time() - cancelled_at < 0.2, "the caller did not wait out the model"
-        assert await runner.run(body, 0.0) == 2
-        assert loop.time() - cancelled_at >= 0.4, "the next caller waited for the model"
+            # gstack-timing-ok: a ceiling for a hang; the model is still held here
+            await asyncio.wait_for(first, 5)
+        assert not release.is_set(), "the caller left while the model was still busy"
+        second = asyncio.ensure_future(runner.run(entered.append, "second"))
+        await asyncio.sleep(0.05)
+        assert entered == ["held"], "the next caller entered beside the abandoned job"
+        release.set()
+        await second
+        assert entered == ["held", "second"]
     finally:
+        release.set()
         runner.close()
-    assert body.peak == 1
 
 
 async def test_batches_run_under_one_permit_in_order() -> None:
@@ -141,17 +152,27 @@ async def test_a_cancelled_batched_caller_stops_at_the_next_batch() -> None:
     inside the model instead of scoring the rest for a caller that is gone, so the requests
     queued behind it get the model back."""
     runner = SerialRunner("test")
-    body = Occupancy()
+    inside, release = threading.Event(), threading.Event()
+    scored: list[int] = []
+
+    def batch(n: int) -> int:
+        scored.append(n)
+        inside.set()
+        release.wait(10)
+        return n
+
     try:
-        many = asyncio.ensure_future(runner.run_each(body, [0.1] * 20))
-        await asyncio.sleep(0.15)
+        many = asyncio.ensure_future(runner.run_each(batch, list(range(20))))
+        await asyncio.to_thread(inside.wait, 5)
         many.cancel()
         with pytest.raises(asyncio.CancelledError):
             await many
-        assert await runner.run(body, 0.0) <= 4, "at most the batch that was inside, then this"
+        release.set()
+        assert await runner.run(lambda: "after") == "after"
+        assert scored == [0], "only the batch that was inside the model"
     finally:
+        release.set()
         runner.close()
-    assert body.peak == 1
 
 
 async def test_a_request_waiting_for_the_model_goes_before_background_jobs() -> None:

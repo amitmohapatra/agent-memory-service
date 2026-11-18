@@ -55,16 +55,19 @@ async def test_the_lock_is_still_held_across_processes(container, uow_factory) -
 
         elsewhere = SqlUnitOfWorkFactory(other.session_factory, None)
 
+        holding = asyncio.Event()
+
         async def first() -> None:
             async with uow_factory() as uow:
                 await uow.serialize("thread:acme/t1")
                 order.append("first in")
+                holding.set()
                 await asyncio.sleep(0.2)
                 order.append("first out")
                 await uow.commit()
 
         async def second() -> None:
-            await asyncio.sleep(0.05)
+            await holding.wait()  # the lock is held: the order is not left to the scheduler
             async with elsewhere() as uow:
                 await uow.serialize("thread:acme/t1")
                 order.append("second in")
@@ -74,3 +77,24 @@ async def test_the_lock_is_still_held_across_processes(container, uow_factory) -
     finally:
         await other.engine.dispose()
     assert order == ["first in", "first out", "second in"]
+
+
+async def test_a_key_serialized_again_after_a_commit_is_locked_again(uow_factory) -> None:
+    """``serialize`` skips a key its unit of work already holds (the local queue is not
+    re-entrant). A commit or a rollback ends the transaction and with it every
+    ``pg_advisory_xact_lock``: a key serialized after it must be locked again, not skipped."""
+    from sqlalchemy import text
+
+    held = text(
+        "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()"
+    )
+    async with uow_factory() as uow:
+        await uow.serialize("thread:acme/relock")
+        assert (await uow.session.execute(held)).scalar_one() == 1
+        await uow.commit()
+        await uow.serialize("thread:acme/relock")
+        assert (await uow.session.execute(held)).scalar_one() == 1, "skipped after the commit"
+        await uow.rollback()
+        await uow.serialize("thread:acme/relock")
+        assert (await uow.session.execute(held)).scalar_one() == 1, "skipped after a rollback"
+        await uow.commit()
