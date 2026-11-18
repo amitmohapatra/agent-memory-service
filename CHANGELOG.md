@@ -468,8 +468,13 @@ each entry says which one moved. Decisions behind each change are in the
     message job's statement labelling. A request waiting for a model now goes before a
     waiting background job (`domain.work.background`, set for every job handler).
   - A unit of work queued on an advisory lock held a pooled connection while it waited (eight
-    jobs of one user's chat: eight connections). Waiters now queue in the process without one;
-    only the head waits in PostgreSQL (`UnitOfWork.serialize`).
+    jobs of one user's chat: eight connections). Waiters that hold nothing yet now queue in
+    the process without one; only the head waits in PostgreSQL (`UnitOfWork.serialize`). A
+    unit of work that already holds a lock or a connection waits in PostgreSQL, so a
+    cross-key deadlock is still broken by PostgreSQL's detector within its
+    `deadlock_timeout`; the local wait is bounded at twice that and spent from the lock
+    statement's timeout, so a lock waits at most one statement timeout in all. The queue is
+    kept per event loop.
   - The retrieval and graph visibility lookups held a connection across the scope cache and
     the relationship store. The revisions are read in a unit of work of their own, closed
     before those calls (`AuthorizationService.visibility(uow_factory=)`).

@@ -53,7 +53,12 @@ whose floor is past its budget. It is for a single-process stack, not a deployme
 A unit of work that waits for an advisory lock (`UnitOfWork.serialize`: a thread's appends,
 a user's memory writes) queues inside its process first, without a connection; only the one
 at the head waits in PostgreSQL. Eight jobs of one user's chat used to hold eight pooled
-connections idle while they queued.
+connections idle while they queued. Only a unit of work that holds nothing yet queues there:
+one that already holds a lock or a connection waits in PostgreSQL, where the deadlock
+detector sees it. The local wait is bounded at twice PostgreSQL's `deadlock_timeout`
+(`DATABASE.deadlock_timeout_ms`, the server's 1 s default; set it there too if you change it
+on the server) and is spent from the lock statement's 15 s, so one lock waits at most one
+statement timeout in all.
 
 Unset, a process keeps the pools it had before the budget existed: requests 8 + 8, graph
 4 + 4, queue 4 (28). Overflow counts against the budget because a burst is exactly when the
