@@ -438,6 +438,19 @@ each entry says which one moved. Decisions behind each change are in the
   `available` tools, so a catalog with many better-matching tools (other agents', or many
   versions of one) left a run's hints empty. The search now ranks among the `available` tools
   alone, filtered in the store (`ToolIndex.search(available=)`).
+- **The tool search's `available` filter reads an indexed field** (service). The filter
+  above matched the payload field `text`, which has no payload index (and holds a whole
+  memory's text in the other collections), so Qdrant read every candidate's payload to apply
+  it. Tool records now carry `tool_name`, a keyword payload index created on every
+  collection when a process first ensures it, and the filter reads it. Rollout: the record's
+  `text_hash` now names its payload layout (`v2:`), so records an earlier release wrote are
+  stale. Nothing is re-embedded for them: the periodic `tools.refresh` (the worker's first
+  tick after the deploy, within five minutes) moves a record of unchanged text to the new
+  layout in place, payload only (`SearchStore.set_payloads`), and so does `GET /v1/tools`
+  for the entries it lists. That is the call a harness waits on before its first hints, so
+  its wait ends at once instead of running out. Until a record is moved, a search naming
+  `available` does not find it: a harness process started before the deploy gets hints that
+  narrow nothing for at most that window, never an error.
 - **`GET /v1/jobs/{job_id}` no longer shows a tenant the error of the service's own job**
   (service). A job that belongs to no tenant (periodic work) is readable by any tenant that
   names its id, and its `last_error`, which can quote any tenant's data, came with it.

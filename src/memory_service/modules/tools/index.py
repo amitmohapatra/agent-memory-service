@@ -2,12 +2,18 @@
 argument names and the arguments' schema descriptions: ``ToolDescriptor.index_text``),
 searched with the same hybrid fusion as memories, per tenant and workspace.
 
-Each record carries the ``text_hash`` of the text it was embedded from. A changed catalog
-entry is re-indexed by its own ``tools.index`` job; ``refresh`` (a periodic job) indexes the
-rest: an entry with no record (one a recorded call created, a job that gave up, a new
-collection after a model change) and one whose text a release changed, so an existing
-deployment picks the new text up by itself. ``rebuild`` (``make reindex``) re-embeds every
-entry.
+Each record carries the ``text_hash`` of the text it was embedded from, prefixed by the
+record's payload layout (``RECORD_FORMAT``). A changed catalog entry is re-indexed by its own
+``tools.index`` job; ``refresh`` (a periodic job) indexes the rest: an entry with no record
+(one a recorded call created, a job that gave up, a new collection after a model change) and
+one whose text a release changed, so an existing deployment picks the new text up by itself.
+``rebuild`` (``make reindex``) re-embeds every entry.
+
+A record an earlier layout wrote for the entry's current text is moved to the current layout
+in place, payload only (its vectors are of the same text): by ``refresh``, and by ``indexed``
+for the entries it is asked about, so a harness waiting for its tools to be indexed is not
+held until the next refresh tick. Layout 2 added ``tool_name``, the keyword payload index a
+search's ``available`` filter reads (layout 1 filtered on ``text``, which is not indexed).
 
 A tool record's audience is its catalog scope: ``tenant:<t>`` for a tenant-wide entry,
 ``workspace:<t>/<w>`` for a workspace's own; a search reads both, and a workspace's entry
@@ -61,8 +67,34 @@ class ToolMatch(NamedTuple):
     matches: bool = True
 
 
+#: The tool record's payload layout, part of its ``text_hash``: a record an older layout wrote
+#: reads as stale, and ``refresh`` / ``indexed`` move it to this one. 2: ``tool_name``.
+RECORD_FORMAT: Final = 2
+
+
+def record_hash(text: str) -> str:
+    """The ``text_hash`` of a record embedded from ``text`` in the current layout."""
+    return f"v{RECORD_FORMAT}:{content_hash(text)}"
+
+
 def _hash(entry: ToolDescriptor) -> str:
+    return record_hash(entry.index_text())
+
+
+def _hash_v1(entry: ToolDescriptor) -> str:
+    """What layout 1 (no ``tool_name``) stored for the same text: a bare content hash."""
     return content_hash(entry.index_text())
+
+
+def _payload(entry: ToolDescriptor, text: str) -> dict[str, object]:
+    return {
+        "kind": "tool",
+        # the name, as every layout wrote it: what a search reads a hit's name from
+        "text": entry.name,
+        "tool_name": entry.name,
+        "text_hash": record_hash(text),
+        "visibility_keys": tool_audience(entry.tenant_id, entry.workspace_id)[-1:],
+    }
 
 
 def tool_audience(tenant_id: str, workspace_id: str | None) -> list[str]:
@@ -124,11 +156,36 @@ class ToolIndex:
         if not entries:
             return set()
         await self.ensure()
-        held = {
+        held = await self._held(entries)
+        current = {e.tool_id for e in entries if held.get(e.tool_id) == _hash(e)}
+        older = [e for e in entries if held.get(e.tool_id) == _hash_v1(e)]
+        if older:
+            # the window after a release: moved now, not at the next refresh tick
+            try:
+                await self._relayout(older)
+            except Exception as exc:  # not indexed yet; the refresh moves them
+                log.warning(
+                    "tools.relayout_failed",
+                    count=len(older),
+                    error_message=f"{type(exc).__name__}: {exc}",
+                )
+            else:
+                current |= {e.tool_id for e in older}
+        return current
+
+    async def _held(self, entries: Sequence[ToolDescriptor]) -> dict[str, object]:
+        """Each entry's record's ``text_hash``, by tool id (absent: no record)."""
+        return {
             r.record_id: r.payload.get("text_hash")
             for r in await self.store.get(self.collection, [e.tool_id for e in entries])
         }
-        return {e.tool_id for e in entries if held.get(e.tool_id) == _hash(e)}
+
+    async def _relayout(self, entries: Sequence[ToolDescriptor]) -> None:
+        """Move records of the entries' current text to the current payload layout, in place:
+        no embedding, the vectors stay."""
+        await self.store.set_payloads(
+            self.collection, {e.tool_id: _payload(e, e.index_text()) for e in entries}
+        )
 
     async def refresh(self, *, force: bool = False) -> int:
         """Index every catalog entry that has no record, or whose record was embedded from
@@ -155,9 +212,9 @@ class ToolIndex:
 
     async def _sweep(self, tenant_id: str | None, *, every: bool) -> int:
         """Page the catalog by ``tool_id`` and index the entries ``every`` or, without it, the
-        ones whose record is missing or holds another text's hash."""
+        ones whose record is missing or holds another text's hash (or another layout's: moved
+        in place)."""
         await self.ensure()
-        collection = self.collection
         written, after = 0, ""
         while True:
             async with self.uow_factory() as uow:
@@ -169,11 +226,13 @@ class ToolIndex:
             after = entries[-1].tool_id
             todo = list(entries)
             if not every:
-                indexed = {
-                    r.record_id: r.payload.get("text_hash")
-                    for r in await self.store.get(collection, [e.tool_id for e in entries])
-                }
-                todo = [e for e in entries if indexed.get(e.tool_id) != _hash(e)]
+                held = await self._held(entries)
+                todo = [e for e in entries if held.get(e.tool_id) != _hash(e)]
+                older = [e for e in todo if held.get(e.tool_id) == _hash_v1(e)]
+                if older:
+                    await self._relayout(older)
+                    written += len(older)
+                    todo = [e for e in todo if held.get(e.tool_id) != _hash_v1(e)]
             if todo:
                 await self.store.upsert(await self._records(todo))
                 written += len(todo)
@@ -192,12 +251,7 @@ class ToolIndex:
                 tenant_id=entry.tenant_id,
                 dense={space: vectors[i] for space, vectors in dense.items()},
                 sparse=sparse[i],
-                payload={
-                    "kind": "tool",
-                    "text": entry.name,
-                    "text_hash": content_hash(texts[i]),
-                    "visibility_keys": tool_audience(entry.tenant_id, entry.workspace_id)[-1:],
-                },
+                payload=_payload(entry, texts[i]),
             )
             for i, entry in enumerate(entries)
         ]
@@ -240,7 +294,8 @@ class ToolIndex:
                 must={"kind": "tool"},
                 must_any={
                     "visibility_keys": tool_audience(tenant_id, workspace_id),
-                    **({"text": sorted(set(available))} if available is not None else {}),
+                    # an indexed keyword field: a catalog of thousands is narrowed in the index
+                    **({"tool_name": sorted(set(available))} if available is not None else {}),
                 },
             ),
             limit=limit,

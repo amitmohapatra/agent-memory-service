@@ -159,6 +159,9 @@ _PAYLOAD_INDEXES: dict[str, Any] = {
     "standing_instruction": models.PayloadSchemaType.KEYWORD,
     # the user's own setup, by the workspace it was said in (the ``about_user`` section)
     "self_description": models.PayloadSchemaType.KEYWORD,
+    # a tool record's name: what a tool search narrows to the run's ``available`` tools by
+    # (``modules.tools.index``). Not ``text``: unindexed, and a whole memory's text elsewhere
+    "tool_name": models.PayloadSchemaType.KEYWORD,
 }
 
 
@@ -578,6 +581,27 @@ class QdrantSearchStore:
             )
         except Exception as exc:
             raise DependencyUnavailable(f"qdrant set_payload failed: {type(exc).__name__}") from exc
+
+    async def set_payloads(
+        self, collection: str, payloads: Mapping[str, Mapping[str, Any]]
+    ) -> None:
+        if not payloads:
+            return
+        # one request for the batch: a payload of its own per point
+        operations: list[Any] = [
+            models.SetPayloadOperation(
+                set_payload=models.SetPayload(payload=dict(fields), points=[point_id(record_id)])
+            )
+            for record_id, fields in payloads.items()
+        ]
+        try:
+            await self._client.batch_update_points(
+                collection_name=self._name(collection), update_operations=operations, wait=True
+            )
+        except Exception as exc:
+            raise DependencyUnavailable(
+                f"qdrant batch set_payload failed: {type(exc).__name__}"
+            ) from exc
 
     async def record_ids(self, collection: str, flt: SearchFilter) -> list[str]:
         name, out, offset = self._name(collection), [], None

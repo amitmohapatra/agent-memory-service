@@ -651,13 +651,27 @@ async def test_an_old_tenant_index_is_rebuilt_with_the_flag() -> None:
         ("current", "script", "observed_at", "valid_from", "valid_to", "known_to"), old
     )
     schema |= dict.fromkeys(
-        ("category", "statement_kind", "standing_instruction", "self_description"), old
+        ("category", "statement_kind", "standing_instruction", "self_description", "tool_name"),
+        old,
     )
     client = _LayoutClient(schema=schema)
     store = _store(client)  # type: ignore[arg-type]
     await store.ensure_collection(CollectionSpec(name="knowledge", dense={VectorName.DENSE_ML: 4}))
     assert list(client.indexes) == ["tenant_id"]
     assert client.indexes["tenant_id"].is_tenant is True
+
+
+async def test_an_existing_tools_collection_gains_the_tool_name_index() -> None:
+    """A collection a release before ``tool_name`` created gets the index when the process
+    first ensures it: the filter a tool search narrows by is never read from payloads."""
+    from memory_service.adapters.search.qdrant_store import _PAYLOAD_INDEXES
+
+    tenant = type("IndexInfo", (), {"params": type("P", (), {"is_tenant": True})()})()
+    schema = dict.fromkeys(set(_PAYLOAD_INDEXES) - {"tool_name"}, tenant)
+    client = _LayoutClient(schema=schema)
+    store = _store(client)  # type: ignore[arg-type]
+    await store.ensure_collection(CollectionSpec(name="tools", dense={VectorName.DENSE_ML: 4}))
+    assert client.indexes == {"tool_name": models.PayloadSchemaType.KEYWORD}
 
 
 async def test_a_grown_memories_collection_moves_its_payload_to_disk() -> None:

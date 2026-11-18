@@ -228,6 +228,13 @@ class SearchStore(Protocol):
         document's passages move to the live threads that hold it."""
         ...
 
+    async def set_payloads(
+        self, collection: str, payloads: Mapping[str, Mapping[str, Any]]
+    ) -> None:
+        """Merge each record's fields (by record id) into its payload, its vectors untouched:
+        how a record moves to a newer payload layout without being embedded again."""
+        ...
+
     async def record_ids(self, collection: str, flt: SearchFilter) -> list[str]:
         """Every record id matching ``flt``. Used to find index entries whose source row is
         gone, which is the only way to notice a superseded generation of a document."""

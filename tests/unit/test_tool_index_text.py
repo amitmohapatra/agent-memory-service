@@ -236,13 +236,132 @@ def _record(entry: ToolDescriptor, text: str) -> SearchRecord:
     )
 
 
+def _current(entry: ToolDescriptor) -> SearchRecord:
+    """The record the current release writes for ``entry``."""
+    from memory_service.modules.tools.index import record_hash
+
+    return SearchRecord(
+        record_id=entry.tool_id,
+        collection="tools",
+        tenant_id="acme",
+        payload={"text_hash": record_hash(entry.index_text()), "tool_name": entry.name},
+    )
+
+
 async def test_an_entry_is_indexed_once_its_record_holds_its_current_text() -> None:
     """B13: the first run asked for hints before its just-published tools were indexed, and
     every hint was a zero. ``GET /v1/tools`` says per entry whether search finds it now."""
     fresh = ToolDescriptor(tenant_id="acme", tool_id="tol_a", name="store_demand")
     changed = ToolDescriptor(tenant_id="acme", tool_id="tol_b", name="excess_stock")
     absent = ToolDescriptor(tenant_id="acme", tool_id="tol_c", name="lost_sales")
-    store = _Store([_record(fresh, fresh.index_text()), _record(changed, "an older text")])
+    store = _Store([_current(fresh), _record(changed, "an older text")])
     index = ToolIndex(None, _Indexer(), store)  # type: ignore[arg-type]
     assert await index.indexed([fresh, changed, absent]) == {"tol_a"}
     assert await index.indexed([]) == set()
+
+
+# --- the record layout a search filters on ---------------------------------------------------
+
+
+class _SearchStore(_Store):
+    """A store that records the filter a search sends and the payloads patched in place."""
+
+    def __init__(self, records: list[SearchRecord]) -> None:
+        super().__init__(records)
+        self.filters: list[Any] = []
+        self.patched: dict[str, dict[str, Any]] = {}
+
+    async def search_hybrid(self, collection, *, flt, **kwargs):
+        self.filters.append(flt)
+        return []
+
+    async def set_payloads(self, collection, payloads) -> None:
+        for record_id, fields in payloads.items():
+            self.patched[record_id] = dict(fields)
+            self.records[record_id].payload.update(fields)
+
+
+class _NoEncoderIndexer(_Indexer):
+    """No encoder at all: a test fails if anything is embedded."""
+
+    spaces = SimpleNamespace(dimensions={}, primary=SimpleNamespace(tool_cosine=0.0))
+
+    async def embed_cached(self, texts, hashes):  # pragma: no cover - the failure itself
+        raise AssertionError("a record of the current text is not embedded again")
+
+
+def _vectors():
+    from memory_service.domain.script import Script
+    from memory_service.modules.retrieval.engine import QueryVectors
+    from memory_service.ports.search import SparseVector, VectorName
+
+    return QueryVectors(
+        dense={VectorName.DENSE_ML: [0.1] * 4},
+        sparse=SparseVector(indices=[1], values=[1.0]),
+        script=Script.LATIN,
+    )
+
+
+async def test_the_available_tools_are_filtered_on_an_indexed_keyword_field() -> None:
+    """``available`` narrows the search in the store: on ``tool_name``, a keyword payload
+    index, never on ``text`` (unindexed, and a whole memory's text in other collections)."""
+    from memory_service.adapters.search.qdrant_store import _PAYLOAD_INDEXES
+
+    store = _SearchStore([])
+    index = ToolIndex(None, _NoEncoderIndexer(), store)  # type: ignore[arg-type]
+    await index.search("acme", "ws1", "t", vectors=_vectors(), available=["b", "a", "b"])
+    (flt,) = store.filters
+    assert flt.must_any["tool_name"] == ["a", "b"], "each name once"
+    assert "text" not in flt.must_any
+    assert {*flt.must, *flt.must_any, *flt.should_any} <= set(_PAYLOAD_INDEXES)
+    assert _PAYLOAD_INDEXES["tool_name"] == "keyword"
+
+    assert await index.search("acme", "ws1", "t", vectors=_vectors(), available=[]) == []
+    assert len(store.filters) == 1, "an empty set searches nothing"
+
+
+async def test_a_record_carries_its_tool_name_and_its_layouts_hash() -> None:
+    from memory_service.modules.tools.index import RECORD_FORMAT, record_hash
+
+    class _Embedding(_Indexer):
+        sparse = SimpleNamespace(
+            server_side_idf=True,
+            encode_documents=lambda texts: [None for _ in texts],
+        )
+
+        async def embed_cached(self, texts, hashes):
+            return {}
+
+    entry = ToolDescriptor(tenant_id="acme", tool_id="tol_a", name="crm-create")
+    index = ToolIndex(None, _Embedding(), _Store([]))  # type: ignore[arg-type]
+    (record,) = await index._records([entry])
+    assert record.payload["tool_name"] == "crm-create"
+    assert record.payload["text_hash"] == record_hash(entry.index_text())
+    assert record.payload["text_hash"] != content_hash(entry.index_text())
+    assert str(RECORD_FORMAT) in record.payload["text_hash"]
+
+
+async def test_a_record_an_older_layout_wrote_is_rewritten_in_place_when_asked_about() -> None:
+    """A record of the entry's current text that an earlier release wrote (no ``tool_name``,
+    a bare ``text_hash``) is not found by a filtered search. ``indexed`` - what a harness
+    waits on before its first hints - moves it to the current layout there and then, payload
+    only (its vectors are of the same text), so the wait does not run out; a record of other
+    text is still not indexed until its job or the refresh embeds it."""
+    old = ToolDescriptor(tenant_id="acme", tool_id="tol_a", name="store_demand")
+    changed = ToolDescriptor(tenant_id="acme", tool_id="tol_b", name="excess_stock")
+    store = _SearchStore([_record(old, old.index_text()), _record(changed, "an older text")])
+    index = ToolIndex(None, _NoEncoderIndexer(), store)  # type: ignore[arg-type]
+    assert await index.indexed([old, changed]) == {"tol_a"}
+    assert set(store.patched) == {"tol_a"}
+    assert store.patched["tol_a"]["tool_name"] == "store_demand"
+    assert await index.indexed([old, changed]) == {"tol_a"}, "and current from then on"
+
+
+async def test_a_failed_rewrite_reads_as_not_indexed_yet() -> None:
+    class _Failing(_SearchStore):
+        async def set_payloads(self, collection, payloads) -> None:
+            raise RuntimeError("store away")
+
+    old = ToolDescriptor(tenant_id="acme", tool_id="tol_a", name="store_demand")
+    index = ToolIndex(None, _NoEncoderIndexer(), _Failing([_record(old, old.index_text())]))  # type: ignore[arg-type]
+    assert await index.indexed([old]) == set()
