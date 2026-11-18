@@ -462,11 +462,16 @@ each entry says which one moved. Decisions behind each change are in the
     (`SerialRunner.run`), so the 504 left when the model was done. It is now answered at once;
     the model's permit still goes back only when the thread is out.
   - A verify's NLI work was one job of up to forty claims' batches; a timed-out verify scored
-    all of them for nobody. It now runs a batch at a time under one permit and stops at the
-    next batch when cancelled (`SerialRunner.run_each`).
+    all of them for nobody. It now runs a batch at a time and stops at the next batch when
+    cancelled (`SerialRunner.run_each`). A request's batches run under one permit; a
+    background job's hand the permit to a waiting request between two batches and take it
+    back after, so a request waits for at most one of a job's batches.
   - Requests and jobs queued for one model in one FIFO, so a verify waited behind every
     message job's statement labelling. A request waiting for a model now goes before a
-    waiting background job (`domain.work.background`, set for every job handler).
+    waiting background job (`domain.work.background`, set for every job handler), but after
+    4 requests in a row while a job waits the oldest job goes next: a job may hold an
+    advisory lock or a connection others wait for, and a sustained stream of requests no
+    longer starves it.
   - A unit of work queued on an advisory lock held a pooled connection while it waited (eight
     jobs of one user's chat: eight connections). Waiters that hold nothing yet now queue in
     the process without one; only the head waits in PostgreSQL (`UnitOfWork.serialize`). A

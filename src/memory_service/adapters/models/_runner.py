@@ -39,12 +39,18 @@ path and the statement labeller share the NLI head; a query's encode and the ind
 the encoder), and a FIFO queue put a verify behind every message job queued before it: under
 a chat's write load it waited out its 15 s deadline behind work nobody was waiting for. The
 gate keeps two FIFO queues and hands the model to a waiting request before a waiting job
-(``domain.work.background`` marks a job). A job still waits behind requests only while some
-are waiting, and the bounded queue keeps that short.
+(``domain.work.background`` marks a job). Not unconditionally: a job may hold what other
+callers wait for (an advisory lock, a connection), so a sustained stream of requests that
+kept it waiting would hold them up too. After ``_REQUESTS_BEFORE_A_JOB`` requests in a row
+have been handed the model while a job waits, the oldest waiting job goes next (aging), and
+the count starts again.
 
-``run_each`` runs a caller's batches one after another under one permit, and stops at the
-first batch boundary after a cancellation: a forty-claim verify that timed out no longer
-scores its remaining batches for a caller that is gone while the requests behind it wait.
+``run_each`` runs a caller's batches one after another, and stops at the first batch
+boundary after a cancellation: a forty-claim verify that timed out no longer scores its
+remaining batches for a caller that is gone while the requests behind it wait. A request's
+batches run under one permit. A job's do not hold it against requests: between two batches,
+while a request waits, the job hands it the permit and takes it back at the head of the
+jobs' queue, so a request waits for at most one of a job's batches.
 """
 
 from __future__ import annotations
@@ -54,7 +60,7 @@ from collections import deque
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Any, ClassVar, ParamSpec, TypeVar
+from typing import Any, ClassVar, Final, ParamSpec, TypeVar
 
 from memory_service.domain.errors import DependencyUnavailable
 from memory_service.domain.work import in_background
@@ -64,18 +70,29 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
+#: Requests handed the model in a row while a job waits, after which the oldest waiting job
+#: goes next (``_Gate``): requests first, without starving a job that may hold a lock.
+_REQUESTS_BEFORE_A_JOB: Final = 4
+
+
 class _Gate:
     """One permit, two FIFO queues: a waiting request is handed the permit before a waiting
-    background job. A cancelled waiter leaves its queue; one handed the permit as it was
-    cancelled passes it on."""
+    background job, unless ``_REQUESTS_BEFORE_A_JOB`` requests in a row have been while a job
+    waited. A cancelled waiter leaves its queue; one handed the permit as it was cancelled
+    passes it on."""
 
     def __init__(self) -> None:
         self._held = False
         self._requests: deque[asyncio.Future[None]] = deque()
         self._jobs: deque[asyncio.Future[None]] = deque()
+        #: requests handed the permit in a row while a job waited
+        self._streak = 0
 
     def locked(self) -> bool:
         return self._held
+
+    def requests_waiting(self) -> bool:
+        return any(not waiter.done() for waiter in self._requests)
 
     async def acquire(self, *, job: bool) -> None:
         if not self._held and not self._requests and not self._jobs:
@@ -84,6 +101,17 @@ class _Gate:
         waiter: asyncio.Future[None] = asyncio.get_running_loop().create_future()
         queue = self._jobs if job else self._requests
         queue.append(waiter)
+        await self._wait(waiter, queue)
+
+    async def yield_to_requests(self) -> None:
+        """The holder, a job between two batches, hands the permit on and waits for it at
+        the head of the jobs' queue: the waiting requests go first, other jobs after it."""
+        waiter: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        self._jobs.appendleft(waiter)
+        self.release()
+        await self._wait(waiter, self._jobs)
+
+    async def _wait(self, waiter: asyncio.Future[None], queue: deque[asyncio.Future[None]]) -> None:
         try:
             await waiter
         except asyncio.CancelledError:
@@ -94,13 +122,20 @@ class _Gate:
             raise
 
     def release(self) -> None:
-        for queue in (self._requests, self._jobs):
+        job_waiting = any(not waiter.done() for waiter in self._jobs)
+        aged = job_waiting and self._streak >= _REQUESTS_BEFORE_A_JOB
+        for queue in (self._jobs, self._requests) if aged else (self._requests, self._jobs):
             while queue:
                 waiter = queue.popleft()
                 if not waiter.done():
                     waiter.set_result(None)  # the permit moves to it; still held
+                    if queue is self._requests and job_waiting:
+                        self._streak += 1
+                    else:
+                        self._streak = 0
                     return
         self._held = False
+        self._streak = 0
 
 
 def configure_runners(*, max_waiters: int | None) -> None:
@@ -144,25 +179,31 @@ class SerialRunner:
                 gate.release()
 
     async def run_each[T, U](self, fn: Callable[[T], U], batches: Sequence[T]) -> list[U]:
-        """``fn`` over each of ``batches`` in order, under one permit: the caller's batches
-        are not interleaved with another caller's, and a cancellation stops them at the next
-        batch (the one inside the model finishes; its completion releases the permit)."""
+        """``fn`` over each of ``batches`` in order: the caller's batches are not interleaved
+        with another caller's, except that a job lets waiting requests in between two of its
+        batches (``_Gate.yield_to_requests``). A cancellation stops them at the next batch
+        (the one inside the model finishes; its completion releases the permit)."""
         if not batches:
             return []
+        job = in_background()
         gate = await self._enter()
-        released = False
+        holding = True
         out: list[U] = []
         try:
-            for batch in batches:
+            for n, batch in enumerate(batches):
+                if n and job and gate.requests_waiting():
+                    holding = False
+                    await gate.yield_to_requests()
+                    holding = True
                 running = self._start(partial(fn, batch))
                 try:
                     out.append(await asyncio.shield(running))
                 except asyncio.CancelledError:
-                    released = self._release_after(running, gate)
+                    holding = not self._release_after(running, gate)
                     raise
             return out
         finally:
-            if not released:
+            if holding:
                 gate.release()
 
     async def _enter(self) -> _Gate:

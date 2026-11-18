@@ -254,3 +254,113 @@ async def test_a_waiter_cancelled_as_the_permit_is_released_leaves_cleanly() -> 
     assert not gate.locked()
     await gate.acquire(job=True)
     assert gate.locked()
+
+
+async def test_a_waiting_job_is_served_after_a_bounded_run_of_requests() -> None:
+    """Requests go first, but not for ever: under a sustained stream of them a job waited
+    as long as the stream lasted, holding whatever it had taken before it asked for the
+    model (an advisory lock, a connection) while the requests behind that lock waited too.
+    After ``_REQUESTS_BEFORE_A_JOB`` requests in a row while a job waits, the oldest job
+    is served."""
+    from memory_service.adapters.models import _runner
+
+    streak = getattr(_runner, "_REQUESTS_BEFORE_A_JOB", 4)
+    gate = _runner._Gate()
+    await gate.acquire(job=False)
+    order: list[str] = []
+
+    async def take(name: str, *, job: bool) -> None:
+        await gate.acquire(job=job)
+        order.append(name)
+
+    waiters = [asyncio.ensure_future(take("job", job=True))]
+    await asyncio.sleep(0)
+    waiters += [asyncio.ensure_future(take(f"r{n}", job=False)) for n in range(10)]
+    await asyncio.sleep(0)
+    for _ in waiters:  # each holder in turn hands the permit on
+        gate.release()
+        await asyncio.sleep(0)
+    await asyncio.gather(*waiters)
+    assert order.index("job") == streak, order
+    assert [n for n in order if n != "job"] == [f"r{n}" for n in range(10)]
+
+
+async def test_a_job_lets_waiting_requests_in_between_its_batches() -> None:
+    """A job's batches used to run under one permit to the last: a statement labeller of
+    twenty batches kept a verify waiting for all of them. Between two batches a job hands
+    the permit to a waiting request and takes it back after; a request's own batches still
+    run together."""
+    from memory_service.domain.work import background
+
+    runner = SerialRunner("test")
+    inside, release = threading.Event(), threading.Event()
+    order: list[str] = []
+
+    def batch(n: int) -> int:
+        order.append(f"job{n}")
+        if n == 0:
+            inside.set()
+            release.wait(10)
+        return n
+
+    async def job() -> list[int]:
+        with background():
+            return await runner.run_each(batch, [0, 1, 2])
+
+    try:
+        many = asyncio.ensure_future(job())
+        await asyncio.to_thread(inside.wait, 5)
+        request = asyncio.ensure_future(runner.run(order.append, "request"))
+        while runner.waiting < 1:
+            await asyncio.sleep(0)
+        release.set()
+        assert await many == [0, 1, 2]
+        await request
+    finally:
+        release.set()
+        runner.close()
+    assert order == ["job0", "request", "job1", "job2"]
+
+
+async def test_a_job_cancelled_while_it_let_a_request_in_does_not_release_its_permit() -> None:
+    """Cancelled while it waits to take the permit back, the job holds nothing: the request
+    inside keeps the model, and the gate is free once that request is out."""
+    from memory_service.domain.work import background
+
+    runner = SerialRunner("test")
+    job_inside, job_go = threading.Event(), threading.Event()
+    request_inside, request_go = threading.Event(), threading.Event()
+
+    def batch(n: int) -> int:
+        job_inside.set()
+        job_go.wait(10)
+        return n
+
+    def request_body() -> str:
+        request_inside.set()
+        request_go.wait(10)
+        return "request"
+
+    async def job() -> list[int]:
+        with background():
+            return await runner.run_each(batch, [0, 1])
+
+    try:
+        many = asyncio.ensure_future(job())
+        await asyncio.to_thread(job_inside.wait, 5)
+        request = asyncio.ensure_future(runner.run(request_body))
+        while runner.waiting < 1:
+            await asyncio.sleep(0)
+        job_go.set()
+        await asyncio.to_thread(request_inside.wait, 5)
+        many.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await many
+        assert runner._gate is not None and runner._gate.locked(), "the request is inside"
+        request_go.set()
+        assert await request == "request"
+        assert not runner._gate.locked()
+    finally:
+        job_go.set()
+        request_go.set()
+        runner.close()
