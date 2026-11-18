@@ -404,3 +404,73 @@ async def test_a_failed_rewrite_reads_as_not_indexed_yet() -> None:
     old = ToolDescriptor(tenant_id="acme", tool_id="tol_a", name="store_demand")
     index = ToolIndex(None, _NoEncoderIndexer(), _Failing([_record(old, old.index_text())]))  # type: ignore[arg-type]
     assert await index.indexed([old]) == set()
+
+
+class _Catalog:
+    """A unit of work whose catalog pages ``entries`` by ``tool_id``."""
+
+    def __init__(self, entries: list[ToolDescriptor]) -> None:
+        self.entries = sorted(entries, key=lambda e: e.tool_id)
+        self.tools = self
+
+    async def __aenter__(self) -> _Catalog:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+    async def catalog_page(self, *, tenant_id, after, limit):
+        return [e for e in self.entries if e.tool_id > after][:limit]
+
+
+async def test_a_failed_rewrite_of_one_page_does_not_stop_the_refresh(monkeypatch) -> None:
+    """``refresh`` moves each page's old-layout records in place. One failed write (the
+    store briefly away) aborted the whole sweep: the pages after it, and the same page's
+    records that needed embedding, waited for the next tick. Like ``indexed``, the sweep now
+    logs the failure and goes on, and the refresh is not trusted as done, so the failed page's
+    records are moved on the next tick."""
+    from memory_service.modules.tools import index as index_module
+
+    monkeypatch.setattr(index_module, "REFRESH_BATCH", 2)
+    first = ToolDescriptor(tenant_id="acme", tool_id="tol_a", name="store_demand")
+    changed = ToolDescriptor(tenant_id="acme", tool_id="tol_b", name="excess_stock")
+    later = ToolDescriptor(tenant_id="acme", tool_id="tol_c", name="lost_sales")
+
+    class _FlakyStore(_SearchStore):
+        failures = 1
+        upserted: list[str] = []
+
+        async def set_payloads(self, collection, payloads) -> None:
+            if self.failures:
+                self.failures -= 1
+                raise RuntimeError("store away")
+            await super().set_payloads(collection, payloads)
+
+        async def upsert(self, records) -> None:
+            self.upserted += [r.record_id for r in records]
+            self.records.update({r.record_id: r for r in records})
+
+    class _Embedding(_Indexer):
+        sparse = SimpleNamespace(
+            server_side_idf=True, encode_documents=lambda texts: [None for _ in texts]
+        )
+
+        async def embed_cached(self, texts, hashes):
+            return {}
+
+    store = _FlakyStore(
+        [
+            _record(first, first.index_text()),
+            _record(changed, "an older text"),
+            _record(later, later.index_text()),
+        ]
+    )
+    catalog = _Catalog([first, changed, later])
+    index = ToolIndex(lambda: catalog, _Embedding(), store)  # type: ignore[arg-type]
+    assert await index.refresh() == 2, "tol_b embedded, tol_c moved"
+    assert store.upserted == ["tol_b"]
+    assert set(store.patched) == {"tol_c"}
+    # not trusted as done: the next tick compares again instead of waiting six hours
+    assert await index.refresh() == 1, "the failed page's record, a tick later"
+    assert set(store.patched) == {"tol_a", "tol_c"}
+    assert await index.refresh() == 0, "and done, trusted from then on"

@@ -454,7 +454,9 @@ each entry says which one moved. Decisions behind each change are in the
   first, or with the API: a worker of the earlier release reads a `v2:` record as stale,
   embeds it again and writes it back without `tool_name` on each of its refresh ticks, so
   while one runs beside this release the catalog is re-embedded every five minutes (its
-  records are still found, on `text`, until this release moves them again).
+  records are still found, on `text`, until this release moves them again). A move that
+  fails for one page of the catalog is logged and the refresh goes on with the rest; the
+  next tick compares again.
 - **Deadlines are kept and the connection pool holds under concurrent load** (service). Under a
   single process with a pool of 5 + 5, `/v1/verify` answered its 15 s deadline at up to 55 s
   and requests and jobs failed with "PostgreSQL connection pool exhausted". Causes and fixes:

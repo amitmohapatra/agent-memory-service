@@ -199,8 +199,9 @@ class ToolIndex:
         last = self._refreshed.get(collection)
         if not force and last is not None and started - last < REFRESH_EVERY_SECONDS:
             return 0
-        written = await self._sweep(None, every=False)
-        self._refreshed[collection] = started
+        written, failed = await self._sweep(None, every=False)
+        if not failed:  # a page that failed is compared again on the next tick
+            self._refreshed[collection] = started
         if written:
             log.info("tools.refreshed", count=written)
         return written
@@ -208,16 +209,17 @@ class ToolIndex:
     async def rebuild(self, tenant_id: str | None = None) -> int:
         """Re-embed every catalog entry of ``tenant_id`` (every tenant's when None) from the
         catalog, whatever its record holds: the reindex tool's part for tool search."""
-        written = await self._sweep(tenant_id, every=True)
+        written, _ = await self._sweep(tenant_id, every=True)
         log.info("tools.rebuilt", tenant_id=tenant_id, count=written)
         return written
 
-    async def _sweep(self, tenant_id: str | None, *, every: bool) -> int:
+    async def _sweep(self, tenant_id: str | None, *, every: bool) -> tuple[int, int]:
         """Page the catalog by ``tool_id`` and index the entries ``every`` or, without it, the
         ones whose record is missing or holds another text's hash (or another layout's: moved
-        in place)."""
+        in place). Returns the records written and the ones whose move failed: a failed move
+        is logged and the sweep goes on, as ``indexed`` does; a later sweep moves them."""
         await self.ensure()
-        written, after = 0, ""
+        written, failed, after = 0, 0, ""
         while True:
             async with self.uow_factory() as uow:
                 entries = await uow.tools.catalog_page(
@@ -232,15 +234,24 @@ class ToolIndex:
                 todo = [e for e in entries if held.get(e.tool_id) != _hash(e)]
                 older = [e for e in todo if held.get(e.tool_id) == _hash_v1(e)]
                 if older:
-                    await self._relayout(older)
-                    written += len(older)
+                    try:
+                        await self._relayout(older)
+                    except Exception as exc:
+                        failed += len(older)
+                        log.warning(
+                            "tools.relayout_failed",
+                            count=len(older),
+                            error_message=f"{type(exc).__name__}: {exc}",
+                        )
+                    else:
+                        written += len(older)
                     todo = [e for e in todo if held.get(e.tool_id) != _hash_v1(e)]
             if todo:
                 await self.store.upsert(await self._records(todo))
                 written += len(todo)
             if len(entries) < REFRESH_BATCH:
                 break
-        return written
+        return written, failed
 
     async def _records(self, entries: Sequence[ToolDescriptor]) -> list[SearchRecord]:
         texts = [e.index_text() for e in entries]
