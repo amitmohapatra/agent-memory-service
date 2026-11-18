@@ -7,6 +7,17 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Fixed (service): a thread's window never misses its newest turns after a cache race
+
+The hot thread cache (the recent visible messages in Dragonfly) wrote its list and the
+revision it is current for in separate commands. Under load a refill built from an earlier
+read could wipe the messages appended meanwhile while a later append wrote the current
+revision: the list held the thread's first message alone, and every window served the
+conversation without its later turns (the model saw them only as recalled memories, out of
+their order). The cache now keeps, with the revision, the message the list must end with, and
+answers only when it does; an internal message invalidates it. A marker an older release wrote
+is a miss, rewritten by the next read.
+
 ### Added
 - **With a model, each person's facts are kept as beliefs** (service). After a message's
   memories are stored, each person they touch is queued once (`memory.consolidate`, 60 s

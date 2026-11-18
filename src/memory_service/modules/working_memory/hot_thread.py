@@ -1,7 +1,14 @@
 """Hot thread cache in Dragonfly. Never the source of truth.
 
 - ``hot:thread:{tenant}:{thread}``       bounded list of recent visible messages
-- ``hot:thread:{tenant}:{thread}:rev``   thread revision the list is current for
+- ``hot:thread:{tenant}:{thread}:rev``   ``{revision}:{sequence}``: the thread revision the
+  list is current for, and the sequence of the message the list must end with
+
+The list and its marker are written in separate commands, so a refill built from an earlier
+read can wipe messages appended meanwhile and still find its marker overwritten by a later
+append. A read therefore trusts the list only when the marker's revision is the thread's and
+the list ends at the marker's message: a list cut short by such a race is a miss, and the
+canonical read refills it.
 """
 
 from __future__ import annotations
@@ -40,19 +47,20 @@ class HotThreadCache:
         that fails (outage) leaves the stored revision behind, so the next read misses."""
         if self.cache is None:
             return
+        rev_key = self.rev_key(message.tenant_id, message.thread_id)
         try:
-            if message.kind.value == "VISIBLE":
-                await self.cache.list_push(
-                    self.key(message.tenant_id, message.thread_id),
-                    _dump(message),
-                    max_len=self.max_messages,
-                    ttl_seconds=self.ttl,
-                )
-            await self.cache.set(
-                self.rev_key(message.tenant_id, message.thread_id),
-                str(revision).encode(),
+            if message.kind.value != "VISIBLE":
+                # the list is unchanged, and which visible message ends it is not known here:
+                # the next read misses and refills it
+                await self.cache.delete(rev_key)
+                return
+            await self.cache.list_push(
+                self.key(message.tenant_id, message.thread_id),
+                _dump(message),
+                max_len=self.max_messages,
                 ttl_seconds=self.ttl,
             )
+            await self.cache.set(rev_key, _marker(revision, message.sequence), ttl_seconds=self.ttl)
         except CacheUnavailable:
             log.debug("hot_thread.append_skipped")
 
@@ -72,9 +80,14 @@ class HotThreadCache:
                     max_len=self.max_messages,
                     ttl_seconds=self.ttl,
                 )
-            await self.cache.set(
-                self.rev_key(tenant_id, thread_id), str(revision).encode(), ttl_seconds=self.ttl
-            )
+            if visible:
+                await self.cache.set(
+                    self.rev_key(tenant_id, thread_id),
+                    _marker(revision, visible[-1].sequence),
+                    ttl_seconds=self.ttl,
+                )
+            else:
+                await self.cache.delete(self.rev_key(tenant_id, thread_id))
 
     async def recent(
         self, tenant_id: str, thread_id: str, *, limit: int, revision: int | None = None
@@ -84,16 +97,17 @@ class HotThreadCache:
         if self.cache is None:
             return None
         try:
-            if revision is not None:
-                stored = await self.cache.get(self.rev_key(tenant_id, thread_id))
-                if stored is None or int(stored) != revision:
-                    return None
+            marker = _read_marker(await self.cache.get(self.rev_key(tenant_id, thread_id)))
+            if marker is None or (revision is not None and marker[0] != revision):
+                return None
             raw = await self.cache.list_range(self.key(tenant_id, thread_id), -limit, -1)
         except CacheUnavailable:
             return None
         if not raw:
             return None
         messages = [Message.model_validate_json(item) for item in raw]
+        if messages[-1].sequence != marker[1]:
+            return None  # cut short by a refill racing an append: not the thread's newest
         # a gap (a push that failed during an outage) means the cache cannot answer fully;
         # neither can a short list that does not start at the thread's first message
         seqs = [m.sequence for m in messages]
@@ -109,3 +123,20 @@ class HotThreadCache:
         with contextlib.suppress(CacheUnavailable):
             await self.cache.delete(self.key(tenant_id, thread_id))
             await self.cache.delete(self.rev_key(tenant_id, thread_id))
+
+
+def _marker(revision: int, sequence: int) -> bytes:
+    """What the list is current for: the thread's revision and the message it ends with."""
+    return f"{revision}:{sequence}".encode()
+
+
+def _read_marker(stored: bytes | None) -> tuple[int, int] | None:
+    """``(revision, sequence)`` of a stored marker; ``None`` for none, or one an older release
+    wrote (a revision alone): a miss, which the canonical read rewrites."""
+    if stored is None:
+        return None
+    revision, _, sequence = stored.decode().partition(":")
+    try:
+        return int(revision), int(sequence)
+    except ValueError:
+        return None
