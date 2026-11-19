@@ -389,6 +389,47 @@ async def test_a_typed_argument_links_the_call_to_the_entity_and_its_id(
     assert hints.missing == []
 
 
+async def test_a_runs_tools_are_found_however_many_better_matches_the_tenants_catalog_holds(
+    container, uow_factory
+) -> None:
+    """The catalog search ranks among the run's available tools, not the tenant's whole
+    catalog: forty other tools about the task, each a better match, do not crowd out the one
+    the run has (the search's 32 candidates used to be taken before the run's set narrowed
+    them, and the hints came back empty)."""
+    service = container.services["tool_memory"]
+    ctx = _ctx("run_crowded")
+    crowd = [
+        ToolDescriptor(
+            tenant_id="",
+            name=f"stock-level-{n:02d}",
+            description="Stock level of a SKU in a warehouse: units on hand right now.",
+            input_schema={"type": "object", "properties": {"sku": {"type": "string"}}},
+            side_effects="read",
+        )
+        for n in range(40)
+    ]
+    mine = ToolDescriptor(
+        tenant_id="",
+        name="inventory-count",
+        description="Count inventory.",
+        input_schema={"type": "object", "properties": {"sku": {"type": "string"}}},
+        side_effects="read",
+    )
+    async with uow_factory() as uow:
+        await service.put_catalog(uow, ctx, _entries(*crowd, mine))
+        await uow.commit()
+    await container.tasks.drain()  # tools.index
+    keys = await _keys(container, ctx)
+    hints = await container.services["tool_hints"].hints(
+        ctx,
+        "what is the stock level of SKU-1 in the warehouse right now?",
+        available=["inventory-count"],
+        k=3,
+        scope_keys=keys,
+    )
+    assert [c.name for c in hints.candidates] == ["inventory-count"]
+
+
 def _pattern() -> str:
     from memory_service.modules.tools.patterns import task_pattern
 

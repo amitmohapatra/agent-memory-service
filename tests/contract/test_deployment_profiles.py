@@ -28,7 +28,7 @@ from memory_service.modules.jobs.registry import register_handlers
 from tests.conftest import DB_URL
 from tests.integration.conftest import PG_AVAILABLE, TABLES
 
-pytestmark = [pytest.mark.contract, pytest.mark.usefixtures()]
+pytestmark = [pytest.mark.contract]
 
 #: name -> (settings sections, stand-ins). Everything not named stays at the suite's default.
 #: The stand-ins are ``build_container`` overrides, not settings: a deployment cannot reach

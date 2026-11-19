@@ -9,9 +9,10 @@ product semantics. The specification forbids provider SDK imports in the domain.
 
 ## Decision
 Ports are `typing.Protocol`s in `memory_service.ports`. Adapters live in
-`memory_service.adapters` and are attached by `adapters/wiring.py` through a
-`ProviderRegistry` keyed by `(port, provider_name)`. Configuration (`Settings`) selects the
-provider. Architecture tests and Ruff `banned-api` enforce the boundary.
+`memory_service.adapters` and are attached by `adapters/wiring.py`. Configuration (`Settings`)
+selects the provider. (As decided, wiring went through a `ProviderRegistry` keyed by
+`(port, provider_name)`; only the document parsers ever registered in it, and since 2026-11
+they are a plain name-to-factory table, `adapters/parsers.PARSERS`.) Architecture tests and Ruff `banned-api` enforce the boundary.
 
 ## Consequences
 - Adding a provider = new adapter module + registry entry; no switch statements.

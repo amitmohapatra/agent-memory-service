@@ -20,10 +20,12 @@ from typing import Any
 
 from memory_service.domain.conversation import Thread
 from memory_service.domain.documents import Chunk, Document, DocumentNode
+from memory_service.domain.enums import Visibility
 from memory_service.domain.ids import content_hash
 from memory_service.domain.memory import CanonicalMemory, earlier_value, replaced_by
 from memory_service.domain.revisions import document_revision_keys
 from memory_service.domain.script import detect_script
+from memory_service.modules.authz.visibility import visibility_keys
 from memory_service.modules.context.summaries import abstractive_summaries, build_summaries
 from memory_service.modules.conversation.summary import (
     SUMMARY_MAX_CHARS,
@@ -684,10 +686,12 @@ class Indexer:
             return False
         thread, body, observed_from, observed_to = source
         text = episode_index_text(body, thread.title, observed_from, observed_to)
-        keys = (
-            [f"user:{tenant_id}/{thread.owner_user_id}"]
-            if thread.owner_user_id
-            else [f"thread:{tenant_id}/{thread_id}"]
+        keys = visibility_keys(
+            tenant_id,
+            Visibility.USER if thread.owner_user_id else Visibility.THREAD,
+            owner_principal="",  # neither audience names a principal
+            user_id=thread.owner_user_id,
+            thread_id=thread_id,
         )
         with span("index.episode", tenant_id=tenant_id):
             dense = await self.embed_cached([text], [f"{content_hash(text)}:epi1"])

@@ -187,6 +187,11 @@ def _has_form(low: str, lex: LexEntity) -> bool:
     )
 
 
+def _relation_status(memory: CanonicalMemory) -> str:
+    """A relation's status from its memory's: current, or superseded for every other one."""
+    return "CURRENT" if memory.temporal.status.value == "CURRENT" else "SUPERSEDED"
+
+
 def entity_id_for(tenant_id: str, scope_key: str, canonical: str) -> str:
     return "ent_" + stable_key(tenant_id, scope_key, canonical)
 
@@ -323,7 +328,7 @@ def _model_relation(
         valid_from=memory.temporal.valid_from,
         valid_to=memory.temporal.valid_to,
         observed_at=memory.temporal.observed_at,
-        status="CURRENT" if memory.temporal.status.value == "CURRENT" else "SUPERSEDED",
+        status=_relation_status(memory),
         confidence=min(confidence, memory.confidence),
         evidence=list(memory.evidence),
         memory_id=memory.memory_id,
@@ -392,7 +397,7 @@ class NativeGraphEnrichment:
                     valid_from=memory.temporal.valid_from,
                     valid_to=memory.temporal.valid_to,
                     observed_at=memory.temporal.observed_at,
-                    status="CURRENT" if memory.temporal.status.value == "CURRENT" else "SUPERSEDED",
+                    status=_relation_status(memory),
                     confidence=memory.confidence,
                     evidence=evidence,
                     memory_id=memory.memory_id,
@@ -443,7 +448,7 @@ class NativeGraphEnrichment:
                     scope_key=scope_key,
                     visibility_keys=keys,
                     observed_at=memory.temporal.observed_at,
-                    status="CURRENT" if memory.temporal.status.value == "CURRENT" else "SUPERSEDED",
+                    status=_relation_status(memory),
                     confidence=min(memory.confidence, 0.6),
                     evidence=evidence,
                     memory_id=memory.memory_id,

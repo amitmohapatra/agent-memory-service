@@ -23,6 +23,17 @@ from itertools import pairwise
 #: either an encoding accident or a probe.
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 
+#: English function words: what the memory, graph and context modules leave out when they
+#: compare two texts by their words. Deliberately not the grounding or sparse-encoder lists,
+#: which keep or drop other words (grounding keeps the negations).
+_STOP_WORDS = """
+a an the and or but if then of to in on at by for with from as is are was were be been
+being it its this that these those there here i me my we our you your they them he she
+his her do does did done have has had having not no so than too very can will would
+should could may might must shall into onto about please
+"""
+STOP_WORDS = frozenset(_STOP_WORDS.split())
+
 # A small explicit exclusion, not a language detector. Unknown short statements must
 # remain eligible for retention and verification: one word can express a whole claim.
 ACKNOWLEDGEMENT = re.compile(

@@ -77,7 +77,7 @@ async def consolidate_tenant(
     """Queue every unit of the tenant and drain the in-process queue (``container.tasks``
     must be the recording queue: a benchmark's, or this tool's)."""
     register_handlers(container)
-    uow_factory = container.services["uow_factory"]
+    uow_factory = container.services.uow_factory
     units = await tenant_units(uow_factory, tenant_id)
     now = datetime.now(UTC)
     async with uow_factory() as uow:

@@ -10,15 +10,20 @@ from typing import TYPE_CHECKING, Any
 from memory_service.config.constants import TASKS
 from memory_service.domain.profile import PROFILE_MEMORY_TYPES
 from memory_service.domain.revisions import RevisionKind
+from memory_service.domain.work import background
 from memory_service.modules.conversation.summary import TASK_EPISODE_INDEX, TASK_SUMMARY_REFRESH
 from memory_service.modules.feedback.service import TASK_FEEDBACK_PROJECT
 from memory_service.modules.jobs.names import (
+    TASK_ARCHIVE_STAGE,
     TASK_BELIEF_INDEX,
     TASK_CONSOLIDATE,
     TASK_DOCUMENT_MOVE,
     TASK_GRAPH_ENRICH_DOCUMENT,
     TASK_GRAPH_ENRICH_MEMORIES,
+    TASK_MEMORY_EXPIRE,
+    TASK_MEMORY_FORGET,
     TASK_MEMORY_INDEX,
+    TASK_PROCESS_OBSERVATION,
 )
 from memory_service.modules.llm.cost import llm_accounting
 from memory_service.modules.memory.connections import TASK_MEMORY_CONNECT
@@ -35,21 +40,17 @@ from memory_service.modules.tools.service import (
     store_output,
 )
 from memory_service.observability.logging import get_logger
-from memory_service.ports.tasks import JobSpec, Queue, TaskHandler
+from memory_service.ports.tasks import JobSpec, Queue, TaskHandler, TaskQueue
 
 if TYPE_CHECKING:
     from memory_service.application.container import Container
 
 log = get_logger(__name__)
 
-TASK_PROCESS_OBSERVATION = "memory.process_observation"
-TASK_ARCHIVE_STAGE = "archive.stage_message"
 TASK_OUTBOX_SWEEP = "system.outbox_sweep"
 TASK_IDEMPOTENCY_PURGE = "system.idempotency_purge"
 TASK_RECONCILE = "system.reconcile"
 TASK_ARCHIVE_PURGE = "archive.purge_payloads"
-TASK_MEMORY_EXPIRE = "memory.expire"
-TASK_MEMORY_FORGET = "memory.forget"
 TASK_MEMORY_REFLECT = "memory.reflect"
 
 
@@ -57,7 +58,7 @@ class _AccountedQueue:
     """Registers every handler inside its own LLM accounting scope, so a job's model tokens
     are counted and logged per job (and never leak into the request that ran it inline)."""
 
-    def __init__(self, queue: Any) -> None:
+    def __init__(self, queue: TaskQueue) -> None:
         self._queue = queue
 
     def register(self, name: str, queue: Queue, handler: TaskHandler, **kwargs: Any) -> None:
@@ -71,7 +72,8 @@ class _AccountedQueue:
 
 def _accounted(name: str, handler: TaskHandler) -> TaskHandler:
     async def run(payload: dict[str, Any]) -> Any:
-        with llm_accounting() as tokens:
+        # background work: a request waiting for the same in-process model goes first
+        with background(), llm_accounting() as tokens:
             try:
                 return await handler(payload)
             finally:
@@ -107,7 +109,7 @@ def _register_tools_refresh(queue: _AccountedQueue, container: Container) -> Non
     other text (``ToolIndex.refresh``: the first tick after a release does the work)."""
 
     async def tools_refresh(payload: dict[str, Any]) -> None:
-        await container.services["tool_index"].refresh()
+        await container.services.tool_index.refresh()
 
     queue.register_periodic(
         "periodic.tools_refresh", Queue.EMBEDDING, tools_refresh, cron="*/5 * * * *"
@@ -121,16 +123,16 @@ def _register_consolidation(queue: _AccountedQueue, container: Container) -> Non
     waiting runs only where a model may be reached."""
 
     async def memory_consolidate(payload: dict[str, Any]) -> None:
-        await container.services["consolidation"].consolidate(
+        await container.services.consolidation.consolidate(
             payload["tenant_id"], payload["scope_key"], payload["person_key"]
         )
 
     async def consolidate_pending(payload: dict[str, Any]) -> None:
-        await container.services["consolidation"].sweep_pending()
-        await container.services["consolidation"].prune()
+        await container.services.consolidation.sweep_pending()
+        await container.services.consolidation.prune()
 
     async def belief_index(payload: dict[str, Any]) -> None:
-        await container.services["indexer"].index_beliefs(
+        await container.services.indexer.index_beliefs(
             payload["tenant_id"], list(payload["belief_ids"])
         )
 
@@ -169,7 +171,7 @@ def register_handlers(container: Container) -> None:
     if container.tasks is None:
         return
     queue = _AccountedQueue(container.tasks)
-    uow_factory = container.services["uow_factory"]
+    uow_factory = container.services.uow_factory
 
     async def process_observation(payload: dict[str, Any]) -> None:
         """M3 baseline: mark the observation processed. M7 replaces this with the memory
@@ -342,11 +344,11 @@ def register_handlers(container: Container) -> None:
 
     async def retention_sweep(payload: dict[str, Any]) -> None:
         """Forget canonical memories past their tenant's retention (modules/tenancy)."""
-        await container.services["retention"].sweep()
+        await container.services.retention.sweep()
 
     async def read_audit_purge(payload: dict[str, Any]) -> None:
         """Drop who-read-what rows past TASKS.read_audit_retention_days, one batch a run."""
-        n = await container.services["read_audit"].purge(
+        n = await container.services.read_audit.purge(
             older_than_days=TASKS.read_audit_retention_days
         )
         if n:
@@ -367,42 +369,38 @@ def register_handlers(container: Container) -> None:
     async def summary_refresh(payload: dict[str, Any]) -> None:
         """Fold a thread's new messages into its durable summary, then index it as the
         thread's searchable episode (removed instead when the thread is gone)."""
-        await container.services["thread_summaries"].refresh(
+        await container.services.thread_summaries.refresh(
             payload["tenant_id"],
             payload["thread_id"],
             principal_id=payload.get("principal_id"),
         )
-        await container.services["indexer"].index_episode(
-            payload["tenant_id"], payload["thread_id"]
-        )
+        await container.services.indexer.index_episode(payload["tenant_id"], payload["thread_id"])
 
     async def episode_index(payload: dict[str, Any]) -> None:
         """Re-index a thread's searchable episode; removes it once the thread is deleted."""
-        await container.services["indexer"].index_episode(
-            payload["tenant_id"], payload["thread_id"]
-        )
+        await container.services.indexer.index_episode(payload["tenant_id"], payload["thread_id"])
 
     async def profile_refresh(payload: dict[str, Any]) -> None:
         """Keep a user's pinned ``user`` block from their USER and PREFERENCE memories."""
-        await container.services["profile"].refresh_user(payload["tenant_id"], payload["user_id"])
+        await container.services.profile.refresh_user(payload["tenant_id"], payload["user_id"])
 
     async def profile_query(payload: dict[str, Any]) -> None:
         """Answer one block's standing question into its text."""
-        await container.services["profile"].answer_query(
+        await container.services.profile.answer_query(
             payload["tenant_id"], payload["scope_key"], payload["block"]
         )
 
     async def profile_queries(payload: dict[str, Any]) -> None:
         """Claim the standing questions that are due."""
-        await container.services["profile"].schedule_due()
+        await container.services.profile.schedule_due()
 
     async def tools_index(payload: dict[str, Any]) -> None:
         """Embed changed catalog entries for tool search."""
-        await container.services["tool_index"].index(payload["tenant_id"], payload["tool_ids"])
+        await container.services.tool_index.index(payload["tenant_id"], payload["tool_ids"])
 
     async def tools_learn(payload: dict[str, Any]) -> None:
         """Fold recorded tool calls into stored procedures and graph edges."""
-        await container.services["tool_learning"].learn(payload.get("tenant_id"))
+        await container.services.tool_learning.learn(payload.get("tenant_id"))
 
     async def tools_output(payload: dict[str, Any]) -> None:
         """Store a tool output whose upload failed when its call was recorded."""

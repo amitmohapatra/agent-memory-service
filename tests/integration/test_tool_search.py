@@ -10,6 +10,7 @@ import pytest
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.ids import content_hash
 from memory_service.domain.tools import ToolDescriptor
+from memory_service.modules.tools.index import record_hash
 from memory_service.ports.search import SearchFilter
 
 pytestmark = pytest.mark.integration
@@ -118,7 +119,7 @@ async def test_records_an_earlier_build_wrote_are_reindexed_on_the_periodic_refr
 
     await container.tasks.run_periodic("periodic.tools_refresh")
 
-    assert await stored() == {e.tool_id: content_hash(e.index_text()) for e in [*entries, bare]}, (
+    assert await stored() == {e.tool_id: record_hash(e.index_text()) for e in [*entries, bare]}, (
         "the stale records re-embedded, the missing one indexed"
     )
     assert (await _search(container))[0] == ("billing-adjust", 1.0)
@@ -168,7 +169,7 @@ async def test_a_tool_first_seen_in_a_recorded_call_becomes_searchable(
 async def test_the_reindex_tool_rebuilds_tool_search_after_a_model_change(
     container, uow_factory
 ) -> None:
-    """A model change is a new, empty collection: ``memory-reindex`` fills it from the
+    """A model change is a new, empty collection: ``make reindex`` fills it from the
     catalog, every tenant's or one tenant's only."""
     from memory_service.tools.reindex import rebuild_search_index
 
@@ -204,3 +205,119 @@ async def test_the_reindex_tool_rebuilds_tool_search_after_a_model_change(
     everyone = await rebuild_search_index(container)
     assert everyone.ok and everyone.tools == 3
     assert await counts() == {"acme": 2, "globex": 1}
+
+
+# --- the run's available tools, filtered on an indexed keyword field -------------------------
+
+
+async def _available(container, available, workspace_id: str | None = "ws1") -> list[str]:
+    found = await container.services["tool_index"].search(
+        "acme", workspace_id, TASK, available=available
+    )
+    return [m.name for m in found]
+
+
+async def _as_an_earlier_release_wrote_them(container, uow_factory) -> list[ToolDescriptor]:
+    """Rewrite the catalog's records as the release before ``tool_name`` wrote them: the same
+    vectors, a bare ``text_hash`` and no keyword field to filter on."""
+    index = container.services["tool_index"]
+    async with uow_factory() as uow:
+        entries = await uow.tools.catalog("acme", workspace_id="ws1", limit=10)
+    records = await index._records(entries)
+    for record, entry in zip(records, entries, strict=True):
+        record.payload.pop("tool_name", None)
+        record.payload["text_hash"] = content_hash(entry.index_text())
+    await container.search.upsert(records)
+    return entries
+
+
+async def test_records_an_earlier_layout_wrote_are_moved_to_the_new_one_without_embedding(
+    container, uow_factory, monkeypatch
+) -> None:
+    """The window after a deploy: the old records have no ``tool_name``. The periodic refresh
+    moves them to the new layout - payload only, the vectors are of the same text."""
+    await _publish(container, uow_factory)
+    entries = await _as_an_earlier_release_wrote_them(container, uow_factory)
+    index = container.services["tool_index"]
+
+    async def no_embedding(texts, hashes):
+        raise AssertionError("an unchanged text is not embedded again")
+
+    monkeypatch.setattr(index.indexer, "embed_cached", no_embedding)
+    await container.tasks.run_periodic("periodic.tools_refresh")
+    moved = await container.search.get(index.collection, [e.tool_id for e in entries])
+    assert {r.payload.get("text_hash") for r in moved} == {
+        record_hash(e.index_text()) for e in entries
+    }
+    assert await _available(container, ["billing-adjust"]) == ["billing-adjust"]
+    assert await index.refresh(force=True) == 0
+
+
+async def test_records_an_earlier_release_wrote_are_found_before_they_are_moved(
+    container, uow_factory
+) -> None:
+    """While releases are mixed, an earlier worker writes layout-1 records (no ``tool_name``)
+    back on each of its refresh ticks. A search naming the run's tools still finds them, by
+    the name layout 1 kept in ``text``, and only in the run's tenant and audience."""
+    await _publish(container, uow_factory)
+    await _as_an_earlier_release_wrote_them(container, uow_factory)
+    assert await _available(container, ["billing-adjust"]) == ["billing-adjust"]
+    assert await _available(container, ["billing-adjust", "billing-export"]) == [
+        "billing-adjust",
+        "billing-export",
+    ]
+    assert await _available(container, ["nobody-has-this"]) == []
+    found = await container.services["tool_index"].search(
+        "globex", "ws1", TASK, available=["billing-adjust"]
+    )
+    assert found == [], "never another tenant's"
+
+
+async def test_asking_whether_old_records_are_indexed_moves_them_there_and_then(
+    container, uow_factory
+) -> None:
+    """A harness waits (seconds) for ``GET /v1/tools`` to say its tools are indexed before its
+    first hints; the refresh runs on the worker's five-minute tick. So the question itself
+    moves a current-text record of the old layout, and the wait ends at once."""
+    await _publish(container, uow_factory)
+    entries = await _as_an_earlier_release_wrote_them(container, uow_factory)
+    index = container.services["tool_index"]
+    assert await index.indexed(entries) == {e.tool_id for e in entries}
+    assert await _available(container, ["billing-adjust", "billing-export"]) == [
+        "billing-adjust",
+        "billing-export",
+    ]
+
+
+async def test_the_available_set_narrows_the_search_whatever_its_size_or_repeats(
+    container, uow_factory
+) -> None:
+    await _publish(container, uow_factory)
+    assert await _available(container, []) == []
+    assert await _available(container, ["nobody-has-this"]) == []
+    assert await _available(container, ["billing-export", "billing-export"]) == ["billing-export"]
+    many = [f"tool-{n:04d}" for n in range(2000)]
+    assert await _available(container, [*many, "billing-export"]) == ["billing-export"]
+    assert await _available(container, None) == ["billing-adjust", "billing-export"]
+
+
+async def test_a_workspaces_own_entry_and_the_tenants_of_one_name_are_one_tool(
+    container, uow_factory
+) -> None:
+    """A workspace's entry shadows the tenant's of the same name: both records match the name,
+    the search answers it once. Another workspace sees the tenant's alone, and never a name
+    only a workspace not its own publishes."""
+    tenant_wide = MemoryExecutionContext(tenant_id="acme", user_id="u1")
+    async with uow_factory() as uow:
+        service = container.services["tool_memory"]
+        await service.put_catalog(
+            uow,
+            tenant_wide,
+            [(e, frozenset(ToolDescriptor.model_fields)) for e in _catalog()[:1]],
+        )
+        await uow.commit()
+    await _publish(container, uow_factory)  # ws1's own billing-adjust and billing-export
+    names = ["billing-adjust", "billing-export"]
+    assert await _available(container, names) == names
+    assert await _available(container, names, workspace_id="ws2") == ["billing-adjust"]
+    assert await _available(container, names, workspace_id=None) == ["billing-adjust"]

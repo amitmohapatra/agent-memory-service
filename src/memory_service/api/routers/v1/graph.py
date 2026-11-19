@@ -161,8 +161,8 @@ async def search_entities(
     (100 entities) in all - narrow ``q`` or ``type`` to reach past it."""
     position = decode_cursor(cursor, fields={"offset": int})
     offset = position["offset"] if position else 0
-    graph: GraphService = container.services["graph"]
-    async with container.services["llm_assist"].reading(ctx):
+    graph: GraphService = container.services.graph
+    async with container.services.llm_assist.reading(ctx):
         found = await graph.search_entities(
             ctx, query=q, entity_type=type, limit=offset + limit + 1
         )
@@ -207,7 +207,7 @@ async def entity_profile(
         ),
     ] = None,
 ) -> EntityProfileResponse:
-    graph: GraphService = container.services["graph"]
+    graph: GraphService = container.services.graph
     profile = await graph.profile(
         ctx, entity_id, depth=depth, as_of=as_of, valid_at=valid_at, layers=layers
     )

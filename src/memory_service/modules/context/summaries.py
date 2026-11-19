@@ -19,9 +19,8 @@ from typing import Any
 
 from memory_service.domain.documents import Chunk, DocumentNode
 from memory_service.domain.enums import Representation
-from memory_service.domain.text import SENTENCE_BREAK, unicode_tokens
+from memory_service.domain.text import SENTENCE_BREAK, STOP_WORDS, unicode_tokens
 from memory_service.modules.llm.assist import LLMAssist
-from memory_service.modules.memory.native import _STOP as STOP_WORDS
 
 _SENT = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(])")
 _WORD = re.compile(r"[a-z][a-z0-9\-]+")

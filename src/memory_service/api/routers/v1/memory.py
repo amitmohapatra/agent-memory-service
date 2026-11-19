@@ -329,7 +329,7 @@ def memory_to_api(m: CanonicalMemory) -> dict[str, Any]:
 
 
 def _service(container: Any) -> MemoryService:
-    return container.services["memory"]
+    return container.services.memory
 
 
 @router.post(
@@ -357,7 +357,7 @@ async def remember(
             # without it the thread is never granted, and a THREAD-scoped memory is readable
             # only through its author's own key - and from every other thread too.
             # create_thread is get-or-create and requires access to an existing one.
-            await container.services["conversation"].create_thread(uow, ctx)
+            await container.services.conversation.create_thread(uow, ctx)
         ack = await _service(container).remember(
             uow,
             ctx,
@@ -399,7 +399,7 @@ async def supersede_memory(
     _: ServicePrincipalDep,
 ) -> Response:
     ctx = build_context(request, container, body.scope)
-    memory_id = await container.services["bundle_records"].resolve(
+    memory_id = await container.services.bundle_records.resolve(
         ctx, memory_id, bundle_id=body.bundle_id
     )
     identity = ("supersede", memory_id, body.content)
@@ -474,7 +474,7 @@ async def list_memories(
             parent_agent_run_id=parent_agent_run_id,
         ),
     )
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         rows = await _service(container).list_memories(
             uow,
             ctx,
@@ -504,7 +504,7 @@ async def list_memories(
 async def get_memory(
     memory_id: MemoryIdPath, ctx: HeaderContextDep, container: ContainerDep
 ) -> MemoryResponse:
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         memory = await _service(container).get_memory(uow, ctx, memory_id)
     return MemoryResponse(**memory_to_api(memory))
 
@@ -529,7 +529,7 @@ async def forget_memory(
     the 404 the forgotten memory would now earn."""
 
     async def handler(uow):  # type: ignore[no-untyped-def]
-        resolved = await container.services["bundle_records"].resolve(
+        resolved = await container.services.bundle_records.resolve(
             ctx, memory_id, bundle_id=bundle_id
         )
         await _service(container).forget(uow, ctx, resolved)
@@ -557,7 +557,7 @@ async def restore_memory(
 ) -> Response:
     async def handler(uow):  # type: ignore[no-untyped-def]
         memory = await _service(container).restore(
-            uow, ctx, memory_id, container.services["forgetting"]
+            uow, ctx, memory_id, container.services.forgetting
         )
         return 200, MemoryResponse(**memory_to_api(memory)).model_dump(mode="json"), None
 

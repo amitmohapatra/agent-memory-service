@@ -126,7 +126,7 @@ ContainerDep = Annotated[Container, Depends(get_container)]
 
 
 async def get_service_principal(request: Request, container: ContainerDep) -> ServicePrincipal:
-    authenticator: ServiceAuthenticator = container.services["authenticator"]
+    authenticator: ServiceAuthenticator = container.services.authenticator
     with span("auth"), stage_seconds.labels("auth").time():
         principal = await authenticator.authenticate(
             {k.lower(): v for k, v in request.headers.items()}
@@ -138,7 +138,7 @@ async def get_service_principal(request: Request, container: ContainerDep) -> Se
 ServicePrincipalDep = Annotated[ServicePrincipal, Depends(get_service_principal)]
 
 
-def _header_scope(request: Request, container: Container) -> dict[str, Any]:
+def _header_scope(request: Request) -> dict[str, Any]:
     h = request.headers
     return {
         "tenant_id": require_one_value(h, HEADERS.tenant),
@@ -192,8 +192,10 @@ def _require_tenant_matches_credential(
     One credential reaches every tenant on the deployment by changing one header.
 
     That is sound where the tenant is a constant a gateway stamps, which is one deployment
-    per customer. On a SHARED deployment it makes the credential the entire boundary, so
-    ``authentication.tenant_claim`` names the claim that must agree with the header.
+    per customer: ``authentication.single_tenant`` names that tenant, and no other is
+    served. On a SHARED deployment it makes the credential the entire boundary, so
+    ``authentication.tenant_claim`` names the claim that must agree with the header. A
+    deployed ``jwt`` environment starts with one of the two set (``_production_guards``).
 
     Fails closed: with the setting on, a credential that carries no such claim is refused
     rather than trusted, so switching a deployment to trusted_dev keys cannot quietly turn
@@ -211,7 +213,12 @@ def _require_tenant_matches_credential(
                 "credential is not valid for this tenant", details={"field": HEADERS.tenant}
             )
         return
-    claim = container.settings.authentication.tenant_claim
+    authentication = container.settings.authentication
+    if authentication.single_tenant and tenant_id != authentication.single_tenant:
+        raise ScopeDenied(
+            "this deployment does not serve this tenant", details={"field": HEADERS.tenant}
+        )
+    claim = authentication.tenant_claim
     if not claim:
         return
     principal: ServicePrincipal | None = getattr(request.state, "service_principal", None)
@@ -312,7 +319,7 @@ def build_context(
     request: Request, container: Container, body_scope: ScopeBody | None
 ) -> MemoryExecutionContext:
     """Merge trusted headers with body lineage into an immutable execution context."""
-    headers = _header_scope(request, container)
+    headers = _header_scope(request)
     body = body_scope or ScopeBody()
     for field in ("tenant_id", "workspace_id", "user_id"):
         header_value = headers[field]
@@ -569,7 +576,7 @@ async def existing_administered_tenant(
     """:func:`administered_tenant`, which must exist when the header alone names it."""
     tenant_id = administered_tenant(request, principal, container)
     if credential_tenant(principal, container) != tenant_id:
-        async with container.services["uow_factory"]() as uow:
+        async with container.services.uow_factory() as uow:
             if await uow.tenants.get(tenant_id) is None:
                 raise NotFound("Tenant not found")
     elif principal.mode == "trusted_dev":
@@ -580,7 +587,7 @@ async def existing_administered_tenant(
 async def _onboard_development_tenant(container: Container, tenant_id: str) -> None:
     """A laptop's development tenant gets its row the first time it is administered, so
     issuing a key or creating a workspace in it works without onboarding it first."""
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         await uow.serialize(f"tenant-onboard:{tenant_id}")
         if await uow.tenants.get(tenant_id) is None:
             await uow.tenants.add(Tenant(tenant_id=tenant_id, name="Development"))

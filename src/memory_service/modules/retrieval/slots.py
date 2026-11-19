@@ -633,12 +633,6 @@ def _surfaces(text: str, things: frozenset[str]) -> list[str]:
     return out
 
 
-def bridged_things(question: str, text: str) -> frozenset[str]:
-    """The things ``text`` names that ``question`` does not (the bridge's far end)."""
-    found = bridge(question, text)
-    return found.things if found else frozenset()
-
-
 def names_any(text: str, things: frozenset[str]) -> bool:
     """Whether ``text`` names one of ``things`` (an identifier however it is spelled, or a
     name)."""

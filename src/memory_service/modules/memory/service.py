@@ -25,6 +25,7 @@ from memory_service.domain.errors import Conflict, NotFound, ScopeDenied
 from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.fiscal import FiscalCalendar
 from memory_service.domain.ids import content_hash, new_id
+from memory_service.domain.learning import CONFIDENCE_FLOOR
 from memory_service.domain.memory import CanonicalMemory, TemporalState
 from memory_service.domain.observation import ProcessingHints
 from memory_service.domain.text import sanitise
@@ -476,15 +477,7 @@ class MemoryService:
         scope" and reopened a forgotten old value as CURRENT."""
         found = await uow.memories.get(ctx.tenant_id, memory_id)
         if found is not None:
-            # the rows this forget may write, read unlocked only to know which to lock
-            twin_ids = [
-                t.memory_id
-                for t in await uow.memories.twins(ctx.tenant_id, found, current_only=False)
-            ]
-            replaced = await uow.memories.replaced_by_any(ctx.tenant_id, [memory_id, *twin_ids])
-            await uow.memories.lock(
-                ctx.tenant_id, [memory_id, *twin_ids, *(m.memory_id for m in replaced)]
-            )
+            await self._lock_related(uow, found)
         # under the lock: already forgotten, or by a concurrent forget of a twin meanwhile
         if await uow.memories.is_forgotten(ctx.tenant_id, memory_id):
             return None
@@ -505,3 +498,155 @@ class MemoryService:
         )
         await self._index(uow, ctx, [memory, *twins, *restored], key=f"memidx:forget:{memory_id}")
         return memory
+
+    async def _lock_related(self, uow: UnitOfWork, memory: CanonicalMemory) -> None:
+        """Lock the rows a transition of ``memory`` may write: its own, its twins' and what
+        they replaced, read unlocked only to know which to lock."""
+        twin_ids = [
+            t.memory_id
+            for t in await uow.memories.twins(memory.tenant_id, memory, current_only=False)
+        ]
+        replaced = await uow.memories.replaced_by_any(
+            memory.tenant_id, [memory.memory_id, *twin_ids]
+        )
+        await uow.memories.lock(
+            memory.tenant_id, [memory.memory_id, *twin_ids, *(m.memory_id for m in replaced)]
+        )
+
+    # ------------------------------------------------------------------ verdicts
+    # What a verdict on a memory does to it (``FeedbackService``, which decides whether and
+    # for whom; nothing here is authorized again). Each takes the rows it writes under the
+    # locks ``forget`` takes, so a verdict and a forget of twins never wait on each other.
+
+    async def held(self, uow: UnitOfWork, tenant_id: str, memory_id: str) -> CanonicalMemory | None:
+        """The memory as it is under the locks its transitions write under (``forget`` says
+        which, and why at once and in id order), or ``None`` when there is none. A forgotten
+        memory is returned, with its ``deleted_at``."""
+        found = await uow.memories.get(tenant_id, memory_id)
+        if found is None:
+            return None
+        await self._lock_related(uow, found)
+        return await uow.memories.get(tenant_id, memory_id)
+
+    async def retract(
+        self, uow: UnitOfWork, memory: CanonicalMemory, *, now: datetime
+    ) -> list[CanonicalMemory]:
+        """Withdraw ``memory`` (as ``held`` returned it) without deleting it: RETRACTED, its
+        validity closed at ``now``, the row kept for the temporal view. The same statement
+        kept twice (a turn and a rule's reading in its words) is withdrawn once - the twin
+        left behind would still assert it - and what the withdrawn statement replaced in the
+        user's other conversations holds again (ADR 0038). The memories written."""
+        twins = await uow.memories.twins(memory.tenant_id, memory)
+        for wrong in (memory, *twins):
+            wrong.temporal = wrong.temporal.model_copy(
+                update={
+                    "status": TemporalStatus.RETRACTED,
+                    "valid_to": wrong.temporal.valid_to or now,
+                }
+            )
+            wrong.updated_at = now
+            await uow.memories.update(wrong)
+        restored = await reinstate(
+            uow, memory.tenant_id, [memory.memory_id, *(t.memory_id for t in twins)], now=now
+        )
+        return [memory, *twins, *restored]
+
+    async def lift_retraction(
+        self, uow: UnitOfWork, memory: CanonicalMemory, retracted_at: datetime, *, now: datetime
+    ) -> list[CanonicalMemory]:
+        """``memory`` (as ``held`` returned it) and the twins retracted with it, current
+        again - only those the retraction at ``retracted_at`` withdrew (their validity closed
+        at its instant), not ones withdrawn since for another reason. The memories written."""
+        twins = await uow.memories.twins(memory.tenant_id, memory, current_only=False)
+        lifted = []
+        for m in (memory, *twins):
+            if (
+                m.temporal.status is TemporalStatus.RETRACTED
+                and m.temporal.valid_to == retracted_at
+            ):
+                m.temporal = m.temporal.model_copy(
+                    update={"status": TemporalStatus.CURRENT, "valid_to": None}
+                )
+                m.updated_at = now
+                await uow.memories.update(m)
+                lifted.append(m)
+        return lifted
+
+    async def correct(
+        self,
+        uow: UnitOfWork,
+        memory: CanonicalMemory,
+        content: str,
+        *,
+        evidence: EvidenceRef,
+        metadata: dict[str, Any],
+        now: datetime,
+    ) -> tuple[CanonicalMemory, list[CanonicalMemory]]:
+        """Replace ``memory`` (as ``held`` returned it) with ``content`` from ``now``: a new
+        row in its scope and audience, linked to it both ways (``pipeline.supersede``), that
+        keeps its evidence and adds ``evidence``. The same statement kept twice is corrected
+        once: its twins close at the correction too. The new memory and the ones closed."""
+        corrected = memory.model_copy(
+            update={
+                "memory_id": new_id("memory"),
+                "content": content,
+                "normalized_hash": normalized_hash(content),
+                "confidence": max(memory.confidence, STATED_CONFIDENCE),
+                "reinforcement_count": 1,
+                "access_count": 0,
+                "last_accessed_at": None,
+                "evidence": [*memory.evidence, evidence],
+                "temporal": memory.temporal.model_copy(
+                    update={
+                        "observed_at": now,
+                        "valid_from": now,
+                        "valid_to": None,
+                        "supersedes": None,
+                    }
+                ),
+                # a fresh row: no inherited TTL, derived slot, index state or admission trail
+                "system_metadata": {
+                    "provider": memory.system_metadata.get("provider", "native"),
+                    **metadata,
+                },
+                "created_at": now,
+                "updated_at": now,
+                "revision": 1,
+            }
+        )
+        closed = [memory, *await uow.memories.twins(memory.tenant_id, memory)]
+        supersede(memory, corrected, now=now)
+        for twin in closed[1:]:
+            supersede(twin, corrected.model_copy(), now=now)
+        await uow.memories.add(
+            corrected, visibility_keys=list(memory.system_metadata.get("visibility_keys", []))
+        )
+        for old in closed:
+            await uow.memories.update(old)
+        return corrected, closed
+
+    async def reinforce(
+        self,
+        uow: UnitOfWork,
+        tenant_id: str,
+        memory_ids: Sequence[str],
+        *,
+        step: float,
+        count: int,
+        now: datetime,
+    ) -> list[CanonicalMemory]:
+        """Move the confidence of the current memories among ``memory_ids`` by ``step``
+        (within ``CONFIDENCE_FLOOR`` and 1) and their reinforcement count by ``count`` (never
+        below 0), under their row locks. The memories moved."""
+        await uow.memories.lock(tenant_id, memory_ids)
+        memories = [
+            m
+            for m in await uow.memories.get_many(tenant_id, memory_ids)
+            if m.deleted_at is None and m.temporal.status is TemporalStatus.CURRENT
+        ]
+        for memory in memories:
+            memory.confidence = min(1.0, max(CONFIDENCE_FLOOR, memory.confidence + step))
+            memory.reinforcement_count = max(0, memory.reinforcement_count + count)
+            memory.updated_at = now
+            await uow.memories.update(memory)
+        return memories

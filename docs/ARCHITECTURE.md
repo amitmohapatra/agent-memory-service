@@ -20,7 +20,7 @@ HTTP APIs and at the shared record types, never at each other's databases.
 | [agent-harness](https://github.com/amitmohapatra/agent-harness) | `trellis-harness` (`trellis.harness`) | running an agent of any framework: the two ways (wrapped, or pluggable blocks), governance, evals, the AG-UI and A2A surfaces | the main caller: through `trellis.memory`, it pushes `/v1/context` into each run, adds the pull tools, records the transcript and tool calls, and sends feedback ([USAGE §14](USAGE.md#14-through-the-harness)) |
 | **agent-memory-service** (this one) | the service, and the SDK `trellis-memory` (`trellis.memory`, in [`sdk/python`](../sdk/python/README.md)) | what agents and people said, stated and uploaded; the context a turn needs; what tools worked | — |
 | [agent-runs](https://github.com/amitmohapatra/agent-runs) | the runs service and `trellis-runs` (`trellis.runs`) | durable runs, the inbox, schedules, workers, and the webhooks that notify people | none directly: the harness calls both. Run notifications (paused, escalated, finished) are agent-runs' webhooks; the memory service sends none |
-| [agent-contracts](https://github.com/amitmohapatra/agent-contracts) | `trellis-contracts` (`trellis.contracts`) | the shared record types (runs, interrupts, feedback, agent cards) | `POST /v1/feedback` takes the `trellis.contracts` `Feedback` shape; the service does not import the package |
+| [agent-contracts](https://github.com/amitmohapatra/agent-contracts) | `trellis-contracts` (`trellis.contracts`) | the shared record types (runs, interrupts, feedback, agent cards) | `POST /v1/feedback` takes the `trellis.contracts` `Feedback` shape, which the service defines for itself (`domain/feedback.py`). The service imports the package for the model endpoint types alone, `Endpoint` and `ModelProfile` (settings, the credential port, the model adapters, the model-key routes); vendored by `make vendor` |
 | [bifrost-sdk](https://github.com/amitmohapatra/bifrost-sdk) | `bifrost-sdk` (`bifrost_sdk`) | the client for the Bifrost model gateway: retries, rate limits, the circuit breaker | every model call the service makes goes through it (`>=0.3`, vendored by `make vendor`), so the service and the harness share one transport |
 
 What the memory service deliberately does **not** do: run an agent or a tool (the harness
@@ -78,7 +78,13 @@ Rules enforced by `tests/unit/test_architecture.py` and Ruff `banned-api`:
 - `domain/`, `application/`, `modules/`, `ports/` and `api/` never import provider SDKs.
 - LangGraph types never appear anywhere in this repository. Framework adapters are not a
   memory-service concern at all (ADR 0020); they live in `agent-harness`.
-- No module reads another module's tables directly; it goes through that module's service.
+- A memory's content and state are written by `modules/memory` alone; another module asks
+  `MemoryService` (the test lists the two writers left: the retention sweep and the
+  operator's backfill). The rule is wider than the test: a module goes through the owning
+  module's service for that module's tables. `UnitOfWork` exposes every repository to every
+  module, so for the other tables, and for reads, this is a convention the tests do not check.
+- `api/` imports no adapter; a provider's errors reach it through `application`
+  (`ErrorTranslator`).
 - Every persistent write is idempotent; every derived memory keeps `EvidenceRef` provenance.
 
 ## Layers
@@ -87,10 +93,10 @@ Rules enforced by `tests/unit/test_architecture.py` and Ruff `banned-api`:
 |---|---|---|
 | `domain` | `MemoryExecutionContext`, `CanonicalMemory`, `Scope`, `Visibility`, `TemporalState`, `EvidenceRef`, conversation and document models, `ContextBundle`, errors | nothing |
 | `ports` | `CacheProvider`, `SearchStore`, `BlobStore`, `TaskQueue`, `AuthorizationProvider`, `EmbeddingProvider`, `SparseEncoder`, `LLMProvider`, `MemoryIntelligenceProvider`, `GraphStore`, `GraphEnrichmentProvider`, `DocumentParser` | domain |
-| `application` | composition root (`Container`), use-case orchestration | domain, ports |
+| `application` | composition root (`Container`), use-case orchestration | domain, ports; `adapters`, imported where the container is built and nowhere else |
 | `modules/*` | feature slices: archive, audit, auth, authz, context, conversation, feedback, graph, grounding, idempotency, ingestion, jobs, llm, memory, profile, rag, retrieval, tenancy, tools, agent_tools, working_memory (the hot thread cache) | domain, ports |
 | `adapters` | one package per provider; the only place SDKs are imported; `wiring.py` attaches configured providers | everything |
-| `api` | FastAPI routers, typed schemas with examples, RFC 9457 problem details, middleware, OpenAPI customization | application |
+| `api` | FastAPI routers, typed schemas with examples, RFC 9457 problem details, middleware, OpenAPI customization | application, modules, ports, domain; never `adapters` |
 
 ## Data placement
 

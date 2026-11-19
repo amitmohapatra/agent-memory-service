@@ -103,13 +103,13 @@ take both clocks: `as_of` for valid time, `valid_at` for knowledge time.
 
 When a memory stops being current — superseded, expired, forgotten, archived — or is a model
 rewrite without verified entailment, the `memory.index` job closes its relations
-(`supersede_for_memory`, called from `GraphService.enrich_memories`).
+(`supersede_for_memories`, called from `GraphService.enrich_memories`).
 
-**Built, not wired:** the invalidation path — closing a relation as `INVALIDATED` and writing
-an `invalidated_by` edge that records why it gave way — is implemented in both stores
-(`GraphStore.invalidate` in `adapters/graph/postgres_store.py` and `memory_store.py`), but no
-module calls it today. Re-extraction and contradictions do not yet invalidate relations;
-until they do, `INVALIDATED` is a status the read filters honour and nothing writes.
+**Not built:** the invalidation path — closing a relation as `INVALIDATED` and writing an
+`invalidated_by` edge that records why it gave way. Re-extraction and contradictions do not
+invalidate relations; `INVALIDATED` and `invalidated_by` are a status and a predicate the
+read filters honour and nothing writes. (Both stores carried a `GraphStore.invalidate` that
+no module called; it was removed.)
 
 ---
 

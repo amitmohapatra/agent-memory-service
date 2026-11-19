@@ -1,12 +1,11 @@
-"""Integration fixtures: real PostgreSQL (migrated) and Redis when reachable, else skip."""
+"""Integration fixtures: real PostgreSQL (migrated) when reachable, else skip."""
 
 from __future__ import annotations
 
-import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from memory_service.__about__ import __version__
 from memory_service.application.container import Container, Overrides, build_container
@@ -14,13 +13,6 @@ from memory_service.config.settings import Settings
 from tests.conftest import (  # noqa: E402  (one definition, see tests/conftest.py)
     DB_URL,
     _test_overrides,
-)
-
-#: ``MEMORY_TEST_CACHE_URL`` (the suite's own namespace, which the root conftest keeps) first:
-#: ``MEMORY__CACHE__URL`` is stripped there, so without it the probe always reached DB 0, which
-#: a shared host's live service may own.
-REDIS_URL = os.environ.get("MEMORY_TEST_CACHE_URL") or os.environ.get(
-    "MEMORY__CACHE__URL", "redis://localhost:6379/0"
 )
 
 TABLES = [
@@ -63,38 +55,11 @@ TABLES = [
 ]
 
 
-def _pg_reachable() -> bool:
-    import psycopg
-
-    try:
-        with psycopg.connect(
-            DB_URL.replace("postgresql+psycopg://", "postgresql://"), connect_timeout=2
-        ):
-            return True
-    except Exception:
-        return False
-
-
-def _redis_reachable() -> bool:
-    import redis
-
-    try:
-        return bool(redis.from_url(REDIS_URL, socket_connect_timeout=1).ping())
-    except Exception:
-        return False
-
-
 from tests.conftest import PG_AVAILABLE  # noqa: E402
 from tests.support_real import reset_real_backends  # noqa: E402
 
-REDIS_AVAILABLE = _redis_reachable()
-
 requires_pg = pytest.mark.skipif(
     not PG_AVAILABLE, reason="PostgreSQL not reachable at MEMORY_TEST_DATABASE_URL"
-)
-requires_redis = pytest.mark.skipif(
-    not REDIS_AVAILABLE,
-    reason="Redis/Dragonfly not reachable at MEMORY_TEST_CACHE_URL or MEMORY__CACHE__URL",
 )
 
 
@@ -150,3 +115,20 @@ async def container(make_settings, tmp_path, request) -> AsyncIterator[Container
 @pytest.fixture
 def uow_factory(container: Container):
     return container.services["uow_factory"]
+
+
+@pytest.fixture
+def statements(container: Container) -> Iterator[list[str]]:
+    """Every SQL statement the container's engine runs while the test holds this list: for
+    asserting that a batch is one round trip, not one per item."""
+    seen: list[str] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany) -> None:  # type: ignore[no-untyped-def]
+        seen.append(" ".join(statement.split()))
+
+    engine = container.database.engine.sync_engine
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        yield seen
+    finally:
+        event.remove(engine, "before_cursor_execute", record)

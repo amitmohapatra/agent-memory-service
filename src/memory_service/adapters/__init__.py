@@ -9,10 +9,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from memory_service.application.container import Container
+    from memory_service.application.container import Container, ErrorTranslator
 
 
 async def wire_adapters(container: Container) -> None:
     from memory_service.adapters.wiring import wire_all
 
     await wire_all(container)
+
+
+def error_translators() -> tuple[ErrorTranslator, ...]:
+    from memory_service.adapters.db.errors import DATABASE_ERRORS, database_error
+    from memory_service.application.container import ErrorTranslator
+
+    return (ErrorTranslator(DATABASE_ERRORS, database_error),)

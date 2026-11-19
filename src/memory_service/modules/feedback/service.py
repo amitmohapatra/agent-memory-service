@@ -59,7 +59,6 @@ from memory_service.domain.learning import (
     APPROVAL_DECISIONS_READ,
     CITED_CONFIDENCE_STEP,
     CITED_MEMORIES_MAX,
-    CONFIDENCE_FLOOR,
 )
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.revisions import RevisionKind
@@ -76,9 +75,7 @@ from memory_service.modules.feedback.votes import (
     voter_key,
 )
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
-from memory_service.modules.memory.native import normalized_hash
-from memory_service.modules.memory.replacement import reinstate
-from memory_service.modules.memory.revisions import bump_memory_revisions, retract, supersede
+from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.modules.memory.service import MemoryService
 from memory_service.modules.tools.service import TASK_TOOLS_LEARN
 from memory_service.observability.logging import get_logger
@@ -441,14 +438,9 @@ class FeedbackService:
             ids = [f.feedback_id for f in found[:BULK_REVIEW_MAX]]
         # one lock order for every caller, so two bulk reviews never deadlock
         await uow.serialize(*(f"feedback:{tenant_id}:{i}" for i in sorted(ids)))
-        records: list[Feedback] = []
-        missing: list[str] = []
-        for feedback_id in ids:
-            record = await uow.feedback.get(tenant_id, feedback_id)
-            if record is None:
-                missing.append(feedback_id)
-            else:
-                records.append(record)
+        found_by_id = {r.feedback_id: r for r in await uow.feedback.get_many(tenant_id, ids)}
+        missing = [i for i in ids if i not in found_by_id]
+        records = [found_by_id[i] for i in ids if i in found_by_id]
         if missing:
             raise NotFound(
                 f"{len(missing)} feedback id(s) not found", details={"feedback_ids": missing}
@@ -513,13 +505,9 @@ class FeedbackService:
         newest first, each verdict with how its author's verdicts fared in review
         (pending / approved / dismissed)."""
         rows = await uow.feedback.list_pending(tenant_id, state=state, before=before, limit=limit)
-        history: dict[tuple[str | None, str | None], dict[str, int]] = {}
-        for r in rows:
-            author = (r.user_id, r.agent_id)
-            if author not in history:
-                history[author] = await uow.feedback.review_counts(
-                    tenant_id, user_id=r.user_id, agent_id=r.agent_id
-                )
+        history = await uow.feedback.review_counts(
+            tenant_id, list(dict.fromkeys((r.user_id, r.agent_id) for r in rows))
+        )
         return [(r, history[(r.user_id, r.agent_id)]) for r in rows]
 
     async def pending_by_target(
@@ -733,40 +721,26 @@ class FeedbackService:
             return
         if prior.target_kind is not FeedbackTargetKind.MEMORY:
             return
-        memory = await uow.memories.get(prior.tenant_id, prior.target_id)
+        memory = await self.memory.held(uow, prior.tenant_id, prior.target_id)
         if memory is None or memory.deleted_at is not None:
             return
         if projection.action is ProjectionAction.MEMORY_REINFORCED:
-            if memory.temporal.status is TemporalStatus.CURRENT:
-                memory.confidence = max(CONFIDENCE_FLOOR, memory.confidence - REINFORCEMENT_STEP)
-                memory.reinforcement_count = max(0, memory.reinforcement_count - 1)
-                memory.updated_at = now
-                await uow.memories.update(memory)
-                await self._reindex(uow, memory)
+            written = await self.memory.reinforce(
+                uow,
+                memory.tenant_id,
+                [memory.memory_id],
+                step=-REINFORCEMENT_STEP,
+                count=-1,
+                now=now,
+            )
         elif projection.action is ProjectionAction.MEMORY_RETRACTED:
-            await self._lift_retraction(uow, memory, projection.projected_at, now=now)
-
-    async def _lift_retraction(
-        self, uow: UnitOfWork, memory: CanonicalMemory, retracted_at: datetime, *, now: datetime
-    ) -> None:
-        """The memory, and the twins retracted with it, current again - only those this vote
-        retracted (their validity closed at its instant), not ones withdrawn since for another
-        reason."""
-        twins = await uow.memories.twins(memory.tenant_id, memory, current_only=False)
-        lifted = []
-        for m in (memory, *twins):
-            if (
-                m.temporal.status is TemporalStatus.RETRACTED
-                and m.temporal.valid_to == retracted_at
-            ):
-                m.temporal = m.temporal.model_copy(
-                    update={"status": TemporalStatus.CURRENT, "valid_to": None}
-                )
-                m.updated_at = now
-                await uow.memories.update(m)
-                lifted.append(m)
-        if lifted:
-            await self._reindex(uow, *lifted)
+            written = await self.memory.lift_retraction(
+                uow, memory, projection.projected_at, now=now
+            )
+        else:
+            return
+        if written:
+            await self._reindex(uow, *written)
 
     async def _project(
         self, uow: UnitOfWork, record: Feedback, *, now: datetime
@@ -782,7 +756,7 @@ class FeedbackService:
     async def _project_memory(
         self, uow: UnitOfWork, record: Feedback, *, now: datetime
     ) -> FeedbackProjection:
-        memory = await uow.memories.get(record.tenant_id, record.target_id)
+        memory = await self.memory.held(uow, record.tenant_id, record.target_id)
         if memory is None or memory.deleted_at is not None:
             return FeedbackProjection(
                 action=ProjectionAction.NONE,
@@ -800,7 +774,7 @@ class FeedbackService:
         if record.verdict in AFFIRMING_VERDICTS:
             return await self._reinforce(uow, memory, now=now)
         if record.verdict is FeedbackVerdict.REJECT:
-            return await self._retract(uow, memory, record, now=now)
+            return await self._retract(uow, memory, now=now)
         if record.verdict in CORRECTING_VERDICTS:
             return await self._correct(uow, memory, record, now=now)
         raise AssertionError(f"unhandled verdict {record.verdict}")  # pragma: no cover
@@ -976,16 +950,9 @@ class FeedbackService:
         if not ids:
             return []
         await uow.serialize(*(f"memory:{tenant_id}:{i}" for i in sorted(ids)))
-        memories = [
-            m
-            for m in await uow.memories.get_many(tenant_id, ids)
-            if m.deleted_at is None and m.temporal.status is TemporalStatus.CURRENT
-        ]
-        for memory in memories:
-            memory.confidence = min(1.0, max(CONFIDENCE_FLOOR, memory.confidence + step))
-            memory.reinforcement_count = max(0, memory.reinforcement_count + reinforce)
-            memory.updated_at = now
-            await uow.memories.update(memory)
+        memories = await self.memory.reinforce(
+            uow, tenant_id, ids, step=step, count=reinforce, now=now
+        )
         if memories:
             await self._reindex(uow, *memories)
         return sorted(m.memory_id for m in memories)
@@ -1028,10 +995,9 @@ class FeedbackService:
     async def _reinforce(
         self, uow: UnitOfWork, memory: CanonicalMemory, *, now: datetime
     ) -> FeedbackProjection:
-        memory.reinforcement_count += 1
-        memory.confidence = min(1.0, memory.confidence + REINFORCEMENT_STEP)
-        memory.updated_at = now
-        await uow.memories.update(memory)
+        await self.memory.reinforce(
+            uow, memory.tenant_id, [memory.memory_id], step=REINFORCEMENT_STEP, count=1, now=now
+        )
         # re-indexed, not only invalidated: the index carries confidence and reinforcement,
         # which retrieval ranks by
         await self._reindex(uow, memory)
@@ -1040,19 +1006,9 @@ class FeedbackService:
         )
 
     async def _retract(
-        self, uow: UnitOfWork, memory: CanonicalMemory, record: Feedback, *, now: datetime
+        self, uow: UnitOfWork, memory: CanonicalMemory, *, now: datetime
     ) -> FeedbackProjection:
-        # the same statement kept twice (a turn and a rule's reading in its words) is
-        # withdrawn once: the twin left behind would still assert it
-        twins = await uow.memories.twins(memory.tenant_id, memory)
-        for wrong in (memory, *twins):
-            await retract(uow, wrong, now=now)
-        # what the withdrawn statement replaced in the user's other conversations holds again
-        # (ADR 0038)
-        restored = await reinstate(
-            uow, memory.tenant_id, [memory.memory_id, *(t.memory_id for t in twins)], now=now
-        )
-        await self._reindex(uow, memory, *twins, *restored)
+        await self._reindex(uow, *await self.memory.retract(uow, memory, now=now))
         return FeedbackProjection(
             action=ProjectionAction.MEMORY_RETRACTED, memory_id=memory.memory_id, projected_at=now
         )
@@ -1068,51 +1024,21 @@ class FeedbackService:
                 reason="the correction carries no text (a string or {content: ...})",
                 projected_at=now,
             )
-        evidence = [
-            *memory.evidence,
-            EvidenceRef(
+        corrected, closed = await self.memory.correct(
+            uow,
+            memory,
+            content,
+            evidence=EvidenceRef(
                 source_type=EVIDENCE_SOURCE,
                 source_id=record.feedback_id,
                 agent_id=record.agent_id,
                 agent_run_id=record.agent_run_id,
                 observed_at=now,
             ),
-        ]
-        corrected = memory.model_copy(
-            update={
-                "memory_id": CanonicalMemory.model_fields["memory_id"].get_default(
-                    call_default_factory=True
-                ),
-                "content": content,
-                "normalized_hash": normalized_hash(content),
-                "confidence": max(memory.confidence, 0.9),
-                "reinforcement_count": 1,
-                "access_count": 0,
-                "last_accessed_at": None,
-                "evidence": evidence,
-                "temporal": memory.temporal.model_copy(
-                    update={"observed_at": now, "valid_from": now, "valid_to": None}
-                ),
-                # a fresh row: no inherited TTL, derived slot, index state or admission trail
-                "system_metadata": {
-                    "provider": memory.system_metadata.get("provider", "native"),
-                    "corrected_by": record.feedback_id,
-                    "reviewer": record.reviewer,
-                },
-                "created_at": now,
-                "updated_at": now,
-                "revision": 1,
-            }
+            metadata={"corrected_by": record.feedback_id, "reviewer": record.reviewer},
+            now=now,
         )
-        keys = list(memory.system_metadata.get("visibility_keys", []))
-        # the same statement kept twice is corrected once: its twin closes at the correction
-        twins = await uow.memories.twins(memory.tenant_id, memory)
-        # link first: ``add`` copies the temporal state into the row as it is at that moment
-        await supersede(uow, memory, corrected, now=now)
-        for twin in twins:
-            await supersede(uow, twin, corrected.model_copy(), now=now)
-        await uow.memories.add(corrected, visibility_keys=keys)
-        await self._reindex(uow, memory, corrected, *twins)
+        await self._reindex(uow, corrected, *closed)
         return FeedbackProjection(
             action=ProjectionAction.MEMORY_SUPERSEDED,
             memory_id=memory.memory_id,

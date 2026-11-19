@@ -132,17 +132,17 @@ async def verify(
     cascade = container.services.get("grounding")
     if cascade is None:
         raise ProviderNotConfigured("the NLI classifier is disabled in this process")
-    record = await container.services["bundle_records"].load(ctx, body.bundle_id)
+    record = await container.services.bundle_records.load(ctx, body.bundle_id)
     if record is None:
         raise NotFound("bundle not found: it was built for another scope, or over 30 minutes ago")
-    async with container.services["llm_assist"].reading(ctx):
+    async with container.services.llm_assist.reading(ctx):
         evidence, unused = record_evidence(record)
         report = await cascade.verify(body.answer, evidence, unused=unused)
     run_id = body.run_id or ctx.agent_run_id
     feedback_id = (
         await judge_run(
-            container.services["feedback"],
-            container.services["uow_factory"],
+            container.services.feedback,
+            container.services.uow_factory,
             ctx,
             run_id,
             body.bundle_id,

@@ -257,8 +257,11 @@ async def test_a_flipped_vote_replaces_the_earlier_and_is_applied_once(
     ]
     # the author's record counts what reviewers decided, not the author's changes of mind
     async with uow_factory() as uow:
-        record = await uow.feedback.review_counts("acme", user_id="alice", agent_id=None)
-    assert record == {"pending": 0, "approved": 1, "dismissed": 0}
+        record = await uow.feedback.review_counts("acme", [("alice", None), ("bob", None)])
+    assert record == {
+        ("alice", None): {"pending": 0, "approved": 1, "dismissed": 0},
+        ("bob", None): {"pending": 0, "approved": 0, "dismissed": 0},
+    }
     async with uow_factory() as uow:
         still = await uow.memories.get("acme", memory.memory_id)
     assert still is not None and still.reinforcement_count == once.reinforcement_count

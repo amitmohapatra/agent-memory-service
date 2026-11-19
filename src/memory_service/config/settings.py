@@ -356,6 +356,18 @@ class AuthenticationSettings(BaseModel):
     #: proof: the header must equal this claim or the request is refused. Fails closed - a
     #: credential carrying no such claim is refused rather than trusted.
     tenant_claim: str | None = None
+    #: The one tenant a deployment without ``tenant_claim`` serves (one deployment per
+    #: customer): a ``jwt`` or development credential may then assert this tenant and no
+    #: other. A deployed ``jwt`` environment sets this or ``tenant_claim``
+    #: (``_production_guards``), so trusting the header is a stated choice there.
+    single_tenant: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @field_validator("single_tenant")
+    @classmethod
+    def _valid_single_tenant(cls, value: str | None) -> str | None:
+        if value is not None and not is_valid_tenant_id(value):
+            raise ValueError(f"invalid single_tenant: {value!r}")
+        return value
 
     @property
     def mode(self) -> AuthenticationMode:
@@ -627,6 +639,16 @@ class Settings(BaseSettings):
             where = self.service.environment
             if self.authentication.mode == "trusted_dev":
                 raise ValueError(f"authentication.mode=trusted_dev is not allowed in {where}")
+            if self.authentication.mode == "jwt" and not (
+                self.authentication.tenant_claim or self.authentication.single_tenant
+            ):
+                # The token names the calling service and the tenant arrives in a header;
+                # with neither set, one token reaches every tenant by changing that header.
+                raise ValueError(
+                    f"authentication.mode=jwt in {where} needs authentication.tenant_claim "
+                    f"(a shared deployment: the claim naming a token's tenant) or "
+                    f"authentication.single_tenant (one deployment per customer: its tenant)"
+                )
             bootstrap = self.authentication.bootstrap_admin_key
             if bootstrap is not None and len(bootstrap.get_secret_value()) < 32:
                 # The one credential that onboards tenants and can administer any of them;

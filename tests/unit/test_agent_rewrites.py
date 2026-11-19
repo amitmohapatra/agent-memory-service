@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 
+from memory_service.application.services import Services
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import MemoryType, TemporalStatus
 from memory_service.domain.errors import ScopeDenied
@@ -136,7 +137,7 @@ class _Handles:
 
 def _tools(uow: _Uow, authz: _Authz | None = None) -> AgentTools:
     service = MemoryService(authz or _Authz())  # type: ignore[arg-type]
-    return AgentTools(lambda: uow, {"memory": service, "bundle_records": _Handles()})
+    return AgentTools(lambda: uow, Services(memory=service, bundle_records=_Handles()))
 
 
 # --- what a person said ---------------------------------------------------------------------

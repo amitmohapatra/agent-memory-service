@@ -598,7 +598,7 @@ class ContextBuilder:
                 conversation_token_budget or self.cfg.conversation_token_budget,
             )
         evidence_status_total.labels(bundle.evidence.status.value).inc()
-        self._after_build(ctx, bundle, found)
+        await self._after_build(ctx, bundle, found)
         return bundle
 
     async def build_api(
@@ -643,7 +643,8 @@ class ContextBuilder:
                     conversation_budget=conversation_token_budget,
                 )
             if found.bundle is not None and not debug:
-                self._track(self.records.given(ctx, found.bundle_id))
+                # on the request path, as a fresh bundle's record is (``_after_build``)
+                await self.records.given(ctx, found.bundle_id)
                 return found.bundle
             bundle = await self._fresh(
                 ctx,
@@ -657,7 +658,7 @@ class ContextBuilder:
                 conversation_token_budget or self.cfg.conversation_token_budget,
             )
         evidence_status_total.labels(bundle.evidence.status.value).inc()
-        self._after_build(ctx, bundle, found)
+        await self._after_build(ctx, bundle, found)
         body = prompt_view(bundle) if output == "prompt" else full_view(bundle)
         if debug:
             body["diagnostics"] = bundle.diagnostics
@@ -906,21 +907,24 @@ class ContextBuilder:
                 )
             )
 
-    def _after_build(
+    async def _after_build(
         self,
         ctx: MemoryExecutionContext,
         bundle: ContextBundle,
         found: _Lookup,
     ) -> None:
-        """The bookkeeping a built bundle leaves behind, none of it on the request path: the
-        served-access counts, the cached bundle, and the record of its handles and evidence
-        that later calls refer back to (``modules.context.handles``)."""
+        """The bookkeeping a built bundle leaves behind: the served-access counts and the
+        cached bundle off the request path, and the record of its handles and evidence that
+        later calls refer back to (``modules.context.handles``) on it. The record was a
+        background write too, and ``/v1/verify`` sent as soon as the bundle arrived could
+        come before it under load: "bundle not found" for a bundle just served. It is one
+        cache write, and the bundle is not answered until it is done."""
         self._buffer_access(ctx.tenant_id, [i.item_id for i in bundle.memories if i.item_id])
         if self.cache is None:
             return
         if _cacheable(bundle):
             self._track(self._store(self.cache, found, bundle))
-        self._track(self._remember(ctx, bundle))
+        await self._remember(ctx, bundle)
 
     async def _remember(self, ctx: MemoryExecutionContext, bundle: ContextBundle) -> None:
         await self.records.store(ctx, record_of(bundle))

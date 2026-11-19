@@ -103,6 +103,7 @@ Chapter 7 explains the modes; [api/admin.md](api/admin.md) onboarding.
 | `MEMORY__AUTHENTICATION__JWT_ISSUER` | unset | `https://issuer.example.com` | no | the `iss` a token must carry |
 | `MEMORY__AUTHENTICATION__JWT_AUDIENCE` | unset | `memory-service` | no | the `aud` a token must carry |
 | `MEMORY__AUTHENTICATION__TENANT_CLAIM` | unset | `tenant` | no | the claim naming the tenant a credential may act for. Set it on a **shared** deployment: the tenant header must equal the claim, and a credential without it is refused. Unset, the header is trusted (one deployment per customer) |
+| `MEMORY__AUTHENTICATION__SINGLE_TENANT` | unset | `acme` | no | the one tenant a deployment for one customer serves: a `jwt` or development credential may assert this tenant and no other (`403` for any other). In `staging` and `prod`, `jwt` mode needs this or `TENANT_CLAIM` |
 
 ## Authorization (OpenFGA)
 
@@ -184,6 +185,10 @@ Metrics need no setting: the API serves `/metrics`, the job worker serves its ow
 When `MEMORY__SERVICE__ENVIRONMENT` is `staging` or `prod`, the service refuses to start if:
 
 - the authentication mode is `trusted_dev` (development keys and no bootstrap key);
+- the authentication mode is `jwt` and neither `MEMORY__AUTHENTICATION__TENANT_CLAIM` nor
+  `MEMORY__AUTHENTICATION__SINGLE_TENANT` is set: the token names the calling service and the
+  tenant arrives in a header, so with neither one token would reach every tenant. Set
+  `TENANT_CLAIM` on a shared deployment, `SINGLE_TENANT` on a deployment for one customer;
 - `MEMORY__AUTHENTICATION__BOOTSTRAP_ADMIN_KEY` is set and shorter than 32 characters.
 
 Registering a model key is refused there until the envelope keys are set, and blobs go to GCS.

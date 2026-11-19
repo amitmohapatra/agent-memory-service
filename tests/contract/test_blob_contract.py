@@ -90,6 +90,21 @@ async def test_an_upload_is_immutable_by_default(blob) -> None:
     assert await blob.get(BUCKET, key) == b"first", "the original must be untouched"
 
 
+async def test_a_replacement_names_the_generation_it_replaces(blob) -> None:
+    """A non-zero ``if_generation_match`` writes only over that generation: not over a newer
+    one, and not where there is no object."""
+    key = _key()
+    ref = await blob.put(BUCKET, key, b"first")
+    stale = int(ref.generation or 0) + 1
+    with pytest.raises(Exception):  # noqa: B017 - each store raises its own precondition error
+        await blob.put(BUCKET, key, b"second", if_generation_match=stale)
+    with pytest.raises(Exception):  # noqa: B017
+        await blob.put(BUCKET, _key(), b"second", if_generation_match=stale)
+    assert await blob.get(BUCKET, key) == b"first", "the original must be untouched"
+    await blob.put(BUCKET, key, b"second", if_generation_match=int(ref.generation or 0))
+    assert await blob.get(BUCKET, key) == b"second"
+
+
 async def test_head_and_verify_agree_with_what_was_written(blob) -> None:
     key, payload = _key(), b"verify me"
     ref = await blob.put(BUCKET, key, payload)

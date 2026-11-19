@@ -37,8 +37,8 @@ log = get_logger(__name__)
 async def _main(args: argparse.Namespace) -> int:
     container = await build_container(Settings(), __version__)
     try:
-        authz = container.services["authz"]
-        async with container.services["uow_factory"]() as uow:
+        authz = container.services.authz
+        async with container.services.uow_factory() as uow:
             # inside the unit of work so the membership revision is bumped with the write:
             # the caller's cached scope is invalidated immediately instead of after the TTL
             await authz.grant_membership(

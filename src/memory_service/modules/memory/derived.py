@@ -1,10 +1,11 @@
 """Derived memories: what the background ReflectionService writes from several sources.
 
-A derived memory carries its supporting memory ids and a ``revised_from`` chain; it is
-revised, never duplicated. Its access is the intersection of its sources' audiences,
-including incomparable RUN/THREAD/GROUP scopes, and is checked again when sources are
-persisted. (The on-landing consolidation that minted extractive beliefs and entity
-summaries here was measured and removed: docs/MEASUREMENTS.md, section 8.6.)
+A derived memory carries its supporting memory ids and the revision of each it was written
+from (``source_revisions``); it is revised, never duplicated. Its access is the intersection
+of its sources' audiences, including incomparable RUN/THREAD/GROUP scopes, and is checked
+again when sources are persisted. (The on-landing consolidation that minted extractive
+beliefs and entity summaries here was measured and removed: docs/MEASUREMENTS.md, section
+8.6.)
 """
 
 from __future__ import annotations

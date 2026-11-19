@@ -54,6 +54,40 @@ def test_a_deployed_environment_stores_blobs_in_gcs(environment: str) -> None:
             "jwt_jwks_url": "https://i/jwks",
             "jwt_issuer": "https://i",
             "jwt_audience": "a",
+            "tenant_claim": "tenant",
         },
     )
     assert settings.blob_provider == "gcs"
+
+
+_JWT = {"jwt_jwks_url": "https://i/jwks", "jwt_issuer": "https://i", "jwt_audience": "a"}
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+def test_a_deployed_jwt_environment_must_bind_the_tenant(environment: str) -> None:
+    """In ``jwt`` mode the token names the calling service and the tenant arrives in a
+    header. With neither ``tenant_claim`` nor ``single_tenant`` nothing compared the two, and
+    the service started clean: one token reached every tenant by changing the header."""
+    with pytest.raises(ValueError) as raised:
+        Settings(service={"environment": environment}, authentication=_JWT)
+    assert "tenant_claim" in str(raised.value) and "single_tenant" in str(raised.value)
+    assert environment in str(raised.value)
+
+
+@pytest.mark.parametrize("environment", ["staging", "prod"])
+@pytest.mark.parametrize("binding", [{"tenant_claim": "tenant"}, {"single_tenant": "arhaus"}])
+def test_a_deployed_jwt_environment_starts_with_either_binding(
+    environment: str, binding: dict[str, str]
+) -> None:
+    settings = Settings(service={"environment": environment}, authentication={**_JWT, **binding})
+    assert settings.authentication.mode == "jwt"
+
+
+@pytest.mark.parametrize("environment", ["dev", "test"])
+def test_an_undeployed_jwt_environment_needs_no_binding(environment: str) -> None:
+    assert Settings(service={"environment": environment}, authentication=_JWT)
+
+
+def test_the_single_tenant_is_a_tenant_id() -> None:
+    with pytest.raises(ValueError, match="single_tenant"):
+        Settings(authentication={**_JWT, "single_tenant": "not a tenant id"})

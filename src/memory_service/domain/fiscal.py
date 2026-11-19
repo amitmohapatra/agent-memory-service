@@ -9,7 +9,7 @@ against the moment it was said and rendered beside the text:
 ``last week = 2026-08-23..2026-08-29 (FY2026 W30)``.
 
 The default is the NRF 4-5-4 calendar most US retailers report in; the pattern, the month the
-year ends in and the naming year are settings (``FiscalCalendarSettings``). Nothing is
+year ends in and the naming year are one setting (``Settings.retail_calendar``). Nothing is
 inferred from the text: a phrase is resolved only when it is unambiguous retail shorthand,
 and a phrase that names no fiscal unit is left to the calendar-date resolver.
 """

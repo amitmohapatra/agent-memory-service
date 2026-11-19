@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Any
 
 from memory_service.domain.graph import INVALIDATED_BY, GraphLayer, document_entity_name
-from memory_service.modules.graph.invalidation import invalidation_edge, passes_time
+from memory_service.modules.graph.invalidation import passes_time
 from memory_service.ports.intelligence import (
     Entity,
     EntityAlias,
@@ -213,61 +212,22 @@ class MemoryGraphStore:
         rels = [r for r in found.values() if r.subject_id in allowed and r.object_id in allowed]
         return GraphNeighborhood(entities=ents, relations=rels, visited=len(visited))
 
-    async def supersede(self, relation_id: str, *, by: str, at: datetime) -> None:
-        r = self.relations.get(relation_id)
-        if r is not None:
-            self.relations[relation_id] = r.model_copy(
-                update={
-                    "status": "SUPERSEDED",
-                    "superseded_by": by,
-                    "valid_to": at,
-                    "invalidated_at": at,
-                }
-            )
-
-    async def supersede_for_memory(self, tenant_id: str, memory_id: str, *, at: datetime) -> int:
-        n = 0
+    async def supersede_for_memories(
+        self, tenant_id: str, memory_ids: Sequence[str], *, at: datetime
+    ) -> set[str]:
+        retired: set[str] = set()
         for rid, r in list(self.relations.items()):
-            if r.tenant_id == tenant_id and r.memory_id == memory_id and r.status == "CURRENT":
+            if (
+                r.tenant_id == tenant_id
+                and r.memory_id is not None
+                and r.memory_id in memory_ids
+                and r.status == "CURRENT"
+            ):
                 self.relations[rid] = r.model_copy(
                     update={"status": "SUPERSEDED", "valid_to": at, "invalidated_at": at}
                 )
-                n += 1
-        return n
-
-    async def invalidate(
-        self,
-        relation_id: str,
-        *,
-        reason: str,
-        at: datetime,
-        by: str | None = None,
-        status: str = "INVALIDATED",
-        attributes: dict[str, Any] | None = None,
-    ) -> Relation | None:
-        r = self.relations.get(relation_id)
-        if r is None:
-            return None
-        update: dict[str, Any] = {
-            "status": status,
-            "invalidated_at": r.invalidated_at or at,
-            "attributes": {
-                **r.attributes,
-                "invalidation": {"reason": reason, "at": at.isoformat(), "by": by},
-            },
-        }
-        if status == "SUPERSEDED":
-            update["valid_to"] = r.valid_to or at
-            update["superseded_by"] = by or r.superseded_by
-        self.relations[relation_id] = r.model_copy(update=update)
-        winner = self.relations.get(by) if by else None
-        if winner is None:
-            return None
-        edge = invalidation_edge(
-            self.relations[relation_id], winner, reason=reason, at=at, attributes=attributes
-        )
-        self.relations[edge.relation_id] = edge
-        return edge
+                retired.add(r.memory_id)
+        return retired
 
     async def delete_for_document(self, tenant_id: str, document_id: str) -> int:
         gone = [

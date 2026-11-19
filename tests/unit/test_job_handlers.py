@@ -19,6 +19,7 @@ import zstandard
 from structlog.testing import capture_logs
 
 from memory_service.adapters.blob.memory import MemoryBlobStore
+from memory_service.application.services import Services
 from memory_service.config.constants import TASKS
 from memory_service.domain.enums import MemoryType
 from memory_service.domain.memory import CanonicalMemory
@@ -180,7 +181,7 @@ def _wire(
     unit = uow or _Uow()
     container = SimpleNamespace(
         tasks=queue,
-        services={"uow_factory": lambda: unit, **(services or {})},
+        services=Services(**{"uow_factory": lambda: unit, **(services or {})}),
         settings=SimpleNamespace(llm=SimpleNamespace(enabled=llm)),
     )
     registry.register_handlers(container)  # type: ignore[arg-type]
@@ -203,7 +204,7 @@ def logs() -> Iterator[list[Any]]:
 
 
 def test_nothing_is_registered_without_a_task_queue() -> None:
-    container = SimpleNamespace(tasks=None, services={}, settings=None)
+    container = SimpleNamespace(tasks=None, services=Services(), settings=None)
     assert registry.register_handlers(container) is None  # type: ignore[arg-type,func-returns-value]
 
 

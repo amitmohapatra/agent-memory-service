@@ -41,6 +41,25 @@ refused at start (`ConnectionBudgetError`, naming both numbers); elsewhere it is
 the floor, and the worker logs a warning, once, naming both. Unset, a worker whose pools need
 more than 28 takes what they need.
 
+A process that serves the API *and* runs the job worker's pools (a single-process stack:
+`build_container(..., role="combined")`) adds an API process's own request pool to `jobs`:
+sized as a worker alone, its jobs held six of a request pool of ten and every request it
+served shared the other four. That API pool is an API process's whole share of the budget
+(`pool_plan(1)`), so a `combined` process always needs more than `connection_budget` names:
+the worker's floor plus that share (56 for a budget of 40). It takes it with a warning, and
+in a deployed environment it is refused at start (`ConnectionBudgetError`), like any process
+whose floor is past its budget. It is for a single-process stack, not a deployment.
+
+A unit of work that waits for an advisory lock (`UnitOfWork.serialize`: a thread's appends,
+a user's memory writes) queues inside its process first, without a connection; only the one
+at the head waits in PostgreSQL. Eight jobs of one user's chat used to hold eight pooled
+connections idle while they queued. Only a unit of work that holds nothing yet queues there:
+one that already holds a lock or a connection waits in PostgreSQL, where the deadlock
+detector sees it. The local wait is bounded at twice PostgreSQL's `deadlock_timeout`
+(`DATABASE.deadlock_timeout_ms`, the server's 1 s default; set it there too if you change it
+on the server) and is spent from the lock statement's 15 s, so one lock waits at most one
+statement timeout in all.
+
 Unset, a process keeps the pools it had before the budget existed: requests 8 + 8, graph
 4 + 4, queue 4 (28). Overflow counts against the budget because a burst is exactly when the
 budget matters. `tests/unit/test_process_model.py` asserts that a plan never exceeds its

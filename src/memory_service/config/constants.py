@@ -300,6 +300,12 @@ HEADERS = Headers()
 class DatabaseTuning:
     pool_timeout_seconds: float = 5.0
     statement_timeout_ms: int = 15_000
+    #: PostgreSQL's ``deadlock_timeout``: how long a lock is waited for before the server
+    #: looks for a cycle. The service does not set it; this is the server's default, which
+    #: the integration suite checks against the server it runs on. The process-local lock
+    #: queue waits at most ``lock_queue_wait_ms`` (twice this) before it goes to PostgreSQL
+    #: anyway (``adapters.db.uow``).
+    deadlock_timeout_ms: int = 1_000
     #: A pooled connection is thrown away and reopened after this long. It replaces the
     #: pre-ping, which cost a round trip on every checkout - up to three per request against
     #: a remote database - to catch a connection closed by the server, a proxy or an idle
@@ -317,6 +323,11 @@ class DatabaseTuning:
     #: still published but whose server has stopped answering completes the TCP handshake
     #: and never replies to the startup packet. Bounded so /health/ready always answers.
     connect_timeout_seconds: int = 5
+
+    @property
+    def lock_queue_wait_ms(self) -> int:
+        """The process-local lock queue's bound: twice ``deadlock_timeout_ms``."""
+        return 2 * self.deadlock_timeout_ms
 
 
 DATABASE = DatabaseTuning()
@@ -760,8 +771,8 @@ class MemoryIntelligenceSettings(BaseModel):
     #: forty idle days and a never-recalled user fact in about ninety. They can still be
     #: forgotten explicitly (DELETE /v1/memories/{id}) and by tenant retention.
     forgetting_protect_core: bool = True
-    #: the deployment's retail calendar (``RetailSettings``): fiscal phrases in a memory are
-    #: resolved against it at ingest; None resolves calendar dates only
+    #: the deployment's retail calendar (``Settings.retail_calendar``): fiscal phrases in a
+    #: memory are resolved against it at ingest; None resolves calendar dates only
     fiscal_calendar: FiscalCalendar | None = None
 
 
@@ -827,7 +838,7 @@ class RetrievalSettings(BaseModel):
         default=2048, ge=64, description="query text beyond this is truncated before retrieval"
     )
     #: Search a query's retail planning shorthand with its expansion too ("WOS" and "weeks of
-    #: supply"; ``domain.glossary``). Set by ``RetailSettings.glossary``.
+    #: supply"; ``domain.glossary``). On when ``Settings.retail_calendar`` is set.
     retail_glossary: bool = False
     exact: bool = True
     bm25: bool = True

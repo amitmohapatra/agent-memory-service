@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import distinct, func, literal, select, tuple_, update
+from sqlalchemy import and_, distinct, func, literal, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -117,6 +118,17 @@ class SqlFeedbackRepository:
     async def get(self, tenant_id: str, feedback_id: str) -> Feedback | None:
         row = await self.s.get(FeedbackRow, (tenant_id, feedback_id))
         return _to_domain(row) if row is not None else None
+
+    async def get_many(self, tenant_id: str, feedback_ids: Sequence[str]) -> list[Feedback]:
+        if not feedback_ids:
+            return []
+        rows = await self.s.scalars(
+            select(FeedbackRow).where(
+                FeedbackRow.tenant_id == tenant_id,
+                FeedbackRow.feedback_id.in_(list(feedback_ids)),
+            )
+        )
+        return [_to_domain(row) for row in rows.all()]
 
     async def list_for(
         self,
@@ -295,21 +307,32 @@ class SqlFeedbackRepository:
         )
 
     async def review_counts(
-        self, tenant_id: str, *, user_id: str | None, agent_id: str | None
-    ) -> dict[str, int]:
+        self, tenant_id: str, authors: Sequence[tuple[str | None, str | None]]
+    ) -> dict[tuple[str | None, str | None], dict[str, int]]:
+        counts = {author: {state.value: 0 for state in ReviewState} for author in authors}
+        if not counts:
+            return counts
         stmt = (
-            select(FeedbackRow.review_state, func.count())
+            select(
+                FeedbackRow.user_id, FeedbackRow.agent_id, FeedbackRow.review_state, func.count()
+            )
             .where(
                 FeedbackRow.tenant_id == tenant_id,
                 FeedbackRow.review_state.is_not(None),
                 # a vote its author replaced is them changing their mind, not a verdict on them
                 FeedbackRow.review_replaced_by.is_(None),
-                FeedbackRow.user_id.is_not_distinct_from(user_id),
-                FeedbackRow.agent_id.is_not_distinct_from(agent_id),
+                or_(
+                    *(
+                        and_(
+                            FeedbackRow.user_id.is_not_distinct_from(user_id),
+                            FeedbackRow.agent_id.is_not_distinct_from(agent_id),
+                        )
+                        for user_id, agent_id in counts
+                    )
+                ),
             )
-            .group_by(FeedbackRow.review_state)
+            .group_by(FeedbackRow.user_id, FeedbackRow.agent_id, FeedbackRow.review_state)
         )
-        counts = {state.value: 0 for state in ReviewState}
-        for state, n in (await self.s.execute(stmt)).all():
-            counts[str(state)] = int(n)
+        for user_id, agent_id, state, n in (await self.s.execute(stmt)).all():
+            counts[(user_id, agent_id)][str(state)] = int(n)
         return counts

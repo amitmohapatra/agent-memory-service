@@ -71,7 +71,6 @@ from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 
 log = get_logger(__name__)
 
-TASK_MEMORY_EXPIRE = "memory.expire"
 
 SHORT_TERM_TTL = timedelta(days=7)
 

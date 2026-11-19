@@ -501,7 +501,7 @@ async def record_invocation(
     """Recorded in the request, so there is no job to poll and no ``Location``: 202 says the
     call is counted, and what it teaches (procedures, statistics) is learned later."""
     ctx = build_context(request, container, body.scope)
-    service = container.services["tool_memory"]
+    service = container.services.tool_memory
 
     async def handler(uow):  # type: ignore[no-untyped-def]
         invocation, created = await service.record(
@@ -562,8 +562,8 @@ async def list_tools(
     limit: Annotated[int, limit_query(CATALOG_MAX, "tools")] = CATALOG_MAX,
 ) -> Response:
     position = decode_cursor(cursor, fields=("name",))
-    async with container.services["uow_factory"]() as uow:
-        rows = await container.services["tool_memory"].catalog(
+    async with container.services.uow_factory() as uow:
+        rows = await container.services.tool_memory.catalog(
             uow, ctx, names, after=position["name"] if position else "", limit=limit + 1
         )
     items, next_cursor = page(rows, limit=limit, position=lambda row: {"name": row[0].name})
@@ -593,7 +593,7 @@ async def put_catalog(
     ctx = build_context(request, container, body.scope)
 
     async def handler(uow):  # type: ignore[no-untyped-def]
-        stored = await container.services["tool_memory"].put_catalog(
+        stored = await container.services.tool_memory.put_catalog(
             uow, ctx, [entry.to_domain() for entry in body.tools]
         )
         out = CatalogResponse(tools=[CatalogTool.of(entry) for entry in stored])
@@ -621,10 +621,10 @@ async def tool_hints(
     request: Request, body: HintsRequest, container: ContainerDep, _: ServicePrincipalDep
 ) -> dict[str, Any]:
     ctx = build_context(request, container, body.scope)
-    visibility = await container.services["authz"].visibility(ctx)
-    async with container.services["uow_factory"]() as uow:
-        profile = await container.services["profile"].blocks(uow, ctx)
-    hints = await container.services["tool_hints"].hints(
+    visibility = await container.services.authz.visibility(ctx)
+    async with container.services.uow_factory() as uow:
+        profile = await container.services.profile.blocks(uow, ctx)
+    hints = await container.services.tool_hints.hints(
         ctx,
         body.task,
         available=body.available,
@@ -663,7 +663,7 @@ async def approval_suggestions(
     ``limit`` and still have a next page."""
     position = decode_cursor(cursor, fields={"support": int, "tool": str, "shape": str})
     after = (position["support"], position["tool"], position["shape"]) if position else None
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         rows = await uow.tools.approval_patterns(
             ctx.tenant_id,
             ctx.agent_id or "",

@@ -10,6 +10,7 @@ import pytest
 from memory_service.adapters.graph.memory_store import MemoryGraphStore
 from memory_service.config.constants import GraphSettings
 from memory_service.domain.evidence import EvidenceRef
+from memory_service.domain.graph import INVALIDATED_BY
 from memory_service.modules.graph.summaries import EntitySummaries, deterministic_summary
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.ports.intelligence import Entity, Relation
@@ -204,7 +205,13 @@ async def check_a_gone_documents_graph_is_forgotten(store) -> None:
             _told_by("doc_b", relation("rel_b1", "ent_acme_corp", "acquired", "ent_globex")),
         ]
     )
-    await store.invalidate("rel_a2", reason="contradicted", at=NOW, by="rel_m1")
+    await store.upsert_relations(
+        [
+            relation("inv_a2", "rel_a2", INVALIDATED_BY, "rel_m1").model_copy(
+                update={"layer": "temporal"}
+            )
+        ]
+    )
     await store.set_summary("acme", "ent_acme_corp", summary="Acme acquired Westfalen", source="x")
 
     forgotten = await store.forget_document("acme", "doc_a")

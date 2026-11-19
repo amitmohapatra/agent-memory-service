@@ -4,7 +4,7 @@ them are skipped with a clear reason (never silently passed)."""
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
@@ -343,14 +343,3 @@ def client(settings: Settings, overrides: Overrides) -> Iterator[TestClient]:
     app = create_app(settings, overrides=overrides)
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c
-
-
-@pytest.fixture
-async def aclient(settings: Settings, overrides: Overrides) -> AsyncIterator[object]:
-    import httpx
-
-    app = create_app(settings, overrides=overrides)
-    async with app.router.lifespan_context(app):
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
-            yield c

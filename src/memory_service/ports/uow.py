@@ -96,6 +96,15 @@ class UnitOfWork(Protocol):
     async def rollback(self) -> None: ...
 
 
+class OutboxSweeper(Protocol):
+    """The periodic repair of the transactional outbox (ADR 0004)."""
+
+    async def sweep(self, *, older_than_seconds: int = 30, limit: int = 200) -> int:
+        """Dispatch the committed rows that are still undispatched after
+        ``older_than_seconds``: the ones whose post-commit dispatch never ran. How many."""
+        ...
+
+
 @runtime_checkable
 class UnitOfWorkFactory(Protocol):
     def __call__(self) -> UnitOfWork: ...

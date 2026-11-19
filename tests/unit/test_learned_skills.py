@@ -115,6 +115,24 @@ def test_another_agents_name_in_the_key_is_not_the_agents_own_record() -> None:
     assert audience_of(forged) == ("principal:acme/agent:ann/other", None)
 
 
+@pytest.mark.parametrize(
+    ("user_id", "own_key", "not_own_key"),
+    [
+        ("ann", "principal:acme/agent:ann/support", "principal:acme/agent:support"),
+        (None, "principal:acme/agent:support", "principal:acme/agent:None/support"),
+        # no user is no user, however it is spelled
+        ("", "principal:acme/agent:support", "principal:acme/agent:/support"),
+    ],
+)
+def test_the_agents_own_key_is_exactly_its_private_key(
+    user_id: str | None, own_key: str, not_own_key: str
+) -> None:
+    own = _call(user_id=user_id, visibility_keys=[own_key])
+    assert audience_of(own) == (agent_audience("acme", "support"), "support")
+    other = _call(user_id=user_id, visibility_keys=[not_own_key])
+    assert audience_of(other) == (not_own_key, None)
+
+
 def test_contributors_count_distinct_users_and_name_the_only_one() -> None:
     assert contributors([_call(), _call()]) == (1, "ann")
     assert contributors([_call(), _call(user_id="bob")]) == (2, None)

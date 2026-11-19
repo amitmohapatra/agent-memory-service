@@ -32,6 +32,17 @@ async def test_put_is_immutable_and_versioned(store) -> None:
     assert await store.verify(ref2) is True
 
 
+async def test_a_generation_precondition_is_honoured(store) -> None:
+    ref = await store.put("bucket", "g", b"1")
+    with pytest.raises(BlobAlreadyExists):
+        await store.put("bucket", "g", b"2", if_generation_match=2)
+    with pytest.raises(BlobAlreadyExists):
+        await store.put("bucket", "absent", b"2", if_generation_match=1)
+    assert await store.get("bucket", "g") == b"1"
+    ref2 = await store.put("bucket", "g", b"2", if_generation_match=int(ref.generation or 0))
+    assert ref2.generation == "2"
+
+
 async def test_checksum_and_missing(store) -> None:
     with pytest.raises(BlobChecksumMismatch):
         await store.put("bucket", "x", b"data", checksum_sha256="0" * 64)

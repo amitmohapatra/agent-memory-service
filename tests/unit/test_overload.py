@@ -224,3 +224,55 @@ def test_only_postgres_is_wired_as_mandatory() -> None:
         Path(__file__).resolve().parents[2] / "src/memory_service/adapters/wiring.py"
     ).read_text()
     assert re.findall(r'name="(\w+)", mandatory=True', wiring) == ["postgres"]
+
+
+async def test_a_verify_past_its_deadline_is_answered_at_the_deadline_not_after_the_model() -> None:
+    """The verify path: its NLI batches are inside a model thread when the deadline fires. The
+    504 must leave at the deadline; it used to wait for every batch of the answer. The model
+    is held inside its first batch until the 504 is in hand, so the test does not depend on
+    how fast this machine is: a 504 that waited for the model never arrives."""
+    from collections.abc import Sequence
+
+    from memory_service.adapters.models.nli import BatchedNLI
+    from memory_service.config.constants import FROZEN_MODELS
+    from memory_service.ports.models import NLIScore
+
+    inside = threading.Event()
+    answered = threading.Event()
+
+    class HeldNLI(BatchedNLI):
+        spec = FROZEN_MODELS.nli
+        _runner = SerialRunner("nli-test")
+        batches = 0
+
+        def _score_pairs(self, pairs: Sequence[tuple[str, str]]) -> list[NLIScore]:
+            HeldNLI.batches += 1
+            inside.set()
+            answered.wait(10)  # the first batch stays in the model until the 504 is out
+            return [NLIScore(entailment=1.0, neutral=0.0, contradiction=0.0) for _ in pairs]
+
+        def fingerprint(self) -> str:
+            return "held"
+
+    nli = HeldNLI()
+    pairs = FROZEN_MODELS.nli.batch_size * 40  # forty batches
+
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        await nli.entail_groups([(["premise"] * pairs, "claim")])
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"done"})
+
+    limits = OverloadTuning(verify_deadline_seconds=0.2)
+    transport = httpx.ASGITransport(app=DeadlineMiddleware(app, limits=limits))
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+            # gstack-timing-ok: a ceiling for a hang, far above the 0.2 s deadline
+            response = await asyncio.wait_for(client.post("/v1/verify"), 5)
+        assert response.status_code == 504
+        assert inside.is_set() and not answered.is_set(), "answered while the model was busy"
+        answered.set()
+        await nli._runner.run(lambda: None)  # the abandoned batch is out of the model
+        assert HeldNLI.batches == 1, "the abandoned answer's other batches were not scored"
+    finally:
+        answered.set()
+        nli.close()

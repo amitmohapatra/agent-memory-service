@@ -59,9 +59,9 @@ stateDiagram-v2
 
 | Transition | Code | What changes |
 |---|---|---|
-| → `SUPERSEDED` | `supersede` in `modules/memory/pipeline.py` and `modules/memory/revisions.py` | status, `superseded_by`, `valid_to` closed; the new row gets `supersedes` |
+| → `SUPERSEDED` | `supersede` in `modules/memory/pipeline.py` (a correcting verdict reaches it through `MemoryService.correct`) | status, `superseded_by`, `valid_to` closed; the new row gets `supersedes` |
 | → `RETRACTED` by forgetting | `MemoryRepository.forget` (`adapters/db/memory_repository.py`) | status `RETRACTED` **and** `deleted_at` set; final from the API's point of view (`404`) |
-| → `RETRACTED` by a verdict | `retract` in `modules/memory/revisions.py`, from the feedback projector | status `RETRACTED`, `valid_to` closed; the row stays for the temporal view |
+| → `RETRACTED` by a verdict | `MemoryService.retract` (`modules/memory/service.py`), from the feedback projector | status `RETRACTED`, `valid_to` closed; the row stays for the temporal view |
 | → `EXPIRED` | `expire_due` in `adapters/db/memory_repository.py`, run by `memory.expire` | status `EXPIRED`; index entry removed by the `memory.index` job it enqueues |
 | → `ARCHIVED` | `ForgettingService.sweep` (`modules/memory/forgetting.py`) | status `ARCHIVED`, a `forgetting` record with the score and threshold |
 | `ARCHIVED` → `CURRENT` | `ForgettingService.restore` | status back, `restored_at` stamped, `access_count` + 1, re-indexed |
@@ -73,7 +73,7 @@ it: a conflict between two principals keeps both memories `CURRENT` and links th
 Each transition also bumps the revisions of every audience that could read the memory
 (`bump_memory_revisions`), so a cached context that showed the old state stops being served
 (chapter 10), and the `memory.index` job closes the memory's knowledge-graph relations
-(`supersede_for_memory`, chapter 5).
+(`supersede_for_memories`, chapter 5).
 
 ---
 
@@ -278,10 +278,10 @@ The resolved dates are what the read side uses; chapter 4 has the details.
 
 The knowledge graph keeps its own temporal status per relation — `CURRENT`, `SUPERSEDED`,
 `RETRACTED`, `INVALIDATED` — with `as_of` (valid time) and `valid_at` (knowledge time) on the
-entity routes. **Built, not wired:** marking a relation `INVALIDATED` ("it was never right")
-with an `invalidated_by` edge is implemented in both graph stores (`GraphStore.invalidate`,
-`modules/graph/invalidation.py`) but no module calls it today; relations are closed only as
-`SUPERSEDED`, when their memory stops being current (chapter 5).
+entity routes. **Not built:** marking a relation `INVALIDATED` ("it was never right") with an
+`invalidated_by` edge. The read filters honour both (`modules/graph/invalidation.py`) and
+nothing writes them; relations are closed only as `SUPERSEDED`, when their memory stops
+being current (chapter 5).
 
 ---
 

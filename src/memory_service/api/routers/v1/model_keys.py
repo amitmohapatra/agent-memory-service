@@ -164,7 +164,7 @@ async def _status(
         choice = await EndpointResolver(container.settings.llm, _Written(written)).resolve(identity)
         endpoint: Endpoint | None = stored
     else:
-        resolver: EndpointResolver = container.services["llm_endpoints"]
+        resolver: EndpointResolver = container.services.llm_endpoints
         choice = await resolver.resolve(identity)
         endpoint = _service(container).endpoint_of(record) if record is not None else None
     return AgentKeyStatus(
@@ -192,11 +192,11 @@ class _Written:
 
 
 def _service(container) -> ModelCredentials:  # type: ignore[no-untyped-def]
-    return container.services["model_credentials"]
+    return container.services.model_credentials
 
 
 async def _probe(container, endpoint: Endpoint) -> None:  # type: ignore[no-untyped-def]
-    probe: EndpointProbe = container.services["endpoint_probe"]
+    probe: EndpointProbe = container.services.endpoint_probe
     await probe(endpoint)
 
 
@@ -479,7 +479,7 @@ def _uses(uses: frozenset[str]) -> list[LLMUse]:
 
 
 def _policies(container) -> ModelPolicies:  # type: ignore[no-untyped-def]
-    return container.services["model_policies"]
+    return container.services.model_policies
 
 
 @router.get(
@@ -573,7 +573,7 @@ async def tenant_usage(
         raise ValidationFailed(
             f"since..until must be an ordered range of at most {USAGE_MAX_DAYS} days"
         )
-    usage: LLMUsage = container.services["llm_usage"]
+    usage: LLMUsage = container.services.llm_usage
     days = await usage.between(tenant_id, since, until)
     return ModelUsageResponse(
         since=since,

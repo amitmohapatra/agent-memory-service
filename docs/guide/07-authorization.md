@@ -43,7 +43,7 @@ follows from what is configured (`AuthenticationSettings.mode` in `config/settin
 | Mode | When | What the credential is |
 |---|---|---|
 | `api_key` | the default; always when `bootstrap_admin_key` is set | a key the service issued, verified against its stored SHA-256 hash; it names its tenant and optionally a workspace (ADR 0021) |
-| `jwt` | `jwt_jwks_url` is set | an issuer's token (RS256/ES256); with `tenant_claim` set, the claim must equal the tenant header — fails closed |
+| `jwt` | `jwt_jwks_url` is set | an issuer's token (RS256/ES256); with `tenant_claim` set, the claim must equal the tenant header — fails closed; with `single_tenant` set, only that tenant is served. `staging` and `prod` refuse to start with neither |
 | `trusted_dev` | development keys only, no bootstrap key | trusts the context headers as given; **refused** when `service.environment` is `staging` or `prod` |
 
 `gcp_iam` and `mtls`, named in ADR 0005, were never deployed and are gone. In deployed

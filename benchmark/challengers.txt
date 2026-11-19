@@ -3,7 +3,7 @@
 # The catalogue in src/memory_service/tools/download_models.py is the frozen set
 # (src/memory_service/config/constants.py) and nothing else; these ~7 GB existed on disk with
 # no production code path. Fetch one when re-running `make bench-embedding` /
-# `make bench-reranker` needs it:
+# `make bench-rerank-offline` needs it:
 #
 #     uv run python -m memory_service.tools.download_models --challengers benchmark/challengers.txt --only bge-small-en-v1.5
 #

@@ -262,7 +262,7 @@ async def test_memory_store_traversal_bounds_visibility_and_time() -> None:
     await store.upsert_entities([ent("a").model_copy(update={"visibility_keys": ["ws:acme/ws1"]})])
     assert set(store.entities["ent_a"].visibility_keys) == {"user:acme/u1", "ws:acme/ws1"}
     assert store.entities["ent_a"].mention_count == 2
-    assert await store.supersede_for_memory("acme", "nope", at=NOW) == 0
+    assert await store.supersede_for_memories("acme", ["nope"], at=NOW) == set()
 
 
 def test_query_terms_and_fact_candidate() -> None:

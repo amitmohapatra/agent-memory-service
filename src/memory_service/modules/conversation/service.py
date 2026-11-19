@@ -45,7 +45,12 @@ from memory_service.modules.conversation.summary import (
     enqueue_episode_index,
     enqueue_refresh,
 )
-from memory_service.modules.jobs.names import TASK_DOCUMENT_INDEX, TASK_DOCUMENT_MOVE
+from memory_service.modules.jobs.names import (
+    TASK_ARCHIVE_STAGE,
+    TASK_DOCUMENT_INDEX,
+    TASK_DOCUMENT_MOVE,
+    TASK_PROCESS_OBSERVATION,
+)
 from memory_service.modules.tenancy.gate import require_workspace_member
 from memory_service.modules.working_memory.hot_thread import HotThreadCache
 from memory_service.observability.logging import get_logger
@@ -55,9 +60,6 @@ from memory_service.ports.tasks import JobSpec, Queue
 from memory_service.ports.uow import UnitOfWork
 
 log = get_logger(__name__)
-
-TASK_PROCESS_OBSERVATION = "memory.process_observation"
-TASK_ARCHIVE_STAGE = "archive.stage_message"
 
 
 def observation_job(ctx: MemoryExecutionContext, observation_id: str) -> JobSpec:

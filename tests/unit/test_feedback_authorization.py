@@ -27,6 +27,7 @@ from memory_service.domain.tools import RunOutcome, ToolDescriptor, ToolInvocati
 from memory_service.modules.feedback.service import CALL_RECORD_CHECKS, FeedbackService
 from memory_service.modules.feedback.votes import ALREADY_COUNTED_REASON, is_vote
 from memory_service.modules.grounding.judge import judge_run
+from memory_service.modules.memory.service import MemoryService
 from memory_service.modules.tools.service import TASK_TOOLS_LEARN
 
 OWNER = MemoryExecutionContext(tenant_id="acme", user_id="alice", workspace_id="fin")
@@ -44,6 +45,9 @@ class _MemoryService:
     async def get_memory(self, uow, ctx, memory_id):
         return _Memory()  # readable by everyone in this test
 
+    #: the real transition, over the fake repository
+    reinforce = MemoryService.reinforce
+
 
 class _Authz:
     def __init__(self, admins: set[str]) -> None:
@@ -58,9 +62,15 @@ class _FeedbackRepo:
 
     def __init__(self) -> None:
         self.rows: dict[tuple[str, str], Feedback] = {}
+        #: how many times ``get_many`` was asked
+        self.reads = 0
 
     async def get(self, tenant_id, feedback_id):
         return self.rows.get((tenant_id, feedback_id))
+
+    async def get_many(self, tenant_id, feedback_ids):
+        self.reads += 1
+        return [self.rows[(tenant_id, i)] for i in feedback_ids if (tenant_id, i) in self.rows]
 
     async def add(self, feedback) -> bool:
         self.rows[(feedback.tenant_id, feedback.feedback_id)] = feedback
@@ -468,6 +478,7 @@ async def test_bulk_approve_of_a_mix_decides_each_pending_vote_once() -> None:
         uow, "acme", feedback_ids=[a, b, a], approve=True, reviewed_by="key:admin", note="ok"
     )
     assert [f.feedback_id for f in decided] == [a] and not more
+    assert uow.feedback.reads == 1, "the named votes are read at once"
     assert [(f.feedback_id, f.review.state.value) for f in unchanged] == [(b, "dismissed")]
     assert len(uow.jobs) == 1, "one projection, for the one vote decided now"
     # the same call again decides nothing and schedules nothing
@@ -662,6 +673,9 @@ class _Run:
 
     async def set_outcome(self, outcome) -> None:
         self.outcomes[outcome.run_id] = outcome
+
+    async def lock(self, tenant_id, ids) -> None:
+        return None
 
     async def get_many(self, tenant_id, ids):
         return [_memory(i, self.confidence[i]) for i in ids if i in self.confidence]

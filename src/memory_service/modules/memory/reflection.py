@@ -26,10 +26,10 @@ from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import MemoryType
 from memory_service.domain.errors import ValidationFailed
 from memory_service.domain.memory import CanonicalMemory, unverified_representation
+from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.consolidation import about_a_person
 from memory_service.modules.memory.derived import _derived
-from memory_service.modules.memory.pipeline import TASK_MEMORY_INDEX
 from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.observability.logging import get_logger
 from memory_service.ports.credentials import ModelIdentity

@@ -7,6 +7,25 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Fixed (SDK): an overloaded answer check no longer cuts a run off from memory
+
+The client had one circuit for every call, and a service too busy to verify answers in time
+(its 504s on `/v1/verify`, which runs the models over a whole answer) opened it: the run's
+context, transcript writes and reads were then refused too, until it cooled. Answer checks
+have a circuit of their own (`Transport.check_breaker`); a service that is down still opens
+both.
+
+### Fixed (service): a thread's window never misses its newest turns after a cache race
+
+The hot thread cache (the recent visible messages in Dragonfly) wrote its list and the
+revision it is current for in separate commands. Under load a refill built from an earlier
+read could wipe the messages appended meanwhile while a later append wrote the current
+revision: the list held the thread's first message alone, and every window served the
+conversation without its later turns (the model saw them only as recalled memories, out of
+their order). The cache now keeps, with the revision, the message the list must end with, and
+answers only when it does; an internal message invalidates it. A marker an older release wrote
+is a miss, rewritten by the next read.
+
 ### Added
 - **With a model, each person's facts are kept as beliefs** (service). After a message's
   memories are stored, each person they touch is queued once (`memory.consolidate`, 60 s
@@ -41,6 +60,73 @@ each entry says which one moved. Decisions behind each change are in the
   asking call.
 
 ### Changed
+- **A deployed `jwt` service must say how the tenant is bound** (service). In `jwt` mode the
+  token names the calling service and the tenant arrives in `X-Trellis-Tenant`; with
+  `MEMORY__AUTHENTICATION__TENANT_CLAIM` unset nothing compared the two, so one token reached
+  every tenant by changing the header, and `staging` and `prod` started that way without a
+  word. They now refuse to start in `jwt` mode unless `TENANT_CLAIM` is set (a shared
+  deployment; unchanged for every deployment that sets it) or the new
+  `MEMORY__AUTHENTICATION__SINGLE_TENANT` names the one tenant the deployment serves (one
+  deployment per customer). With `SINGLE_TENANT` set, a `jwt` or development credential that
+  asserts any other tenant gets `403 SCOPE_DENIED`. **To upgrade a deployed `jwt` service
+  that sets no `TENANT_CLAIM`: set `SINGLE_TENANT` to its tenant.** `dev` and `test` are
+  unchanged ([configuration.md](docs/configuration.md#production-guards)).
+- **`Container.services` is typed** (service; no behaviour changed). It was a
+  `dict[str, Any]` of about fifty string keys: a misspelt key was a `KeyError` in a request,
+  and nothing read from it had a type. It is `application.services.Services` now, one
+  declared attribute per service (`container.services.memory`), which the type checker reads.
+  Wiring, every router, the job registry and the operator tools read attributes, and a test
+  keeps `services["..."]` out of `src`. Reading and writing by name still works for the test
+  suite and the benchmarks; a name that is not a service is refused where it is written.
+- **`docs/ARCHITECTURE.md` says what the code does** (documentation). Three claims were
+  false: that the service does not import `trellis.contracts` (it imports `Endpoint` and
+  `ModelProfile`), that `api` depends on `application` only (it imports the modules, ports and
+  domain too, and no adapter), and that no module touches another module's tables (enforced
+  for writes to memories; a convention for the rest).
+- **`config/registry.py` is gone** (service; no behaviour changed). The generic
+  `ProviderRegistry` held one port: wiring copied the document parsers' table
+  (`adapters/parsers.PARSERS`) into it and read the same entry back, through a process-wide
+  singleton on the container. Wiring now calls `adapters.parsers.build_parser(name)`, which
+  raises `ProviderNotConfigured` for a name the table does not have. `Container.registries`,
+  `config.Registries` and `config.get_registries` are removed; ADR 0001 notes it.
+- **The shared stop-word set is public** (service; no behaviour changed). The graph and
+  context modules imported `modules/memory/native.py`'s private `_STOP`; it is
+  `domain.text.STOP_WORDS` now, the same 73 words. An architecture test refuses a new import
+  of another module's private name and lists the seven that remain.
+- **Four per-item database loops are one batch each** (service; outcomes unchanged). The
+  retention sweep forgot a batch of up to 500 memories one at a time (a write and the
+  dependents' statement each); it forgets the batch in three statements
+  (`MemoryRepository.forget_many`). A bulk review read each of up to 500 named votes on its
+  own; it reads them in one query (`FeedbackRepository.get_many`). The review queue counted
+  each author's verdicts with a query per author, up to 100 a page; one query counts them all
+  (`FeedbackRepository.review_counts` takes the authors). The `memory.index` job closed the
+  graph facts of each memory that is no longer current in a transaction of its own; one
+  statement closes them (`GraphStore.supersede_for_memories`, which replaces
+  `supersede_for_memory`), before the job's current memories are enriched.
+- **`GraphStore.supersede` and `GraphStore.invalidate` are removed** (service; no behaviour
+  changed). No module called either; the architecture test that requires every port method to
+  have a caller matched bare method names, so `MemoryService.supersede` and
+  `verifier.invalidate` kept them alive. The test now counts a call only on a name the port is
+  held under, and lists the eight other methods that check exposed (`UNCALLED_PORT_METHODS`).
+  The graph's `INVALIDATED` status and `invalidated_by` predicate stay honoured by the read
+  filters; nothing writes them (guide chapters 3 and 5 say "not built").
+- **The API package imports no adapter** (service; no behaviour changed). `api/errors.py`
+  imported the database driver's error mapping from `adapters.db.errors`, which put
+  sqlalchemy and psycopg behind the API although the architecture test bans them there. The
+  mapping now reaches the API as an `ErrorTranslator` from `application.container`
+  (`error_translators()`), and a new architecture test refuses any import of
+  `memory_service.adapters` under `api/`.
+- **Internal cleanup, no behaviour, route, field or SDK call changed** (service). Job task
+  names are defined once, in `modules/jobs/names.py`, and imported from there. Access keys
+  are built through `visibility_keys` and `domain.context.agent_principal` (tool learning
+  and the episode indexer no longer build them by hand). The `TaskQueue` port declares
+  `register_periodic`, which both adapters implement. Unused code is gone: the provider
+  registries nothing registered into (`document_parser` stays), `slots.bridged_things`,
+  `standing.BLOCKS`, eight unused parameters of private functions, and unused test support
+  (`aclient`, `requires_redis`). Comments and docs name what exists (`Settings.retail_calendar`,
+  `make reindex`, `make bench-rerank-offline`; the SDK README's list of `Literal`s).
+- **The in-memory blob store honours generation preconditions** (service). A write whose
+  generation does not match is refused, as the filesystem store does.
 - **The OpenAPI document lists the `504` the request deadline answers** (service, contract).
   Every operation the deadline middleware covers (every one but `POST /v1/documents`, the
   probes and `/metrics`: 69 of 73) now documents `504` with the `Problem` schema, `code:
@@ -366,6 +452,88 @@ each entry says which one moved. Decisions behind each change are in the
   (`rendered`) is unchanged.
 
 ### Fixed
+- **Tool hints find a run's tools in a large catalog** (service). The catalog search took
+  its 32 best candidates from the tenant's whole catalog and only then kept the run's
+  `available` tools, so a catalog with many better-matching tools (other agents', or many
+  versions of one) left a run's hints empty. The search now ranks among the `available` tools
+  alone, filtered in the store (`ToolIndex.search(available=)`).
+- **The tool search's `available` filter reads an indexed field** (service). The filter
+  above matched the payload field `text`, which has no payload index (and holds a whole
+  memory's text in the other collections), so Qdrant read every candidate's payload to apply
+  it. Tool records now carry `tool_name`, a keyword payload index created on every
+  collection when a process first ensures it, and the filter reads it. While layout-1
+  records can still be written (below), the filter also accepts the name in `text`, so a
+  candidate whose `tool_name` does not match still has that field read (the tools
+  collection keeps its payload in memory); the `text` alternative goes when no release that
+  writes layout 1 can run. Rollout: the record's
+  `text_hash` now names its payload layout (`v2:`), so records an earlier release wrote are
+  stale. Nothing is re-embedded for them: the periodic `tools.refresh` (the worker's first
+  tick after the deploy, within five minutes) moves a record of unchanged text to the new
+  layout in place, payload only (`SearchStore.set_payloads`, bounded by the record's
+  tenant like every other store write), and so does `GET /v1/tools`
+  for the entries it lists. That is the call a harness waits on before its first hints, so
+  its wait ends at once instead of running out. Until a record is moved, a search naming
+  `available` matches it by the name layout 1 kept in `text` (either field, inside the
+  tenant, the kind and the audience), so hints are never empty for it. Upgrade the worker
+  first, or with the API: a worker of the earlier release reads a `v2:` record as stale,
+  embeds it again and writes it back without `tool_name` on each of its refresh ticks, so
+  while one runs beside this release the catalog is re-embedded every five minutes (its
+  records are still found, on `text`, until this release moves them again). A move that
+  fails for one page of the catalog is logged and the refresh goes on with the rest; the
+  next tick compares again.
+- **Deadlines are kept and the connection pool holds under concurrent load** (service). Under a
+  single process with a pool of 5 + 5, `/v1/verify` answered its 15 s deadline at up to 55 s
+  and requests and jobs failed with "PostgreSQL connection pool exhausted". Causes and fixes:
+  - A request cancelled at its deadline waited for its model call to leave the model's thread
+    (`SerialRunner.run`), so the 504 left when the model was done. It is now answered at once;
+    the model's permit still goes back only when the thread is out.
+  - A verify's NLI work was one job of up to forty claims' batches; a timed-out verify scored
+    all of them for nobody. It now runs a batch at a time and stops at the next batch when
+    cancelled (`SerialRunner.run_each`). A request's batches run under one permit; a
+    background job's hand the permit to a waiting request between two batches and take it
+    back after, so a request waits for at most one of a job's batches.
+  - Requests and jobs queued for one model in one FIFO, so a verify waited behind every
+    message job's statement labelling. A request waiting for a model now goes before a
+    waiting background job (`domain.work.background`, set for every job handler), but after
+    4 requests in a row while a job waits the oldest job goes next: a job may hold an
+    advisory lock or a connection others wait for, and a sustained stream of requests no
+    longer starves it.
+  - A unit of work queued on an advisory lock held a pooled connection while it waited (eight
+    jobs of one user's chat: eight connections). Waiters that hold nothing yet now queue in
+    the process without one; only the head waits in PostgreSQL (`UnitOfWork.serialize`). A
+    unit of work that already holds a lock or a connection waits in PostgreSQL, so a
+    cross-key deadlock is still broken by PostgreSQL's detector within its
+    `deadlock_timeout`; the local wait is bounded at twice that and spent from the lock
+    statement's timeout, so a lock waits at most one statement timeout in all. The queue is
+    kept per event loop.
+  - The retrieval and graph visibility lookups held a connection across the scope cache and
+    the relationship store. The revisions are read in a unit of work of their own, closed
+    before those calls (`AuthorizationService.visibility(uow_factory=)`).
+  - A bundle's record, which `/v1/verify` reads, was written after the response, so a verify
+    sent at once could get "bundle not found". It is written before the bundle is returned.
+  - A process that serves the API and runs the worker's pools can be built as
+    `role="combined"`: its request pool holds the jobs' connections and an API process's own.
+- **`GET /v1/jobs/{job_id}` no longer shows a tenant the error of the service's own job**
+  (service). A job that belongs to no tenant (periodic work) is readable by any tenant that
+  names its id, and its `last_error`, which can quote any tenant's data, came with it.
+  `last_error` is now always `null` for such a job; its status, task name and attempts are
+  unchanged, and so is everything about a tenant's own job. The route reads the outbox
+  through its repository (`OutboxRepository.get`) and no longer opens a database session of
+  its own.
+- **A verdict on a memory and a forget of its twin no longer deadlock** (service). A rejected
+  memory is retracted together with its twins (the same statement kept twice), and the
+  feedback projector wrote its own row first and the twins after, on advisory locks a forget
+  does not take. A forget of a twin, or a second verdict on one, took the same rows in another
+  order: PostgreSQL broke the deadlock by failing one of the two (the job was retried, a
+  `DELETE /v1/memories/{id}` answered `503`). Every change a verdict makes to a memory
+  (retract, lift a retraction, correct, reinforce) is now a `MemoryService` method that locks
+  the memory, its twins and what they replaced at once and in id order, as forget does, and
+  decides on what the rows hold under the lock. The feedback module's own copies of supersede
+  and retract (`modules/memory/revisions.py`) are gone; a correction links its new row
+  through the one `pipeline.supersede`. Outcomes are unchanged.
+- **A malformed job id is a `404`, not a `500`** (service). `GET /v1/jobs/obx_abc` and an
+  `obx_` number too long for the database (`obx_99999999999999999999`) answered `500`; they
+  answer `404 NOT_FOUND` like any other id that names no job.
 - **A deleted thread's grant ends with it** (service, MEM-06). Deleting a thread left its
   authorization tuples in place, so every scope of its owner (and of the agent that created
   it) still listed it: a read naming no thread, or the deleted thread, still reached what was

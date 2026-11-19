@@ -917,6 +917,12 @@ class SqlOutboxRepository:
         ).first()
         return (False, None) if row is None else (True, row[0])
 
+    async def get(self, tenant_id: str, outbox_id: int) -> OutboxEntry | None:
+        row = await self.s.get(OutboxRow, outbox_id)
+        if row is None or (row.tenant_id and row.tenant_id != tenant_id):
+            return None
+        return self._entries([row])[0]
+
     async def add(self, spec: JobSpec) -> int | None:
         stmt = pg_insert(OutboxRow).values(
             tenant_id=spec.tenant_id,
@@ -1001,6 +1007,7 @@ class SqlOutboxRepository:
                 attempts=r.attempts,
                 dispatched_at=r.dispatched_at,
                 job_id=r.job_id,
+                last_error=r.last_error,
             )
             for r in rows
         ]

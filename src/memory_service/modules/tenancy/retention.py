@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from memory_service.modules.memory.pipeline import TASK_MEMORY_INDEX
+from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.memory.revisions import bump_memory_revisions
 from memory_service.observability.logging import get_logger
 from memory_service.ports.tasks import JobSpec, Queue
@@ -62,10 +62,9 @@ class RetentionService:
             )
             if not memories:
                 return 0
-            for memory in memories:
-                await uow.memories.forget(tenant_id, memory.memory_id)
-            await bump_memory_revisions(uow, memories)
             memory_ids = [m.memory_id for m in memories]
+            await uow.memories.forget_many(tenant_id, memory_ids)
+            await bump_memory_revisions(uow, memories)
             await uow.enqueue(
                 JobSpec(
                     task_name=TASK_MEMORY_INDEX,

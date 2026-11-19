@@ -44,6 +44,10 @@ _TRACE_ID = re.compile(r"[0-9a-fA-F]{32}")
 #: cannot duplicate anything and they retry like a GET. (``/v1/verify`` with a run records the
 #: judge's feedback, which the service keys on the run and the bundle.)
 READ_ONLY_POSTS: Final = frozenset({"/v1/context", "/v1/recall", "/v1/verify", "/v1/tools/hints"})
+#: The calls that run the service's models over a whole answer (verifying it): slow under load,
+#: they have a circuit of their own (``Transport.check_breaker``), so their timeouts never stop
+#: the context, writes and reads a run needs; a service that is down opens both.
+CHECK_ROUTES: Final = frozenset({"/v1/verify"})
 #: The longest a ``Retry-After`` is waited before the next attempt; a longer one is waited
 #: this long, so a caller is never parked for a minute inside one call.
 RETRY_AFTER_CAP_SECONDS: Final = 30.0
@@ -128,8 +132,10 @@ class Transport:
         self._client = client
         self._owns_client = owns
         self.max_retries = max_retries
-        #: Per client: one service, one circuit (``breaker.FAILURE_THRESHOLD``, ``OPEN_SECONDS``).
+        #: Per client: one service, one circuit (``breaker.FAILURE_THRESHOLD``, ``OPEN_SECONDS``)
+        #: for every call but an answer's check, which has its own (:data:`CHECK_ROUTES`).
         self.breaker = CircuitBreaker()
+        self.check_breaker = CircuitBreaker()
 
     @staticmethod
     def scope_headers(scope: Scope) -> dict[str, str]:
@@ -279,23 +285,24 @@ class Transport:
         # httpx reads an explicit timeout=None as "wait forever": passed only when given
         if timeout is not None:
             request["timeout"] = request_timeout(timeout)
-        probe = self.breaker.acquire()
+        breaker = self.check_breaker if path in CHECK_ROUTES else self.breaker
+        probe = breaker.acquire()
         try:
             response = await self._attempts(
                 method, path, request, safe_to_retry=_safe_to_retry(method, path, idempotency_key)
             )
         except MemoryError as err:
             if err.status == 0 or err.status >= 500:
-                self.breaker.record_failure()
+                breaker.record_failure()
             elif err.status != 429:
-                self.breaker.record_success()
+                breaker.record_success()
             raise
         else:
-            self.breaker.record_success()
+            breaker.record_success()
             return response
         finally:
             if probe:
-                self.breaker.release()
+                breaker.release()
 
     async def _attempts(
         self, method: str, path: str, request: dict[str, Any], *, safe_to_retry: bool

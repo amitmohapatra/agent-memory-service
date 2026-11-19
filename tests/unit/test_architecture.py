@@ -123,6 +123,19 @@ def test_domain_does_not_import_application_adapters_or_frameworks() -> None:
     assert not offenders, "\n".join(offenders)
 
 
+def test_api_does_not_import_adapters() -> None:
+    """``api`` reaches a provider through ``application`` and the ports alone. The ban on
+    provider SDKs above reads direct imports, so ``api/errors.py`` importing
+    ``adapters.db.errors`` put sqlalchemy and psycopg behind the API without tripping it."""
+    offenders = [
+        f"{path.relative_to(SRC)}: {name}"
+        for path in (SRC / "api").rglob("*.py")
+        for name in sorted(_dotted_imports(path))
+        if name == "memory_service.adapters" or name.startswith("memory_service.adapters.")
+    ]
+    assert not offenders, "\n".join(offenders)
+
+
 def test_ports_are_protocols_not_implementations() -> None:
     for path in (SRC / "ports").rglob("*.py"):
         if path.name == "__init__.py":
@@ -137,34 +150,104 @@ UNCALLED_PORT_METHODS = frozenset(
     {
         # the knowledge-graph gate ADR 0016 requires (``kg_gate.json``: fact recall, false
         # facts, noise) reads every relation of a document through it (tests/eval/test_kg_gate.py)
-        "relations_for_document",
+        "GraphStore.relations_for_document",
+        # the benchmarks count a collection's points through it (benchmark/corpus.py)
+        "SearchStore.count",
+        # Found when the test began to read the receiver; each passed on another object's
+        # method of the same name. An adapter's own step declared on the port:
+        "TaskQueue.run_worker",  # ``run_pools`` calls it
+        "UnitOfWork.rollback",  # ``__aexit__`` calls it
+        "AuthorizationProvider.check",  # the in-memory ``batch_check`` calls it
+        # and three with no caller at all:
+        "AgentRunRepository.complete",
+        "BlobStore.list",
+        "MemoryRepository.set_status",
     }
 )
+
+
+#: The names a port is held under where the service calls it. A repository is held under its
+#: ``UnitOfWork`` attribute (read from the protocol); the names here are the other ports',
+#: and the two repositories a collaborator is handed directly.
+PORT_RECEIVERS: dict[str, frozenset[str]] = {
+    "AuthorizationProvider": frozenset({"provider"}),
+    "BlobStore": frozenset({"blob", "store"}),
+    "CacheProvider": frozenset({"cache"}),
+    "ContextReader": frozenset({"reader", "builder"}),
+    "ContextualExtractor": frozenset({"extractor"}),
+    "CredentialCipher": frozenset({"cipher"}),
+    "CredentialResolver": frozenset({"credentials", "resolver"}),
+    "DocumentParser": frozenset({"parser"}),
+    "EmbeddingProvider": frozenset({"embedding", "encoder", "spaces"}),
+    "GraphEnrichmentProvider": frozenset({"provider", "graph"}),
+    "GraphStore": frozenset({"store", "graph"}),
+    "IdempotencyRepository": frozenset({"repo"}),
+    "LLMProvider": frozenset({"provider"}),
+    "LLMUsageRecorder": frozenset({"usage"}),
+    "LateInteractionEncoder": frozenset({"late", "late_encoder", "encoder"}),
+    "MemoryIntelligenceProvider": frozenset({"provider"}),
+    "NLIProvider": frozenset({"nli"}),
+    "OutboxRepository": frozenset({"repo"}),
+    "OutboxSweeper": frozenset({"relay"}),
+    "SearchStore": frozenset({"store", "search"}),
+    "SparseEncoder": frozenset({"sparse"}),
+    "TaskQueue": frozenset({"tasks", "queue", "task_queue"}),
+    "UnitOfWork": frozenset({"uow"}),
+}
+
+
+def _receiver(node: ast.Attribute) -> str | None:
+    """The name ``node``'s attribute is read from: ``store`` in ``self.store.upsert`` and in
+    ``store.upsert``, ``reader`` in ``self.reader().build``."""
+    value = node.value.func if isinstance(node.value, ast.Call) else node.value
+    if isinstance(value, ast.Attribute):
+        return value.attr
+    return value.id if isinstance(value, ast.Name) else None
 
 
 def test_every_port_method_has_a_caller() -> None:
     """A port method nothing in the service calls is dead code its adapters keep alive, with
     whatever serves it: ``WorkspaceRepository.memberships_of`` kept an index of its own on
-    ``workspace_members`` (a write on every membership change) for no reader."""
-    declared: dict[str, str] = {}
+    ``workspace_members`` (a write on every membership change) for no reader.
+
+    A call counts for a port only when it is made on a name that port is held under. Any
+    attribute of the same name used to count, so ``GraphStore.supersede`` and ``invalidate``
+    lived on ``MemoryService.supersede`` and ``verifier.invalidate``, and
+    ``MemoryRepository.set_status`` on ``uow.documents.set_status``."""
+    held_as = {port: set(names) for port, names in PORT_RECEIVERS.items()}
+    uow = ast.parse((SRC / "ports" / "uow.py").read_text(encoding="utf-8"))
+    for node in ast.walk(uow):
+        if isinstance(node, ast.ClassDef) and node.name == "UnitOfWork":
+            for item in node.body:
+                if isinstance(item, ast.AnnAssign) and isinstance(item.annotation, ast.Name):
+                    assert isinstance(item.target, ast.Name)
+                    held_as.setdefault(item.annotation.id, set()).add(item.target.id)
+    declared: dict[tuple[str, str], str] = {}
     for path in (SRC / "ports").rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if isinstance(node, ast.ClassDef):
+            if isinstance(node, ast.ClassDef) and any(
+                isinstance(base, ast.Name) and base.id == "Protocol" for base in node.bases
+            ):
                 for item in node.body:
                     named = isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef)
                     if named and not item.name.startswith("_"):
-                        declared.setdefault(item.name, f"{path.name}:{node.name}")
-    called: set[str] = set()
+                        declared[(node.name, item.name)] = path.name
+    called: set[tuple[str | None, str]] = set()
     for path in SRC.rglob("*.py"):
         if "ports" in path.relative_to(SRC).parts:
             continue
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.Attribute):
-                called.add(node.attr)
-    uncalled = {name: where for name, where in declared.items() if name not in called}
-    assert set(uncalled) <= UNCALLED_PORT_METHODS, {
-        name: where for name, where in uncalled.items() if name not in UNCALLED_PORT_METHODS
+                called.add((_receiver(node), node.attr))
+    unheld = {port for port, _ in declared} - set(held_as)
+    assert not unheld, f"say in PORT_RECEIVERS what these ports are held as: {sorted(unheld)}"
+    uncalled = {
+        f"{port}.{method}": where
+        for (port, method), where in declared.items()
+        if f"{port}.{method}" not in UNCALLED_PORT_METHODS
+        and not any((name, method) in called for name in held_as[port])
     }
+    assert not uncalled, "\n".join(sorted(uncalled))
 
 
 def test_sdk_does_not_depend_on_service_internals() -> None:
@@ -411,19 +494,20 @@ def test_the_parser_enum_and_the_parser_registry_agree() -> None:
     )
 
 
-def test_wiring_selects_providers_through_the_registry_not_a_switch() -> None:
-    """``config/registry.py`` calls itself the Open/Closed extension point: "adding a provider
-    means registering a factory, never editing a switch statement". It was dead code —
-    nothing registered, nothing created — while wiring grew the switch it forbids.
+def test_wiring_builds_the_parser_by_name_not_through_a_switch() -> None:
+    """``adapters/parsers.PARSERS`` is the registry: a new parser is one entry there, never a
+    branch in wiring. (A generic ``ProviderRegistry`` in ``config/`` used to stand between
+    the two: wiring copied ``PARSERS`` into it and read the same entry back.)"""
+    from memory_service.adapters.parsers import build_parser
+    from memory_service.domain.errors import ProviderNotConfigured
 
-    This pins the parser port, the first one converted. Extending the assertion to another
-    port is the intended way to make this true of the rest.
-    """
     source = (SRC / "adapters" / "wiring.py").read_text()
-    assert "registries.document_parser.create(" in source, (
-        "the document parser must be built through the registry"
-    )
+    assert "build_parser(" in source, "the document parser must be built by name from PARSERS"
     assert 'cfg.parser == "docling"' not in source, "the parser switch statement is back"
+    assert not (SRC / "config" / "registry.py").exists()
+    assert type(build_parser("builtin")).__name__ == "BuiltinParser"
+    with pytest.raises(ProviderNotConfigured, match="'nope' is not registered; known: "):
+        build_parser("nope")
 
 
 def test_the_memory_type_docs_match_what_the_pipeline_actually_produces() -> None:
@@ -474,3 +558,77 @@ def test_the_default_image_can_honour_the_default_configuration() -> None:
             f"documents.parser defaults to {default_parser!r} but the default image builds "
             f"extras {sorted(extras)} — the deployment cannot honour its own default"
         )
+
+
+#: ``MemoryRepository`` methods that write a memory's content or state.
+MEMORY_STATE_WRITES = frozenset({"add", "update", "forget", "forget_many", "set_status"})
+#: Who else writes memories through the unit of work, and why. Shrink this; never grow it:
+#: a new transition belongs on ``MemoryService``.
+MEMORY_WRITERS_OUTSIDE_MEMORY = frozenset(
+    {
+        # retention deletes a tenant's expired memories in batches, as no principal
+        ("modules/tenancy/retention.py", "forget_many"),
+        # the operator's backfill rewrites rows an earlier build stored (make backfill)
+        ("tools/backfill.py", "update"),
+    }
+)
+
+
+def test_memory_state_is_written_by_the_memory_module_alone() -> None:
+    """``UnitOfWork`` hands every repository to every module, so "no module writes another
+    module's tables" held only by convention: feedback closed, corrected and re-opened
+    memories with its own copies of the transitions ``modules/memory`` owns, on its own
+    locking protocol. A write to ``uow.memories`` from outside ``modules/memory`` is refused
+    here unless it is listed above."""
+    found: set[tuple[str, str]] = set()
+    for path in SRC.rglob("*.py"):
+        where = path.relative_to(SRC)
+        if where.parts[0] == "adapters" or where.parts[:2] == ("modules", "memory"):
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (
+                isinstance(node, ast.Attribute)
+                and node.attr in MEMORY_STATE_WRITES
+                and isinstance(node.value, ast.Attribute)
+                and node.value.attr == "memories"
+            ):
+                found.add((where.as_posix(), node.attr))
+    assert found == MEMORY_WRITERS_OUTSIDE_MEMORY, sorted(found ^ MEMORY_WRITERS_OUTSIDE_MEMORY)
+
+
+#: Private names of ``modules/memory/replacement.py`` that other modules still import.
+#: Shrink this; never grow it.
+PRIVATE_NAMES_IMPORTED_ACROSS_MODULES = frozenset(
+    {
+        "modules/context/coverage.py: _NOUN_CAPITALISING",
+        "modules/context/coverage.py: _function_words",
+        "modules/context/coverage.py: _marked",
+        "modules/context/coverage.py: _vocab_json",
+        "modules/context/standing.py: _function_words",
+        "modules/retrieval/slots.py: _function_words",
+        "modules/retrieval/slots.py: _marked",
+    }
+)
+
+
+def test_no_module_imports_another_modules_private_name() -> None:
+    """A leading underscore says "this file's": ``modules/memory/native.py``'s ``_STOP`` was
+    imported by the graph and context modules, so the name could not change where it was
+    defined. What two modules share is public, in ``domain`` or on the owning module."""
+    offenders: set[str] = set()
+    for path in (SRC / "modules").rglob("*.py"):
+        package = path.relative_to(SRC / "modules").parts[0]
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not (isinstance(node, ast.ImportFrom) and node.module):
+                continue
+            source = node.module.split(".")
+            if source[:2] != ["memory_service", "modules"] or source[2:3] == [package]:
+                continue
+            offenders |= {
+                f"{path.relative_to(SRC).as_posix()}: {alias.name}"
+                for alias in node.names
+                if alias.name.startswith("_")
+            }
+    assert offenders == PRIVATE_NAMES_IMPORTED_ACROSS_MODULES, sorted(
+        offenders ^ PRIVATE_NAMES_IMPORTED_ACROSS_MODULES
+    )

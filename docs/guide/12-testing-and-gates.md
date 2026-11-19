@@ -87,7 +87,7 @@ Some tests exist only so that a description cannot drift from what it describes:
 
 | Test | Holds |
 |---|---|
-| `tests/unit/test_architecture.py` | the hexagonal rules (no provider SDK in the core, no LLM SDK anywhere, ports are Protocols, wiring through the registry, every stand-in has a wiring branch); one test database URL; no host literals; and "the memory type docs match what the pipeline actually produces" |
+| `tests/unit/test_architecture.py` | the hexagonal rules (no provider SDK in the core, no LLM SDK anywhere, ports are Protocols, the parser built by name from its table, every stand-in has a wiring branch); one test database URL; no host literals; and "the memory type docs match what the pipeline actually produces" |
 | `tests/unit/test_complexity_budget.py` | a ratchet: budgets set at the worst function's complexity at the time, so nothing may get worse and every improvement tightens them |
 | `tests/unit/test_model_provenance.py` | the provenance rule on every surface that names a model (chapter 8) |
 | `tests/unit/test_job_registration.py` | every enqueued task has a handler and the outbox has a scheduled repair path — both were broken on a running service, silently |

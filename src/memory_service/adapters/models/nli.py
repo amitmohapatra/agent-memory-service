@@ -75,8 +75,7 @@ class BatchedNLI(ABC):
     async def entail(self, premises: Sequence[str], hypothesis: str) -> list[NLIScore]:
         if not premises:
             return []
-        pairs = [(premise, hypothesis) for premise in premises]
-        return await self._runner.run(self._score_pairs, pairs)
+        return await self._scored([(premise, hypothesis) for premise in premises])
 
     async def entail_groups(
         self, groups: Sequence[tuple[Sequence[str], str]]
@@ -84,13 +83,23 @@ class BatchedNLI(ABC):
         pairs = [(premise, hypothesis) for premises, hypothesis in groups for premise in premises]
         if not pairs:
             return [[] for _ in groups]
-        flat = await self._runner.run(self._score_pairs, pairs)
+        flat = await self._scored(pairs)
         scores: list[list[NLIScore]] = []
         cut = 0
         for premises, _ in groups:
             scores.append(flat[cut : cut + len(premises)])
             cut += len(premises)
         return scores
+
+    async def _scored(self, pairs: Sequence[tuple[str, str]]) -> list[NLIScore]:
+        """``pairs`` scored a model batch at a time under one permit: a caller cancelled
+        (its request past its deadline) stops at the next batch instead of holding the model
+        for the rest of its answer (``SerialRunner.run_each``)."""
+        size = self.spec.batch_size
+        batches = [pairs[start : start + size] for start in range(0, len(pairs), size)]
+        return [
+            s for scored in await self._runner.run_each(self._score_pairs, batches) for s in scored
+        ]
 
     def close(self) -> None:
         self._runner.close()

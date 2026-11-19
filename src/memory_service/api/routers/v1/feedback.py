@@ -50,7 +50,7 @@ _GROUP_CURSOR_FIELDS = {"latest_at": datetime, "target_kind": str, "target_id": 
 
 
 def _service(container) -> FeedbackService:  # type: ignore[no-untyped-def]
-    return container.services["feedback"]
+    return container.services.feedback
 
 
 @router.post(
@@ -203,7 +203,7 @@ async def list_feedback(
     ctx = build_context(request, container, lineage)
     position = decode_cursor(cursor, fields=_CURSOR_FIELDS)
     before = (position["created_at"], position["feedback_id"]) if position else None
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         rows = await _service(container).list_for(
             uow, ctx, target_kind=target_kind, target_id=target_id, before=before, limit=limit + 1
         )
@@ -257,7 +257,7 @@ async def _pending(
 ) -> FeedbackListResponse:
     position = decode_cursor(cursor, fields=_CURSOR_FIELDS)
     before = (position["created_at"], position["feedback_id"]) if position else None
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         queued = await _service(container).pending(
             uow, tenant_id, state=state, before=before, limit=limit + 1
         )
@@ -291,7 +291,7 @@ async def _grouped(
         if position
         else None
     )
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         groups = await _service(container).pending_by_target(
             uow, tenant_id, state=state, before=before, limit=limit + 1
         )
@@ -319,7 +319,7 @@ async def _grouped(
 async def get_feedback(
     feedback_id: FeedbackIdPath, container: ContainerDep, ctx: HeaderContextDep
 ) -> FeedbackResponse:
-    async with container.services["uow_factory"]() as uow:
+    async with container.services.uow_factory() as uow:
         return FeedbackResponse.of(await _service(container).get(uow, ctx, feedback_id))
 
 

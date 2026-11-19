@@ -59,9 +59,7 @@ def concrete_path(template: str, **values: str) -> str:
 
 # --------------------------------------------------------------------------- the record
 
-#: operation id -> the statuses it answered, for the whole session.
-_SESSION: dict[str, set[int]] = {}
-#: the same, for the test that is running now.
+#: operation id -> the statuses it answered, for the test that is running now.
 _CURRENT: dict[str, set[int]] = {}
 #: The last problem body an SDK request received, so a test can assert the RFC 9457 envelope
 #: the service actually sent rather than the fields the SDK keeps.
@@ -80,7 +78,6 @@ def begin_test() -> None:
 
 
 def record(operation: str, status: int) -> None:
-    _SESSION.setdefault(operation, set()).add(status)
     _CURRENT.setdefault(operation, set()).add(status)
 
 
@@ -89,10 +86,6 @@ def reached(*, errors: bool) -> set[str]:
     return {
         op for op, seen in _CURRENT.items() if any((status >= 400) is errors for status in seen)
     }
-
-
-def session_statuses() -> dict[str, set[int]]:
-    return {op: set(seen) for op, seen in _SESSION.items()}
 
 
 def last_problem() -> dict[str, Any]:

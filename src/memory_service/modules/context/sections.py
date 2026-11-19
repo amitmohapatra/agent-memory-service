@@ -14,7 +14,7 @@ import asyncio
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Final
+from typing import TYPE_CHECKING, Final
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -40,6 +40,9 @@ from memory_service.modules.retrieval.engine import QueryVectors
 from memory_service.modules.tools.matching import TaskVectors
 from memory_service.modules.tools.skills import skill_view
 from memory_service.ports.uow import UnitOfWorkFactory
+
+if TYPE_CHECKING:
+    from memory_service.application.services import Services
 
 #: Learned skills a context carries.
 CONTEXT_PROCEDURES: Final = 3
@@ -236,7 +239,7 @@ def _chosen(people: Sequence[PersonPage], room: int, relevance: Mapping[str, int
 
 
 class ContextSections:
-    def __init__(self, uow_factory: UnitOfWorkFactory, services: dict[str, Any]) -> None:
+    def __init__(self, uow_factory: UnitOfWorkFactory, services: Services) -> None:
         self.uow_factory = uow_factory
         self.services = services
 
@@ -258,7 +261,7 @@ class ContextSections:
             self._profile(ctx),
             self._people(ctx, visibility),
             self._summary(ctx),
-            self.services["tool_hints"].procedures(
+            self.services.tool_hints.procedures(
                 ctx, query, list(visibility.keys), k=CONTEXT_PROCEDURES, vectors=vectors
             )
             if procedures
@@ -282,7 +285,7 @@ class ContextSections:
         profile: Sequence[ProfileBlockView],
         vectors: QueryVectors | None,
     ) -> ToolHints:
-        return await self.services["tool_hints"].hints(
+        return await self.services.tool_hints.hints(
             ctx,
             query,
             available=request.available,
@@ -295,7 +298,7 @@ class ContextSections:
 
     async def _profile(self, ctx: MemoryExecutionContext) -> list[ProfileBlockView]:
         async with self.uow_factory() as uow:
-            blocks = await self.services["profile"].blocks(uow, ctx)
+            blocks = await self.services.profile.blocks(uow, ctx)
         return [ProfileBlockView(block=b.block, text=b.text, version=b.version) for b in blocks]
 
     async def _people(
@@ -303,10 +306,10 @@ class ContextSections:
     ) -> list[PersonPage]:
         """The people's pages, where a model can be reached (beliefs are written nowhere
         else): without one the read is today's, round trip for round trip."""
-        if not self.services["llm_assist"].available:
+        if not self.services.llm_assist.available:
             return []
         async with self.uow_factory() as uow:
-            return await self.services["profile"].people(uow, ctx, sorted(visibility.keys))
+            return await self.services.profile.people(uow, ctx, sorted(visibility.keys))
 
     async def _summary(self, ctx: MemoryExecutionContext) -> ThreadSummaryView | None:
         if not ctx.thread_id:

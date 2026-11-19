@@ -4387,7 +4387,7 @@
                 "type": "null"
               }
             ],
-            "description": "Why the last attempt failed, when one did.",
+            "description": "Why the last attempt failed, when one did. Always null for a job that belongs to no tenant (the service's own periodic work).",
             "title": "Last Error"
           },
           "queue": {

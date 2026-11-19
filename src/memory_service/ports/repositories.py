@@ -46,6 +46,7 @@ class OutboxEntry(BaseModel):
     attempts: int = 0
     dispatched_at: datetime | None = None
     job_id: str | None = None
+    last_error: str | None = None
 
 
 @runtime_checkable
@@ -354,6 +355,11 @@ class OutboxRepository(Protocol):
         """
         ...
 
+    async def get(self, tenant_id: str, outbox_id: int) -> OutboxEntry | None:
+        """The row ``tenant_id`` may read: its own, or one that belongs to no tenant (the
+        service's own periodic work). Dispatched and dead rows included."""
+        ...
+
     async def mark_dispatched(self, outbox_id: int, *, job_id: str) -> None: ...
 
     async def dispatcher_of(self, job_id: str) -> tuple[bool, str | None]:
@@ -528,6 +534,11 @@ class MemoryRepository(Protocol):
         ...
 
     async def forget(self, tenant_id: str, memory_id: str) -> bool: ...
+
+    async def forget_many(self, tenant_id: str, memory_ids: Sequence[str]) -> list[str]:
+        """``forget`` for a batch, in a fixed number of statements. The ids forgotten: not
+        those already forgotten, another tenant's or unknown."""
+        ...
 
     async def lock(self, tenant_id: str, memory_ids: Sequence[str]) -> None:
         """Hold these rows (deleted ones too) for writing until the transaction ends, taken

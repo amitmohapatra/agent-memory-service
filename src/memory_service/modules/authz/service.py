@@ -33,6 +33,7 @@ from memory_service.ports.authorization import (
 )
 from memory_service.ports.cache import CacheProvider, CacheUnavailable
 from memory_service.ports.repositories import RevisionRepository
+from memory_service.ports.uow import UnitOfWorkFactory
 
 log = get_logger(__name__)
 
@@ -86,12 +87,17 @@ class AuthorizationService:
         ctx: MemoryExecutionContext,
         *,
         revisions: RevisionRepository | None = None,
+        uow_factory: UnitOfWorkFactory | None = None,
         revision_fingerprint: str | None = None,
         cached_scope: bytes | None = None,
     ) -> AuthorizedScope:
         """The caller's authorized scope.
 
-        ``revisions`` reads the fingerprint here, one round trip on the query path.
+        ``revisions`` reads the fingerprint here, one round trip on the query path, in the
+        caller's unit of work. ``uow_factory`` reads it in a unit of work of its own, closed
+        before the cache is asked and the scope resolved: those are network round trips (the
+        relationship store's listing can take hundreds of milliseconds), and a connection held
+        idle across them was one fewer for every other request of the process.
         ``revision_fingerprint`` is for a caller that has already read those revisions: pass
         it *together with* ``cached_scope``, the bytes that caller's own read of
         ``scope_cache_key`` returned (``None`` when it missed). Passing the fingerprint alone
@@ -104,16 +110,8 @@ class AuthorizationService:
         raw = cached_scope if self.cache is not None else None
         if fingerprint is None:
             fingerprint = "0"
-            if revisions is not None:
-                # the same keys revision_fingerprint() derives: grants, never content
-                keys = [
-                    (RevisionKind.MEMBERSHIP, ""),
-                    (RevisionKind.MEMBERSHIP, ctx.user_id or ""),
-                ]
-                if ctx.agent_id:
-                    keys.append((RevisionKind.MEMBERSHIP, ctx.agent_id))
-                values = await revisions.get_many(ctx.tenant_id, keys)
-                fingerprint = ",".join(f"{k}={v}" for k, v in sorted(values.items()))
+            if revisions is not None or uow_factory is not None:
+                fingerprint = await self._grants(ctx, revisions, uow_factory)
             if self.cache is not None:
                 try:
                     raw = await self.cache.get(self.scope_cache_key(ctx, fingerprint))
@@ -134,11 +132,35 @@ class AuthorizationService:
                 )
         return scope
 
+    @staticmethod
+    async def _grants(
+        ctx: MemoryExecutionContext,
+        revisions: RevisionRepository | None,
+        uow_factory: UnitOfWorkFactory | None,
+    ) -> str:
+        """The fingerprint of the caller's grants: read through ``revisions``, or in a unit
+        of work of its own that is closed when this returns."""
+        # the same keys revision_fingerprint() derives: grants, never content
+        keys = [
+            (RevisionKind.MEMBERSHIP, ""),
+            (RevisionKind.MEMBERSHIP, ctx.user_id or ""),
+        ]
+        if ctx.agent_id:
+            keys.append((RevisionKind.MEMBERSHIP, ctx.agent_id))
+        if revisions is not None:
+            values = await revisions.get_many(ctx.tenant_id, keys)
+        else:
+            assert uow_factory is not None
+            async with uow_factory() as uow:
+                values = await uow.revisions.get_many(ctx.tenant_id, keys)
+        return ",".join(f"{k}={v}" for k, v in sorted(values.items()))
+
     async def visibility(
         self,
         ctx: MemoryExecutionContext,
         *,
         revisions: RevisionRepository | None = None,
+        uow_factory: UnitOfWorkFactory | None = None,
         revision_fingerprint: str | None = None,
         cached_scope: bytes | None = None,
     ) -> VisibilitySpecification:
@@ -149,6 +171,7 @@ class AuthorizationService:
             scope=await self.scope(
                 ctx,
                 revisions=revisions,
+                uow_factory=uow_factory,
                 revision_fingerprint=revision_fingerprint,
                 cached_scope=cached_scope,
             ),
@@ -328,7 +351,7 @@ class AuthorizationService:
     # removed a grant, so a removed user kept live access (design/PRODUCT_DECISIONS.md, §4).
 
     @staticmethod
-    def _member_subject(tenant_id: str, principal: str) -> tuple[str, str]:
+    def _member_subject(principal: str) -> tuple[str, str]:
         """FGA subject for a workspace principal, and the revision id its scopes hang on."""
         kind, ident = parse_principal(principal)
         return f"{kind}:{ident}", ident
@@ -353,7 +376,7 @@ class AuthorizationService:
         in the same write (deleting a tuple that does not exist would fail the batch and
         fall back to one write per tuple)."""
         obj = f"workspace:{object_id(tenant_id, workspace_id)}"
-        subject, ident = self._member_subject(tenant_id, principal)
+        subject, ident = self._member_subject(principal)
         keep = RelationTuple(user=subject, relation=role, object=obj)
         drop = (
             [RelationTuple(user=subject, relation=previous, object=obj)]
@@ -372,7 +395,7 @@ class AuthorizationService:
         revisions: RevisionRepository | None = None,
     ) -> None:
         obj = f"workspace:{object_id(tenant_id, workspace_id)}"
-        subject, ident = self._member_subject(tenant_id, principal)
+        subject, ident = self._member_subject(principal)
         await self.provider.write(
             [], [RelationTuple(user=subject, relation=r, object=obj) for r in WORKSPACE_ROLES]
         )

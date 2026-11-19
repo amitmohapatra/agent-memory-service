@@ -54,7 +54,7 @@ async def learned_skills(
     container: ContainerDep, tenant_id: AdministeredTenantDep, agent: AgentFilter = None
 ) -> LearnedSkillsResponse:
     return LearnedSkillsResponse(
-        skills=await container.services["learned_skills"].list(tenant_id, agent_id=agent)
+        skills=await container.services.learned_skills.list(tenant_id, agent_id=agent)
     )
 
 
@@ -75,7 +75,7 @@ async def dismiss_learned_skill(
     tenant_id: AdministeredTenantDep,
 ) -> Response:
     async def handler(uow):  # type: ignore[no-untyped-def]
-        skill = await container.services["learned_skills"].dismiss(tenant_id, skill_id)
+        skill = await container.services.learned_skills.dismiss(tenant_id, skill_id)
         return 200, skill.model_dump(mode="json"), None
 
     return await run_idempotent(

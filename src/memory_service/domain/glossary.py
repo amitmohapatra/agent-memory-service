@@ -8,8 +8,8 @@ other at all. So a query that names one side is searched with the other side too
 
 Only unambiguous shorthand is listed. An acronym matches as an upper-case word ("OH" is on
 hand, "oh" is not); a phrase matches in any case. Nothing is inferred - the expansion is a
-fixed table, the same for every retailer (``RetailSettings.glossary``), kept as data in the
-retail vocabulary pack.
+fixed table, the same for every retailer (on when ``Settings.retail_calendar`` is set), kept
+as data in the retail vocabulary pack.
 """
 
 from __future__ import annotations

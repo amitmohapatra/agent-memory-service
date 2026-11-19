@@ -28,10 +28,9 @@ from memory_service.config.constants import RetrievalSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import ContextGraphEdge, EvidenceStatus, QueryType
 from memory_service.domain.language import detect_language, function_words
-from memory_service.domain.text import unicode_tokens
+from memory_service.domain.text import STOP_WORDS, unicode_tokens
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.context.expansion import edges_to_groups, evidence_group_key
-from memory_service.modules.memory.native import _STOP as STOP_WORDS
 from memory_service.modules.retrieval.engine import Candidate
 from memory_service.modules.retrieval.router import RoutedQuery
 from memory_service.observability.metrics import stage_seconds

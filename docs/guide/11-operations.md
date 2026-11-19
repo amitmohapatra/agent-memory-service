@@ -196,7 +196,7 @@ the queue pool.
 | `memory.index` | `embedding` | every memory change | 5 | index or remove, bump revisions, queue a profile refresh; the graph enrichment, queued with a model and run here without one |
 | `graph.enrich_memories` | `graph` | `memory.index`, with a model | 5 | the memories' entities and relations |
 | `document.parse` | `document-parse` | upload | 3 | parse, hierarchy, chunks, Document Context Graph |
-| `document.index` | `embedding` | parse | 5 | index chunks and summaries, mark the document `READY`, then the graph enrichment (queued with a model, run here without one); when it gives up, the document is `FAILED` ("index failed: ...") for `memory-reindex` to finish |
+| `document.index` | `embedding` | parse | 5 | index chunks and summaries, mark the document `READY`, then the graph enrichment (queued with a model, run here without one); when it gives up, the document is `FAILED` ("index failed: ...") for `make reindex` (`python -m memory_service.tools.reindex`) to finish |
 | `graph.enrich_document` | `graph` | `document.index`, with a model | 5 | the document's entities and relations |
 | `archive.stage_message` | `archive` | each message, 60 s coalesced per thread | 10 | compress, upload, verify, manifest (ADR 0006) |
 | `feedback.project` | `reconcile` | an applied verdict | 3 | apply it (chapter 6) |
@@ -336,6 +336,11 @@ never raised into the code that logged it.
 **Overload.** A read (GET, `/v1/context`, `/v1/recall`, `/v1/tools/hints`) that runs past
 5 s, a write past 15 s, `/v1/verify` past 15 s is answered `504` `TIMEOUT` (retryable);
 uploads and probes have no deadline. A model queue past 32 waiters answers `503` at once.
+The 504 leaves at the deadline even when the request's model batch is in the model's thread:
+the batch finishes there and the model's permit goes back when it does, and a cancelled
+request scores none of its remaining batches. A request waiting for an in-process model is
+served before a background job waiting for it (the verify path and the statement labeller
+share the NLI head).
 uvicorn refuses past 128 concurrent connections per worker and keeps idle keep-alive
 connections for 65 s (above the SDK's 30 s and the usual 60 s load-balancer idle timeout;
 uvicorn's own default of 5 s closed connections clients were about to reuse). The values are

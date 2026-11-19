@@ -448,3 +448,27 @@ def test_compose_brings_every_long_running_service_back_on_its_own() -> None:
             assert service.get("restart", "no") == "no", name
         elif not service.get("profiles"):  # optional profiles (validation, observability) aside
             assert service.get("restart") == "unless-stopped", name
+
+
+def test_one_process_serving_the_api_and_running_the_jobs_has_a_request_pool_for_both() -> None:
+    """A process that serves the API *and* runs every worker pool (a single-process stack,
+    such as the harness's scenario stack) was built as a worker: a request pool of ten, with
+    a connection reserved for each of its six jobs, and four for every request it served
+    ("QueuePool limit of size 5 overflow 5 reached" on /v1/verify and /v1/messages). The
+    combined role sizes the request pool for the jobs and an API process's own pool."""
+    from memory_service.adapters.wiring import _pool_plan
+    from memory_service.application.container import Container, process_shape
+
+    settings = Settings(_env_file=None, tasks={"worker_concurrency": 4}, **NO_MODEL)
+    worker = _pool_plan(
+        Container(settings=settings, version="t", **process_shape(settings, "worker"))
+    )
+    api = _pool_plan(Container(settings=settings, version="t", **process_shape(settings, "api")))
+    both = Container(settings=settings, version="t", **process_shape(settings, "combined"))
+    plan = _pool_plan(both)
+    worker_main = worker.main_size + worker.main_overflow
+    api_main = api.main_size + api.main_overflow
+    jobs = Container(settings=settings, version="t", **process_shape(settings, "worker")).jobs
+    assert both.jobs == jobs + api_main, "each job's connection, and the API's own pool"
+    assert plan.main_size + plan.main_overflow >= both.jobs > worker_main
+    assert plan.listeners == worker.listeners and plan.queue_max >= worker.queue_max

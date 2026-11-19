@@ -100,8 +100,9 @@ The tenant's `rate_limit_per_minute` (set per tenant through the admin API). The
 ## The service
 
 **It refuses to start in `staging` or `prod`.**
-The production guards: development keys alone (`trusted_dev` mode), the `filesystem` blob
-store, and a bootstrap key under 32 characters are refused when deployed. The error names the
+The production guards: development keys alone (`trusted_dev` mode), `jwt` mode with neither
+`tenant_claim` nor `single_tenant`, the `filesystem` blob store, and a bootstrap key under 32
+characters are refused when deployed. The error names the
 setting ([configuration.md](configuration.md#production-guards)).
 
 **`/health/ready` says `degraded`.**

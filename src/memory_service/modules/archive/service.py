@@ -218,7 +218,7 @@ class ArchiveService:
             verified = await uow.archive.list_verified(limit=verify_sample)
 
         # ACKed but archive incomplete -> requeue the thread
-        from memory_service.modules.jobs.registry import TASK_ARCHIVE_STAGE
+        from memory_service.modules.jobs.names import TASK_ARCHIVE_STAGE
         from memory_service.ports.tasks import JobSpec, Queue
 
         threads = sorted({(m.tenant_id, m.thread_id) for m in staged})

@@ -263,7 +263,7 @@ async def upload_document(
             "invalid scope/custom_metadata", details={"error": str(exc)[:300]}
         ) from exc
     ctx = build_context(request, container, scope_body)
-    service: IngestionService = container.services["ingestion"]
+    service: IngestionService = container.services.ingestion
     data = await read_bounded(file, service.cfg.max_file_bytes)
     filename = file.filename or "upload.bin"
     media_type = file.content_type or "application/octet-stream"
@@ -314,8 +314,8 @@ async def upload_document(
 async def get_document(
     document_id: DocumentIdPath, ctx: HeaderContextDep, container: ContainerDep
 ) -> DocumentResponse:
-    service: IngestionService = container.services["ingestion"]
-    async with container.services["uow_factory"]() as uow:
+    service: IngestionService = container.services.ingestion
+    async with container.services.uow_factory() as uow:
         d = await service.get_document(uow, ctx, document_id)
     return DocumentResponse(
         document_id=d.document_id,

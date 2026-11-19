@@ -37,8 +37,9 @@ class AccessCheck(BaseModel):
 class AuthorizedScope(BaseModel):
     """The set of scope anchors the principal may read. Used to build search filters.
 
-    Lists are bounded; when a list would exceed ``max_objects`` the provider sets
-    ``truncated=True`` and callers must fall back to per-object checks.
+    Lists are bounded; when a list exceeds ``AUTHORIZATION.max_listed_objects`` the resolver
+    (``modules.authz.scope``) cuts it there and sets ``truncated=True``, and callers must fall
+    back to per-object checks.
     """
 
     model_config = ConfigDict(frozen=True)

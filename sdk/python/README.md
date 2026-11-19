@@ -137,15 +137,13 @@ await agent.profile.edit("user.decisions", source_query="Which project decisions
 ## Closed sets are typed
 
 Every closed vocabulary on the wire is a `Literal` in `trellis.memory.models`
-(`MemoryType`, `Visibility`, `Lifetime`, `MessageRole`, `MessageKind`, `ObservationKind`,
-`JobStatus`, `DocumentStatus`, `ArchiveStatus`, `QueryType`, `Representation`,
-`TemporalStatus`, `EvidenceStatus`, `RecallKind`, `EvidenceKind`, `ToolStatus`,
+(`MemoryType`, `Visibility`, `Lifetime`, `MessageRole`, `MessageKind`, `JobStatus`,
+`DocumentStatus`, `ArchiveStatus`, `TemporalStatus`, `EvidenceStatus`, `ToolStatus`,
 `SideEffects`, ...). Client parameters such as `remember(memory_type=...)`,
 `search(kinds=...)` and `advanced.memories.page(memory_types=...)` take them, and response models
 (`MemoryResult.memory_type`, `MessageInfo.role`, `DocumentInfo.status`, `JobHandle.status`,
-`ContextBundle.query_type`, ...) carry them instead of `str`. A wrong value is a type error
-in your editor and a 422 from the service naming the allowed values; it is never silently
-dropped. The service keeps the SDK's Literals equal to its own enums with a test.
+...) carry them instead of `str`. A wrong value is a type error in your editor and a 422 from
+the service naming the allowed values; it is never silently dropped. The service keeps the SDK's Literals equal to its own enums with a test.
 
 `search(kinds=...)` accepts `memory`, `chunk` (document passages), `summary`, `episode`
 (earlier conversations) and `message` (what was said: this thread's messages, then this

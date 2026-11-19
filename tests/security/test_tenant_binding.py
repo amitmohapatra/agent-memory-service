@@ -7,7 +7,8 @@ it was - one credential reached every tenant on the deployment by changing one h
 
 That is sound where a gateway stamps the tenant as a constant, which is one deployment per
 customer. It is not sound when several product teams share one deployment, which is why
-``authentication.tenant_claim`` exists.
+``authentication.tenant_claim`` exists. A deployment for one customer says which one
+(``authentication.single_tenant``), and then serves no other.
 """
 
 from __future__ import annotations
@@ -38,11 +39,12 @@ class _Request:
 
 
 class _Container:
-    def __init__(self, claim: str | None) -> None:
+    def __init__(self, claim: str | None, single_tenant: str | None = None) -> None:
         from memory_service.config.settings import Settings
 
         self.settings = Settings()
         self.settings.authentication.tenant_claim = claim
+        self.settings.authentication.single_tenant = single_tenant
         self.services: dict = {}  # no tenant registry: nothing is suspended
 
 
@@ -50,10 +52,15 @@ def _principal(**claims: str) -> ServicePrincipal:
     return ServicePrincipal(service_id="svc", mode="jwt", claims=dict(claims))
 
 
-def _build(tenant: str, principal: ServicePrincipal | None, claim: str | None) -> None:
+def _build(
+    tenant: str,
+    principal: ServicePrincipal | None,
+    claim: str | None,
+    single_tenant: str | None = None,
+) -> None:
     build_context(
         _Request(tenant, principal),  # type: ignore[arg-type]
-        _Container(claim),  # type: ignore[arg-type]
+        _Container(claim, single_tenant),  # type: ignore[arg-type]
         ScopeBody(),
     )
 
@@ -82,3 +89,18 @@ def test_the_claim_is_compared_exactly() -> None:
     """No prefix match: 'arhaus' must not satisfy a request for 'arhaus-staging'."""
     with pytest.raises(ScopeDenied):
         _build("arhaus-staging", _principal(tenant="arhaus"), claim="tenant")
+
+
+def test_a_single_tenant_deployment_serves_no_other_tenant() -> None:
+    """The header is still how the tenant arrives, and it may only name the one configured."""
+    _build("arhaus", _principal(), claim=None, single_tenant="arhaus")
+    with pytest.raises(ScopeDenied):
+        _build("someone-else", _principal(), claim=None, single_tenant="arhaus")
+    with pytest.raises(ScopeDenied):
+        _build("arhaus-staging", _principal(), claim=None, single_tenant="arhaus")
+
+
+def test_a_single_tenant_deployment_with_a_claim_checks_both() -> None:
+    _build("arhaus", _principal(tenant="arhaus"), claim="tenant", single_tenant="arhaus")
+    with pytest.raises(ScopeDenied):
+        _build("other", _principal(tenant="other"), claim="tenant", single_tenant="arhaus")

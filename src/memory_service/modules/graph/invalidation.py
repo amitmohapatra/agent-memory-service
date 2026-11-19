@@ -1,6 +1,4 @@
-"""Invalidation instead of deletion: the edge that records why a fact gave way to another,
-the bitemporal filter both stores apply, and the deterministic adjudication of two facts
-that occupy the same slot.
+"""Invalidation instead of deletion: the bitemporal filter both graph stores apply.
 
 Status vocabulary for a closed relation:
 
@@ -14,47 +12,8 @@ Status vocabulary for a closed relation:
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
-from memory_service.domain.graph import INVALIDATED_BY
-from memory_service.domain.ids import stable_key
 from memory_service.ports.intelligence import Relation
-
-
-def invalidation_edge(
-    loser: Relation,
-    winner: Relation,
-    *,
-    reason: str,
-    at: datetime,
-    attributes: dict[str, Any] | None = None,
-) -> Relation:
-    """The relation -> relation edge that records why ``loser`` gave way to ``winner``."""
-    return Relation(
-        relation_id="inv_" + stable_key(loser.tenant_id, loser.relation_id, winner.relation_id),
-        tenant_id=loser.tenant_id,
-        subject_id=loser.relation_id,
-        predicate=INVALIDATED_BY,
-        object_id=winner.relation_id,
-        layer="temporal",
-        scope_key=loser.scope_key,
-        visibility_keys=list(loser.visibility_keys),
-        observed_at=at,
-        status="CURRENT",
-        confidence=1.0,
-        evidence=list(winner.evidence[:3] or loser.evidence[:3]),
-        fact_text=(
-            f"'{loser.fact_text[:120]}' was invalidated by '{winner.fact_text[:120]}' ({reason})"
-        ),
-        attributes={
-            "reason": reason,
-            "invalidated_at": at.isoformat(),
-            "winner": winner.relation_id,
-            "loser": loser.relation_id,
-            "loser_status": loser.status,
-            **(attributes or {}),
-        },
-    )
 
 
 def passes_time(r: Relation, *, as_of: datetime | None, valid_at: datetime | None) -> bool:

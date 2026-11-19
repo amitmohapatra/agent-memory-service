@@ -15,7 +15,12 @@ from memory_service.api.errors import install_error_handlers
 from memory_service.api.middleware import CorrelationMiddleware, RateLimitMiddleware
 from memory_service.api.openapi import TITLE, custom_openapi, operation_id
 from memory_service.api.routers import ops
-from memory_service.application.container import Container, Overrides, build_container
+from memory_service.application.container import (
+    Container,
+    Overrides,
+    build_container,
+    error_translators,
+)
 from memory_service.config import constants
 from memory_service.config.settings import Settings, get_settings
 from memory_service.observability.logging import configure_logging, get_logger
@@ -104,7 +109,7 @@ def create_app(
         burst=constants.RATE_LIMIT_BURST,
     )
     app.add_middleware(CorrelationMiddleware, max_body_bytes=constants.MAX_BODY_BYTES)
-    install_error_handlers(app)
+    install_error_handlers(app, error_translators())
     app.include_router(ops.router)
     _include_v1_routers(app)
 

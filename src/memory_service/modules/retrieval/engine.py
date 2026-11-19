@@ -331,8 +331,9 @@ class RetrievalEngine:
             try:
                 if visibility is None:
                     with timings.stage("visibility"):
-                        async with self.uow_factory() as uow:
-                            visibility = await self.authz.visibility(ctx, revisions=uow.revisions)
+                        # the revisions in a unit of work of their own: no connection is
+                        # held across the scope cache and the relationship store
+                        visibility = await self.authz.visibility(ctx, uow_factory=self.uow_factory)
                 await self.ensure_collections()
                 # a post-stage that depends only on the route and the scope (the graph
                 # traversal) starts now and is awaited when its turn comes

@@ -2,6 +2,12 @@
 assignments: the registration check reads them as module-level string constants)."""
 
 TASK_MEMORY_INDEX = "memory.index"
+#: A recorded message turned into memories; a message staged for the archive
+TASK_PROCESS_OBSERVATION = "memory.process_observation"
+TASK_ARCHIVE_STAGE = "archive.stage_message"
+#: The periodic sweeps of memories past their expiry, and of what the forgetting policy drops
+TASK_MEMORY_EXPIRE = "memory.expire"
+TASK_MEMORY_FORGET = "memory.forget"
 #: A document's chunks embedded and searchable, or taken out of the index once it is gone
 #: (``Indexer.index_document``): ingestion enqueues it, and so does a thread's deletion
 TASK_DOCUMENT_INDEX = "document.index"

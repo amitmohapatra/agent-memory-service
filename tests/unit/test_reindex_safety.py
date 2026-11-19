@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from memory_service.application.services import Services
 from memory_service.modules.rag.indexer import MEMORIES
 from memory_service.modules.tools.index import TOOLS
 from memory_service.ports.search import SearchFilter
@@ -54,7 +55,7 @@ class _Indexer:
 class _Container:
     def __init__(self, search: _Search) -> None:
         self.search = search
-        self.services: dict[str, Any] = {"indexer": _Indexer()}
+        self.services = Services(indexer=_Indexer())
         self.database = None
 
 

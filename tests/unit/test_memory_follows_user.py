@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from memory_service.application.services import Services
 from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import (
@@ -568,7 +569,7 @@ async def test_an_agents_remembered_user_fact_is_the_agents_not_the_users_profil
     scope="user", content="omar (u-77)"): it was kept as the user's USER memory and became
     the pinned "### user" block, so every later context told the model the user is Omar."""
     uow = _Stated()
-    tools = AgentTools(lambda: uow, {"memory": MemoryService(None)})  # type: ignore[arg-type]
+    tools = AgentTools(lambda: uow, Services(memory=MemoryService(None)))  # type: ignore[arg-type]
     await tools.call(
         HARNESS, "memory_remember", {"content": "omar (u-77)", "kind": "USER", "scope": "user"}
     )

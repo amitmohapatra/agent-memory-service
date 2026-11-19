@@ -39,6 +39,10 @@ class MemoryBlobStore:
         existing = self._objects.get((bucket, key))
         if if_generation_match == 0 and existing is not None:
             raise BlobAlreadyExists(f"{bucket}/{key} exists")
+        if if_generation_match not in (None, 0) and (
+            existing is None or int(existing[1].generation or 0) != if_generation_match
+        ):
+            raise BlobAlreadyExists("generation precondition failed")
         generation = int(existing[1].generation or 0) + 1 if existing else 1
         ref = BlobRef(
             bucket=bucket,
