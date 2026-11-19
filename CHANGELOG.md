@@ -7,6 +7,14 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Fixed (SDK): an overloaded answer check no longer cuts a run off from memory
+
+The client had one circuit for every call, and a service too busy to verify answers in time
+(its 504s on `/v1/verify`, which runs the models over a whole answer) opened it: the run's
+context, transcript writes and reads were then refused too, until it cooled. Answer checks
+have a circuit of their own (`Transport.check_breaker`); a service that is down still opens
+both.
+
 ### Fixed (service): a thread's window never misses its newest turns after a cache race
 
 The hot thread cache (the recent visible messages in Dragonfly) wrote its list and the

@@ -230,6 +230,29 @@ def _breaking_client(threshold: int = 2) -> tuple[MemoryClient, Clock]:
 
 
 @respx.mock
+async def test_answer_checks_that_time_out_open_only_their_own_circuit() -> None:
+    """A service too busy to verify answers in time (its 504s) stops its checks, never the
+    context, writes and reads a run needs; a call of those still goes through."""
+    client, _ = _breaking_client()
+    client.transport.check_breaker.threshold = 2
+    busy = {"code": "TIMEOUT", "detail": "verify deadline", "retryable": True}
+    respx.post(f"{URL}/v1/verify").mock(return_value=httpx.Response(504, json=busy))
+    job = respx.get(f"{URL}/v1/jobs/job_1").mock(
+        return_value=httpx.Response(200, json={"job_id": "job_1", "status": "PENDING"})
+    )
+    ctx = _ctx(client)
+    for _ in range(2):
+        with pytest.raises(TimeoutError):
+            await ctx.verify("an answer", bundle_id="b1")
+    assert client.transport.check_breaker.state == "open"
+    with pytest.raises(CircuitOpenError):
+        await ctx.verify("an answer", bundle_id="b1")
+    assert client.transport.breaker.state == "closed"
+    await ctx.advanced.job("job_1")  # the run's own calls go on
+    assert job.call_count == 1
+
+
+@respx.mock
 async def test_the_circuit_opens_after_failed_calls_and_fails_fast() -> None:
     client, clock = _breaking_client()
     route = respx.get(f"{URL}/v1/jobs/job_1").mock(
