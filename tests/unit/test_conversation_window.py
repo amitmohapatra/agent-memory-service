@@ -29,6 +29,7 @@ from memory_service.modules.context.views import conversation_body
 from memory_service.modules.context.window import (
     MESSAGE_OVERHEAD_TOKENS,
     RUN_RECORD,
+    SURE,
     message_tokens,
     replay_window,
     replayable,
@@ -491,3 +492,47 @@ def test_a_steps_list_with_refs_names_each_result_by_its_message() -> None:
     assert lines[1] == f'1. lookup(q="Top SKUs-0"): ok, result {results[0]}'
     assert lines[2] == f'2. lookup(q="Top SKUs-1"): result {results[1]}'
     assert "result " not in steps_list(turns(units(turn))[0], NOW), "the window's own: no refs"
+
+
+def test_a_failed_run_says_why_in_its_steps_list() -> None:
+    """ "Why did my report fail?" is answered from the run's record: a run that failed says the
+    error the caller recorded (``error``), after its calls."""
+    turn = _turn("Check the stock of SKU-1", ["3 left"], "")[:-1]
+    turn[-1].custom_metadata[RUN_RECORD] = {"status": "OK", "seconds": 0.04}
+    turn.append(_m(A, "Checking the alert."))
+    turn[-1].custom_metadata[RUN_RECORD] = {
+        "status": "ERROR",
+        "seconds": 1.2,
+        "approvals": "none",
+        "error": "Gmail: sign-in expired",
+    }
+    said = steps_list(turns(units(turn))[0], NOW).splitlines()
+    assert "The run: status ERROR, 1.2 s, approvals: none, error: Gmail: sign-in expired." in said
+
+
+def test_a_run_that_failed_before_any_call_still_says_why() -> None:
+    """A run that failed before it called anything has no steps, and still its record says it
+    failed and why: otherwise its question reads as one still unanswered."""
+    turn = [_m(U, "Scheduled task: check the stock of SKU-1")]
+    turn[-1].custom_metadata[RUN_RECORD] = {"status": "ERROR", "error": "Gmail: sign-in expired"}
+    assert steps_list(turns(units(turn))[0], NOW).splitlines() == [
+        'For "Scheduled task: check the stock of SKU-1" (0 calls):',
+        "The run: status ERROR, error: Gmail: sign-in expired.",
+    ]
+
+
+def test_a_turn_with_no_calls_that_did_not_fail_has_no_steps_list() -> None:
+    turn = [_m(U, "Hello"), _m(A, "Hi.")]
+    turn[-1].custom_metadata[RUN_RECORD] = {"status": "SUCCESS", "seconds": 0.5}
+    assert steps_list(turns(units(turn))[0], NOW) == ""
+
+
+def test_a_run_the_harness_says_errored_or_timed_out_is_graded_as_failed() -> None:
+    """The harness writes its own run statuses (``ERROR``, ``TIMEOUT``): a run that ended so is
+    a failed run, however its calls went."""
+    for status in ("ERROR", "TIMEOUT"):
+        turn = _turn("What did ACME close at?", ["123.45"], "123.45 USD.")
+        turn[2].custom_metadata[RUN_RECORD] = {"status": "OK", "sources": "Nasdaq, 2026-10-27"}
+        turn[-1].custom_metadata[RUN_RECORD] = {"status": status}
+        [*_, sure] = steps_list(turns(units(turn))[0], NOW).splitlines()
+        assert sure.endswith(f"How sure, from this record: {SURE[2]}."), (status, sure)

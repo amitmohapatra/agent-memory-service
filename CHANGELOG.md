@@ -7,6 +7,15 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Fixed (service): a failed run says why in its steps list, and the harness's failures count
+
+A turn's run record may carry ``error`` (why its run failed, as text): the steps list says it
+on the run's line ("The run: status ERROR, error: Gmail: sign-in expired."), so "why did my
+report fail?" is answered from the record. A run that failed before it called anything had no
+steps list, and its question read as one still unanswered: it now has its run's line. The
+evidence grade counted only ``FAILED`` and ``TIMED_OUT`` as failed runs, which the harness
+never writes: its ``ERROR`` and ``TIMEOUT`` now grade as failed too.
+
 ### Fixed (SDK): an overloaded answer check no longer cuts a run off from memory
 
 The client had one circuit for every call, and a service too busy to verify answers in time

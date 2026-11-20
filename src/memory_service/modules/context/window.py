@@ -36,9 +36,10 @@ A caller that keeps a run record writes its facts on the messages it records, un
 tool result, ``status``, ``seconds``, ``sources`` (the result's sources, as text), ``fetched``
 (when the call returned: ISO 8601, UTC) and ``max_age`` (the seconds its value stays current,
 when the tool says); on the turn's last message, the run's ``status``, ``seconds`` and
-``approvals`` (as text). The steps list carries what is there, and nothing that is not: the
-fetch time is said there and nowhere else, and each window message carries its facts
-(``WindowMessage.run_record``) for the caller to act on.
+``approvals`` (as text), and a run that failed, its ``error`` (why, as text). The steps list
+carries what is there, and nothing that is not: the fetch time is said there and nowhere else,
+and each window message carries its facts (``WindowMessage.run_record``) for the caller to act
+on.
 
 "Why" and "how sure" are the record's, never the model's own account. A step whose argument
 is a value an earlier step's result returned says so (``from step 2``): the evidence of why it
@@ -75,7 +76,9 @@ QUESTION_CHARS: Final = 120
 FROM_STEP_CHARS: Final = 3
 #: The tool status of a call that succeeded, and the run statuses of a run that did not.
 CALL_OK: Final = "ok"
-RUN_FAILED: Final = frozenset({"FAILED", "CANCELLED", "TIMED_OUT", "REJECTED"})
+#: (the harness's ``RunStatus``: ``ERROR``, ``TIMEOUT``, ``CANCELLED``, ``REJECTED``; and the
+#: names other callers may write)
+RUN_FAILED: Final = frozenset({"ERROR", "TIMEOUT", "FAILED", "CANCELLED", "TIMED_OUT", "REJECTED"})
 #: The grades of the evidence line, from the record alone (the module says when each holds).
 SURE: Final = ("high", "medium", "low")
 #: What the evidence line says of values older than their tools' ``max_age``.
@@ -293,22 +296,25 @@ def steps_list(
     message holding the result: an earlier conversation's, which a later chat reads whole by
     its id, under that thread's read rules), the run's own recorded facts, then its
     :func:`evidence` as of ``now`` (default: the current time); empty for a turn that made no
-    call."""
+    call, unless its run failed: then its run's facts, why among them (a question that reads
+    as unanswered was one whose run failed)."""
     steps = _steps(turn)
-    if not steps:
+    run = _facts(turn[-1][-1])
+    failed = str(run.get("status", "")).upper() in RUN_FAILED
+    if not steps and not failed:
         return ""
     lines = [
         s.line(n, [e.result for e in steps[: n - 1]], ref=refs) for n, s in enumerate(steps, 1)
     ]
-    run = _facts(turn[-1][-1])
     said = [
         f"status {run['status']}" if run.get("status") else None,
         _seconds(run.get("seconds")),
         _said("approvals", run.get("approvals")),
+        _said("error", run.get("error")),
     ]
     told = ", ".join(x for x in said if x)
     head = f"For {_asked(turn)} ({len(lines)} {'call' if len(lines) == 1 else 'calls'}):"
-    sure = evidence(steps, run, now or datetime.now(UTC))
+    sure = evidence(steps, run, now or datetime.now(UTC)) if steps else None
     return "\n".join(
         [head, *lines, *([f"The run: {told}."] if told else []), *([sure] if sure else [])]
     )
