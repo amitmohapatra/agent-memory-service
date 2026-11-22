@@ -334,6 +334,48 @@ async def test_the_probe_refuses_an_endpoint_that_does_not_answer_models(status:
         await _probe(lambda request: httpx.Response(status))(Endpoint(base_url=BASE, api_key="k"))
 
 
+async def test_the_probe_asks_the_named_model_where_the_endpoint_lists_none() -> None:
+    """An endpoint need not list its models to serve them: Anthropic's own answers 400 to a
+    bearer ``GET /models`` (it wants a header of its API there) and serves chat completions with
+    the same key. Refused at ``/models``, every agent on it fell back to the service's own
+    settings — none, in a deployment that has only the harness's: summaries cut to a first
+    sentence, extraction off, said once in a log line. With a model named, the probe asks what
+    the service will ask: one short completion."""
+    seen: list[tuple[str, str]] = []
+
+    def endpoint(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path))
+        if request.url.path.endswith("/models"):
+            return httpx.Response(400, json={"error": "anthropic-version: header is required"})
+        assert request.headers["authorization"] == "Bearer k"
+        assert json.loads(request.content)["model"] == "m"
+        return httpx.Response(200, json=_openai("OK"))
+
+    await _probe(endpoint)(Endpoint(base_url=BASE, api_key="k", model="m"))
+    assert seen == [("GET", "/v1/models"), ("POST", "/v1/chat/completions")]
+
+
+@pytest.mark.parametrize("status", [401, 403])
+async def test_the_probe_does_not_ask_a_model_with_a_key_the_endpoint_refused(status: int) -> None:
+    seen: list[str] = []
+
+    def endpoint(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        return httpx.Response(status)
+
+    with pytest.raises(ValidationFailed, match=f"answered {status}"):
+        await _probe(endpoint)(Endpoint(base_url=BASE, api_key="k", model="m"))
+    assert seen == ["/v1/models"]
+
+
+async def test_the_probe_refuses_an_endpoint_whose_named_model_does_not_answer() -> None:
+    def endpoint(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404 if request.method == "POST" else 400)
+
+    with pytest.raises(ValidationFailed, match="chat/completions answered 404"):
+        await _probe(endpoint)(Endpoint(base_url=BASE, api_key="k", model="m"))
+
+
 @pytest.mark.parametrize(
     ("fields", "why"),
     [

@@ -77,6 +77,13 @@ log = get_logger(__name__)
 MAX_ENDPOINT_CLIENTS = 256
 #: The registration probe's budget: a reachable endpoint lists its models well inside it.
 PROBE_TIMEOUT_SECONDS = 5.0
+#: The answers to the probe that say the endpoint refused the key: no model is asked then.
+KEY_REFUSED = frozenset({401, 403})
+
+
+def _asked(model: str) -> dict[str, Any]:
+    """The probe's one completion: the shortest question, with no option a model may refuse."""
+    return {"model": model, "messages": [{"role": "user", "content": "Reply with OK."}]}
 
 
 @dataclass(frozen=True)
@@ -136,9 +143,10 @@ def _http_client(
 
 class HttpEndpointProbe:
     """``ports.credentials.EndpointProbe``: ``GET /models`` with the endpoint's own route and
-    auth, before an endpoint is stored. An address only the harness's machine resolves (its
-    loopback address, a compose service name of its own) is refused here, not at the first
-    memory call."""
+    auth, before an endpoint is stored — and, where the endpoint does not list its models
+    (any answer but a refused key), one short completion by the model it names. An address
+    only the harness's machine resolves (its loopback address, a compose service name of its
+    own) is refused here, not at the first memory call."""
 
     def __init__(self, *, http: httpx.AsyncBaseTransport | None = None) -> None:
         self.http = http
@@ -161,12 +169,29 @@ class HttpEndpointProbe:
                     "does not work from here.",
                     details={"base_url": endpoint.base_url},
                 ) from exc
-        if not response.is_success:
-            raise ValidationFailed(
-                f"GET {where} answered {response.status_code}: check the endpoint's key and "
-                "auth, and that base_url is the API root (it usually ends in /v1).",
-                details={"base_url": endpoint.base_url, "status": response.status_code},
-            )
+            if response.is_success:
+                return
+            asked, status = f"GET {where}", response.status_code
+            if status not in KEY_REFUSED and endpoint.model:
+                # an endpoint need not list its models to serve them (Anthropic's own wants a
+                # header of its API at ``/models`` and none for a completion): with a model
+                # named, what the service will ask of it decides — one short completion
+                asked = f"POST {endpoint.base_url.rstrip('/')}/chat/completions"
+                try:
+                    said = await client.post("/chat/completions", json=_asked(endpoint.model))
+                except httpx.HTTPError as exc:
+                    raise ValidationFailed(
+                        f"The memory service cannot reach {asked} ({type(exc).__name__}).",
+                        details={"base_url": endpoint.base_url},
+                    ) from exc
+                if said.is_success:
+                    return
+                status = said.status_code
+        raise ValidationFailed(
+            f"{asked} answered {status}: check the endpoint's key and "
+            "auth, and that base_url is the API root (it usually ends in /v1).",
+            details={"base_url": endpoint.base_url, "status": status},
+        )
 
 
 @dataclass(frozen=True)
