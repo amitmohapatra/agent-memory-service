@@ -7,6 +7,16 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Fixed (service): an endpoint that does not list its models is not refused for it
+
+The registration probe asked `GET /models` and refused the endpoint on any answer but a
+success. Anthropic's own endpoint answers 400 there to a bearer key (it wants a header of its
+API) and serves chat completions with the same key, so every agent on it fell back to the
+service's own settings — none, in a deployment that has only the harness's: summaries cut to a
+first sentence and extraction off, said once in a log line. With a model named, any answer
+but a refused key (401, 403) is now followed by one short completion by that model, which
+decides.
+
 ### Fixed (service): a failed run says why in its steps list, and the harness's failures count
 
 A turn's run record may carry ``error`` (why its run failed, as text): the steps list says it
