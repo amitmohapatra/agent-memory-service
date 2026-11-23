@@ -1,6 +1,6 @@
 """The conversation window in the messages form, through the API on PostgreSQL: the caller's
 ``conversation_token_budget``, turns from the store in layers (``conversation_max_messages``
-counts turns) - each turn's steps list, its text, the newest turn whole when it fits - the
+counts turns) - each turn's steps list, its text, the turns whole while they fit - the
 newest turn's text and steps always, ``conversation.over_budget`` when they alone are over the
 budget, the run-record facts a caller writes carried by the steps list, and the evidence
 status labelled as long-term memory's.
@@ -119,10 +119,12 @@ def test_a_10k_character_tool_result_comes_back_with_its_question_and_call(api) 
     assert [r for r, _ in _said(sized)] == ["USER", "ASSISTANT", "TOOL", "ASSISTANT"]
     assert SOURCE in _said(sized)[2][1] and "over_budget" not in sized["conversation"]
     _pairs_whole(sized)
-    # the question written first, then asked: the earlier turn as its text and steps list
+    # the question written first, then asked: the earlier turn is still whole, as a
+    # framework's checkpoint keeps it
     _post(api, thread, {"role": "USER", "content": "Where did you get that answer?"})
     both = _context(api, thread, "Where did you get that answer?", conversation_token_budget=8000)
-    assert [r for r, _ in _said(both)] == ["USER", "ASSISTANT", "USER"]
+    assert [r for r, _ in _said(both)] == ["USER", "ASSISTANT", "TOOL", "ASSISTANT", "USER"]
+    _pairs_whole(both)
 
 
 def test_twelve_calls_in_one_turn_are_read_and_listed(api) -> None:

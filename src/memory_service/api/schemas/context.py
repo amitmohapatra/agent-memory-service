@@ -323,7 +323,8 @@ class ConversationBody(BaseModel):
 
     thread_id: str | None = Field(default=None, description="The thread the window comes from.")
     messages: list[WindowMessageBody] = Field(
-        description="The thread's most recent messages after its summary, oldest first; a "
+        description="The thread's most recent messages, oldest first (rendered: those after "
+        "its summary; window_format=messages: those its budget holds); a "
         "tool call and its results are never parted."
     )
     over_budget: bool | None = Field(

@@ -17,13 +17,17 @@ A turn is given in layers, each cheaper than the one before and kept longer:
   it, never a message: replayed as an ASSISTANT message, a model read it as its own claim
   and disowned it. A chat template that does not render tool calls still renders the context;
 * its *text*: the question and what the agent said, without the calls and their results;
-* *whole*: the calls and their results too - the newest turn only, when it fits; an older
-  result is never replayed (it would read as a fresh one).
+* *whole*: the calls and their results too - from the newest turn back, while they fit: a
+  follow-up two questions on ("why that one?") is about the figures an older turn's calls
+  returned, and a thread a framework checkpoints keeps them. Each result carries when it was
+  fetched and its tool's age (``WindowMessage.run_record``), for the caller to mark the ones
+  out of date; the steps list's evidence line says it too.
 
 The budget is spent from the newest turn back, layer by layer: every turn's steps list (a
 turn without calls: its text) until the first that does not fit (a window has no gaps), then
-the turns' text from the newest back, then the newest turn whole. Short of space, the full
-results go first and the steps lists last. The newest turn's question, answer and steps list
+the turns' text from the newest back, then the turns whole from the newest back. Short of
+space, the full results go first (the oldest before the newer) and the steps lists last.
+The newest turn's question, answer and steps list
 are always given, even when they alone are over the budget: the window then says so
 (``ConversationWindow.over_budget``) and the caller trims it to its model's context with its
 own library (LangChain's ``trim_messages``). At most ``max_turns`` turns are given. Messages
@@ -388,13 +392,26 @@ def _texts(layers: Sequence[Layers], kept: int, used: int, budget: int) -> tuple
     return texts, used
 
 
-def _shown_turns(layers: Sequence[Layers], texts: int, *, full: bool) -> list[WindowMessage]:
+def _wholes(layers: Sequence[Layers], texts: int, used: int, budget: int) -> tuple[int, int]:
+    """How many of the ``texts`` turns, from the newest back, give their calls and results
+    too (a turn without calls is whole as its text), and the tokens used then."""
+    wholes = 0
+    for turn in layers[:texts]:
+        if turn.steps is not None:
+            if used + turn.cost("whole") > budget:
+                break
+            used += turn.cost("whole")
+        wholes += 1
+    return wholes, used
+
+
+def _shown_turns(layers: Sequence[Layers], texts: int, wholes: int) -> list[WindowMessage]:
     """The messages of ``layers`` (newest first), oldest first: the newest ``texts`` turns'
-    text, and the newest turn whole when ``full``."""
+    text, and the newest ``wholes`` of them whole."""
     return [
         m
         for n, turn in reversed(list(enumerate(layers)))
-        for m in turn.messages(text=n < texts, whole=n == 0 and full)
+        for m in turn.messages(text=n < texts, whole=n < wholes and turn.steps is not None)
     ]
 
 
@@ -419,11 +436,8 @@ def replay_window(
         return ConversationWindow(thread_id=thread_id, form=WindowFormat.MESSAGES)
     kept, used = _cores(layers, token_budget)
     texts, used = _texts(layers, kept, used, token_budget)
-    newest = layers[0]
-    full = newest.steps is not None and used + newest.cost("whole") <= token_budget
-    if full:
-        used += newest.cost("whole")
-    shown = _shown_turns(layers[:kept], texts, full=full)
+    wholes, used = _wholes(layers, texts, used, token_budget)
+    shown = _shown_turns(layers[:kept], texts, wholes)
     return ConversationWindow(
         thread_id=thread_id,
         message_ids=[m.message_id for m in shown],

@@ -7,7 +7,9 @@ message triggered it) the fold is abstractive; without one the stored summary is
 extractive digest (a line per message: role, first sentence and the sentences that fit after
 it), so every thread has one.
 
-The pushed context carries the latest summary and only the messages after it.
+The pushed context carries the latest summary and, as rendered text, only the messages
+after it; the messages form (``window_format=messages``) is cut by its own budget, and gives
+the turns the summary covers too while they fit.
 """
 
 from __future__ import annotations

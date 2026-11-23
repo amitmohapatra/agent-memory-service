@@ -1167,16 +1167,21 @@ class ContextBuilder:
         form: WindowFormat,
         token_budget: int,
     ) -> ConversationWindow:
-        """The messages after the thread's durable summary (which covers everything up to
-        ``after``) that fit ``token_budget``, in the form asked for."""
+        """The thread's recent messages that fit ``token_budget``, in the form asked for. The
+        rendered text gives those after the thread's durable summary (which covers everything
+        up to ``after``). The messages form is cut by its budget and its turns alone: a caller
+        that replays the thread as its model's own conversation, in a budget sized for that
+        model, gets the turns the summary covers too, word for word, as a framework's
+        checkpoint would keep them (a summary of twenty messages is two turns of calls)."""
         if not ctx.thread_id or not messages:
             return ConversationWindow(thread_id=ctx.thread_id, form=form)
-        after_summary = [m for m in messages if m.sequence > after]
         if form is WindowFormat.MESSAGES:
             return replay_window(
-                ctx.thread_id, after_summary, token_budget, self.cfg.conversation_max_messages
+                ctx.thread_id, messages, token_budget, self.cfg.conversation_max_messages
             )
-        return render_window(ctx.thread_id, after_summary, token_budget)
+        return render_window(
+            ctx.thread_id, [m for m in messages if m.sequence > after], token_budget
+        )
 
     def _below_floor(self, c: Candidate, slot: slots.Slot | None = None) -> bool:
         """A ranked item whose similarity to the question is under the floor is not packed:

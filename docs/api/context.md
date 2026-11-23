@@ -171,12 +171,14 @@ harness, not by the model or the user (replayed as an `ASSISTANT` message, a mod
 list as its own claim and disowned it). A chat template that does not render tool calls still
 shows them.
 Each turn has three layers, each kept longer than the next: its steps list; its text (the
-question and what the agent said); and, for the newest turn only, the calls and their results
-themselves (an older result is never replayed: it would read as a fresh one). The budget is
+question and what the agent said); and the calls and their results themselves, from the newest
+turn back while they fit (each result carries when it was fetched and its tool's age in `run_record`, for you to mark the
+ones out of date). The messages form is cut by its budget alone: it reaches back over the
+turns the thread's summary covers too. The budget is
 `conversation_token_budget` (100-1000000 tokens; omitted: the service's 2,000), spent from the
 newest turn back layer by layer: every turn's steps list (a turn without calls: its text) back
-to the first that does not fit, then the turns' text from the newest back, then the newest
-turn's calls and results; at most 20 turns (`conversation_max_messages`). Short of space the
+to the first that does not fit, then the turns' text from the newest back, then the turns'
+calls and results from the newest back; at most 20 turns (`conversation_max_messages`). Short of space the
 results go first and the steps lists last. The newest turn's question, answer and steps list
 are always given, even when they alone are over the budget: `conversation.over_budget` is then
 `true` (absent otherwise), and the caller trims them to its model's context with its own

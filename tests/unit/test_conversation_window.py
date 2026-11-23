@@ -1,6 +1,6 @@
 """The messages form of the conversation window (``modules/context/window.py``): in order, a
 tool call never parted from its results, cut from the newest turn back in layers - every
-turn's steps list, then its text, then the newest turn whole - the newest turn's text and steps
+turn's steps list, then its text, then the turns whole - the newest turn's text and steps
 always (flagged when they alone are over the budget). The steps lists are the window's run
 record, rendered in the context: never a message the model would read as its own."""
 
@@ -200,7 +200,7 @@ def test_the_run_record_is_in_the_context_and_no_message_is_put_in_the_agent_s_m
     heading that says who wrote it; the agent's own answer stays its message."""
     turn = _turn("What did ACME close at?", ["123.45"], "123.45 USD.")
     window = replay_window("thr", [*turn, _m(U, "Where is that from?")], 100_000)
-    assert [(m.role, m.text) for m in window.messages if m.role == "ASSISTANT"] == [
+    assert [(m.role, m.text) for m in window.messages if m.role == "ASSISTANT" and m.text] == [
         ("ASSISTANT", "123.45 USD.")
     ]
     bundle = ContextBundle(
@@ -267,13 +267,35 @@ def test_a_10k_character_tool_result_replays_with_its_question_and_call() -> Non
     _whole_pairs(w)
 
 
-def test_an_older_turn_never_replays_its_results() -> None:
+def test_an_older_turn_replays_its_results_while_the_budget_holds_them() -> None:
+    """A follow-up two questions on ("why that one?") is about the figures the first turn's
+    calls returned: a thread a framework checkpoints keeps them, so the window does too. Each
+    carries its run record (when it was fetched, its tool's age), for the caller to mark what
+    is out of date."""
     first = _turn("What did ACME close at?", ["123.45"], "123.45 USD.")
+    first[2].custom_metadata[RUN_RECORD] = {"fetched": "2026-01-01T00:00:00Z", "max_age": 60}
+    asked = _turn("And is that high?", [], "It is its highest this year.")
     second = _m(U, "And ZETA?")
-    w = replay_window("thr", [*first, second], 100_000)
-    assert [m.role for m in w.messages] == ["USER", "ASSISTANT", "USER"]
-    assert not any(m.tool_calls for m in w.messages) and len(_steps(w)) == 1
-    assert w.message_ids == [first[0].message_id, first[-1].message_id, second.message_id]
+    w = replay_window("thr", [*first, *asked, second], 100_000)
+    assert [m.role for m in w.messages] == [
+        "USER", "ASSISTANT", "TOOL", "ASSISTANT", "USER", "ASSISTANT", "USER",
+    ]  # fmt: skip
+    assert w.message_ids == [m.message_id for m in (*first, *asked, second)]
+    assert w.messages[2].run_record == {"fetched": "2026-01-01T00:00:00Z", "max_age": 60}
+    assert len(_steps(w)) == 1 and not w.over_budget
+    _whole_pairs(w)
+
+
+def test_short_of_space_the_oldest_results_go_first() -> None:
+    old = _turn("oldest", ["x" * 2000], "old answer")
+    mid = _turn("middle", ["m" * 2000], "middle answer")
+    new = _turn("newest", ["n" * 2000], "new answer")
+    thread = [*old, *mid, *new]
+    kept = [
+        [m.text[0] for m in replay_window("thr", thread, budget).messages if m.role == "TOOL"]
+        for budget in (100_000, _cost(thread) - 300, _cost(new) + 300, 300)
+    ]
+    assert kept == [["x", "m", "n"], ["m", "n"], ["n"], []]
 
 
 def test_twelve_calls_in_one_turn_list_twelve_steps() -> None:
@@ -536,3 +558,38 @@ def test_a_run_the_harness_says_errored_or_timed_out_is_graded_as_failed() -> No
         turn[-1].custom_metadata[RUN_RECORD] = {"status": status}
         [*_, sure] = steps_list(turns(units(turn))[0], NOW).splitlines()
         assert sure.endswith(f"How sure, from this record: {SURE[2]}."), (status, sure)
+
+
+def test_the_messages_form_reaches_back_over_the_turns_the_summary_covers() -> None:
+    """A summary rolls forward every twenty messages - two turns of calls - and the window
+    used to start after it: a ReAct agent's fifth question was sent a digest and the turn
+    before, where a checkpointed thread was sent the conversation. The messages form is cut by
+    its budget; the rendered text still starts after the summary, which stands for the rest."""
+    from types import SimpleNamespace
+
+    from memory_service.domain.context import MemoryExecutionContext
+    from memory_service.modules.context.builder import ContextBuilder
+
+    first = _turn("What did ACME close at?", ["123.45 " + "t" * 2000], "123.45 USD.")
+    second = _turn("And ZETA?", ["67.89"], "67.89 USD.")
+    builder = SimpleNamespace(cfg=SimpleNamespace(conversation_max_messages=20))
+    ctx = MemoryExecutionContext(tenant_id="t", user_id="u", thread_id="thr")
+
+    def window(form: WindowFormat, budget: int) -> ConversationWindow:
+        return ContextBuilder._window(
+            builder,  # type: ignore[arg-type]
+            ctx,
+            [*first, *second],
+            after=first[-1].sequence,
+            form=form,
+            token_budget=budget,
+        )
+
+    replayed = window(WindowFormat.MESSAGES, 100_000)
+    assert replayed.message_ids == [m.message_id for m in (*first, *second)]
+    _whole_pairs(replayed)
+    tight = window(WindowFormat.MESSAGES, _cost(second) + 200)  # the budget still bounds it
+    assert [m.text for m in tight.messages if m.role == "TOOL"] == ["67.89"]
+    assert window(WindowFormat.RENDERED, 100_000).message_ids == [
+        m.message_id for m in second if m.role is not T
+    ]
