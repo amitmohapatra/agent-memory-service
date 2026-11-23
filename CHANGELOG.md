@@ -7,6 +7,22 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service): the messages window replays older turns whole, over the summary too
+
+`window_format=messages` gave only the newest turn's calls and results, and only the messages
+after the thread's summary — which rolls forward every twenty messages, two turns of calls. An
+agent that keeps no thread of its own (the harness's `ReAct`) was sent no earlier tool result
+on its third question and a digest on its fifth, where a framework's checkpoint is sent the
+conversation; a follow-up about an earlier figure ("why that one?") was answered from the
+answer's prose. The window is now cut by `conversation_token_budget` alone: turns whole from
+the newest back while they fit (short of space the oldest results go first), over the turns
+the summary covers too. Each result carries when it was fetched and its tool's age
+(`run_record`) for the caller to mark the ones out of date; the rendered form is unchanged.
+
+Measured with the harness's hard set (320 questions every run was scored on, three runs each,
+one model): `ReAct` on Deep Agents 97.2% (310, 312, 311) with it; 95.9% on the one clean run
+without it; Claude Code 96.4% (two runs).
+
 ### Fixed (service): an endpoint that does not list its models is not refused for it
 
 The registration probe asked `GET /models` and refused the endpoint on any answer but a
