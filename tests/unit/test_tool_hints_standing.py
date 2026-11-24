@@ -30,6 +30,7 @@ from tests.unit.test_tool_learning import (
     NEVER_AT_S40,
     RULE,
     STOCK_RULE_TASK,
+    _described,
     _HintsUow,
     _procedure,
     _rules,
@@ -251,3 +252,71 @@ async def test_a_context_build_reads_the_standing_rules_once(monkeypatch) -> Non
     assert bundle.tools is not None
     assert bundle.tools.forbidden == {"create_stock_rule": NEVER_AT_S40}
     assert bundle.tools.next is None
+
+
+# ---------------------------------------------------------------- a change nobody asked for
+
+
+class _Found:
+    """A tool index that finds what it is told to."""
+
+    def __init__(self, *found: ToolMatch) -> None:
+        self.found = list(found)
+
+    async def encode(self, task: str) -> _Vectors:
+        return _Vectors()
+
+    async def search(self, *_: object, **__: object) -> list[ToolMatch]:
+        return self.found
+
+
+async def _after_an_export(task: str, *found: ToolMatch) -> ToolHints:
+    """A skill learned from runs that exported a report, in a chat whose words match its
+    pattern: the export is the plan's next step, and ranks first on the plan's bonus."""
+    export = _described("export_report", skus=("array", "The SKUs to export."))
+    export = export.model_copy(update={"side_effects": "write"})
+    stock = _described("stock_level", sku=("string", "The SKU's id.")).model_copy(
+        update={"side_effects": "read"}
+    )
+    learned = _procedure(task_pattern(task), ["export_report"], success_rate=1.0, support=3)
+    service = ToolHintsService(
+        lambda: _HintsUow([export, stock], [learned]),  # type: ignore[arg-type,return-value]
+        _Found(*found),  # type: ignore[arg-type]
+        None,
+    )
+    return await service.hints(
+        CTX, task, available=["export_report", "stock_level"], k=5, scope_keys=["user:acme/u1"]
+    )
+
+
+async def test_a_tool_that_changes_something_leads_only_a_task_whose_words_are_closest_to_it() -> (
+    None
+):
+    """ "Compare it with today's numbers and explain the differences." ends with no question
+    mark, and the learned plan's next step was the export that began the chat: the hint named
+    the export as the next step, an agent called it, and the turn paused for an approval of a
+    change nobody asked for (three of eight runs). A plan's bonus alone no longer makes a
+    changing tool lead: the task's own words must be closest to it."""
+    compare = "Compare it with today's numbers and explain the differences."
+    hints = await _after_an_export(
+        compare, ToolMatch("stock_level", 0.52), ToolMatch("export_report", 0.31)
+    )
+    assert hints.next == "stock_level"
+    asked_for = await _after_an_export(
+        "Export the stock report for SKU-1 to SKU-5.",
+        ToolMatch("export_report", 0.8),
+        ToolMatch("stock_level", 0.4),
+    )
+    assert asked_for.next == "export_report"
+
+
+def test_a_plan_under_way_goes_on_to_its_step_that_changes_something() -> None:
+    """Look the price up, then update the quote: once the run has taken the first step, the
+    update leads, whichever tool the task's words are closest to."""
+    update = _described("update_quote", quote=("string", "The quote's id."))
+    entries = {"update_quote": update}
+    found = [ToolMatch("lookup_price", 0.9), ToolMatch("update_quote", 0.6)]
+    task = "update quote Q-1 with the list price for SKU-22"
+    leads = hints_module._plan_leads
+    assert leads("update_quote", task, entries, found) is None
+    assert leads("update_quote", task, entries, found, under_way=True) == "update_quote"

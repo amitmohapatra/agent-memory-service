@@ -206,6 +206,29 @@ def _may_lead(tool: str | None, task: str, entries: dict[str, ToolDescriptor]) -
     return None
 
 
+def _plan_leads(
+    tool: str | None,
+    task: str,
+    entries: dict[str, ToolDescriptor],
+    found: Sequence[ToolMatch],
+    *,
+    under_way: bool = False,
+) -> str | None:
+    """The learned plan's next step as the next step (:func:`_may_lead`) — a tool that changes
+    something only when the task's own words are closest to it (the search's best match), or
+    the run has already taken a step of the plan (``under_way``: it is following it). A
+    request with no question mark is not always one to change something ("Compare it with
+    today's numbers and explain the differences."), and a plan whose first step exported a
+    report named the export as the next step of that comparison: an agent called it, and the
+    turn waited for an approval of a change nobody asked for. Its plan's bonus alone leads no
+    change; a tool that only reads leads as before."""
+    tool = _may_lead(tool, task, entries)
+    if tool is None or under_way or not _changes(entries.get(tool)):
+        return tool
+    best = max(found, key=lambda match: match.relevance, default=None)
+    return tool if best is not None and best.name == tool and best.matches else None
+
+
 def _rescored(
     candidates: Sequence[ToolCandidate],
     found: Sequence[ToolMatch],
@@ -460,7 +483,7 @@ class ToolHintsService:
                 if ctx.agent_run_id
                 else []
             )
-        step = _may_lead(next_tool(plan, done), task, entries)
+        step = _plan_leads(next_tool(plan, done), task, entries, found, under_way=bool(done))
         candidates = _candidates(found, plan, step, stats, available, min(k, HINTS_K_MAX))
         # every candidate's arguments, not only the next step's: the caller may take another
         prefill, missing = await self._every_argument(
@@ -475,7 +498,9 @@ class ToolHintsService:
             # the plan's next step is a call the user's standing rule forbids: it leads nothing
             step = None
             candidates = _rescored(candidates, found, plan, stats, available)
-        tool = step or next((c.name for c in candidates if _may_lead(c.name, task, entries)), None)
+        tool = step or next(
+            (c.name for c in candidates if _plan_leads(c.name, task, entries, found)), None
+        )
         hints = ToolHints(
             candidates=candidates,
             plan=_plan_hint(plan),

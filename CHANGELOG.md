@@ -7,6 +7,16 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Fixed (service): a tool that changes something is not the next step of a task that did not ask for it
+
+A tool that changes something never led a question; a task with no question mark counted as
+a request to act. "Compare it with today's numbers and explain the differences." has none,
+and a plan learned from the chat's first turn named its export as the next step: an agent
+called it and the turn waited for an approval of a change nobody asked for (three of eight
+runs of one benchmark chat). Such a tool now leads only when the task's own words are
+closest to it, or when the run has already taken a step of the plan it belongs to; a tool
+that only reads leads as before.
+
 ### Fixed (service): two publishers of one tool at once both succeed
 
 `PUT /v1/tools/catalog` looked for the entry and inserted it when there was none: two
