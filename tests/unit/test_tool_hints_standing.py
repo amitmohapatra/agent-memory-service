@@ -30,7 +30,6 @@ from tests.unit.test_tool_learning import (
     NEVER_AT_S40,
     RULE,
     STOCK_RULE_TASK,
-    _described,
     _HintsUow,
     _procedure,
     _rules,
@@ -254,69 +253,84 @@ async def test_a_context_build_reads_the_standing_rules_once(monkeypatch) -> Non
     assert bundle.tools.next is None
 
 
-# ---------------------------------------------------------------- a change nobody asked for
+# ------------------------------------------------- a change is asked for in this message
 
 
-class _Found:
-    """A tool index that finds what it is told to."""
+class _Searched:
+    """A tool index that finds one list for the conversation-widened search text and
+    another for the message's own words (told apart by the vectors searched with)."""
 
-    def __init__(self, *found: ToolMatch) -> None:
-        self.found = list(found)
+    def __init__(self, widened: list[ToolMatch], own: list[ToolMatch]) -> None:
+        self.wide, self.own = _Vectors(), _Vectors()
+        self.found = {id(self.wide): widened, id(self.own): own}
 
     async def encode(self, task: str) -> _Vectors:
-        return _Vectors()
+        return self.wide
 
-    async def search(self, *_: object, **__: object) -> list[ToolMatch]:
-        return self.found
+    async def search(self, *_: object, vectors: Any = None, **__: object) -> list[ToolMatch]:
+        return self.found[id(vectors)]
 
 
-async def _after_an_export(task: str, *found: ToolMatch) -> ToolHints:
-    """A skill learned from runs that exported a report, in a chat whose words match its
-    pattern: the export is the plan's next step, and ranks first on the plan's bonus."""
+def _export_and_stock() -> list[Any]:
+    from tests.unit.test_tool_learning import _described
+
     export = _described("export_report", skus=("array", "The SKUs to export."))
-    export = export.model_copy(update={"side_effects": "write"})
-    stock = _described("stock_level", sku=("string", "The SKU's id.")).model_copy(
-        update={"side_effects": "read"}
-    )
-    learned = _procedure(task_pattern(task), ["export_report"], success_rate=1.0, support=3)
+    stock = _described("stock_level", sku=("string", "The SKU's id."))
+    return [
+        export.model_copy(update={"side_effects": "write"}),
+        stock.model_copy(update={"side_effects": "read"}),
+    ]
+
+
+async def _follow_up_hints(
+    widened: list[ToolMatch], own: list[ToolMatch], *, follow_up: bool
+) -> ToolHints:
+    index = _Searched(widened, own)
     service = ToolHintsService(
-        lambda: _HintsUow([export, stock], [learned]),  # type: ignore[arg-type,return-value]
-        _Found(*found),  # type: ignore[arg-type]
+        lambda: _HintsUow(_export_and_stock(), []),  # type: ignore[arg-type,return-value]
+        index,  # type: ignore[arg-type]
         None,
     )
     return await service.hints(
-        CTX, task, available=["export_report", "stock_level"], k=5, scope_keys=["user:acme/u1"]
+        CTX,
+        "Compare it with today's numbers and explain the differences.",
+        available=["export_report", "stock_level"],
+        k=5,
+        scope_keys=["user:acme/u1"],
+        vectors=index.wide,  # type: ignore[arg-type]
+        own_vectors=index.own if follow_up else None,  # type: ignore[arg-type]
     )
 
 
-async def test_a_tool_that_changes_something_leads_only_a_task_whose_words_are_closest_to_it() -> (
-    None
-):
-    """ "Compare it with today's numbers and explain the differences." ends with no question
-    mark, and the learned plan's next step was the export that began the chat: the hint named
-    the export as the next step, an agent called it, and the turn paused for an approval of a
-    change nobody asked for (three of eight runs). A plan's bonus alone no longer makes a
-    changing tool lead: the task's own words must be closest to it."""
-    compare = "Compare it with today's numbers and explain the differences."
-    hints = await _after_an_export(
-        compare, ToolMatch("stock_level", 0.52), ToolMatch("export_report", 0.31)
-    )
-    assert hints.next == "stock_level"
-    asked_for = await _after_an_export(
-        "Export the stock report for SKU-1 to SKU-5.",
-        ToolMatch("export_report", 0.8),
-        ToolMatch("stock_level", 0.4),
-    )
-    assert asked_for.next == "export_report"
+async def test_a_change_is_hinted_only_from_the_message_s_own_words() -> None:
+    """A short follow-up whose own search found nothing close is searched again with the
+    chat's earlier messages in its text ("Export a stock report for ... What's in that file?
+    Compare it with today's numbers ..."): the export those earlier words asked for ranked
+    first, scored 0.74 and was named the next step, its arguments asked for — and an agent
+    shown the earlier call's arguments made it again, the turn waiting for an approval
+    nobody asked for. What to look up may follow from the conversation; a change is asked
+    for in this message: a tool that changes something is matched by its own words."""
+    widened = [ToolMatch("export_report", 1.0), ToolMatch("stock_level", 0.7)]
+    own = [
+        ToolMatch("stock_level", 1.0, matches=False),
+        ToolMatch("export_report", 0.4, matches=False),
+    ]
+    hints = await _follow_up_hints(widened, own, follow_up=True)
+    by_name = {c.name: c for c in hints.candidates}
+    assert hints.next == "stock_level" and hints.candidates[0].name == "stock_level"
+    assert by_name["export_report"].confidence < 0.2
+    assert all(m.tool != "export_report" for m in hints.missing)
+    # a read follows the conversation as before: its match is the widened search's
+    assert by_name["stock_level"].confidence == 0.5  # 1 - e^-0.7: as found
 
 
-def test_a_plan_under_way_goes_on_to_its_step_that_changes_something() -> None:
-    """Look the price up, then update the quote: once the run has taken the first step, the
-    update leads, whichever tool the task's words are closest to."""
-    update = _described("update_quote", quote=("string", "The quote's id."))
-    entries = {"update_quote": update}
-    found = [ToolMatch("lookup_price", 0.9), ToolMatch("update_quote", 0.6)]
-    task = "update quote Q-1 with the list price for SKU-22"
-    leads = hints_module._plan_leads
-    assert leads("update_quote", task, entries, found) is None
-    assert leads("update_quote", task, entries, found, under_way=True) == "update_quote"
+async def test_a_change_the_message_itself_asks_for_is_hinted_as_before() -> None:
+    """ "Export it again for SKU-20": the message's own words match the export, and with no
+    follow-up search at all nothing changes."""
+    widened = [ToolMatch("export_report", 1.0), ToolMatch("stock_level", 0.7)]
+    own = [ToolMatch("export_report", 1.0), ToolMatch("stock_level", 0.3, matches=False)]
+    asked = await _follow_up_hints(widened, own, follow_up=True)
+    assert asked.next == "export_report"
+    assert any(m.tool == "export_report" for m in asked.missing)
+    alone = await _follow_up_hints(widened, widened, follow_up=False)
+    assert alone.next == "export_report"

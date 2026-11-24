@@ -284,6 +284,7 @@ class ContextSections:
         memories: Sequence[ContextItem],
         profile: Sequence[ProfileBlockView],
         vectors: QueryVectors | None,
+        own_vectors: QueryVectors | None = None,
     ) -> ToolHints:
         return await self.services.tool_hints.hints(
             ctx,
@@ -294,6 +295,7 @@ class ContextSections:
             memories=memories,
             profile=profile,
             vectors=vectors,
+            own_vectors=own_vectors,
         )
 
     async def _profile(self, ctx: MemoryExecutionContext) -> list[ProfileBlockView]:

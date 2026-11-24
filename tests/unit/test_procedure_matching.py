@@ -270,7 +270,9 @@ class _Gathering:
         self.seen.append(await vectors)
         return Pinned()
 
-    async def tools(self, ctx, query, request, visibility, *, memories, profile, vectors):
+    async def tools(
+        self, ctx, query, request, visibility, *, memories, profile, vectors, own_vectors=None
+    ):
         return ToolHints()
 
 

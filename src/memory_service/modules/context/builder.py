@@ -741,10 +741,11 @@ class ContextBuilder:
             await self._similarity_and_standing(
                 query, visibility, result, pinned, standing.task, ctx.workspace_id
             )
+        asked = result
         result = await self._followed_up(
             ctx, query, document_ids, visibility, result, asked_before, timings
         )
-        await self._add_extras(ctx, query, tools, visibility, result, pinned, timings)
+        await self._add_extras(ctx, query, tools, visibility, result, pinned, timings, asked)
         # the engine's own stage split, plus what happened around it
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
         beliefs = await self._beliefs(ctx, query, visibility, result)
@@ -841,6 +842,7 @@ class ContextBuilder:
         result: RetrievalResult,
         pinned: Pinned,
         timings: Timings,
+        asked: RetrievalResult | None = None,
     ) -> None:
         """Working memory ahead of the ranked memories, the tool hints (which read the
         memories in hand and the profile), and the learned skills' steps a standing rule of
@@ -870,6 +872,12 @@ class ContextBuilder:
                     ],
                     profile=pinned.profile,
                     vectors=result.query_vectors,
+                    # searched again with the chat's earlier messages (``asked``: the message's
+                    # own search): the hints also read what its own words found, a change
+                    # being asked for in this message
+                    own_vectors=(
+                        asked.query_vectors if asked is not None and asked is not result else None
+                    ),
                 )
         pinned.procedures = ruled(pinned.procedures, query, pinned.profile, pinned.tools)
 

@@ -7,15 +7,21 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
-### Fixed (service): a tool that changes something is not the next step of a task that did not ask for it
+### Fixed (service): a follow-up's tool hints never ask for a change only earlier messages asked for
 
-A tool that changes something never led a question; a task with no question mark counted as
-a request to act. "Compare it with today's numbers and explain the differences." has none,
-and a plan learned from the chat's first turn named its export as the next step: an agent
-called it and the turn waited for an approval of a change nobody asked for (three of eight
-runs of one benchmark chat). Such a tool now leads only when the task's own words are
-closest to it, or when the run has already taken a step of the plan it belongs to; a tool
-that only reads leads as before.
+A follow-up whose own search found nothing close ("Compare it with today's numbers and explain
+the differences.") is searched again with the chat's earlier messages in its text, and the tool
+hints read that widened search. The export an earlier message asked for ranked first, scored
+0.74 and was named the next step with its arguments asked for; an agent that is also shown the
+earlier call's arguments (`ReAct`, which keeps no thread of its own) made it again, and the
+turn waited for an approval of a change nobody asked for (16 of 65 `ReAct` runs of one
+benchmark chat; no other adapter). What to look up may follow from the conversation; a change
+is asked for in this message: in a widened search, a tool whose catalog says it changes
+something is matched by the message's own words alone. Unmatched, it is no next step, its
+arguments are not asked for and the earlier words lend it no score. Read-only tools and turns
+whose search was not widened are as before. Replayed with the scripted model over the
+harness's hard and core sets (561 turns), the hints of 9 turns in 4 chats change, each a change
+tool only an earlier message asked for.
 
 ### Fixed (service): two publishers of one tool at once both succeed
 
