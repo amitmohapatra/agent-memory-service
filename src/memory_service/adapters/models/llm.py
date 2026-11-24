@@ -251,6 +251,12 @@ _NO_RESPONSE_FORMAT = re.compile(
 )
 
 
+#: A provider that constrains output to a subset of JSON Schema refuses a schema outside it by
+#: naming its own field for the envelope (Anthropic: ``output_config.format.schema: For
+#: 'object' type, 'additionalProperties' must be explicitly set to false``).
+_SCHEMA_REFUSED = re.compile(r"output_config|format\.schema", re.IGNORECASE)
+
+
 def _unsupported_response_format(exc: LLMCallFailed) -> bool:
     """Whether the gateway refused the request *because* of the JSON envelope.
 
@@ -260,6 +266,15 @@ def _unsupported_response_format(exc: LLMCallFailed) -> bool:
     if exc.details.get("status") != _BAD_REQUEST:
         return False
     return bool(_NO_RESPONSE_FORMAT.search(str(exc.details.get("body") or "")))
+
+
+def _schema_refused(exc: LLMCallFailed) -> bool:
+    """Whether the provider refused *this schema* in the envelope (:data:`_SCHEMA_REFUSED`):
+    the call falls back as for an envelope it does not take, and its model keeps the
+    envelope for the schemas it does constrain."""
+    if exc.details.get("status") != _BAD_REQUEST:
+        return False
+    return bool(_SCHEMA_REFUSED.search(str(exc.details.get("body") or "")))
 
 
 def _json_only_instruction(schema: dict[str, Any]) -> dict[str, Any]:
@@ -450,10 +465,13 @@ class EndpointLLM:
                 # one benchmark run. Ask for the JSON in the prompt instead and parse it;
                 # the validate-and-repair loop below is unchanged, so the contract the
                 # caller relies on is the same either way.
-                if response_format is None or not _unsupported_response_format(exc):
+                unsupported = _unsupported_response_format(exc)
+                if response_format is None or not (unsupported or _schema_refused(exc)):
                     raise
-                log.info("llm.structured_fallback", use=use, reason="response_format_unsupported")
-                self._schema_in_prompt.add(model)
+                why = "response_format_unsupported" if unsupported else "schema_refused"
+                log.info("llm.structured_fallback", use=use, reason=why)
+                if unsupported:  # a refused schema says nothing of the model's next one
+                    self._schema_in_prompt.add(model)
                 response_format = None
                 turns = [*turns, _json_only_instruction(schema)]
                 continue

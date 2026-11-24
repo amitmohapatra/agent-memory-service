@@ -164,7 +164,9 @@ def test_a_chat_without_calls_is_given_as_before(api) -> None:
     assert "over_budget" not in body["conversation"]
 
 
-def test_older_turns_give_their_steps_never_their_results(api) -> None:
+def test_older_turns_give_their_steps_and_the_results_the_budget_holds(api) -> None:
+    """Short of space the oldest results go first: the steps lists stay, a result that fits
+    is replayed with its call, and a budget sized for the model holds them all."""
     thread = new_id("thread")
     _post(api, thread, *_turn("oldest question", ["x" * 8000], "old answer"))
     _post(api, thread, *_turn("middle question", ["m" * 400], "middle answer"))
@@ -172,8 +174,13 @@ def test_older_turns_give_their_steps_never_their_results(api) -> None:
     body = _context(api, thread, "and then?", conversation_token_budget=400)
     said = _said(body)
     assert said[0] == ("USER", "oldest question") and said[-1] == ("ASSISTANT", "new answer")
-    assert len(_steps(body)) == 2 and all(r != "TOOL" for r, _ in said)
+    assert len(_steps(body)) == 2
+    assert [t[:1] for r, t in said if r == "TOOL"] == ["m"]  # the oldest result does not fit
     assert "over_budget" not in body["conversation"]
+    _pairs_whole(body)
+    roomy = _context(api, thread, "and then?", conversation_token_budget=8000)
+    assert [t[:1] for r, t in _said(roomy) if r == "TOOL"] == ["x", "m"]
+    _pairs_whole(roomy)
 
 
 def test_the_run_record_a_caller_writes_is_in_the_steps_list(api) -> None:

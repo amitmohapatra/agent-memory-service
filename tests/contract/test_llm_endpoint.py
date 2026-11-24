@@ -505,6 +505,44 @@ async def test_structured_falls_back_when_the_model_rejects_response_format() ->
 
 
 @respx.mock
+async def test_structured_falls_back_when_the_provider_refuses_this_schema() -> None:
+    """Anthropic constrains output to a subset of JSON Schema and refuses the rest by naming
+    its own field, never ``response_format``: ``400 "output_config.format.schema: For 'object'
+    type, 'additionalProperties' must be explicitly set to false"``. That is the envelope
+    refused too: the schema moves into the prompt for this call. The model is not marked as
+    one that takes no envelope — its next schema may be one it constrains."""
+    seen: list[dict] = []
+    refusal = (
+        "output_config.format.schema: For 'object' type, 'additionalProperties' must be "
+        "explicitly set to false"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        seen.append(body)
+        if "response_format" in body and "reason" in str(body["response_format"]):
+            error = {"type": "invalid_request_error", "message": refusal}
+            return httpx.Response(400, json={"error": error})
+        return httpx.Response(200, json=_chat('{"worthy": true, "reason": "fact"}'))
+
+    respx.post(f"{BASE}/chat/completions").mock(side_effect=handler)
+    llm = EndpointLLM(_settings())
+    messages = [LLMMessage(role="user", content="grade this")]
+    assert await llm.structured(messages, schema=SCHEMA) == {"worthy": True, "reason": "fact"}
+    assert "response_format" in seen[0] and "response_format" not in seen[1]
+    assert "JSON Schema" in seen[1]["messages"][-1]["content"]
+    strict = {
+        "type": "object",
+        "properties": {"worthy": {"type": "boolean"}},
+        "required": ["worthy"],
+        "additionalProperties": False,
+    }
+    await llm.structured(messages, schema=strict)
+    assert "response_format" in seen[2], "another schema is still asked for with the envelope"
+    await llm.close()
+
+
+@respx.mock
 async def test_the_repair_round_survives_the_envelope_fallback() -> None:
     """The refusal is not an attempt. Before, it consumed the first of two, so an invalid
     first answer after the fallback raised with no repair - the one path that needs it most,

@@ -7,6 +7,15 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Fixed (service): a schema the provider refuses falls back to the prompt
+
+A structured call asks for constrained output and falls back to the schema in the prompt when
+the model does not take the envelope — recognised only when the refusal said
+`response_format`. Anthropic constrains a subset of JSON Schema and refuses the rest by its
+own field's name (`output_config.format.schema: For 'object' type, 'additionalProperties'
+must be explicitly set to false`): such a call failed outright. It now falls back for that
+call; the model keeps the envelope for the schemas it does constrain.
+
 ### Changed (service): the messages window replays older turns whole, over the summary too
 
 `window_format=messages` gave only the newest turn's calls and results, and only the messages
