@@ -169,9 +169,7 @@ class _Sections:
         found = [SkillView(id="proc_1", name=guarded_signature(query) or query)]
         return Pinned(procedures=found if procedures else [])
 
-    async def tools(
-        self, ctx, query, request, visibility, *, memories, profile, vectors, own_vectors=None
-    ):
+    async def tools(self, ctx, query, request, visibility, *, memories, profile, vectors):
         self.hinted += 1
         first = sorted(request.available)[0]
         # as the real hints: a tool that changes something never leads a question

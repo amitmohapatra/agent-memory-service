@@ -198,39 +198,12 @@ def _changes(entry: ToolDescriptor | None) -> bool:
     return entry is None or entry.risk != "read"
 
 
-def _may_lead(
-    tool: str | None,
-    task: str,
-    entries: dict[str, ToolDescriptor],
-    held: frozenset[str] = frozenset(),
-) -> str | None:
+def _may_lead(tool: str | None, task: str, entries: dict[str, ToolDescriptor]) -> str | None:
     """``tool`` as the next step, unless it changes something and the task is a question: a
-    question is answered before anything is changed; nor a change the message's own words do
-    not ask for (``held``: :func:`_asked_here`)."""
-    if tool in held:
-        return None
+    question is answered before anything is changed."""
     if tool is None or asks_change(task) or not _changes(entries.get(tool)):
         return tool
     return None
-
-
-def _asked_here(
-    found: Sequence[ToolMatch],
-    own: Sequence[ToolMatch] | None,
-    entries: dict[str, ToolDescriptor],
-) -> tuple[list[ToolMatch], frozenset[str]]:
-    """``found`` as this message asks it, and the tools that change something it does not ask
-    for. A follow-up whose own search found nothing close is searched with the chat's earlier
-    messages in its text (``own``: what its own words found): what to look up may follow from
-    the conversation, but a change is asked for in this message — an earlier request's words
-    ("Export a stock report for ...") are no request to export again. Such a tool is matched
-    by the message's own words alone: unmatched, it is no next step, its arguments are not
-    asked for and the earlier words lend it no score. No widened search: all as found."""
-    if own is None:
-        return list(found), frozenset()
-    mine = {m.name for m in own if m.matches}
-    held = frozenset(n for n, e in entries.items() if _changes(e) and n not in mine)
-    return [ToolMatch(m.name, 0.0, False) if m.name in held else m for m in found], held
 
 
 def _rescored(
@@ -264,16 +237,13 @@ def _guarded(hints: ToolHints, forbidden: dict[str, str], unasked: set[str]) -> 
 
 
 def _unasked(
-    candidates: Sequence[ToolCandidate],
-    task: str,
-    entries: dict[str, ToolDescriptor],
-    held: frozenset[str] = frozenset(),
+    candidates: Sequence[ToolCandidate], task: str, entries: dict[str, ToolDescriptor]
 ) -> set[str]:
     """The candidates that change something when the task is a question (``_may_lead``): it
     is answered before anything is changed, so no argument of such a call is found or asked
     for - a value an earlier request named ("min 1 max 3") is no argument of a call nobody
     asked for. They stay candidates."""
-    return {c.name for c in candidates if _may_lead(c.name, task, entries, held) is None}
+    return {c.name for c in candidates if _may_lead(c.name, task, entries) is None}
 
 
 def _forbidden(
@@ -450,26 +420,21 @@ class ToolHintsService:
         profile: Sequence[Any] = (),
         vectors: QueryVectors | None = None,
         visibility: VisibilitySpecification | None = None,
-        own_vectors: QueryVectors | None = None,
     ) -> ToolHints:
         """``visibility``: the caller's, when ``profile`` is the stored blocks alone (no
         context was built): the standing rules that apply to the task are read in it
-        (``_standing``). The context passes none: its profile already lists them.
-        ``own_vectors``: the message's own, when ``vectors`` are of a search text widened with
-        the chat's earlier messages (a follow-up): a change is matched by them
-        (:func:`_asked_here`)."""
+        (``_standing``). The context passes none: its profile already lists them."""
         if vectors is None:
             # encoded once: the catalog search, a procedure the words miss and the standing
             # rules all read them
             vectors = await self.index.encode(task)
         # the stored procedures, the catalog search and the standing rules are independent
-        procedures, found, standing, own = await asyncio.gather(
+        procedures, found, standing = await asyncio.gather(
             self.procedures(ctx, task, scope_keys, k=3, vectors=vectors),
             self.index.search(
                 ctx.tenant_id, ctx.workspace_id, task, vectors=vectors, available=available
             ),
             self._standing(task, visibility, vectors),
-            self._own_search(ctx, task, own_vectors, available),
         )
         profile = [*standing, *profile]
         plan = next(
@@ -495,8 +460,7 @@ class ToolHintsService:
                 if ctx.agent_run_id
                 else []
             )
-        found, held = _asked_here(found, own, entries)
-        step = _may_lead(next_tool(plan, done), task, entries, held)
+        step = _may_lead(next_tool(plan, done), task, entries)
         candidates = _candidates(found, plan, step, stats, available, min(k, HINTS_K_MAX))
         # every candidate's arguments, not only the next step's: the caller may take another
         prefill, missing = await self._every_argument(
@@ -511,9 +475,7 @@ class ToolHintsService:
             # the plan's next step is a call the user's standing rule forbids: it leads nothing
             step = None
             candidates = _rescored(candidates, found, plan, stats, available)
-        tool = step or next(
-            (c.name for c in candidates if _may_lead(c.name, task, entries, held)), None
-        )
+        tool = step or next((c.name for c in candidates if _may_lead(c.name, task, entries)), None)
         hints = ToolHints(
             candidates=candidates,
             plan=_plan_hint(plan),
@@ -521,21 +483,7 @@ class ToolHintsService:
             prefill=prefill,
             missing=missing,
         )
-        return _guarded(hints, forbidden, _unasked(candidates, task, entries, held))
-
-    async def _own_search(
-        self,
-        ctx: MemoryExecutionContext,
-        task: str,
-        own_vectors: QueryVectors | None,
-        available: Sequence[str] | None,
-    ) -> list[ToolMatch] | None:
-        """The catalog search on the message's own words (``own_vectors``), or None."""
-        if own_vectors is None:
-            return None
-        return await self.index.search(
-            ctx.tenant_id, ctx.workspace_id, task, vectors=own_vectors, available=available
-        )
+        return _guarded(hints, forbidden, _unasked(candidates, task, entries))
 
     async def _standing(
         self, task: str, visibility: VisibilitySpecification | None, vectors: QueryVectors | None
