@@ -163,9 +163,26 @@ class SqlToolRepository:
         ).scalar_one_or_none()
         if row is None:
             desc = desc.model_copy(update={"tool_id": new_id("tool")})
-            self.s.add(_new_row(desc, workspace))
-            await self.s.flush()
-            return desc, True
+            # two publishers of one tool at once (an agent's servers starting together) both
+            # find none: the second waits for the first's insert and takes its entry, where a
+            # plain insert failed on the name's constraint (a 500 to the publisher)
+            inserted = await self.s.execute(
+                insert(ToolRow)
+                .values(**_row_values(desc, workspace))
+                .on_conflict_do_nothing(constraint="uq_tools_catalog_name")
+                .returning(ToolRow.tool_id)
+            )
+            if inserted.scalar_one_or_none() is not None:
+                return desc, True
+            row = (
+                await self.s.execute(
+                    select(ToolRow).where(
+                        ToolRow.tenant_id == desc.tenant_id,
+                        ToolRow.workspace_id == workspace,
+                        ToolRow.name == desc.name,
+                    )
+                )
+            ).scalar_one()
         stored = _to_descriptor(row)
         if fields is not None:
             kept = {name: getattr(stored, name) for name in set(desc.catalog_fields()) - fields}
@@ -544,10 +561,6 @@ def _catalog_values(desc: ToolDescriptor) -> dict[str, Any]:
         **desc.catalog_fields(),
         "annotations": desc.annotations.model_dump(by_alias=True, exclude_none=True),
     }
-
-
-def _new_row(desc: ToolDescriptor, workspace: str) -> ToolRow:
-    return ToolRow(**_row_values(desc, workspace))
 
 
 def _to_procedure(row: ProcedureRow) -> StoredProcedure:

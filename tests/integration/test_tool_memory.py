@@ -148,6 +148,29 @@ async def test_recording_is_idempotent_and_counted_once(container, uow_factory) 
     assert stats[PRICING].calls == 1 and stats[PRICING].avg_latency_ms == 10.0
 
 
+async def test_two_publishers_of_one_tool_at_once_both_succeed(container, uow_factory) -> None:
+    """Three servers of one agent start together and each publishes its tools: both looked
+    for the entry, found none and inserted it, and the second answered 500 (a unique
+    violation). The second now takes the entry the first stored."""
+    service = container.services["tool_memory"]
+    entry = ToolDescriptor(
+        tenant_id="", name="published_at_once", input_schema={"type": "object"}, side_effects="read"
+    )
+    looked = asyncio.Barrier(2)
+
+    async def publish() -> ToolDescriptor:
+        async with uow_factory() as uow:
+            # both have looked (and found none) before either inserts
+            assert await uow.tools.by_name("acme", entry.name) is None
+            await looked.wait()
+            [stored] = await service.put_catalog(uow, _ctx(workspace_id=None), _entries(entry))
+            await uow.commit()
+            return stored
+
+    first, second = await asyncio.gather(publish(), publish())
+    assert first.tool_id == second.tool_id and first.name == entry.name
+
+
 async def test_the_catalog_versions_a_changed_schema_and_a_workspace_shadows_the_tenant(
     container, uow_factory
 ) -> None:

@@ -7,6 +7,13 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Fixed (service): two publishers of one tool at once both succeed
+
+`PUT /v1/tools/catalog` looked for the entry and inserted it when there was none: two
+publishers at once (an agent's servers starting together) both found none, and the second
+answered 500 on the name's unique constraint. The insert now yields to the one that got
+there first and the second takes its entry.
+
 ### Fixed (service): a schema the provider refuses falls back to the prompt
 
 A structured call asks for constrained output and falls back to the schema in the prompt when
