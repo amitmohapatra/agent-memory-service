@@ -23,8 +23,8 @@ prompt text unless ``log_source_text`` is on.
 
 from __future__ import annotations
 
+import hashlib
 import json
-import re
 import time
 from collections import OrderedDict
 from collections.abc import AsyncIterator, Hashable, Sequence
@@ -246,35 +246,21 @@ def _text_or_none(data: dict[str, Any]) -> str | None:
     return content if isinstance(content, str) else None
 
 
-_NO_RESPONSE_FORMAT = re.compile(
-    r"response_format|json_schema|structured output|constrained decoding", re.IGNORECASE
-)
+def _refused(exc: LLMCallFailed) -> bool:
+    """Whether the endpoint refused the request as it stood (a 400). A request that carried the
+    JSON envelope is then asked once more without it: a provider that takes no envelope, or
+    not this schema, says so in words of its own (DeepSeek: "This response_format type is
+    unavailable now"; Anthropic: "output_config.format.schema: ... 'additionalProperties'
+    must be explicitly set to false"), and none says it with a code — so no wording is read.
+    A request refused for another reason is refused again without the envelope, and that
+    first refusal is what is raised."""
+    return exc.details.get("status") == _BAD_REQUEST
 
 
-#: A provider that constrains output to a subset of JSON Schema refuses a schema outside it by
-#: naming its own field for the envelope (Anthropic: ``output_config.format.schema: For
-#: 'object' type, 'additionalProperties' must be explicitly set to false``).
-_SCHEMA_REFUSED = re.compile(r"output_config|format\.schema", re.IGNORECASE)
-
-
-def _unsupported_response_format(exc: LLMCallFailed) -> bool:
-    """Whether the gateway refused the request *because* of the JSON envelope.
-
-    Narrow on purpose: a 400 that is not about the envelope is a real bad request, and
-    retrying it without constrained decoding would hide a genuine bug behind a slower path.
-    """
-    if exc.details.get("status") != _BAD_REQUEST:
-        return False
-    return bool(_NO_RESPONSE_FORMAT.search(str(exc.details.get("body") or "")))
-
-
-def _schema_refused(exc: LLMCallFailed) -> bool:
-    """Whether the provider refused *this schema* in the envelope (:data:`_SCHEMA_REFUSED`):
-    the call falls back as for an envelope it does not take, and its model keeps the
-    envelope for the schemas it does constrain."""
-    if exc.details.get("status") != _BAD_REQUEST:
-        return False
-    return bool(_SCHEMA_REFUSED.search(str(exc.details.get("body") or "")))
+def _schema_key(model: str, schema: dict[str, Any]) -> tuple[str, str]:
+    """A model and a schema, as what the model refused the envelope for is remembered."""
+    digest = hashlib.sha256(json.dumps(schema, sort_keys=True, default=str).encode()).hexdigest()
+    return model, digest
 
 
 def _json_only_instruction(schema: dict[str, Any]) -> dict[str, Any]:
@@ -363,7 +349,8 @@ class EndpointLLM:
         #: Models that answered 400 to the JSON-schema envelope, so later structured calls
         #: put the schema in the prompt from the first attempt instead of paying a wasted
         #: round trip each time (DeepSeek did, on every one of ~600 calls in one run).
-        self._schema_in_prompt: set[str] = set()
+        #: the (model, schema) pairs whose envelope the endpoint refused: asked in the prompt
+        self._schema_in_prompt: set[tuple[str, str]] = set()
         self._credential_attempt: ContextVar[
             tuple[ModelIdentity, ResolvedCredential | None] | None
         ] = ContextVar("memory_credential_attempt", default=None)
@@ -425,14 +412,16 @@ class EndpointLLM:
         async with self._endpoint() as (connection, key):
             selection = await self._select(use, connection, key)
         model = selection.model
+        known = _schema_key(model, schema)
+        refused: LLMCallFailed | None = None
         response_format: dict[str, Any] | None = None
-        if model not in self._schema_in_prompt:
+        if known not in self._schema_in_prompt:
             response_format = {
                 "type": "json_schema",
                 "json_schema": {"name": "result", "schema": schema, "strict": True},
             }
         else:
-            # This model already refused the envelope once; do not pay the 400 again.
+            # This model already refused this schema's envelope; do not pay the 400 again.
             turns = [*turns, _json_only_instruction(schema)]
         last_error: Exception | None = None
         # One bounded repair round: feed the validation error back once. A refused envelope
@@ -465,16 +454,17 @@ class EndpointLLM:
                 # one benchmark run. Ask for the JSON in the prompt instead and parse it;
                 # the validate-and-repair loop below is unchanged, so the contract the
                 # caller relies on is the same either way.
-                unsupported = _unsupported_response_format(exc)
-                if response_format is None or not (unsupported or _schema_refused(exc)):
+                if refused is not None and _refused(exc):
+                    raise refused from exc  # refused without the envelope too: not about it
+                if response_format is None or not _refused(exc):
                     raise
-                why = "response_format_unsupported" if unsupported else "schema_refused"
-                log.info("llm.structured_fallback", use=use, reason=why)
-                if unsupported:  # a refused schema says nothing of the model's next one
-                    self._schema_in_prompt.add(model)
+                log.info("llm.structured_fallback", use=use, reason="envelope_refused")
+                refused = exc
                 response_format = None
                 turns = [*turns, _json_only_instruction(schema)]
                 continue
+            if refused is not None:  # answered without the envelope: it was the envelope
+                self._schema_in_prompt.add(known)
             text = completion.text
             try:
                 parsed = _parse_json(text)

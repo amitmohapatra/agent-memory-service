@@ -572,12 +572,46 @@ async def test_the_repair_round_survives_the_envelope_fallback() -> None:
 
 @respx.mock
 async def test_a_bad_request_that_is_not_about_the_envelope_still_raises() -> None:
-    """The fallback is narrow: an unrelated 400 is a real bug and must not be retried."""
-    respx.post(f"{BASE}/chat/completions").mock(
-        return_value=httpx.Response(
-            400, json={"error": {"message": "max_tokens must be a positive integer"}}
-        )
-    )
+    """No provider says with a code that it refused the envelope, so no wording is read: a
+    refused request is asked once more without it. One refused for another reason is refused
+    again, and the first refusal is what is raised — two requests, never a loop — and
+    nothing is remembered of the model: its next call sends the envelope."""
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(request.content))
+        asked = "with" if "response_format" in seen[-1] else "without"
+        error = {"message": f"max_tokens must be a positive integer ({asked} the envelope)"}
+        return httpx.Response(400, json={"error": error})
+
+    respx.post(f"{BASE}/chat/completions").mock(side_effect=handler)
     llm = EndpointLLM(_settings())
+    messages = [LLMMessage(role="user", content="x")]
+    with pytest.raises(LLMCallFailed) as raised:
+        await llm.structured(messages, schema=SCHEMA, use="generic")
+    assert "with the envelope" in str(raised.value.details.get("body"))
+    assert ["response_format" in body for body in seen] == [True, False]
     with pytest.raises(LLMCallFailed):
-        await llm.structured([LLMMessage(role="user", content="x")], schema=SCHEMA, use="generic")
+        await llm.structured(messages, schema=SCHEMA, use="generic")
+    assert "response_format" in seen[2], "a bad request is not taken for a refused envelope"
+    await llm.close()
+
+
+@respx.mock
+async def test_an_envelope_refused_in_words_never_seen_before_falls_back() -> None:
+    """A provider new to the service, refusing in its own words: the fallback reads none."""
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(request.content))
+        if "response_format" in seen[-1]:
+            return httpx.Response(400, json={"error": {"message": "E1042: unsupported field"}})
+        return httpx.Response(200, json=_chat('{"worthy": true}'))
+
+    respx.post(f"{BASE}/chat/completions").mock(side_effect=handler)
+    llm = EndpointLLM(_settings())
+    messages = [LLMMessage(role="user", content="grade this")]
+    assert await llm.structured(messages, schema=SCHEMA) == {"worthy": True}
+    assert await llm.structured(messages, schema=SCHEMA) == {"worthy": True}
+    assert ["response_format" in body for body in seen] == [True, False, False]
+    await llm.close()

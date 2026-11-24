@@ -14,14 +14,15 @@ publishers at once (an agent's servers starting together) both found none, and t
 answered 500 on the name's unique constraint. The insert now yields to the one that got
 there first and the second takes its entry.
 
-### Fixed (service): a schema the provider refuses falls back to the prompt
+### Fixed (service): a refused envelope falls back to the prompt, whatever the provider says
 
-A structured call asks for constrained output and falls back to the schema in the prompt when
-the model does not take the envelope — recognised only when the refusal said
-`response_format`. Anthropic constrains a subset of JSON Schema and refuses the rest by its
-own field's name (`output_config.format.schema: For 'object' type, 'additionalProperties'
-must be explicitly set to false`): such a call failed outright. It now falls back for that
-call; the model keeps the envelope for the schemas it does constrain.
+A structured call asks for constrained output and fell back to the schema in the prompt only
+when the refusal's text held `response_format` or the like. Anthropic refuses a schema outside
+its subset in words of its own (`output_config.format.schema: ...`), and such a call failed
+outright. No provider says with a code that it refused the envelope, so no wording is read
+any more: a request refused with a 400 is asked once more without the envelope. One refused
+for another reason is refused again, and the first refusal is raised (two requests, never a
+loop). What a model refused is remembered per schema, once the call without it succeeded.
 
 ### Changed (service): the messages window replays older turns whole, over the summary too
 
