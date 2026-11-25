@@ -30,6 +30,15 @@ Monday-to-Sunday before, "last month" the calendar month, "last year" the calend
 (``retrieval.periods``). A bare weekday ("on Friday"), "next weekend" and the seasons stay
 unresolved: past or coming, and which hemisphere, is not in the words.
 
+A count that says its direction ("three days ago", "hace dos semanas", "قبل 3 أيام", "2 हफ़्ते
+पहले", "ten days from today") is read by rule too, in every pack language, from the words in
+``counted.json`` (``_counted``): dateparser's locale data has no count in words in Spanish,
+Hindi or Arabic ("dos", "एक"), no second word for "ago" or "week" (Arabic "قبل", Hindi
+"हफ़्ता"), no Arabic dual ("أسبوعين", two weeks), and reads "ten days from today" as today.
+The same words say where a count is from something else - "3 days before the meeting",
+"शादी से 3 दिन पहले" (three days before the wedding), "قبل شهر رمضان" (before Ramadan) - and
+such a count is no day, by the rule or by dateparser.
+
 Nothing here is generated text: the phrase is the memory's own words and the date is
 arithmetic on the observation's timestamp.
 
@@ -41,10 +50,14 @@ this; the resolved pairs are already in the payload.
 from __future__ import annotations
 
 import calendar
+import json
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from functools import cache
+from pathlib import Path
+from typing import Any, Final
 
 from memory_service.domain.fiscal import FiscalCalendar, resolve_fiscal_mentions
 from memory_service.domain.script import Script, detect_script
@@ -212,6 +225,165 @@ def _english(text: str, base: datetime) -> list[DatedMention]:
     return out
 
 
+#: The words of a counted offset that says its direction, per pack language (module docstring).
+COUNTED: Final = Path(__file__).with_name("counted.json")
+_UNITS: Final = ("day", "week", "month", "year")
+#: where a clause ends: what a unit word that counts one on its own ("قبل شهر.") is followed by
+_CLAUSE_END: Final = re.compile(r"\s*(?:$|[.!?;:,،؛؟।)\]\"'])")
+#: the marks a word in the data may be written with or without: Arabic diacritics and the
+#: tatweel, the Hindi nukta
+_MARKS: Final = re.compile("[ً-ْٰـ़]")
+
+
+def _folded(word: str) -> str:
+    return _MARKS.sub("", unicodedata.normalize("NFKC", word).casefold())
+
+
+@dataclass(frozen=True)
+class _Counting:
+    """One language's counted offsets (``counted.json``): the phrases that say their direction,
+    each with it (-1 back from the day said, 1 ahead of it), a count and its unit alone, the
+    words around a count that count it from something else, and the counts in words."""
+
+    phrases: tuple[tuple[re.Pattern[str], int], ...]
+    bare: re.Pattern[str]
+    bare_after: re.Pattern[str] | None
+    other_before: re.Pattern[str] | None
+    other_after: re.Pattern[str] | None
+    numbers: dict[str, int]
+    dual: dict[str, int]
+    singular: dict[str, int]
+
+    def read(self, text: str, day: date) -> tuple[list[DatedMention], list[str]]:
+        """The days ``text``'s counted offsets name, and the counts it names from something
+        else (casefolded): no other reading may make those a day either."""
+        found: list[DatedMention] = []
+        refused: list[str] = []
+        taken: list[tuple[int, int]] = []
+        for pattern, step in self.phrases:
+            for m in pattern.finditer(text):
+                if not any(s < m.end() and m.start() < e for s, e in taken):
+                    taken.append(m.span())
+                    self._phrase(m, step, text, day, found, refused)
+        for m in self.bare.finditer(text):
+            inside = any(s <= m.start() and m.end() <= e for s, e in taken)
+            if not inside and self._elsewhere(m, text, self.bare_after):
+                refused.append(m.group(0).casefold())
+        return found, refused
+
+    def _phrase(
+        self,
+        m: re.Match[str],
+        step: int,
+        text: str,
+        day: date,
+        found: list[DatedMention],
+        refused: list[str],
+    ) -> None:
+        unit = next(u for u in _UNITS if m.group(u) is not None)
+        count = self._count(m, unit, text)
+        if count is None:
+            if _folded(m.group(unit)) in self.singular:
+                refused.append(m.group(0).casefold())  # "قبل شهر رمضان": before Ramadan
+        elif self._elsewhere(m, text, self.other_after):
+            refused.append(m.group(0).casefold())
+        else:
+            at = _shifted(day, unit, step * count)
+            found.append(DatedMention(text=m.group(0), date=at.isoformat()))
+
+    def _count(self, m: re.Match[str], unit: str, text: str) -> int | None:
+        said = m.group("count")
+        if said is not None:
+            return int(said) if said.isdecimal() else self.numbers.get(_folded(said))
+        word = _folded(m.group(unit))
+        if word in self.dual:
+            return self.dual[word]
+        return self.singular.get(word) if _CLAUSE_END.match(text, m.end(unit)) else None
+
+    def _elsewhere(self, m: re.Match[str], text: str, after: re.Pattern[str] | None) -> bool:
+        """The count is from something else: a word just before it, or just after its unit."""
+        unit = next(u for u in _UNITS if m.group(u) is not None)
+        start = m.start("count") if m.group("count") is not None else m.start(unit)
+        before = self.other_before is not None and self.other_before.search(text, 0, start)
+        return bool(before or (after is not None and after.match(text, m.end(unit))))
+
+
+def _shifted(day: date, unit: str, count: int) -> date:
+    """``day`` moved by ``count`` units; a month or a year onto a shorter month keeps its
+    last day (a month before 31 March is 28 February), as dateparser does."""
+    if unit in ("day", "week"):
+        return day + timedelta(days=count * (7 if unit == "week" else 1))
+    month = day.month - 1 + count * (12 if unit == "year" else 1)
+    year, month = day.year + month // 12, month % 12 + 1
+    return date(year, month, min(day.day, calendar.monthrange(year, month)[1]))
+
+
+@cache
+def _countings() -> dict[str, _Counting]:
+    """Every language's counted offsets, from ``counted.json``."""
+    data = json.loads(COUNTED.read_text(encoding="utf-8"))["languages"]
+    return {lang: _counting(lang, words) for lang, words in data.items()}
+
+
+def _counting(lang: str, words: dict[str, Any]) -> _Counting:
+    from memory_service.modules.memory.statements import _AFTER, _BEFORE, _compile_term
+
+    def any_of(terms: list[str]) -> str:
+        return "|".join(_compile_term(t, lang, ()) for t in sorted(terms, key=len, reverse=True))
+
+    def whole(pattern: str) -> re.Pattern[str]:
+        return re.compile(_BEFORE + pattern + _AFTER, re.IGNORECASE)
+
+    def just_before(terms: list[str]) -> re.Pattern[str] | None:
+        return re.compile(rf"{_BEFORE}(?:{any_of(terms)})\s+$", re.IGNORECASE) if terms else None
+
+    def just_after(terms: list[str]) -> re.Pattern[str] | None:
+        return re.compile(rf"\s+(?:{any_of(terms)}){_AFTER}", re.IGNORECASE) if terms else None
+
+    count = rf"(?P<count>\d+|{any_of(list(words['numbers']))})"
+    unit = "(?:" + "|".join(f"(?P<{u}>{any_of(words['units'][u])})" for u in _UNITS) + ")"
+    back, ago, ahead, lead = (
+        any_of(words[k]) for k in ("ago_before", "ago_after", "ahead_after", "ahead_lead")
+    )
+    lead = rf"(?:(?:{lead})\s+)?" if lead else ""
+    shapes = (
+        (back, rf"(?:{back})\s+(?:{count}\s+)?{unit}", -1),
+        (ago, rf"(?:{count}\s+)?{unit}\s+(?:{ago})", -1),
+        (ahead, rf"{lead}{count}\s+{unit}\s+(?:{ahead})", 1),
+    )
+    phrases = tuple((whole(shape), step) for said, shape, step in shapes if said)
+    return _Counting(
+        phrases=phrases,
+        bare=whole(rf"{count}\s+{unit}"),
+        # after a lone count, a word for "ago" that belongs before one counts from elsewhere too
+        bare_after=just_after([*words["other_after"], *words["ago_before"]]),
+        other_before=just_before(words["other_before"]),
+        other_after=just_after(words["other_after"]),
+        numbers={_folded(w): n for w, n in words["numbers"].items()},
+        dual={_folded(w): n for w, n in words["dual"].items()},
+        singular={_folded(w): n for w, n in words["singular"].items()},
+    )
+
+
+def _counted(
+    text: str, base: datetime, languages: tuple[str, ...], ruled: list[DatedMention]
+) -> tuple[list[DatedMention], list[str]]:
+    """The counted offsets that say their direction, in every language of the script the data
+    has words for, but those the English rules already read; and the refused counts."""
+    found: list[DatedMention] = []
+    refused: list[str] = []
+    taken = [m.text.casefold() for m in ruled]
+    for counting in filter(None, map(_countings().get, languages)):
+        days, refusals = counting.read(text, base.date())
+        found += [m for m in days if not any(_overlap(m.text.casefold(), t) for t in taken)]
+        refused += refusals
+    return found, refused
+
+
+def _overlap(one: str, other: str) -> bool:
+    return one in other or other in one
+
+
 def resolve_dated_mentions(
     text: str, *, base: datetime, script: Script, limit: int = MAX_MENTIONS
 ) -> list[DatedMention]:
@@ -222,6 +394,8 @@ def resolve_dated_mentions(
     if languages is None or not text.strip():
         return []
     out = _english(text, base) if script is Script.LATIN else []
+    counted, refused = _counted(text, base, languages, out)
+    out += counted
     seen = {m.text.casefold() for m in out}
     if _cues(languages).found_in(text):
         from dateparser.search import search_dates
@@ -233,7 +407,7 @@ def resolve_dated_mentions(
             "PREFER_DATES_FROM": "past",
             "RETURN_AS_TIMEZONE_AWARE": False,
         }
-        ruled = list(seen)
+        ruled = [*seen, *refused]
         found = search_dates(text, languages=list(languages), settings=settings) or ()
         for found_phrase, when in found:
             phrase = _as_a_day(
@@ -242,8 +416,9 @@ def resolve_dated_mentions(
             if phrase is None:
                 continue  # a length of time
             cleaned = _trimmed(phrase, cues.skip).casefold()
-            # a phrase the English rules already read (as a range) is not read again as a day
-            if not cleaned or cleaned in seen or any(cleaned in r or r in cleaned for r in ruled):
+            # a phrase the rules already read (the English ones as a range, a count as the day
+            # it names) is not read again, nor a count the rules found counted from elsewhere
+            if not cleaned or cleaned in seen or any(_overlap(cleaned, r) for r in ruled):
                 continue
             seen.add(cleaned)
             out.append(DatedMention(text=_trimmed(phrase, cues.skip), date=when.date().isoformat()))

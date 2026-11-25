@@ -238,6 +238,13 @@ sequenceDiagram
 - The English phrases that are unambiguous, by rule: `last Friday` (the most recent Friday
   before the day it was said), `next Tuesday`, `last weekend`, `this weekend`,
   `this morning`, `tonight`.
+- A count that says its direction, by rule in every pack language, from the words in
+  `modules/memory/counted.json`: a count in words (`hace dos semanas`, `एक महीने पहले`), a
+  second word for "ago" or "week" (`قبل 3 أيام`, `2 हफ़्ते पहले`), Arabic's dual (`منذ
+  أسبوعين`, two weeks ago) and `ten days from today`, none of which dateparser's own locale
+  data reads. A count from something else is no date, by the rule or by dateparser:
+  `3 days before the meeting`, `3 Tage vor dem Termin`, `शादी से 3 दिन पहले` (before the
+  wedding), `قبل شهر رمضان` (before Ramadan).
 - The vague counts — "a few days ago", "a couple of weeks ago" — as the range they allow.
 - A **named period** is a range, not a day: `last week` is the Monday-to-Sunday before,
   `last month` the calendar month, `last year` the calendar year. A question naming that

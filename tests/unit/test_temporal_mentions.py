@@ -163,9 +163,7 @@ def test_a_count_with_its_direction_is_still_a_date() -> None:
 #: French: the dates each text should resolve to. A count with no direction of its own ("32
 #: Tage", "durante tres semanas", "in 2 months", "دو महीने में") is a length of time; one that
 #: says its direction ("vor 3 Tagen", "hace dos semanas", "قبل 3 أيام", "3 दिन पहले", "from
-#: today") is a day. BASE is Monday 2023-05-08. Where dateparser itself misses a day the text
-#: names, the case says so (``LIBRARY_GAPS``): it is measured, not hidden, and an upgrade that
-#: reads it fails the strict xfail until the mark is removed.
+#: today") is a day. BASE is Monday 2023-05-08.
 DURATION_OR_DATE: list[tuple[str, str, frozenset[str]]] = [
     (lang, text, frozenset(dates))
     for lang, text, dates in [
@@ -237,34 +235,63 @@ DURATION_OR_DATE: list[tuple[str, str, frozenset[str]]] = [
 ]
 
 
-LIBRARY_GAPS: dict[str, str] = {
-    "Inventory is 10 days from today.": "dateparser reads '10 days from today' as today",
-    "Hace dos semanas llegó el envío.": "dateparser's search finds no date in 'Hace dos semanas'",
-    "التقينا قبل 3 أيام.": "dateparser's Arabic locale has no 'قبل N' (ago)",
-    "وصلت الشحنة قبل 2 أسابيع.": "dateparser's Arabic locale has no 'قبل N' (ago)",
-    "غيرنا الأسعار قبل شهر.": "dateparser's Arabic locale has no 'قبل N' (ago)",
-    "2 हफ़्ते पहले शिपमेंट आया।": "dateparser's search finds no date in '2 हफ़्ते पहले'",
-    "एक महीने पहले हमने कीमतें बदलीं।": "dateparser's search finds no date in 'एक महीने पहले'",
-}
-
-
 @pytest.mark.parametrize(
     ("lang", "text", "expected"),
-    [
-        pytest.param(
-            *case,
-            id=f"{case[0]}-{i}",
-            marks=[pytest.mark.xfail(strict=True, reason=LIBRARY_GAPS[case[1]])]
-            if case[1] in LIBRARY_GAPS
-            else [],
-        )
-        for i, case in enumerate(DURATION_OR_DATE)
-    ],
+    [pytest.param(*case, id=f"{case[0]}-{i}") for i, case in enumerate(DURATION_OR_DATE)],
 )
 def test_a_length_of_time_is_told_from_a_day_in_every_language(
     lang: str, text: str, expected: frozenset[str]
 ) -> None:
     assert {m.date for m in _resolve(text)} == expected, [m.as_dict() for m in _resolve(text)]
+
+
+@pytest.mark.parametrize(
+    ("text", "phrase", "day"),
+    [
+        ("Hace tres días firmamos.", "Hace tres días", "2023-05-05"),
+        ("दो हफ़्ते पहले शिपमेंट आया।", "दो हफ़्ते पहले", "2023-04-24"),
+        ("2 हफ्ते पहले शिपमेंट आया।", "2 हफ्ते पहले", "2023-04-24"),
+        ("Vor zwei Jahren zogen wir um.", "Vor zwei Jahren", "2021-05-08"),
+        ("منذ أسبوعين وصلت الشحنة.", "منذ أسبوعين", "2023-04-24"),
+        ("قبل يومين وصلت الشحنة.", "قبل يومين", "2023-05-06"),
+        ("وصلت الشحنة قبل أسبوع.", "قبل أسبوع", "2023-05-01"),
+        ("Restock in 10 days from today.", "in 10 days from today", "2023-05-18"),
+        ("Inventory is 10 days from now.", "10 days from now", "2023-05-18"),
+    ],
+)
+def test_a_counted_day_is_read_in_the_words_people_write(text: str, phrase: str, day: str) -> None:
+    """A count in words ("tres", "दो"), a second word for the unit (हफ़्ता beside सप्ताह, with
+    or without its nukta), Arabic's dual ("أسبوعين", two weeks) and a lone singular ("قبل
+    أسبوع", a week ago), and a count ahead from the day it was said: each the day it names,
+    the phrase as written."""
+    assert [m.as_dict() for m in _resolve(text)] == [{"text": phrase, "date": day}]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "We arrived 3 days before the meeting.",
+        "Wir kamen 3 Tage vor dem Termin.",
+        "وصلنا قبل 3 أيام من الموعد.",
+        "وصلنا 3 أيام قبل الموعد.",
+        "शादी से 3 दिन पहले हम मिले।",
+        "शादी के 3 दिन पहले हम मिले।",
+        "سافرنا قبل شهر رمضان.",
+    ],
+)
+def test_a_count_from_something_else_is_no_day(text: str) -> None:
+    """Three days before the meeting is not three days before the day it was said, and "قبل
+    شهر رمضان" is before the month of Ramadan: the words name another moment, so no date."""
+    assert _resolve(text) == [], [m.as_dict() for m in _resolve(text)]
+
+
+def test_a_month_back_from_a_month_end_is_that_months_last_day() -> None:
+    found = resolve_dated_mentions(
+        "Hace un mes cambiamos los precios.",
+        base=datetime(2023, 3, 31, 9, tzinfo=UTC),
+        script=Script.LATIN,
+    )
+    assert [m.as_dict() for m in found] == [{"text": "Hace un mes", "date": "2023-02-28"}]
 
 
 @pytest.mark.parametrize(

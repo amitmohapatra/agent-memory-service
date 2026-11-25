@@ -7,6 +7,20 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Fixed (service): a counted date in the words people write is the day it names
+
+A memory's relative dates are resolved at ingest, by dateparser, whose locale data lacks
+words people use: "hace dos semanas" and "एक महीने पहले" (a count in words), "قبل 3 أيام" and
+"2 हफ़्ते पहले" (a second word for "ago" and for "week"), "منذ أسبوعين" (Arabic's dual), and
+"ten days from today", read as today. Seven such cases were measured as the library's gaps;
+each is now the day it names, read by rule from the words of each pack language
+(`modules/memory/counted.json`). And a count from something else is no longer read as one
+back from the day said: "3 days before the meeting", "3 Tage vor dem Termin" and "शादी से 3
+दिन पहले" (three days before the wedding) were each dated three days back; they are no date
+now, nor is "قبل شهر رمضان" (before Ramadan). The 117 cases of the temporal suite pass, its
+expected failures gone; a text with no relative cue costs 0.25 ms (0.22 before), one that
+parses 6.2 ms (5.6).
+
 ### Changed (service): a replayed window that says the whole summary is sent without it
 
 `window_format="messages"` reaches back over the turns the thread summary covers, word for

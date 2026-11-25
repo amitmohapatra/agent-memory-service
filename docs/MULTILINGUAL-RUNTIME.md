@@ -75,7 +75,10 @@ never returned to a reader. `dated_mentions` is projected and rendered.
 (`yesterday`, `tomorrow`, `three days ago`, `last week`, `hace 2 días`, `вчера`, `昨天`). The
 English weekday and weekend phrases that are unambiguous (`last Tuesday`, `next Monday`,
 `last weekend`, `this morning`, `a few days ago`) are resolved by rule, and a named period is
-a range (`last week` = `2023-05-01..2023-05-07`). dateparser's absolute-time parser is never
+a range (`last week` = `2023-05-01..2023-05-07`). A count that says its direction is read by
+rule in every pack language from `modules/memory/counted.json` (`hace dos semanas`,
+`قبل 3 أيام`, `2 हफ़्ते पहले`, `ten days from today`: words dateparser's locale data lacks), and
+a count from something else (`3 days before the meeting`) is no date. dateparser's absolute-time parser is never
 used - it reads the word "we" as a Wednesday - and a bare weekday, `next weekend` and the
 seasons stay unresolved: a date resolved to the wrong day is worse for a reader than one left
 alone (ADR 0024, decision 7, amended).

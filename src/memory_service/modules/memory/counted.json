@@ -1,0 +1,112 @@
+{
+  "description": "The words of a counted offset that says its direction ('three days ago', 'hace dos semanas', 'قبل 3 أيام', '2 हफ़्ते पहले', 'ten days from today'), per pack language: dateparser's own locale data leaves some of them out (a count in words, a second word for 'ago' or 'week', Arabic's dual) and reads others where they do not count from the day said ('3 days before the meeting'). Data read by modules/memory/temporal.py (_counted); edit here, not in code. Every entry is a word or phrase matched whole and case-insensitively; a space matches any whitespace, an Arabic letter may carry a diacritic and a Hindi consonant may go without its nukta. Fields: ago_before / ago_after - the words before the count or after the unit that put it back from the day said; ahead_after - after the unit, the day said itself, which puts the count ahead of it ('from today'); ahead_lead - a word before such a count, part of the phrase ('in' ten days from today); other_before - a word just before the count that counts it from something else ('शादी से 3 दिन पहले', three days before the wedding); other_after - a word just after it that does ('3 days before the meeting', 'قبل 3 أيام من الموعد'); an ago_before word after a lone count does too ('3 Tage vor dem Termin'); numbers - a count in words, one to twelve as dateparser's own lists go (digits are read in every script); units - the words of each unit; dual - a unit word that is its own count of two ('أسبوعين'); singular - a unit word that is a count of one on its own, read so only where its clause ends ('قبل شهر.', not 'قبل شهر رمضان').",
+  "languages": {
+    "en": {
+      "ago_before": [],
+      "ago_after": ["ago"],
+      "ahead_after": ["from today", "from now"],
+      "ahead_lead": ["in"],
+      "other_before": [],
+      "other_after": ["before", "after", "earlier", "later", "prior"],
+      "numbers": {
+        "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+        "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12
+      },
+      "units": {
+        "day": ["day", "days"],
+        "week": ["week", "weeks"],
+        "month": ["month", "months"],
+        "year": ["year", "years"]
+      },
+      "dual": {},
+      "singular": {}
+    },
+    "de": {
+      "ago_before": ["vor"],
+      "ago_after": [],
+      "ahead_after": [],
+      "ahead_lead": [],
+      "other_before": [],
+      "other_after": ["nach", "danach", "davor", "später", "früher"],
+      "numbers": {
+        "ein": 1, "eine": 1, "einem": 1, "einer": 1, "eins": 1, "zwei": 2, "drei": 3,
+        "vier": 4, "fünf": 5, "sechs": 6, "sieben": 7, "acht": 8, "neun": 9, "zehn": 10,
+        "elf": 11, "zwölf": 12
+      },
+      "units": {
+        "day": ["tag", "tage", "tagen"],
+        "week": ["woche", "wochen"],
+        "month": ["monat", "monate", "monaten"],
+        "year": ["jahr", "jahre", "jahren"]
+      },
+      "dual": {},
+      "singular": {}
+    },
+    "es": {
+      "ago_before": ["hace"],
+      "ago_after": [],
+      "ahead_after": [],
+      "ahead_lead": [],
+      "other_before": [],
+      "other_after": ["antes", "después", "despues", "más tarde"],
+      "numbers": {
+        "un": 1, "una": 1, "uno": 1, "dos": 2, "tres": 3, "cuatro": 4, "cinco": 5,
+        "seis": 6, "siete": 7, "ocho": 8, "nueve": 9, "diez": 10, "once": 11, "doce": 12
+      },
+      "units": {
+        "day": ["día", "días", "dia", "dias"],
+        "week": ["semana", "semanas"],
+        "month": ["mes", "meses"],
+        "year": ["año", "años"]
+      },
+      "dual": {},
+      "singular": {}
+    },
+    "ar": {
+      "ago_before": ["منذ", "قبل"],
+      "ago_after": [],
+      "ahead_after": [],
+      "ahead_lead": [],
+      "other_before": [],
+      "other_after": ["من", "بعد"],
+      "numbers": {
+        "واحد": 1, "واحدة": 1, "اثنين": 2, "اثنان": 2, "ثلاثة": 3, "ثلاث": 3, "أربعة": 4,
+        "اربعة": 4, "أربع": 4, "اربع": 4, "خمسة": 5, "خمس": 5, "ستة": 6, "ست": 6,
+        "سبعة": 7, "سبع": 7, "ثمانية": 8, "ثماني": 8, "تسعة": 9, "تسع": 9, "عشرة": 10,
+        "عشر": 10
+      },
+      "units": {
+        "day": ["يوم", "يوما", "أيام", "ايام", "يومين"],
+        "week": ["أسبوع", "اسبوع", "أسبوعا", "اسبوعا", "أسابيع", "اسابيع", "أسبوعين", "اسبوعين"],
+        "month": ["شهر", "شهرا", "أشهر", "اشهر", "شهور", "شهرين"],
+        "year": ["سنة", "سنوات", "سنين", "عام", "عاما", "أعوام", "اعوام", "سنتين", "عامين"]
+      },
+      "dual": {
+        "يومين": 2, "أسبوعين": 2, "اسبوعين": 2, "شهرين": 2, "سنتين": 2, "عامين": 2
+      },
+      "singular": {
+        "يوم": 1, "أسبوع": 1, "اسبوع": 1, "شهر": 1, "سنة": 1, "عام": 1
+      }
+    },
+    "hi": {
+      "ago_before": [],
+      "ago_after": ["पहले", "पूर्व"],
+      "ahead_after": [],
+      "ahead_lead": [],
+      "other_before": ["से", "के"],
+      "other_after": [],
+      "numbers": {
+        "एक": 1, "दो": 2, "तीन": 3, "चार": 4, "पाँच": 5, "पांच": 5, "छह": 6, "छः": 6,
+        "सात": 7, "आठ": 8, "नौ": 9, "दस": 10, "ग्यारह": 11, "बारह": 12
+      },
+      "units": {
+        "day": ["दिन", "दिनों"],
+        "week": ["सप्ताह", "सप्ताहों", "हफ़्ता", "हफ़्ते", "हफ़्तों"],
+        "month": ["महीना", "महीने", "महीनों", "माह"],
+        "year": ["साल", "सालों", "वर्ष", "वर्षों", "बरस"]
+      },
+      "dual": {},
+      "singular": {}
+    }
+  }
+}
