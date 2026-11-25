@@ -731,9 +731,7 @@ class ContextBuilder:
                     form=window or WindowFormat.RENDERED,
                     token_budget=conversation_budget,
                 )
-                if replays_summary(conversation, read, pinned.covered_to):
-                    # the caller replays every message the summary was folded from
-                    pinned.thread_summary = None
+                _without_replayed_summary(pinned, conversation, read)
                 asked_before = await previous
                 answered_before = await earlier
         except BaseException:
@@ -1514,6 +1512,15 @@ class ContextBuilder:
             revision_fingerprint=revision_fp,
             diagnostics=diagnostics,
         )
+
+
+def _without_replayed_summary(
+    pinned: Pinned, window: ConversationWindow, read: Sequence[Message]
+) -> None:
+    """``pinned`` without its thread summary where the caller replays every message the
+    summary was folded from (``window.replays_summary``): it would say them a second time."""
+    if replays_summary(window, read, pinned.covered_to):
+        pinned.thread_summary = None
 
 
 def render_window(
