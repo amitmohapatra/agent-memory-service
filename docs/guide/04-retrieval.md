@@ -359,7 +359,8 @@ most 20 turns, each its question and answer, with a steps list of its tool calls
 context's `## Run record` section, the
 newest with the calls and results too when they fit, its text and steps always, flagged
 `over_budget` when they alone are over the budget — for a framework that replays it
-as its own conversation (`modules/context/window.py`,
+as its own conversation, without the thread summary when it replays every message the summary
+was folded from (`modules/context/window.py`,
 [context.md](../api/context.md#the-two-forms)).
 
 **The rendering** (`ContextBundle.render`, `domain/context_bundle.py`):

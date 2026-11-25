@@ -1815,7 +1815,7 @@
                 "type": "null"
               }
             ],
-            "description": "the thread's durable summary",
+            "description": "the thread's durable summary (left out of window_format=messages when the window replays every message it was folded from)",
             "title": "Thread Summary"
           },
           "token_estimate": {

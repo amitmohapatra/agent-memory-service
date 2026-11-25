@@ -174,7 +174,9 @@ Each turn has three layers, each kept longer than the next: its steps list; its 
 question and what the agent said); and the calls and their results themselves, from the newest
 turn back while they fit (each result carries when it was fetched and its tool's age in `run_record`, for you to mark the
 ones out of date). The messages form is cut by its budget alone: it reaches back over the
-turns the thread's summary covers too. The budget is
+turns the thread's summary covers too. When it replays, from the thread's first message, every
+message the summary was folded from (the visible ones with text), the summary would say them a
+second time and `thread_summary` is left out; a window cut short of one keeps it. The budget is
 `conversation_token_budget` (100-1000000 tokens; omitted: the service's 2,000), spent from the
 newest turn back layer by layer: every turn's steps list (a turn without calls: its text) back
 to the first that does not fit, then the turns' text from the newest back, then the turns'

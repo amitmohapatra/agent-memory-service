@@ -7,6 +7,17 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service): a replayed window that says the whole summary is sent without it
+
+`window_format="messages"` reaches back over the turns the thread summary covers, word for
+word, so a thread past the summary's mark was sent both: the summary and every message it was
+folded from (up to 1,100 characters twice in a 12-turn thread). The summary is now left out
+when the window replays, from the thread's first message, every visible message with text it
+covers; a window cut short of one keeps it. The rendered form and a context without the
+window are unchanged: 192 builds of 12 threads, with and without the rule, byte for byte the
+same; the 36 replayed-form builds that changed differ only in `thread_summary` and the token
+estimate.
+
 ### Fixed (service): two publishers of one tool at once both succeed
 
 `PUT /v1/tools/catalog` looked for the entry and inserted it when there was none: two

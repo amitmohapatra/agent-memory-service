@@ -406,7 +406,11 @@ class ContextResponse(BaseModel):
     conversation: ConversationBody | None = Field(
         default=None, description="the thread's recent messages (with window)"
     )
-    thread_summary: str | None = Field(default=None, description="the thread's durable summary")
+    thread_summary: str | None = Field(
+        default=None,
+        description="the thread's durable summary (left out of window_format=messages when "
+        "the window replays every message it was folded from)",
+    )
     profile: list[ProfileBlockBody] | None = Field(
         default=None, description="The pinned profile blocks (user, agent, workspace)."
     )

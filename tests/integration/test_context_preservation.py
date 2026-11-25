@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.enums import EvidenceStatus, MessageRole, QueryType
+from memory_service.domain.enums import EvidenceStatus, MessageRole, QueryType, WindowFormat
 from memory_service.domain.ids import new_id
 from memory_service.modules.context.expansion import ExpansionStage, chunk_candidate
 from memory_service.modules.conversation.summary import SUMMARY_EVERY
@@ -236,3 +236,47 @@ async def test_global_summary_and_the_durable_thread_summary(container, uow_fact
     assert bundle.thread_summary.covers_to_sequence == SUMMARY_EVERY + 2
     assert bundle.conversation.message_ids == [], "only the turns after the summary"
     assert "## Conversation summary" in bundle.render()
+
+
+async def test_a_summary_the_replayed_turns_say_word_for_word_is_left_out(
+    container, uow_factory
+) -> None:
+    """A caller that replays the thread as its model's own conversation (the messages form)
+    is sent the turns the summary covers too, word for word: the summary would say them a
+    second time, so it is left out - only when every message it was folded from is replayed.
+    The rendered form, whose window starts after the summary, keeps it as it always did."""
+    register_handlers(container)
+    thread = new_id("thread")
+    ctx = U1.model_copy(
+        update={"thread_id": thread, "session_id": new_id("session"), "turn_id": new_id("turn")}
+    )
+    conv = container.services["conversation"]
+    async with uow_factory() as uow:
+        for i in range(SUMMARY_EVERY // 2 + 1):
+            await conv.append_message(uow, ctx, role=MessageRole.USER, content=f"Question {i}?")
+            await conv.append_message(
+                uow, ctx, role=MessageRole.ASSISTANT, content=f"Answer {i}: a short detail."
+            )
+        await uow.commit()
+    await container.tasks.drain()  # summary.refresh
+    builder = container.services["context_builder"]
+    query = "what did you answer first?"
+
+    replayed = await builder.build(
+        ctx, query, window_format=WindowFormat.MESSAGES, conversation_token_budget=50_000
+    )
+    assert len(replayed.conversation.message_ids) == SUMMARY_EVERY + 2  # every message
+    assert replayed.thread_summary is None
+    assert "## Conversation summary" not in replayed.render()
+
+    # a window cut short of the first turns: the summary still says what it does not
+    cut = await builder.build(
+        ctx, query, window_format=WindowFormat.MESSAGES, conversation_token_budget=60
+    )
+    assert 0 < len(cut.conversation.message_ids) < SUMMARY_EVERY + 2
+    assert cut.thread_summary is not None and "## Conversation summary" in cut.render()
+
+    rendered = await builder.build(ctx, query)
+    assert rendered.thread_summary is not None
+    assert rendered.thread_summary.covers_to_sequence == SUMMARY_EVERY + 2
+    assert "## Conversation summary" in rendered.render()

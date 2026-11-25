@@ -58,7 +58,7 @@ from memory_service.modules.context.sections import (
 from memory_service.modules.context.semantic_cache import SemanticBundleCache, semantic_key
 from memory_service.modules.context.standing import standing_blocks, with_more_about
 from memory_service.modules.context.views import full_view, prompt_view
-from memory_service.modules.context.window import replay_window
+from memory_service.modules.context.window import replay_window, replays_summary
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.llm.assist import LLMAssist
@@ -723,13 +723,17 @@ class ContextBuilder:
             encoded.settle(result.query_vectors)
             with timings.stage("sections"):
                 pinned = await sections if sections is not None else Pinned()
+                read = await recent
                 conversation = self._window(
                     ctx,
-                    await recent,
+                    read,
                     after=pinned.covered_to,
                     form=window or WindowFormat.RENDERED,
                     token_budget=conversation_budget,
                 )
+                if replays_summary(conversation, read, pinned.covered_to):
+                    # the caller replays every message the summary was folded from
+                    pinned.thread_summary = None
                 asked_before = await previous
                 answered_before = await earlier
         except BaseException:

@@ -25,14 +25,17 @@ from memory_service.domain.enums import (
     WindowFormat,
 )
 from memory_service.domain.ids import content_hash
+from memory_service.modules.context.builder import render_window
 from memory_service.modules.context.views import conversation_body
 from memory_service.modules.context.window import (
     MESSAGE_OVERHEAD_TOKENS,
     RUN_RECORD,
     SURE,
+    Layers,
     message_tokens,
     replay_window,
     replayable,
+    replays_summary,
     steps_list,
     turns,
     units,
@@ -593,3 +596,55 @@ def test_the_messages_form_reaches_back_over_the_turns_the_summary_covers() -> N
     assert window(WindowFormat.RENDERED, 100_000).message_ids == [
         m.message_id for m in second if m.role is not T
     ]
+
+
+def _thread(*turns_: list[Message]) -> list[Message]:
+    """``turns_`` as one thread from its first message: sequences 1, 2, ..."""
+    return [m.model_copy(update={"sequence": n}) for n, m in enumerate(itertools.chain(*turns_), 1)]
+
+
+def test_a_summary_the_replayed_window_says_word_for_word_is_said_again() -> None:
+    """The thread summary is folded from the visible messages with text up to the sequence it
+    covers (``conversation/summary.py``). A messages-form window that replays every one of
+    them, from the thread's first message, already says it all: the summary would say it a
+    second time."""
+    msgs = _thread(
+        _turn("What did ACME close at?", ["123.45"], "123.45 USD."),
+        _turn("And ZETA?", ["67.89"], "67.89 USD."),
+    )
+    covered = msgs[-1].sequence
+    whole = replay_window("thr", msgs, 100_000)
+    assert replays_summary(whole, msgs, covered)
+    # only the text of the turns, without their calls: still every message the summary has
+    layers = [Layers.of(t, datetime.now(UTC)) for t in turns(units(msgs))]
+    text = replay_window("thr", msgs, sum(t.cost("steps") + t.cost("text") for t in layers))
+    assert [m.role for m in text.messages] == ["USER", "ASSISTANT"] * 2
+    assert replays_summary(text, msgs, covered)
+
+
+def test_a_summary_stays_wherever_the_window_leaves_out_a_message_it_covers() -> None:
+    first = _turn("What did ACME close at?", ["123.45"], "123.45 USD.")
+    msgs = _thread(first, _turn("And ZETA?", ["67.89"], "67.89 USD."))
+    covered = msgs[-1].sequence
+    # the budget holds the newer turn alone: the first one's question and answer are not said
+    newer = replay_window("thr", msgs, 10)
+    assert newer.message_ids == [msgs[len(first)].message_id, msgs[-1].message_id]
+    assert not replays_summary(newer, msgs, covered)
+    # a read that does not start at the thread's first message may miss an older one
+    later = msgs[len(first) :]
+    assert not replays_summary(replay_window("thr", later, 100_000), later, covered)
+    # the rendered form shows no replayed turn; nothing to compare without a summary
+    assert not replays_summary(render_window("thr", msgs, 100_000), msgs, covered)
+    assert not replays_summary(replay_window("thr", msgs, 100_000), msgs, 0)
+    assert not replays_summary(replay_window("thr", [], 100_000), [], covered)
+
+
+def test_a_message_the_summary_does_not_cover_does_not_keep_it() -> None:
+    """A visible message after the summary's last one is not in the summary: the window need
+    not show it for the summary to say nothing new."""
+    msgs = _thread(
+        _turn("What did ACME close at?", ["123.45"], "123.45 USD."),
+        [_m(U, "And ZETA?")],
+    )
+    covered = msgs[-2].sequence  # the summary ends before the newest question
+    assert replays_summary(replay_window("thr", msgs, 100_000), msgs, covered)

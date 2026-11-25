@@ -449,3 +449,24 @@ def replay_window(
         form=WindowFormat.MESSAGES,
         over_budget=used > token_budget,
     )
+
+
+def replays_summary(
+    window: ConversationWindow, messages: Sequence[Message], covered_to: int
+) -> bool:
+    """Whether the messages-form ``window`` replays, word for word, every message a thread
+    summary covering up to ``covered_to`` was folded from (``conversation/summary.py``: the
+    visible messages with text): the summary would then say again what the caller's model
+    reads as its own conversation. Only when ``messages``, the read the window was cut from,
+    start at the thread's first message (sequence 1): a message older than the read may be in
+    the summary and nowhere else."""
+    if window.form is not WindowFormat.MESSAGES or covered_to <= 0 or not messages:
+        return False
+    if min(m.sequence for m in messages) != 1:
+        return False
+    shown = set(window.message_ids)
+    return all(
+        m.message_id in shown
+        for m in messages
+        if m.sequence <= covered_to and m.kind is MessageKind.VISIBLE and m.content.strip()
+    )

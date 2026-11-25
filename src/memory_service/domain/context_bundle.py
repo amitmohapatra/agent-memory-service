@@ -173,7 +173,8 @@ RUN_RECORD_NOTE = (
 
 class ConversationWindow(BaseModel):
     """The thread's most recent messages that fit (rendered: those after its durable summary;
-    messages: those its budget holds, the summary's turns among them). ``form``:
+    messages: those its budget holds, the summary's turns among them - with all of them the
+    context leaves the summary out: ``window.replays_summary``). ``form``:
     whether the rendered context shows them (``rendered``) or the caller replays them as its
     own conversation (``messages``)."""
 
