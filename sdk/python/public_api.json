@@ -1161,6 +1161,8 @@
    "fields": {
     "fixes": "list[str] = ...",
     "id": "str (required)",
+    "match": "float | None = None",
+    "matched_by": "Optional[Literal['words', 'meaning']] = None",
     "name": "str = ''",
     "runs": "int = 0",
     "steps": "list[str] = ...",
@@ -1490,5 +1492,5 @@
    "signature": "() -> 'MemoryContext | None'"
   }
  },
- "version": "0.6.9"
+ "version": "0.6.10"
 }

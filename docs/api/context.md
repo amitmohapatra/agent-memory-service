@@ -83,7 +83,7 @@ has no `rendered`: that would be the same content twice.
   "conversation": {"thread_id": "thread-po", "messages": [{"id": "msg_…", "role": "USER", "text": "…"}]},
   "thread_summary": "Priya runs procurement for the Berlin office.",
   "profile": [{"block": "user", "text": "name: Priya"}],
-  "skills": [{"id": "prc_…", "name": "order-supplies", "steps": ["erp-search_supplier", "erp-create_po"], "success_rate": 1.0, "runs": 3}],
+  "skills": [{"id": "prc_…", "name": "order-supplies", "steps": ["erp-search_supplier", "erp-create_po"], "success_rate": 1.0, "runs": 3, "match": 0.83, "matched_by": "words"}],
   "tools": [{"name": "erp-create_po", "confidence": 0.74, "success_rate": 1.0, "next": true, "args": {"amount": 700, "cost_centre": "CC-7"}, "missing": [{"arg": "supplier_id", "question": "erp-create_po needs 'supplier id': what should it be?"}]}],
   "memories": [{"id": "mem_…", "text": "…", "relevance": 0.32, "observed_at": "2026-10-04T11:17:47Z", "subject": "user:u-priya", "dates": [{"text": "Last week", "date": "2026-09-21..2026-09-27"}], "sources": ["msg_…"]}],
   "knowledge": [{"id": "chk_…", "text": "…", "relevance": 0.61, "document_id": "doc_…", "page": 11, "section": "Results > Revenue"}],

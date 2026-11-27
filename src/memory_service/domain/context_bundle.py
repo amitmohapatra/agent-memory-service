@@ -708,9 +708,19 @@ def summary_section(summary: ThreadSummaryView | None) -> str | None:
     return f"## Conversation summary\n{summary.text}" if summary else None
 
 
+def _match(skill: SkillView) -> str:
+    """``; task match 0.83``, or ``; task match by meaning only 0.41`` for a skill no word of
+    the request names (the weaker match), or nothing for one not matched to a request."""
+    if skill.match is None:
+        return ""
+    how = " by meaning only" if skill.matched_by == "meaning" else ""
+    return f"; task match{how} {skill.match:.2f}"
+
+
 def skills_section(skills: Sequence[SkillView], tools: ToolHints | None = None) -> str | None:
     """The learned skills that match the task, in full: their steps, what fixed a failing
-    step and their track record. One the agent's own skill was opened for says so. The one
+    step, their track record and how closely their task matches this one (``_match``). One
+    the agent's own skill was opened for says so. The one
     the Tools section lays out (``planned``) is not spelled out twice: its line names it,
     its track record and its fixes, and its steps are the tools listed first there. A step a
     standing rule of the user forbids for this task (``SkillView.forbidden``, with or without
@@ -724,7 +734,8 @@ def skills_section(skills: Sequence[SkillView], tools: ToolHints | None = None) 
         if skill.id == laid_out:
             steps = f"the first {len(skill.steps)} tools under Tools, in that order"
         what = f"adds to your skill {skill.with_skill}" if skill.with_skill else skill.name
-        lines.append(f"- {what}: {steps} (worked {skill.success_rate:.0%} of {skill.support} runs)")
+        record = f"worked {skill.success_rate:.0%} of {skill.support} runs"
+        lines.append(f"- {what}: {steps} ({record}{_match(skill)})")
         lines.extend(f"  - if {fix}" for fix in skill.fixes)
         lines.extend(
             f"  - but {_FORBIDDEN.format(tool=step)}: {skill.forbidden[step]}"

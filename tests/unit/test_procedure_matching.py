@@ -142,6 +142,16 @@ async def test_a_word_match_outranks_a_meaning_match() -> None:
     assert similarity(task_pattern(task), MFA.pattern) < PROCEDURE_MATCH
     ranked = await _matcher(_Meaning()).rank(task, [MFA, worded, POS], 3)
     assert ranked == [worded, MFA]
+    # each with its match, and what the number measures
+    first, second = await _matcher(_Meaning()).matched(task, [MFA, worded, POS], 3)
+    assert (first.procedure, first.by, second.procedure, second.by) == (
+        worded,
+        "words",
+        MFA,
+        "meaning",
+    )
+    assert first.match == similarity(task_pattern(task), worded.pattern) >= PROCEDURE_MATCH
+    assert 0.0 < second.match <= 1.0
 
 
 async def test_without_a_calibrated_floor_only_the_words_count() -> None:

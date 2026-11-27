@@ -69,7 +69,7 @@ from memory_service.modules.context.standing import forbids, listed_rules, stand
 from memory_service.modules.ingestion.context_graph import canonical_entity, extract_entities
 from memory_service.modules.retrieval.engine import QueryVectors, RetrievalEngine
 from memory_service.modules.tools.index import ToolIndex, ToolMatch
-from memory_service.modules.tools.matching import ProcedureMatcher, TaskVectors
+from memory_service.modules.tools.matching import Matched, ProcedureMatcher, TaskVectors
 from memory_service.modules.tools.patterns import task_slots
 from memory_service.modules.tools.skills import skill_view
 from memory_service.ports.intelligence import GraphStore
@@ -398,6 +398,20 @@ class ToolHintsService:
         and its agent's learned skills (``ProcedureRepository.visible``), matched by
         ``ProcedureMatcher``. ``vectors``: the task's, when the request has (or is computing)
         them."""
+        found = await self.matched(ctx, task, scope_keys, k=k, vectors=vectors)
+        return [m.procedure for m in found]
+
+    async def matched(
+        self,
+        ctx: MemoryExecutionContext,
+        task: str,
+        scope_keys: Sequence[str],
+        *,
+        k: int,
+        vectors: TaskVectors = None,
+    ) -> list[Matched]:
+        """``procedures``, each with how closely it matches the task and by what
+        (``matching.Matched``): what a context says of a learned skill it offers."""
         async with self.uow_factory() as uow:
             visible = await uow.procedures.visible(
                 ctx.tenant_id,
@@ -406,7 +420,7 @@ class ToolHintsService:
                 user_id=ctx.user_id,
                 limit=VISIBLE_PROCEDURES_MAX,
             )
-        return await self.matcher.rank(task, visible, k, vectors=vectors)
+        return await self.matcher.matched(task, visible, k, vectors=vectors)
 
     async def hints(
         self,

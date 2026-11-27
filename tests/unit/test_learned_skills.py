@@ -21,6 +21,7 @@ from memory_service.domain.tools import (
     agent_audience,
 )
 from memory_service.modules.context.sections import TOOL_HINTS_MIN, ToolsRequest
+from memory_service.modules.context.views import skill_body
 from memory_service.modules.tools.learning import audience_of, contributors, merge
 from memory_service.modules.tools.procedures import Procedure, ProcedureStep
 from memory_service.modules.tools.skills import (
@@ -255,7 +256,22 @@ def test_the_context_shows_each_skill_in_full_and_an_addition_as_one() -> None:
     )
     assert "  - if update_quote on Locked: ask the owner to unlock it" in text
     assert "- adds to your skill refund-policy: find_order -> refund" in text
+    assert "task match" not in text, "one offered for no request says nothing of a match"
     assert skills_section([]) is None
+
+
+def test_a_skill_offered_for_a_request_says_how_closely_its_task_matches() -> None:
+    """Matched by the words the two share, or - the weaker match, said as such - by their
+    meaning alone: the number is read with what it measures."""
+    worded = skill_view(_procedure(), match=0.8333, matched_by="words")
+    meant = skill_view(_procedure(procedure_id="prc_2"), match=0.412, matched_by="meaning")
+    text = skills_section([worded, meant])
+    assert text is not None
+    assert "(worked 75% of 4 runs; task match 0.83)" in text
+    assert "(worked 75% of 4 runs; task match by meaning only 0.41)" in text
+    assert skill_body(worded)["match"] == 0.83 and skill_body(worded)["matched_by"] == "words"
+    assert skill_body(meant)["matched_by"] == "meaning"
+    assert "match" not in skill_body(skill_view(_procedure()))
 
 
 def test_the_learned_plan_is_spelled_out_once() -> None:

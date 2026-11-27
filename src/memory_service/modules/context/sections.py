@@ -33,12 +33,12 @@ from memory_service.domain.context_bundle import (
     tools_section,
 )
 from memory_service.domain.profile import USER_BLOCK
-from memory_service.domain.tools import StoredProcedure, ToolHints
+from memory_service.domain.tools import ToolHints
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.profile.service import PersonPage
 from memory_service.modules.retrieval.engine import QueryVectors
-from memory_service.modules.tools.matching import TaskVectors
+from memory_service.modules.tools.matching import Matched, TaskVectors
 from memory_service.modules.tools.skills import skill_view
 from memory_service.ports.uow import UnitOfWorkFactory
 
@@ -269,7 +269,7 @@ class ContextSections:
             self._profile(ctx),
             self._people(ctx, visibility),
             self._summary(ctx),
-            self.services.tool_hints.procedures(
+            self.services.tool_hints.matched(
                 ctx, query, list(visibility.keys), k=CONTEXT_PROCEDURES, vectors=vectors
             )
             if procedures
@@ -279,7 +279,9 @@ class ContextSections:
             profile=found_profile,
             people=found_people,
             thread_summary=found_summary,
-            procedures=[skill_view(p) for p in found_procedures],
+            procedures=[
+                skill_view(m.procedure, match=m.match, matched_by=m.by) for m in found_procedures
+            ],
         )
 
     async def tools(
@@ -338,5 +340,5 @@ class ContextSections:
         )
 
 
-async def _empty() -> list[StoredProcedure]:
+async def _empty() -> list[Matched]:
     return []

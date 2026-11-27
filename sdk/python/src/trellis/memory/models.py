@@ -971,6 +971,11 @@ class SkillView(BaseModel):
     success_rate: float = 0.0
     #: the runs it was learned from
     runs: int = 0
+    #: 0..1, how closely its task matches the query it is offered for; read it with
+    #: ``matched_by``: "words" (the share of the task's words the query has) or "meaning"
+    #: (the encoder's cosine alone - the weaker match)
+    match: float | None = None
+    matched_by: Literal["words", "meaning"] | None = None
 
 
 # --- platform administration -----------------------------------------------------

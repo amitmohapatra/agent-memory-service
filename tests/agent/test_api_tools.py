@@ -486,7 +486,8 @@ async def test_an_agent_learns_a_skill_from_its_runs_and_is_offered_it(make_sett
         assert (mine.steps, mine.runs, mine.success_rate) == ([LOOKUP, UPDATE], 2, 1.0)
         prompt = await bot("u1").context(TASK, tools=[LOOKUP, UPDATE])
         assert "## Learned skills for this task" in prompt.rendered
-        assert f"{LOOKUP} -> {UPDATE} (worked 100% of 2 runs)" in prompt.rendered
+        # asked in the words it was learned from: every word of the task matches
+        assert f"{LOOKUP} -> {UPDATE} (worked 100% of 2 runs; task match 1.00)" in prompt.rendered
         assert "## Tools" not in prompt.rendered, "two tools earn no tool hints"
         assert await offered("u2") == [], "u1's wording reaches nobody else"
 

@@ -109,8 +109,14 @@ def fixes(procedure: StoredProcedure) -> list[str]:
     return out
 
 
-def skill_view(procedure: StoredProcedure) -> SkillView:
-    """The learned skill as the agent is offered it."""
+def skill_view(
+    procedure: StoredProcedure,
+    *,
+    match: float | None = None,
+    matched_by: Literal["words", "meaning"] | None = None,
+) -> SkillView:
+    """The learned skill as the agent is offered it; for a request, with how closely its
+    task matches it (``match``, ``matched_by``: ``matching.Matched``)."""
     return SkillView(
         id=procedure.procedure_id,
         name=skill_name(procedure),
@@ -119,6 +125,8 @@ def skill_view(procedure: StoredProcedure) -> SkillView:
         fixes=fixes(procedure),
         success_rate=procedure.success_rate,
         support=procedure.support,
+        match=match,
+        matched_by=matched_by,
     )
 
 

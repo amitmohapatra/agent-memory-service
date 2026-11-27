@@ -167,6 +167,18 @@ class SkillBody(BaseModel):
         ..., ge=0.0, le=1.0, description="0..1, the share of runs that followed it and succeeded."
     )
     runs: int = Field(description="The runs it was learned from.")
+    match: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="0..1, how closely its task matches the query it is offered for; read it "
+        "with matched_by (the two are not one scale).",
+    )
+    matched_by: Literal["words", "meaning"] | None = Field(
+        default=None,
+        description="words: the query shares enough of the task's words (match: the share). "
+        "meaning: only the encoder puts them close (match: the cosine) - the weaker match.",
+    )
 
 
 class ToolHintsResponse(BaseModel):

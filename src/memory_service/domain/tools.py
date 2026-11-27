@@ -513,6 +513,11 @@ class SkillView(BaseModel):
     #: its steps a standing rule of the user forbids for this task, step -> the rule
     #: (``modules.tools.hints.ruled``): what the runs did is no step to take against it
     forbidden: dict[str, str] = Field(default_factory=dict)
+    #: how closely its task matches the request it is offered for, 0..1, and by what: the
+    #: words the two share, or their meaning alone (the weaker match: no word names it).
+    #: ``None`` where it is not offered for a request (``tool_search``'s plan).
+    match: float | None = None
+    matched_by: Literal["words", "meaning"] | None = None
 
 
 PrefillSource = Literal["procedure", "graph", "profile", "memory", "task"]

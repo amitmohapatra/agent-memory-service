@@ -35,16 +35,21 @@ flowchart LR
 
    ```text
    ## Learned skills for this task
-   - refund-an-order: find_order -> refund (worked 95% of 40 runs)
+   - refund-an-order: find_order -> refund (worked 95% of 40 runs; task match 0.83)
      - if refund on AlreadyRefunded: stop and tell the user
-   - adds to your skill refund-policy: find_order -> refund (worked 100% of 12 runs)
+   - adds to your skill refund-policy: find_order -> refund (worked 100% of 12 runs; task match by meaning only 0.41)
    ```
+
+   `task match` is how closely the skill's task matches the request it is offered for: the
+   share of the task's words the request has, or - said as `by meaning only` - the encoder's
+   cosine when no word of the request names it. The second is the weaker match and the two
+   are not one scale; the structured form carries both as `match` and `matched_by`.
 
    When the context also carries tool hints and the best skill is their plan (every step a
    candidate), its steps are spelled out once: they are the tools listed first under `## Tools`,
    in its order, with their arguments and the next step, and its line here keeps the name, the
    track record and the fixes (`- refund-an-order: the first 2 tools under Tools, in that order
-   (worked 95% of 40 runs)`).
+   (worked 95% of 40 runs; task match 0.83)`).
 
    The `tool_search` memory tool returns the best one as its `plan`. Nothing to load, nothing
    to install: the harness puts the context in front of the model, and every framework gets it.

@@ -155,12 +155,15 @@ def hints_view(hints: ToolHints) -> dict[str, Any]:
 
 def skill_body(skill: SkillView) -> dict[str, Any]:
     """A learned skill: its name, its steps, the agent's own skill it adds to, what fixed a
-    failing step, and how often it worked."""
+    failing step, how often it worked, and how closely its task matches the request."""
     body: dict[str, Any] = {"id": skill.id, "name": skill.name, "steps": skill.steps}
     _put(body, "with_skill", skill.with_skill)
     _put(body, "fixes", skill.fixes)
     body["success_rate"] = round(skill.success_rate, PLACES)
     body["runs"] = skill.support
+    if skill.match is not None:
+        body["match"] = round(skill.match, PLACES)
+        _put(body, "matched_by", skill.matched_by)
     return body
 
 

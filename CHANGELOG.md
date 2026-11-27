@@ -7,6 +7,18 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added (service; trellis-memory 0.6.10): a learned skill says how closely its task matches the request
+
+A learned skill is offered when its task is close to the request, and the closeness was
+thrown away: sales steps offered for an allocation request looked exactly like a skill
+learned for it. Each skill of a context now carries its match - `match` (0..1) and
+`matched_by`: `words` (the share of the task's words the request has) or `meaning` (the
+encoder's cosine alone, when no word names it: the weaker match). Its line says so:
+`(worked 75% of 4 runs; task match 0.83)`, or `task match by meaning only 0.41`. The two are
+not one scale, so the number is read with what it measures. `tool_search`'s plan, offered for
+no request of its own, carries none. The SDK's `SkillView` has both fields (trellis-memory
+0.6.10).
+
 ### Added (service): a rule or preference says when it was said in this conversation
 
 A standing line said when it was said, not where: a rule given an hour ago in this

@@ -27,7 +27,8 @@ from __future__ import annotations
 import asyncio
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
-from typing import Final
+from dataclasses import dataclass
+from typing import Final, Literal
 
 import numpy as np
 
@@ -49,29 +50,64 @@ _PATTERN_KEY: Final = ":procedure1"
 TaskVectors = QueryVectors | asyncio.Future[QueryVectors | None] | None
 
 
+#: How a procedure was matched to a task: its pattern shares enough of the task's words, or
+#: only the encoder puts the two close (the weaker match: no word of the task names it).
+MatchedBy = Literal["words", "meaning"]
+
+
+@dataclass(frozen=True)
+class Matched:
+    """A procedure about a task, and how closely: the share of the pattern's words the task
+    has (``by`` words) or the cosine of the two (``by`` meaning). The two are not one scale;
+    a number is to be read with its ``by``."""
+
+    procedure: StoredProcedure
+    match: float
+    by: MatchedBy
+
+
+def matched_procedures(
+    task: str,
+    procedures: Sequence[StoredProcedure],
+    k: int,
+    meaning: Mapping[str, float] | None = None,
+) -> list[Matched]:
+    """The procedures about this task, best first, each with its match: those whose pattern
+    shares enough of its words (``PROCEDURE_MATCH``), the closest first, then those
+    ``meaning`` keeps (procedure id -> cosine of its pattern to the task, the ones at the
+    encoder's floor), closest first."""
+    pattern = task_pattern(task)
+    meaning = meaning or {}
+    worded: list[Matched] = []
+    meant: list[Matched] = []
+    for p in procedures:
+        if (score := similarity(pattern, p.pattern)) >= PROCEDURE_MATCH:
+            worded.append(Matched(p, score, "words"))
+        elif p.procedure_id in meaning:
+            meant.append(Matched(p, meaning[p.procedure_id], "meaning"))
+    out: list[Matched] = []
+    for tier in (worded, meant):
+        tier.sort(
+            key=lambda m: (
+                -m.match,
+                -m.procedure.success_rate,
+                -m.procedure.support,
+                m.procedure.procedure_id,
+            )
+        )
+        out.extend(tier)
+    return out[:k]
+
+
 def rank_procedures(
     task: str,
     procedures: Sequence[StoredProcedure],
     k: int,
     meaning: Mapping[str, float] | None = None,
 ) -> list[StoredProcedure]:
-    """The procedures about this task, best first: those whose pattern shares enough of its
-    words (``PROCEDURE_MATCH``), the closest first, then those ``meaning`` keeps (procedure id
-    -> cosine of its pattern to the task, the ones at the encoder's floor), closest first."""
-    pattern = task_pattern(task)
-    meaning = meaning or {}
-    worded: list[tuple[float, StoredProcedure]] = []
-    meant: list[tuple[float, StoredProcedure]] = []
-    for p in procedures:
-        if (score := similarity(pattern, p.pattern)) >= PROCEDURE_MATCH:
-            worded.append((score, p))
-        elif p.procedure_id in meaning:
-            meant.append((meaning[p.procedure_id], p))
-    out: list[StoredProcedure] = []
-    for tier in (worded, meant):
-        tier.sort(key=lambda sp: (-sp[0], -sp[1].success_rate, -sp[1].support, sp[1].procedure_id))
-        out.extend(p for _, p in tier)
-    return out[:k]
+    """The procedures about this task, best first (``matched_procedures``, without the
+    match)."""
+    return [m.procedure for m in matched_procedures(task, procedures, k, meaning)]
 
 
 def missed_by_words(task: str, procedures: Sequence[StoredProcedure]) -> list[StoredProcedure]:
@@ -109,19 +145,31 @@ class ProcedureMatcher:
         *,
         vectors: TaskVectors = None,
     ) -> list[StoredProcedure]:
-        """The procedures about ``task``, best first (``rank_procedures``). The task is read
-        for its meaning only when the words leave fewer than ``k`` and miss a procedure."""
+        """The procedures about ``task``, best first (``matched``, without the match)."""
+        return [m.procedure for m in await self.matched(task, procedures, k, vectors=vectors)]
+
+    async def matched(
+        self,
+        task: str,
+        procedures: Sequence[StoredProcedure],
+        k: int,
+        *,
+        vectors: TaskVectors = None,
+    ) -> list[Matched]:
+        """The procedures about ``task``, best first, each with its match
+        (``matched_procedures``). The task is read for its meaning only when the words leave
+        fewer than ``k`` and miss a procedure."""
         missed = missed_by_words(task, procedures)
         floor = self.floor
         if not missed or floor <= 0 or len(procedures) - len(missed) >= k:
-            return rank_procedures(task, procedures, k)
+            return matched_procedures(task, procedures, k)
         task_vector = await self._task_vector(task, vectors)
         patterns = await self._pattern_vectors([p.pattern for p in missed])
         cosines = np.stack(patterns) @ task_vector
         meaning = {
             p.procedure_id: float(c) for p, c in zip(missed, cosines, strict=True) if c >= floor
         }
-        return rank_procedures(task, procedures, k, meaning)
+        return matched_procedures(task, procedures, k, meaning)
 
     def _key(self, pattern: str) -> str:
         assert self.indexer is not None
