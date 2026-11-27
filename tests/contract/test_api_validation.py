@@ -18,14 +18,14 @@ SCOPE = {"thread_id": "thr_1"}
 
 def test_recall_with_an_unknown_kind_is_422(client: TestClient) -> None:
     r = client.post(
-        "/v1/recall", headers=HEADERS, json={"scope": SCOPE, "query": "q", "kinds": ["fact"]}
+        "/v1/recall", headers=HEADERS, json={"scope": SCOPE, "query": "q", "kinds": ["note"]}
     )
     assert r.status_code == 422, r.text
     error = r.json()
     assert error["code"] == "VALIDATION"
     assert error["details"]["errors"][0]["loc"] == ["body", "kinds", "0"]
     assert (
-        "'memory', 'chunk', 'summary', 'episode' or 'message'"
+        "'memory', 'chunk', 'summary', 'episode', 'message' or 'fact'"
         in error["details"]["errors"][0]["msg"]
     )
 

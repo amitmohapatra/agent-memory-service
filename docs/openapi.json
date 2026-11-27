@@ -6192,7 +6192,8 @@
                 "chunk",
                 "summary",
                 "episode",
-                "message"
+                "message",
+                "fact"
               ],
               "type": "string"
             },
@@ -6894,13 +6895,14 @@
             "type": "string"
           },
           "kind": {
-            "description": "What the item is: memory (something learned or stated), chunk (a document passage), summary (a document summary), episode (an earlier conversation of this user) or message (what was said, here or in an earlier conversation).",
+            "description": "What the item is: memory (something learned or stated), chunk (a document passage), summary (a document summary), episode (an earlier conversation of this user), message (what was said, here or in an earlier conversation) or fact (a relation the knowledge graph holds).",
             "enum": [
               "memory",
               "chunk",
               "summary",
               "episode",
-              "message"
+              "message",
+              "fact"
             ],
             "title": "Kind",
             "type": "string"

@@ -63,7 +63,8 @@ class MemorySearchArgs(_Args):
         default=None,
         description="memory, chunk (document passages), summary, episode (earlier "
         "conversations), message (what was said, here and in earlier conversations, your "
-        "answers too); default memory and chunk",
+        "answers too), fact (relations the knowledge graph holds of what the query names); "
+        "default memory and chunk",
     )
     time_from: UtcDateTime | None = Field(default=None, description="observed since")
     time_to: UtcDateTime | None = Field(default=None, description="observed until")

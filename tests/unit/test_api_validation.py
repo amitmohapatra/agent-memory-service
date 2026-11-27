@@ -51,10 +51,10 @@ def _locs(response: Any) -> set[str]:
 
 def test_unknown_recall_kind_is_rejected_not_dropped(client: TestClient) -> None:
     r = client.post(
-        "/v1/recall", headers=HEADERS, json={"scope": SCOPE, "query": "q", "kinds": ["fact"]}
+        "/v1/recall", headers=HEADERS, json={"scope": SCOPE, "query": "q", "kinds": ["note"]}
     )
     assert "body.kinds.0" in _locs(r)
-    assert "'memory', 'chunk', 'summary', 'episode' or 'message'" in r.text
+    assert "'memory', 'chunk', 'summary', 'episode', 'message' or 'fact'" in r.text
 
 
 def test_recall_kinds_must_name_at_least_one_kind(client: TestClient) -> None:
@@ -309,13 +309,13 @@ def test_sdk_literals_match_the_service_literals(sdk_literal: Any, service: Any)
     assert _values(sdk_literal) == _values(service)
 
 
-def test_search_kinds_are_the_record_kinds_and_the_history() -> None:
+def test_search_kinds_are_the_record_kinds_the_history_and_the_graphs_facts() -> None:
     from memory_service.modules.retrieval.search import SearchKind
 
     assert (
         _values(SearchKind)
         == _values(sdk.SearchKind)
-        == {"memory", "chunk", "summary", "episode", "message"}
+        == {"memory", "chunk", "summary", "episode", "message", "fact"}
     )
 
 

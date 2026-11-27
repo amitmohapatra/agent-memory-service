@@ -303,3 +303,31 @@ async def test_the_last_and_the_first_thing_said_are_read_by_time_not_by_words(
         await tools.call(at(None, "thr_new"), "memory_search", args)
     with pytest.raises(ValidationFailed):
         await search("thr_new", order="latest")
+
+
+async def test_the_graphs_facts_are_a_kind_a_search_can_ask_for(container, uow_factory) -> None:
+    """``fact``: the relations the knowledge graph holds of what the query names, on demand -
+    a context shows them only when its question names an entity. Only facts that say
+    something: where a name appears ("u1 mentions Dana") is the graph's own bookkeeping."""
+    from tests.integration.test_statements_follow_the_user import _chat, _say
+
+    earlier = _chat()
+    for said in ("The Coach tote is short of stock at stores 12 and 40.", "Dana manages store 40."):
+        await _say(container, uow_factory, earlier, said)
+    tools = container.services["agent_tools"]
+    ask = "Which stores are short of stock of the Coach tote?"
+
+    facts = await tools.call(_chat(), "memory_search", {"query": ask, "kinds": ["fact"]})
+    assert facts and {item["kind"] for item in facts} == {"fact"}
+    assert any("short of stock at stores 12 and 40" in item["text"] for item in facts)
+    assert not any(" mentions " in item["text"] for item in facts)
+    assert all(item["observed_on"] for item in facts)
+
+    both = await tools.call(_chat(), "memory_search", {"query": ask, "kinds": ["memory", "fact"]})
+    assert {item["kind"] for item in both} == {"memory", "fact"}
+    # unless asked for, a search returns none, as before
+    default = await tools.call(_chat(), "memory_search", {"query": ask})
+    assert "fact" not in {item["kind"] for item in default}
+    # another user's graph is never read
+    theirs = await tools.call(_chat("u2"), "memory_search", {"query": ask, "kinds": ["fact"]})
+    assert theirs == []

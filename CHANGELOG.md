@@ -7,6 +7,16 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added (service; trellis-memory 0.6.8): the knowledge graph's facts, on demand
+
+A context shows graph facts only when its question names something the graph holds, and a
+search returned none at all: `/v1/recall` and the `memory_search` agent tool read the index,
+and a fact is no record of it. `kinds` now takes `fact`: the relations the graph holds of
+what the query names ("Coach tote short_at store 12"), each with the day it was observed.
+Only facts that say something are returned - where a name appears ("u1 mentions Dana") is the
+graph's own bookkeeping. Not in the default kinds: a search that does not ask for facts
+returns what it did. The SDK's `SearchKind` names `fact` (trellis-memory 0.6.8).
+
 ### Added (service): the last and the first thing said, read by time
 
 "What was my last question?" is a question about order, and a search finds by meaning. The

@@ -10,7 +10,9 @@ Kinds: ``memory`` (what was learned or stated), ``chunk`` (document passages), `
 digest of what followed, across every thread the caller's user owns in the request's
 workspace) and ``message`` (the messages of this conversation and of the user's earlier ones
 in the request's workspace, this conversation's first; another user's are never read, nor a
-deleted conversation's). A time range keeps only what was observed within it, and it filters
+deleted conversation's) and ``fact`` (the relations the knowledge graph holds of what the
+query names: "Coach tote short_at store 12"; found by the names in the query, where the query
+is one the graph is read for). A time range keeps only what was observed within it, and it filters
 before anything is ranked: the store applies it to memories, and a message outside it is never
 scored.
 
@@ -48,6 +50,7 @@ from memory_service.domain.enums import (
     StatementKind,
     TemporalStatus,
 )
+from memory_service.domain.graph import BOOKKEEPING_LAYERS, layer_for
 from memory_service.domain.memory import CanonicalMemory, statement_kind_of
 from memory_service.domain.profile import PROFILE_MEMORY_TYPES
 from memory_service.domain.text import SENTENCE_BREAK
@@ -66,7 +69,10 @@ from memory_service.modules.retrieval.engine import (
 from memory_service.modules.retrieval.router import points_to_earlier_chat
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 
-SearchKind = Literal["memory", "chunk", "summary", "episode", "message"]
+SearchKind = Literal["memory", "chunk", "summary", "episode", "message", "fact"]
+#: The kinds the index holds. A ``fact`` is no record of it: the knowledge graph gives the
+#: relations of what the query names, beside whatever the index is searched for.
+_INDEXED: Final = ("chunk", "memory", "summary", "episode")
 #: How a search orders what it returns: by meaning, or the messages by when they were said.
 Order = Literal["relevance", "newest", "oldest"]
 #: Whose messages a search by time keeps.
@@ -140,7 +146,8 @@ class SearchItem(BaseModel):
     kind: SearchKind = Field(
         description="What the item is: memory (something learned or stated), chunk (a "
         "document passage), summary (a document summary), episode (an earlier conversation "
-        "of this user) or message (what was said, here or in an earlier conversation)."
+        "of this user), message (what was said, here or in an earlier conversation) or fact "
+        "(a relation the knowledge graph holds)."
     )
     text: str = Field(description="The item's text (clipped for long passages).")
     observed_on: str | None = Field(
@@ -181,6 +188,28 @@ class SearchResult:
 def _words(text: str) -> set[str]:
     """Word tokens in any script (``\\w`` is Unicode-aware), casefolded."""
     return {w for w in _WORD.findall(text.casefold()) if len(w) > 1}
+
+
+def _index_kinds(kinds: Sequence[str]) -> tuple[str, ...]:
+    """What the index is searched for when a caller asks for ``kinds``: those it holds; and,
+    for ``fact``, passages and memories too - the graph's relations come with a search of
+    both (the engine's source contract), and the caller is given only the kinds it named."""
+    indexed = [k for k in kinds if k in _INDEXED]
+    if "fact" in kinds:
+        indexed = list(dict.fromkeys(["chunk", "memory", *indexed]))
+    return tuple(indexed)
+
+
+def _asked_for(candidate: Candidate, wanted: set[SearchKind]) -> bool:
+    """Whether a search for ``wanted`` returns ``candidate``: its kind is one of them, and a
+    fact says something of what it names - not where a name appears or which tool touched it
+    (``BOOKKEEPING_LAYERS``: "u1 mentions Dana"), which the graph keeps for its own
+    traversal and a reader learns nothing from."""
+    if candidate.kind not in wanted:
+        return False
+    if candidate.kind != "fact":
+        return True
+    return layer_for(str(candidate.payload.get("predicate") or "")) not in BOOKKEEPING_LAYERS
 
 
 def default_kinds(query: str) -> tuple[SearchKind, ...]:
@@ -406,7 +435,7 @@ class Searcher:
             return await self._by_time(
                 ctx, order, said_by, here, observed, limit, debug=debug, text_chars=text_chars
             )
-        wanted = set(kinds)
+        wanted: set[SearchKind] = set(kinds)
         ranked = [k for k in kinds if k != "message"]
         items: list[SearchItem] = []
 
@@ -418,7 +447,7 @@ class Searcher:
                     ctx,
                     query,
                     limit=limit,
-                    kinds=tuple(ranked),
+                    kinds=_index_kinds(ranked),
                     document_ids=document_ids,
                     observed=observed,
                     at=at,
@@ -439,7 +468,7 @@ class Searcher:
                 [
                     candidate_item(c, debug=debug, text_chars=text_chars)
                     for c in retrieved.candidates
-                    if c.kind in wanted
+                    if _asked_for(c, wanted)
                 ],
             )
         merged = [
