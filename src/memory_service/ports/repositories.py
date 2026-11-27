@@ -135,6 +135,27 @@ class MessageRepository(Protocol):
         """Visible messages after ``after_sequence``, oldest first, at most ``limit``."""
         ...
 
+    async def by_time(
+        self,
+        tenant_id: str,
+        *,
+        thread_id: str | None = None,
+        owner_user_id: str | None = None,
+        workspace_id: str | None = None,
+        newest: bool,
+        limit: int,
+        threads: int,
+        role: str | None = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> list[Message]:
+        """Visible messages by when they were said - the newest first (``newest``) or the
+        oldest first - at most ``limit``: of ``thread_id`` alone when it is given, else of the
+        ``threads`` most recently active threads ``owner_user_id`` owns in the workspace.
+        ``role`` keeps one speaker's. No word of a query is read: this is the read for "the
+        last thing said" and "the first", which no search by meaning answers."""
+        ...
+
     async def owned_recent(
         self,
         tenant_id: str,

@@ -18,7 +18,7 @@ from memory_service.domain.errors import NotFound, ValidationFailed
 from memory_service.domain.instants import UtcDateTime
 from memory_service.modules.context.views import hints_view
 from memory_service.modules.retrieval.engine import PointInTime
-from memory_service.modules.retrieval.search import SearchKind, default_kinds
+from memory_service.modules.retrieval.search import Order, SearchKind, Speaker, default_kinds
 from memory_service.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -72,6 +72,19 @@ class MemorySearchArgs(_Args):
     )
     known_at: UtcDateTime | None = Field(
         default=None, description="what had been learned by this moment"
+    )
+    order: Order = Field(
+        default="relevance",
+        description="relevance: by meaning. newest or oldest: the messages by when they were "
+        "said, whatever the query - the last or the first thing said",
+    )
+    said_by: Speaker | None = Field(
+        default=None, description="with newest or oldest: only the user's or only your messages"
+    )
+    here: bool = Field(
+        default=False,
+        description="with newest or oldest: only this conversation (default: every "
+        "conversation of the user, this one included)",
     )
     k: int = Field(default=DEFAULT_K, ge=1, le=MAX_K)
 
@@ -147,7 +160,8 @@ TOOLS: Final = (
         "memory_search",
         "Search what is remembered for this user, agent and conversation, and the documents "
         "they may read. Returns items with id, kind, text and observed_on; an item a later "
-        "statement replaced is marked superseded.",
+        "statement replaced is marked superseded. For the last or the first thing said (a "
+        "question, an answer) use order newest or oldest: it reads the messages by time.",
         MemorySearchArgs,
     ),
     AgentTool(
@@ -232,6 +246,9 @@ class AgentTools:
             observed=observed,
             at=PointInTime(as_of=args.as_of, known_at=args.known_at),
             text_chars=TEXT_CHARS,
+            order=args.order,
+            said_by=args.said_by,
+            here=args.here,
         )
         return [item.model_dump(mode="json", exclude_none=True) for item in found.items]
 

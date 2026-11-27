@@ -14,6 +14,13 @@ deleted conversation's). A time range keeps only what was observed within it, an
 before anything is ranked: the store applies it to memories, and a message outside it is never
 scored.
 
+``order``: a search is by meaning unless it says otherwise. ``newest`` or ``oldest`` reads the
+messages by when they were said instead - "my last question", "the first thing I asked", "your
+last answer" are questions about order, which no ranking by shared words answers (asked "what
+was the last thing you answered?" in a new conversation, the ranking returned the user's first
+message). Messages only; the query is not read; ``said_by`` keeps one speaker's and ``here``
+this conversation's.
+
 ``earlier_chats`` is the pushed context's read of the same messages (ADR 0044): what the
 assistant answered in the user's earlier conversations, for a question that points to one.
 """
@@ -60,6 +67,11 @@ from memory_service.modules.retrieval.router import points_to_earlier_chat
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 
 SearchKind = Literal["memory", "chunk", "summary", "episode", "message"]
+#: How a search orders what it returns: by meaning, or the messages by when they were said.
+Order = Literal["relevance", "newest", "oldest"]
+#: Whose messages a search by time keeps.
+Speaker = Literal["user", "assistant"]
+_ROLES: Final = {"user": MessageRole.USER, "assistant": MessageRole.ASSISTANT}
 #: What a search reads when the caller names no kinds. The order is the order the engine
 #: interleaves the per-kind rankings in, so document passages lead (as /v1/recall always did).
 DEFAULT_KINDS: Final[tuple[SearchKind, ...]] = ("chunk", "memory")
@@ -386,7 +398,14 @@ class Searcher:
         document_ids: Sequence[str] | None = None,
         debug: bool = False,
         text_chars: int | None = None,
+        order: Order = "relevance",
+        said_by: Speaker | None = None,
+        here: bool = False,
     ) -> SearchResult:
+        if order != "relevance":
+            return await self._by_time(
+                ctx, order, said_by, here, observed, limit, debug=debug, text_chars=text_chars
+            )
         wanted = set(kinds)
         ranked = [k for k in kinds if k != "message"]
         items: list[SearchItem] = []
@@ -547,6 +566,48 @@ class Searcher:
             if nxt in fixes or (nxt in ended and _names_what(reply.content, ended[nxt])):
                 out.add(reply.message_id)
         return out
+
+    async def _by_time(
+        self,
+        ctx: MemoryExecutionContext,
+        order: Order,
+        said_by: Speaker | None,
+        here: bool,
+        observed: ObservedRange | None,
+        limit: int,
+        *,
+        debug: bool,
+        text_chars: int | None,
+    ) -> SearchResult:
+        """The visible messages by when they were said, the newest or the oldest first: of
+        this conversation (``here``, or a caller with no user) or of every conversation the
+        caller's user owns in the request's workspace, this one included. Another user's are
+        never read, nor a conversation the caller may not read."""
+        since, until = observed or (None, None)
+        own = None if here else ctx.user_id
+        async with self.uow_factory() as uow:
+            if own is None:
+                if not ctx.thread_id or await uow.threads.get(ctx.tenant_id, ctx.thread_id) is None:
+                    return SearchResult(items=[], query_type=QueryType.CONVERSATION_HISTORY)
+                await self.conversation.authz.require(ctx, "can_read", "thread", ctx.thread_id)
+            read = await uow.messages.by_time(
+                ctx.tenant_id,
+                thread_id=ctx.thread_id if own is None else None,
+                owner_user_id=own,
+                workspace_id=ctx.workspace_id,
+                newest=order == "newest",
+                limit=limit,
+                threads=OWNED_THREADS,
+                role=_ROLES[said_by].value if said_by else None,
+                since=since,
+                until=until,
+            )
+        items = [_message_item(m, 0.0, debug=debug, text_chars=text_chars) for m in read]
+        replies = {m.message_id: m for m in read if m.role is MessageRole.ASSISTANT}
+        return SearchResult(
+            items=await self._mark_replaced(ctx, items, replies),
+            query_type=QueryType.CONVERSATION_HISTORY,
+        )
 
     async def _messages(
         self,

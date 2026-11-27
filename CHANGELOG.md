@@ -7,6 +7,19 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added (service): the last and the first thing said, read by time
+
+"What was my last question?" is a question about order, and a search finds by meaning. The
+`memory_search` agent tool ranked messages by the words they share with the query: asked
+"what was the last thing you answered?" in a new conversation, it returned the user's first
+message. The tool takes `order`: `relevance` (the default, as before), or `newest` / `oldest`,
+which read the messages by when they were said, whatever the query's words - of every
+conversation the caller's user owns in the workspace (this one included), or of this
+conversation alone with `here`; `said_by` keeps the user's or the assistant's. Another user's
+conversation and a deleted one are never read, and a caller with no user reads its own
+conversation only. A time range narrows either order. Nothing new is stored: every message
+was already kept with its time. `/v1/recall` is unchanged.
+
 ### Added (service; trellis-memory 0.6.7): a model checks what a context attaches from memory
 
 A context is built by similarity, and near is not about. Measured on one run of a retail

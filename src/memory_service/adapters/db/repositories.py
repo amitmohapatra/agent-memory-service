@@ -494,6 +494,65 @@ class SqlMessageRepository:
         ).scalars()
         return [_row_to_message(r) for r in rows]
 
+    async def by_time(
+        self,
+        tenant_id: str,
+        *,
+        thread_id: str | None = None,
+        owner_user_id: str | None = None,
+        workspace_id: str | None = None,
+        newest: bool,
+        limit: int,
+        threads: int,
+        role: str | None = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> list[Message]:
+        if thread_id is not None:
+            within = [thread_id]
+        elif owner_user_id is not None:
+            # the user's most recently active threads, as ``owned_recent`` bounds its work
+            within = list(
+                (
+                    await self.s.execute(
+                        select(ThreadRow.thread_id)
+                        .where(
+                            ThreadRow.tenant_id == tenant_id,
+                            ThreadRow.owner_user_id == owner_user_id,
+                            _in_workspace(workspace_id),
+                            ThreadRow.deleted_at.is_(None),
+                        )
+                        .order_by(ThreadRow.updated_at.desc(), ThreadRow.thread_id)
+                        .limit(threads)
+                    )
+                ).scalars()
+            )
+        else:
+            within = []
+        if not within:
+            return []
+        when, place = MessageRow.occurred_at, MessageRow.sequence
+        stmt = (
+            select(MessageRow)
+            .where(
+                MessageRow.tenant_id == tenant_id,
+                MessageRow.thread_id.in_(within),
+                MessageRow.deleted_at.is_(None),
+                MessageRow.kind == MessageKind.VISIBLE.value,
+                MessageRow.content.is_not(None),
+            )
+            # when it was said; in one conversation, said at one instant, its own order
+            .order_by(*((when.desc(), place.desc()) if newest else (when.asc(), place.asc())))
+            .limit(limit)
+        )
+        if role is not None:
+            stmt = stmt.where(MessageRow.role == role)
+        if since is not None:
+            stmt = stmt.where(MessageRow.occurred_at >= since)
+        if until is not None:
+            stmt = stmt.where(MessageRow.occurred_at <= until)
+        return [_row_to_message(r) for r in (await self.s.execute(stmt)).scalars()]
+
     async def owned_recent(
         self,
         tenant_id: str,
