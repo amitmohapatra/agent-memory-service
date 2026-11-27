@@ -24,6 +24,7 @@ from memory_service.domain.context_bundle import (
     earlier_chats_section,
 )
 from memory_service.domain.memory import unverified_representation
+from memory_service.modules.context.standing import stated
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.retrieval.engine import UNUSED_MAX
 
@@ -66,3 +67,40 @@ def standing(bundle: ContextBundle) -> ContextBundle:
             },
         }
     )
+
+
+def said_once(bundle: ContextBundle) -> ContextBundle:
+    """``bundle`` without the memories a profile line already states, word for word (a rule
+    or preference that applies is listed with its date in the profile, and was in the
+    prompt a second time as a ranked memory). Each stays evidence the bundle does not carry
+    (``unused``), which an answer is still checked against."""
+    shown = {
+        _plain(stated(line)[0]) for block in bundle.profile for line in block.text.splitlines()
+    }
+    shown.discard("")
+    twice = [m for m in bundle.memories if _plain(m.text) in shown]
+    if not twice:
+        return bundle
+    gone = {m.item_id for m in twice}
+    return bundle.model_copy(
+        update={
+            "memories": [m for m in bundle.memories if m.item_id not in gone],
+            "evidence": bundle.evidence.model_copy(
+                update={
+                    "unused": [
+                        *bundle.evidence.unused,
+                        *(
+                            UnusedEvidence(item_id=m.item_id, kind="memory", text=m.text)
+                            for m in twice
+                            if not unverified_representation(m.attributes)
+                        ),
+                    ][:UNUSED_MAX]
+                }
+            ),
+            "token_estimate": max(0, bundle.token_estimate - sum(m.token_estimate for m in twice)),
+        }
+    )
+
+
+def _plain(text: str) -> str:
+    return " ".join(text.split()).casefold().strip(" .!?;:,")

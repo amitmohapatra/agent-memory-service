@@ -33,7 +33,7 @@ from typing import Any, Final
 from memory_service.domain.beliefs import FACETS, Belief, person_name
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import ProfileBlockView
-from memory_service.domain.enums import Lifetime, TemporalStatus
+from memory_service.domain.enums import Lifetime, MemoryType, TemporalStatus
 from memory_service.domain.errors import Conflict, NotFound, ValidationFailed
 from memory_service.domain.memory import CanonicalMemory
 from memory_service.domain.profile import (
@@ -211,6 +211,30 @@ class PersonPage:
         )
 
 
+#: What a person said that is how they want things done, not who they are: a context
+#: carries it only when it applies to the request (``context.standing``), never in the
+#: ``user`` block that goes with every request.
+STANDING_CATEGORIES: Final = frozenset({"rule", "instruction", "preference"})
+STANDING_KINDS: Final = frozenset({"RULE", "CONDITIONAL_RULE"})
+
+
+def identity(memory: CanonicalMemory) -> bool:
+    """Whether ``memory`` says who the person is (their name, role, team, place, what they
+    own or do) rather than how they want things done."""
+    metadata = memory.system_metadata or {}
+    return (
+        memory.memory_type is MemoryType.USER
+        and metadata.get("category") not in STANDING_CATEGORIES
+        and str(metadata.get("statement_kind") or "") not in STANDING_KINDS
+        and metadata.get("standing_instruction") != "yes"
+    )
+
+
+def _who_they_are(memories: Sequence[CanonicalMemory]) -> list[CanonicalMemory]:
+    """Of ``memories``, the lasting ones that say who the person is (``identity``)."""
+    return [m for m in memories if m.lifetime is not Lifetime.SHORT_TERM and identity(m)]
+
+
 class ProfileService:
     def __init__(
         self,
@@ -334,7 +358,10 @@ class ProfileService:
         )
 
     async def refresh_user(self, tenant_id: str, user_id: str) -> ProfileBlock | None:
-        """Keep the ``user`` block from the user's own USER and PREFERENCE memories: composed
+        """Keep the ``user`` block from the user's own memories of who they are (``identity``:
+        not their rules and preferences, which a context carries only where they apply,
+        ``context.standing``; in the block they went with every request, about anything, and
+        each was in the prompt twice where it applied): composed
         from those held now, so a memory forgotten, replaced or archived leaves it with the
         next refresh, and a learned block of a user who has none left is emptied. An edited
         block keeps its edit (a person's or an agent's words, not derived); a line the job
@@ -350,7 +377,7 @@ class ProfileService:
             # The block is pinned into every context, so it holds what lasts: a SHORT_TERM
             # memory ("do not invent a sales number", scoped to one task) would otherwise
             # follow its author into every conversation for its whole TTL.
-            memories = [m for m in memories if m.lifetime is not Lifetime.SHORT_TERM]
+            memories = _who_they_are(memories)
             current = await uow.profiles.get(tenant_id, scope, USER_BLOCK)
             held = await _held(uow, tenant_id, current)
         if current is not None and current.source == "edited":

@@ -48,6 +48,7 @@ from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.context.check import NOTE as CHECK_NOTE
 from memory_service.modules.context.check import ContextCheck, without
 from memory_service.modules.context.coverage import unanswered
+from memory_service.modules.context.demand import said_once
 from memory_service.modules.context.demand import standing as standing_only
 from memory_service.modules.context.evidence import NO_SHARED_TERM
 from memory_service.modules.context.handles import BundleRecords, record_of
@@ -1685,7 +1686,9 @@ _RECALL_KEYS: Final[dict[bool, tuple[str, ...]]] = {True: (), False: ("recall=of
 
 
 def _as_asked(found: _Lookup, bundle: ContextBundle) -> ContextBundle:
-    """``bundle`` as the caller asked for it: whole, or with what stands alone (``demand``)."""
+    """``bundle`` as the caller asked for it: whole, or with what stands alone (``demand``),
+    and each statement in it once (``demand.said_once``)."""
+    bundle = said_once(bundle)
     return bundle if found.recall else standing_only(bundle)
 
 

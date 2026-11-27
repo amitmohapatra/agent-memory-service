@@ -79,8 +79,8 @@ async def _texts(container, uow_factory, user: str = "u1") -> list[str]:
     return [m.content for m in await _memories(uow_factory, _chat(user), container)]
 
 
-async def _rules(container, user: str = "u1") -> str:
-    body = await container.services["context_builder"].build_api(_chat(user), ASK, output="full")
+async def _rules(container, user: str = "u1", ask: str = ASK) -> str:
+    body = await container.services["context_builder"].build_api(_chat(user), ask, output="full")
     blocks = json.loads(body).get("profile") or []
     return "\n".join(b["text"] for b in blocks if b["block"] in ("standing_rules", "user"))
 
@@ -150,7 +150,7 @@ async def test_a_rule_the_model_reads_from_a_request_stays_and_the_request_goes(
     after = await _texts(container, uow_factory)
     assert rule in after and asked not in after
     assert quoted not in after and PASTED not in after
-    assert "as a table" in await _rules(container)
+    assert "as a table" in await _rules(container, ask="Show the stock of the tote as a table.")
 
 
 async def test_a_message_the_model_does_not_answer_for_is_left_as_it_is(

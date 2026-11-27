@@ -7,6 +7,18 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service): the profile says who the person is; their rules and preferences come where they apply, once
+
+The stored `user` block, sent with every context, was composed from every rule, preference
+and fact the person stated. A preference that applied was then in the prompt three times
+(the `preferences` section, the block, a ranked memory), and a rule about something else went
+with every request. The block is now composed only from what says who the person is (name,
+role, team, place); their rules and preferences reach a context only where they apply
+(`standing_rules`, `preferences`), dated. A ranked memory a profile line already states word
+for word is not listed again (it stays evidence an answer is checked against). A block a
+person or an agent edited is kept as written. Blocks stored before change at their next
+refresh.
+
 ### Added (service; trellis-memory 0.6.11): only what a person types in chat becomes their memory
 
 Everything posted as a USER message was read as the person's words. An application posts

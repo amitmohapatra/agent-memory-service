@@ -77,11 +77,11 @@ async def _remember(container, uow_factory, content: str, memory_type: MemoryTyp
 async def test_the_user_block_is_kept_from_what_the_user_said_and_an_edit_is_kept(
     container, uow_factory
 ) -> None:
-    await _remember(container, uow_factory, "I prefer email over phone", MemoryType.PREFERENCE)
+    await _remember(container, uow_factory, "I work on the email team", MemoryType.USER)
     profile: ProfileService = container.services["profile"]
     async with uow_factory() as uow:
         [block] = await profile.blocks(uow, ANN)
-    assert block.block == "user" and block.text == "- I prefer email over phone"
+    assert block.block == "user" and block.text == "- I work on the email team"
     assert block.source == "learned"
 
     async with uow_factory() as uow:
@@ -89,13 +89,15 @@ async def test_the_user_block_is_kept_from_what_the_user_said_and_an_edit_is_kep
         edited = await profile.edit(uow, ANN, "user", "email", "e-mail")
         await uow.commit()
         after = await uow.revisions.get_many("acme", [(RevisionKind.USER, "ann")])
-    assert edited.text == "- I prefer e-mail over phone" and edited.version == 2
+    assert edited.text == "- I work on the e-mail team" and edited.version == 2
     assert after != before
 
     await _remember(container, uow_factory, "My desk is in Berlin", MemoryType.USER)
+    # how they want things done is no line of who they are (``profile.service.identity``)
+    await _remember(container, uow_factory, "I prefer email over phone", MemoryType.PREFERENCE)
     async with uow_factory() as uow:
         [block] = await profile.blocks(uow, ANN)
-    assert block.text == "- I prefer e-mail over phone\n- My desk is in Berlin"
+    assert block.text == "- I work on the e-mail team\n- My desk is in Berlin"
     assert block.source == "edited" and block.version == 3
 
     with pytest.raises(Conflict):
@@ -126,11 +128,13 @@ async def test_an_agents_remembered_user_fact_never_becomes_the_users_profile(
     assert block.block == "user" and block.text == "- My name is Ann"
 
 
-async def test_a_standing_rule_said_in_conversation_is_pinned_in_the_user_block(
+async def test_a_standing_rule_said_in_conversation_is_kept_and_not_pinned_in_the_user_block(
     container, uow_factory
 ) -> None:
-    """ "Never suggest recipes with cilantro" said once reaches the pinned user block, which
-    every context carries; a one-off instruction does not."""
+    """ "Never suggest recipes with cilantro" said once is kept as the person's rule - a
+    context lists it where it applies (``context.standing``) - and the pinned user block,
+    which goes with every request, holds who they are, not their rules; a one-off
+    instruction is neither."""
     from benchmark.common import submit_observation  # noqa: PLC0415 - test helper
 
     from memory_service.modules.jobs.registry import register_handlers  # noqa: PLC0415
@@ -144,10 +148,10 @@ async def test_a_standing_rule_said_in_conversation_is_pinned_in_the_user_block(
             await container.tasks.drain()
     profile: ProfileService = container.services["profile"]
     async with uow_factory() as uow:
-        [block] = await profile.blocks(uow, ANN)
-    assert block.block == "user"
-    assert "cilantro" in block.text
-    assert "sales number" not in block.text
+        assert await profile.blocks(uow, ANN) == [], "no line of who they are was said"
+    found = await container.services["context_builder"].build(ANN, "Suggest a recipe with cilantro")
+    rules = "\n".join(b.text for b in found.profile if b.block == "standing_rules")
+    assert "cilantro" in rules and "sales number" not in rules
 
 
 async def test_a_standing_question_comes_due_again_every_refresh(container, uow_factory) -> None:
