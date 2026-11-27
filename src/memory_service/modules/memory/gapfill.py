@@ -38,7 +38,7 @@ import math
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Final, Literal
 
 from memory_service.config.constants import MEMORY_INTELLIGENCE
@@ -147,15 +147,21 @@ SYSTEM: Final = (
     "for character; type - fact, profile, preference, rule, event, plan, procedure or "
     "opinion; subject - who or what it is about, as written in the sources; date - the ISO "
     "day (YYYY-MM-DD) an event happened or a plan is for, resolved against said_on, or an "
-    "empty string; confidence - 0.9 when stated outright, 0.6 when implied; target - the "
-    "KNOWN number for update and contradict, else 0.\n"
+    "empty string; until - for a rule, preference or plan the speaker limits to a period "
+    "('for today', 'this week', 'until Friday', 'during the sale ending 30 June'), the last "
+    "ISO day (YYYY-MM-DD) it holds, resolved against said_on, else an empty string; "
+    "confidence - 0.9 when stated outright, 0.6 when implied; target - the KNOWN number for "
+    "update and contradict, else 0.\n"
     "profile (who the speaker is: name, role, contact, where they work), preference and "
     "rule are only ever the speaker's own, said of themselves in the MESSAGE. A rule is an "
     "instruction the speaker gives you for every time ('always ...', 'never ...', 'from now "
     "on ...', 'whenever I ask ...'); its fact is the instruction as the speaker gave it. An "
-    "instruction for now, for this task or for this conversation ('for now skip the check', "
-    "'this time use the short form') and a request to do something ('delete the plan', "
-    "'show the top 20 as a chart') are not memory.\n"
+    "instruction the speaker gives for a period that outlasts this conversation ('for today "
+    "only use the outlet channel', 'this week answer in German') is a rule with until: it "
+    "holds in their other conversations until that day, and no longer. An instruction for "
+    "now, for this task or for this conversation, with no period named ('for now skip the "
+    "check', 'this time use the short form') and a request to do something ('delete the "
+    "plan', 'show the top 20 as a chart') are not memory.\n"
     "No operation for small talk, greetings, questions, requests and commands, "
     "instructions for the moment, offers the speaker did not take up, hypotheticals, "
     "material the speaker shares (a named fact aside), or what KNOWN already holds. An "
@@ -188,6 +194,7 @@ SCHEMA: Final[dict[str, Any]] = {
                     "type",
                     "subject",
                     "date",
+                    "until",
                     "confidence",
                     "target",
                 ],
@@ -198,6 +205,7 @@ SCHEMA: Final[dict[str, Any]] = {
                     "type": {"type": "string", "enum": sorted(TYPES)},
                     "subject": {"type": "string"},
                     "date": {"type": "string"},
+                    "until": {"type": "string"},
                     "confidence": {"type": "number"},
                     "target": {"type": "integer", "minimum": 0, "maximum": KNOWN},
                 },
@@ -230,6 +238,8 @@ class Fill:
     day: date | None
     #: the memory an ``update`` or ``contradict`` is about
     target: CanonicalMemory | None
+    #: the last day a rule, preference or plan given for a period holds; None: no end
+    until: date | None = None
 
 
 @dataclass(frozen=True)
@@ -509,6 +519,14 @@ def candidate(
             if fill.day is not None
             else None
         ),
+        # through its last day: it lapses when the next one starts (``build_memory`` makes
+        # this its expiry, and the hourly expiry retires it from every context)
+        valid_to=(
+            datetime(fill.until.year, fill.until.month, fill.until.day, tzinfo=UTC)
+            + timedelta(days=1)
+            if fill.until is not None
+            else None
+        ),
         confidence=fill.confidence,
         importance=0.8 if rule else 0.5,
         evidence=evidence,
@@ -543,6 +561,9 @@ def checked(
         return None
     op, target = _op(item, known)
     subject = _text(item.get("subject"))
+    ends = _until(str(item.get("until") or ""), said_at)
+    if ends is _PAST:
+        return None
     return Fill(
         op=op,
         fact=fact,
@@ -553,7 +574,27 @@ def checked(
         confidence=_confidence(item.get("confidence")),
         day=day,
         target=target,
+        until=ends,
     )
+
+
+#: an end the model gave that no memory can be kept to: not a day, or one already past
+_PAST: Final = date.min
+
+
+def _until(given: str, said_at: datetime) -> date | None:
+    """The last day a time-limited op holds: None when the model names none; the day when it
+    is one on or after the day said; :data:`_PAST` otherwise - what was said for a period
+    that cannot be read, or that is over, is not kept as if it had no end."""
+    given = given.strip()
+    if not given:
+        return None
+    try:
+        day = date.fromisoformat(given)
+    except ValueError:
+        return _PAST
+    near = abs(day.year - said_at.year) <= MAX_DATE_YEARS
+    return day if near and day >= said_at.date() else _PAST
 
 
 def _text(value: object) -> str:

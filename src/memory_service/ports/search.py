@@ -207,6 +207,9 @@ PAYLOAD_FIELDS: tuple[str, ...] = (
     "text",
     "text_hash",
     "thread_id",
+    # when a statement given for a period stops holding: the standing sections leave it out
+    # from that moment and say its last day (``context.standing``)
+    "valid_to",
     "visibility",
 )
 

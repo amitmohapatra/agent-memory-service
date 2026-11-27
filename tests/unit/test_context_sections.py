@@ -132,3 +132,37 @@ def test_the_prompt_starts_from_the_pinned_sections() -> None:
     ), rendered
     assert "step 2" not in rendered, "the why is for the full form, not the prompt"
     assert "[m1] Acme supplies paper" in rendered
+
+
+def test_a_statement_given_for_a_period_says_its_last_day_and_is_left_out_once_over() -> None:
+    """The standing sections read a statement's end from the index (``valid_to``; "no end" is
+    indexed as the end of time): its line says the last day it holds, and from the moment
+    that day is over it is in no context, before the hourly expiry retires it."""
+    from datetime import UTC, datetime, timedelta
+
+    from memory_service.modules.context import standing
+    from memory_service.ports.search import PAYLOAD_FIELDS, SearchHit
+
+    now = datetime.now(UTC)
+
+    def hit(valid_to: str | None) -> SearchHit:
+        payload = {"text": "Use the outlet channel.", "observed_at": "2026-11-27T09:00:00+00:00"}
+        if valid_to is not None:
+            payload["valid_to"] = valid_to
+        return SearchHit(record_id="mem_1", score=0.5, retriever="dense_en", payload=payload)
+
+    running = hit((now + timedelta(hours=3)).isoformat())
+    over = hit((now - timedelta(minutes=1)).isoformat())
+    no_end = hit("9999-12-31T00:00:00+00:00")
+    assert not standing._ended(running) and standing._ended(over)
+    assert not standing._ended(no_end) and not standing._ended(hit(None))
+    assert not standing._ended(hit("not a time"))
+    # its last day: it lapses when the next one starts
+    midnight = hit("2026-11-28T00:00:00+00:00")
+    assert standing._dated(midnight, None) == " (said 2026-11-27; until 2026-11-27)"
+    assert standing._dated(no_end, None) == " (said 2026-11-27)"
+    assert standing.stated("- Use the outlet channel. (said 2026-11-27; until 2026-11-27)") == (
+        "Use the outlet channel.",
+        "2026-11-27",
+    )
+    assert "valid_to" in PAYLOAD_FIELDS  # a search returns it, or no section could read it

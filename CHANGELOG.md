@@ -7,6 +7,18 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added (service): what is said for a period is kept until its last day, and no longer
+
+"For today only, use the outlet channel" was either kept for good (no model: the patterns
+read no end) or not kept at all (a model reading it as an instruction for the moment). The
+model's reading of a message now names the last day of a rule, preference or plan the speaker
+limits to a period (`until`); the day is checked in code (a day, on or after the day it was
+said), the memory expires when the next day starts, the standing sections leave it out from
+that moment and its line says so: `(said 2026-11-27; until 2026-11-27)`. A search returns a
+memory's `valid_to`, which the sections read. An instruction for now with no period named is
+still not memory. No model: as before
+([ADR 0049](docs/adr/0049-what-is-said-for-a-period-ends-with-it.md)).
+
 ### Added (service; trellis-memory 0.6.8): the knowledge graph's facts, on demand
 
 A context shows graph facts only when its question names something the graph holds, and a

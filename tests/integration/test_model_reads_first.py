@@ -45,6 +45,7 @@ def op(fact: str, quote: str, kind: str) -> dict:
         "subject": "",
         "date": "",
         "confidence": 0.9,
+        "until": "",
         "target": 0,
     }
 
@@ -283,3 +284,71 @@ async def test_a_message_not_asked_about_costs_no_call(container, uow_factory, m
     memories = await _memories(uow_factory, U1, container)
     assert bool(memories) is kept and _readings(memories) == []
     assert not any(is_rule(m.system_metadata) for m in memories)
+
+
+# --------------------------------------------------------------------------- for a period
+
+TODAY_ONLY = "For today only, use the Retail-Outlet channel for allocations."
+
+
+async def _rules_shown(container, ask: str) -> str:
+    from tests.integration.test_statements_follow_the_user import _chat
+
+    body = await container.services["context_builder"].build_api(_chat(), ask, output="full")
+    blocks = json.loads(body).get("profile") or []
+    return "\n".join(b["text"] for b in blocks if b["block"] == "standing_rules")
+
+
+async def test_an_instruction_for_a_period_holds_until_its_last_day_and_then_lapses(
+    container, uow_factory
+):
+    """ "For today only ..." was either kept for good (the patterns: "use" is no rule word, the
+    turn stays) or not at all (an instruction for the moment). Read with its last day, it is
+    the person's rule in their other conversations today, says until when, and is in no
+    context once the day is over."""
+    from datetime import UTC, datetime, timedelta
+
+    from memory_service.domain.enums import TemporalStatus
+
+    today = datetime.now(UTC).date()
+    pipeline = container.services["observation_pipeline"]
+    reading = {
+        "kind": "statement",
+        "ops": [op(TODAY_ONLY, TODAY_ONLY, "rule") | {"until": today.isoformat()}],
+    }
+    with mocked_gateway([reading]) as gateway:
+        pipeline.gapfill = GapFill(gateway.assist(uses=["contextual_extraction"]))
+        await _observe(container, uow_factory, U1, TODAY_ONLY, hints=USER)
+    await container.tasks.drain()
+    [rule] = [m for m in await _memories(uow_factory, U1, container) if is_rule(m.system_metadata)]
+    ends = datetime.fromisoformat(rule.system_metadata["expires_at"])
+    assert ends == datetime(today.year, today.month, today.day, tzinfo=UTC) + timedelta(days=1)
+    assert rule.temporal.valid_to == ends
+
+    ask = "Create an allocation, which channel do I use?"
+    shown = await _rules_shown(container, ask)
+    assert TODAY_ONLY in shown and f"until {today.isoformat()}" in shown
+
+    # the day is over: the hourly expiry retires it, and no later context carries it
+    async with uow_factory() as uow:
+        expired = await uow.memories.expire_due(now=ends + timedelta(minutes=1))
+        await uow.commit()
+    assert [memory_id for _, memory_id in expired] == [rule.memory_id]
+    async with uow_factory() as uow:
+        [gone] = await uow.memories.get_many(U1.tenant_id, [rule.memory_id])
+    assert gone.temporal.status is TemporalStatus.EXPIRED
+
+
+async def test_a_period_already_over_keeps_nothing_beyond_the_conversation(container, uow_factory):
+    """The model names a last day before the day it was said: nothing is made of it."""
+    pipeline = container.services["observation_pipeline"]
+    reading = {
+        "kind": "request",
+        "ops": [op(TODAY_ONLY, TODAY_ONLY, "rule") | {"until": "2020-01-01"}],
+    }
+    with mocked_gateway([reading]) as gateway:
+        pipeline.gapfill = GapFill(gateway.assist(uses=["contextual_extraction"]))
+        await _observe(container, uow_factory, U1, TODAY_ONLY, hints=USER)
+    memories = await _memories(uow_factory, U1, container)
+    assert not any(is_rule(m.system_metadata) for m in memories)
+    assert _readings(memories) == []

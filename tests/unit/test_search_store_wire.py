@@ -47,6 +47,8 @@ READERS = (
     "modules/retrieval/engine.py",
     "modules/context/builder.py",
     "modules/context/evidence.py",
+    # the standing sections read their hits straight from the store (``_search``)
+    "modules/context/standing.py",
     "modules/context/expansion.py",
     "modules/graph/retrieval.py",
     "modules/rag/indexer.py",

@@ -106,6 +106,7 @@ def _reply(fact: str, quote: str, *, kind: str = "profile") -> dict:
                 "subject": "",
                 "date": "",
                 "confidence": 0.9,
+                "until": "",
                 "target": 0,
             }
         ],

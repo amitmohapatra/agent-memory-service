@@ -29,6 +29,7 @@ def op(**fields):
         "subject": "Biscuit",
         "date": "",
         "confidence": 0.9,
+        "until": "",
         "target": 0,
         **fields,
     }
@@ -465,3 +466,50 @@ async def test_only_a_statement_is_kept_beyond_its_conversation(reply, kept):
 def test_the_model_is_asked_what_the_message_is():
     assert gapfill.SCHEMA["required"] == ["kind", "ops"]
     assert gapfill.SCHEMA["properties"]["kind"]["enum"] == list(gapfill.KINDS)
+
+
+# --------------------------------------------------------------------------- for a period
+
+
+async def test_what_is_given_for_a_period_carries_its_last_day():
+    """ "For today only ..." is no rule for every time and no instruction for this conversation
+    alone: it holds in the speaker's other conversations until the day it names, then lapses."""
+    message = "For this week only, answer me in German."
+    reading = {
+        "kind": "statement",
+        "ops": [
+            op(
+                fact="Ana wants answers in German this week.",
+                quote="For this week only, answer me in German.",
+                type="rule",
+                subject="",
+                until="2026-10-04",
+            )
+        ],
+    }
+    [found], _ = await fill([reading], message=message)
+    assert found.until == date(2026, 10, 4)
+    made = gapfill.candidate(found, speaker="Ana", evidence=[])
+    # through its last day: it lapses when the next one starts
+    assert made.valid_to == datetime(2026, 10, 5, tzinfo=UTC)
+    # no period named: no end
+    [plain], _ = await fill([{"kind": "statement", "ops": [op()]}])
+    assert plain.until is None
+    assert gapfill.candidate(plain, speaker="Ana", evidence=[]).valid_to is None
+
+
+@pytest.mark.parametrize("until", ["2026-09-30", "next friday", "2026-13-45", "9999-01-01"])
+async def test_a_period_that_is_over_or_cannot_be_read_is_not_kept_as_if_it_had_no_end(until):
+    """Said for a period: kept to that period or not at all. A day before the day it was
+    said, a phrase that is no day, or a year no period reaches would leave an instruction
+    for a while standing for good."""
+    reading = {"kind": "statement", "ops": [op(until=until)]}
+    out, _ = await fill([reading])
+    assert out == []
+
+
+def test_the_day_said_is_a_period_still_running():
+    assert gapfill._until("2026-10-01", SAID) == date(2026, 10, 1)
+    assert gapfill._until("  ", SAID) is None
+    assert gapfill._until("2026-09-30", SAID) is gapfill._PAST
+    assert "until" in gapfill.SCHEMA["properties"]["ops"]["items"]["required"]

@@ -28,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import re
 from collections.abc import Iterable, Sequence
+from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
 from pydantic import Field
@@ -155,6 +156,9 @@ def applies(query_stems: set[str], hit_stems: set[str], similarity: float, floor
     return similarity >= floor or len(query_stems & hit_stems) >= SHARED_STEMS
 
 
+#: the index writes "no end" as the end of time (``rag.indexer.TIME_MAX``): a year from here
+#: on is no end
+NO_END_YEAR: Final = 9000
 #: what a listed line says after the statement: when it was said, and what it superseded
 _DATED = re.compile(r" \(said \d{4}-\d{2}-\d{2}(?:;.*)?\)$")
 
@@ -346,6 +350,7 @@ def _about(
             and hit.payload.get("memory_type") not in _IN_USER_BLOCK
             and _text(hit)
             and _said(hit) not in shown
+            and not _ended(hit)
         ]
         gone = _superseded([(hit, _frame(_text(hit), lang)) for hit, _, _ in current])
         lines = _lines([c for c in current if c[0].record_id not in gone])
@@ -395,7 +400,7 @@ def _choose(
     current = [
         (hit, _stems(_text(hit), lang), similarity)
         for hit, similarity in found
-        if not hit.payload.get("earlier_value") and _text(hit)
+        if not hit.payload.get("earlier_value") and _text(hit) and not _ended(hit)
     ]
     gone = _superseded([(hit, _frame(_text(hit), lang)) for hit, _, _ in current])
     live = [c for c in current if c[0].record_id not in gone]
@@ -434,13 +439,42 @@ def _lines(
 
 
 def _dated(hit: SearchHit, old: SearchHit | None) -> str:
-    """`` (said <day>; earlier: <what it superseded>, said <day>)``, or nothing undated."""
+    """`` (said <day>; until <its last day>; earlier: <what it superseded>, said <day>)``, or
+    nothing undated. ``until``: a rule or preference given for a period (ADR 0049) says the
+    last day it holds, so the reader knows it is not for every time."""
     day = _day(hit)
     if not day:
         return ""
+    last = _last_day(hit)
+    until = f"; until {last}" if last else ""
     before = _text(old)[:ABOUT_LINE_CHARS] if old is not None else ""
     was = f"; earlier: {before}, said {_day(old)}" if before and _day(old) else ""
-    return f" (said {day}{was})"
+    return f" (said {day}{until}{was})"
+
+
+def _ends(hit: SearchHit) -> datetime | None:
+    """When a statement given for a period stops holding (the index's ``valid_to``; one
+    with no end is indexed with the end of time)."""
+    raw = str(hit.payload.get("valid_to") or "")
+    try:
+        ends = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    ends = ends if ends.tzinfo else ends.replace(tzinfo=UTC)
+    return ends if ends.year < NO_END_YEAR else None
+
+
+def _ended(hit: SearchHit) -> bool:
+    """Whether its period is over: it is in no context from that moment, before the hourly
+    expiry retires it from the index."""
+    ends = _ends(hit)
+    return ends is not None and ends <= datetime.now(UTC)
+
+
+def _last_day(hit: SearchHit) -> str:
+    """The last day it holds (it lapses when the next one starts); "" for no end."""
+    ends = _ends(hit)
+    return (ends - timedelta(seconds=1)).date().isoformat() if ends is not None else ""
 
 
 def _day(hit: SearchHit | None) -> str:

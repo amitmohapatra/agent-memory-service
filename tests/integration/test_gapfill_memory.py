@@ -25,6 +25,7 @@ OPS = {
             "subject": "",
             "date": "",
             "confidence": 0.9,
+            "until": "",
             "target": 0,
         }
     ],
@@ -102,6 +103,7 @@ async def test_a_sentence_the_model_read_is_held_once_in_its_words(container, uo
                 "subject": "audit",
                 "date": "2026-12-18",
                 "confidence": 0.9,
+                "until": "",
                 "target": 0,
             }
         ],
@@ -174,6 +176,7 @@ async def test_a_reply_the_model_read_whole_is_not_kept_again_with_its_question(
                 "subject": "",
                 "date": "",
                 "confidence": 0.9,
+                "until": "",
                 "target": 0,
             }
             for fact in facts
