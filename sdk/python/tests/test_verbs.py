@@ -524,3 +524,11 @@ async def test_the_catalog_is_read_again_only_when_it_changed(ctx) -> None:
     assert route.calls[1].request.headers["if-none-match"] == '"v1"'
     changed, newer = await ctx.advanced.tools.catalog_if_changed(etag=kept)
     assert [t.name for t in changed or []] == ["erp-get_stock", "x"] and newer == '"v2"'
+
+
+@respx.mock
+async def test_a_message_says_its_origin_only_when_a_person_did_not_type_it(ctx) -> None:
+    route = respx.post(f"{BASE}/v1/messages").respond(202, json={"messages": []})
+    await ctx.history.add([("USER", "hello"), {"role": "USER", "content": "x", "origin": "app"}])
+    sent = _body(route)["messages"]
+    assert "origin" not in sent[0] and sent[1]["origin"] == "app"

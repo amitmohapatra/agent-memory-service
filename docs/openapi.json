@@ -5084,6 +5084,14 @@
             "description": "When the message was originally sent, for imports of an older conversation; omitted: now. ISO 8601; a value without an offset is read as UTC.",
             "title": "Occurred At"
           },
+          "origin": {
+            "$ref": "#/components/schemas/MessageOrigin",
+            "default": "person",
+            "description": "Who put a USER message's words together: person (typed in the chat, the default), app (composed for the person by an application: a UI service's action, a WebMCP page's tool, a form, a notification) or schedule (a scheduled run's stored task). Only a person's own message is read for their memory - rules, preferences, profile; the others are kept in the conversation as said.",
+            "examples": [
+              "person"
+            ]
+          },
           "parent_message_id": {
             "anyOf": [
               {
@@ -5236,6 +5244,16 @@
         ],
         "title": "MessageListResponse",
         "type": "object"
+      },
+      "MessageOrigin": {
+        "description": "Who put a USER message's words together. Only a person's own is read for their memory\n(``pipeline._told``): the rest is kept in its conversation, as said.",
+        "enum": [
+          "person",
+          "app",
+          "schedule"
+        ],
+        "title": "MessageOrigin",
+        "type": "string"
       },
       "MessageResponse": {
         "examples": [

@@ -859,6 +859,7 @@
     "custom_metadata": "dict[str, Any] = ...",
     "kind": "Literal['VISIBLE', 'INTERNAL'] = 'VISIBLE'",
     "occurred_at": "datetime | None = None",
+    "origin": "Literal['person', 'app', 'schedule'] = 'person'",
     "parent_message_id": "str | None = None",
     "role": "Literal['USER', 'ASSISTANT', 'SYSTEM', 'TOOL', 'AGENT', 'EVENT'] (required)",
     "source_message_id": "str | None = None",
@@ -1492,5 +1493,5 @@
    "signature": "() -> 'MemoryContext | None'"
   }
  },
- "version": "0.6.10"
+ "version": "0.6.11"
 }

@@ -127,6 +127,23 @@ class MessageRole(StrEnum):
     EVENT = "EVENT"
 
 
+class MessageOrigin(StrEnum):
+    """Who put a USER message's words together. Only a person's own is read for their memory
+    (``pipeline._told``): the rest is kept in its conversation, as said."""
+
+    #: typed by the person, in the chat
+    PERSON = "person"
+    #: composed for the person by an application: a UI service's action, a WebMCP page's
+    #: tool, a form, a notification the harness adds
+    APP = "app"
+    #: a scheduled run's stored task, sent each time it fires, with nobody present
+    SCHEDULE = "schedule"
+
+
+#: Where a message's origin is kept with its observation (said only when not the person).
+ORIGIN = "origin"
+
+
 class WindowFormat(StrEnum):
     """How the context gives the thread's recent messages back: ``rendered`` - as a section
     of the rendered text (``## Recent conversation``); ``messages`` - verbatim, as the

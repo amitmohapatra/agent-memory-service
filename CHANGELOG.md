@@ -7,6 +7,18 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added (service; trellis-memory 0.6.11): only what a person types in chat becomes their memory
+
+Everything posted as a USER message was read as the person's words. An application posts
+more than the person types: a UI service's action ("always use Retail-Store"), a WebMCP
+page's tool call, a form, a harness notification, a scheduled run's stored task sent every
+time it fires. Each became the person's rule, preference or profile line. A message now says
+who put its words together: `origin` is `person` (typed in the chat, the default), `app` or
+`schedule`. Only a person's own message is read for their memory; the others are kept in the
+conversation as posted (its window, a search of its messages) and teach nothing about them.
+The SDK's `Message.origin` (trellis-memory 0.6.11) sends it only when it is not `person`. Messages stored before this
+carry no origin; what was made of them is for `tools.clean_up` (ADR 0050).
+
 ### Added (service; trellis-memory 0.6.10): a learned skill says how closely its task matches the request
 
 A learned skill is offered when its task is close to the request, and the closeness was

@@ -785,7 +785,10 @@ def _message(message: Message | Mapping[str, Any] | tuple[str, str]) -> dict[str
         message = Message(role=role, content=content)  # type: ignore[arg-type]
     elif not isinstance(message, Message):
         message = Message.model_validate(dict(message))
-    return message.model_dump(mode="json", exclude_none=True)
+    body = message.model_dump(mode="json", exclude_none=True)
+    if body.get("origin") == "person":  # sent only when not: an earlier service knows no such field
+        del body["origin"]
+    return body
 
 
 class HistoryAPI:

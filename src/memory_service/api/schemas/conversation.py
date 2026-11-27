@@ -9,7 +9,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from memory_service.api.deps import ScopeBody
 from memory_service.api.validation import CustomMetadata
-from memory_service.domain.enums import ArchiveStatus, JobStatus, MessageKind, MessageRole
+from memory_service.domain.enums import (
+    ArchiveStatus,
+    JobStatus,
+    MessageKind,
+    MessageOrigin,
+    MessageRole,
+)
 from memory_service.domain.instants import UTC_RULE, UtcDateTime
 from memory_service.ports.tasks import Queue
 
@@ -169,6 +175,15 @@ class MessageIn(BaseModel):
     attachments: list[AttachmentIn] = Field(
         default_factory=list,
         description="Files attached to the message; a document_id links one already ingested.",
+    )
+    origin: MessageOrigin = Field(
+        default=MessageOrigin.PERSON,
+        description="Who put a USER message's words together: person (typed in the chat, the "
+        "default), app (composed for the person by an application: a UI service's action, a "
+        "WebMCP page's tool, a form, a notification) or schedule (a scheduled run's stored "
+        "task). Only a person's own message is read for their memory - rules, preferences, "
+        "profile; the others are kept in the conversation as said.",
+        examples=["person"],
     )
     custom_metadata: CustomMetadata = Field(default_factory=dict, examples=[{"ui_locale": "en-GB"}])
     occurred_at: UtcDateTime | None = Field(

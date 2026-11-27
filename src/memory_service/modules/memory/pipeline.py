@@ -15,10 +15,12 @@ from typing import Any, Final
 from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import (
+    ORIGIN,
     AdmissionVerdict,
     DedupDecision,
     Lifetime,
     MemoryType,
+    MessageOrigin,
     ObservationKind,
     ScopeLevel,
     TemporalStatus,
@@ -340,10 +342,16 @@ def _told(observation: Observation) -> bool:
     assistant's side with no run id, and its advice is not the user's rule or fact. Both stay
     in the transcript; a fact the agent wants kept goes through ``memory_remember``. A
     person's words, an event and a document are told, and so is what an agent submits as an
-    observation of its own (``AGENT_RESULT``)."""
+    observation of its own (``AGENT_RESULT``). A USER message a person did not type -
+    composed for them by an application, or a scheduled run's stored task (``MessageOrigin``)
+    - is in the transcript and teaches nothing about them: a UI service's "always use
+    Retail-Store", sent with every action, is not the person's rule."""
     if observation.kind is not ObservationKind.MESSAGE:
         return True
-    return str((observation.custom_metadata or {}).get("role", "")).upper() not in AGENT_ROLES
+    metadata = observation.custom_metadata or {}
+    if str(metadata.get(ORIGIN, MessageOrigin.PERSON.value)) != MessageOrigin.PERSON.value:
+        return False
+    return str(metadata.get("role", "")).upper() not in AGENT_ROLES
 
 
 def authored_type(memory_type: MemoryType, *, by_agent: bool) -> MemoryType:

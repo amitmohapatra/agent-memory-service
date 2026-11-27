@@ -293,6 +293,7 @@ async def create_messages(
                     ctx,
                     role=m.role,
                     kind=m.kind,
+                    origin=m.origin,
                     content=m.content,
                     attachments=[
                         Attachment(message_id="pending", **a.model_dump()) for a in m.attachments

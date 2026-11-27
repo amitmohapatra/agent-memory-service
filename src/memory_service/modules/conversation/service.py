@@ -32,7 +32,13 @@ from memory_service.domain.conversation import (
     Turn,
     tool_fields_problem,
 )
-from memory_service.domain.enums import MessageKind, MessageRole, ObservationKind
+from memory_service.domain.enums import (
+    ORIGIN,
+    MessageKind,
+    MessageOrigin,
+    MessageRole,
+    ObservationKind,
+)
 from memory_service.domain.errors import NotFound, ScopeDenied, ValidationFailed
 from memory_service.domain.ids import content_hash, new_id, thread_session_id, thread_turn_id
 from memory_service.domain.observation import Observation
@@ -278,6 +284,7 @@ class ConversationService:
         role: MessageRole,
         content: str,
         kind: MessageKind = MessageKind.VISIBLE,
+        origin: MessageOrigin = MessageOrigin.PERSON,
         attachments: Sequence[Attachment] = (),
         custom_metadata: dict[str, Any] | None = None,
         occurred_at: datetime | None = None,
@@ -290,7 +297,9 @@ class ConversationService:
     ) -> AppendResult:
         """Append one message. An EVENT is internal evidence: it is kept in the transcript and
         learned from as an event, never shown as chat. ``tool_calls`` are an ASSISTANT
-        message's calls; ``tool_call_id`` names the call a TOOL message answers.
+        message's calls; ``tool_call_id`` names the call a TOOL message answers. ``origin``:
+        who put a USER message's words together; only a person's own is read for their
+        memory (``MessageOrigin``).
 
         ``may_write`` is ``may_write_thread`` for this thread, asked by the caller before it
         opened the unit of work. The check used to run here, after the per-thread advisory
@@ -392,7 +401,12 @@ class ConversationService:
                 message_id=message.message_id,
                 source_system=source_system,
                 source_id=source_message_id,
-                custom_metadata={"role": role.value, "kind": kind.value},
+                custom_metadata={
+                    "role": role.value,
+                    "kind": kind.value,
+                    # said only when it is not the person: what earlier messages never had
+                    **({ORIGIN: origin.value} if origin is not MessageOrigin.PERSON else {}),
+                },
                 occurred_at=message.occurred_at,
             )
             await uow.observations.add(observation)

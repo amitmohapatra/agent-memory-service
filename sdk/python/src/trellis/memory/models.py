@@ -662,6 +662,10 @@ class Message(BaseModel):
     role: MessageRole
     content: str
     kind: MessageKind = "VISIBLE"
+    #: who put a USER message's words together: person (typed in the chat), app (composed
+    #: for the person: a UI service's action, a WebMCP page's tool, a notification) or
+    #: schedule (a scheduled run's task); only a person's own is read for their memory
+    origin: Literal["person", "app", "schedule"] = "person"
     occurred_at: datetime | None = None
     attachments: list[dict[str, Any]] = Field(default_factory=list)
     custom_metadata: dict[str, Any] = Field(default_factory=dict)
