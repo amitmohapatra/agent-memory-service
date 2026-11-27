@@ -162,8 +162,6 @@ tenant's policy, set through the API.
 | `MEMORY__MODELS__LLM__ACCEPT_AGENT_ENDPOINTS` | `true` | `true` | no | `false`: a registered endpoint is stored but never called; every call uses the service's own endpoint, or none |
 | `MEMORY__AGENT_CREDENTIALS__ACTIVE_KEY_ID` | unset | `v1` | yes in `dev`/`test`: a development key | the envelope key that encrypts newly registered model endpoints |
 | `MEMORY__AGENT_CREDENTIALS__ENCRYPTION_KEYS` | `{}` | `{"v1":"<base64 of 32 random bytes>"}` | yes in `dev`/`test`: a development key | the keyring, by version (keep old versions while rotating). Required in `staging` and `prod`, where registration is refused without it |
-| `MEMORY__HINDSIGHT__BASE_URL` | unset | `http://hindsight:8888` | no | an optional Hindsight extraction service (install the `[hindsight]` extra): non-agent contextual extraction goes through it |
-| `MEMORY__HINDSIGHT__API_KEY` | unset | `<hindsight-token>` | no | Hindsight's server authentication token |
 
 ## Observability
 

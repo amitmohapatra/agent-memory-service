@@ -36,7 +36,7 @@ import asyncio
 import json
 import math
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Final, Literal
@@ -305,24 +305,19 @@ class GapFill:
         assist: LLMAssist,
         embedding: EmbeddingProvider | None = None,
         nli: NLIProvider | None = None,
-        *,
-        server_reads: Callable[[Observation, MemoryExecutionContext], bool] | None = None,
     ) -> None:
         self.assist = assist
-        #: the messages a Hindsight server reads instead (``NativeMemoryIntelligence``)
-        self.server_reads = server_reads
         usable = embedding is not None and not embedding.fingerprint().startswith("hash-")
         self.embedding = embedding if usable else None
         self.nli = nli if nli is not None and getattr(nli, "representative", False) else None
         self._slots: dict[str, asyncio.Semaphore] = {}
 
     def wanted(self, observation: Observation, ctx: MemoryExecutionContext) -> bool:
-        """A person's own message, when the model may read it and no server does."""
+        """A person's own message, when the model may read it."""
         return (
             observation.kind is ObservationKind.MESSAGE
             and not observation.agent_authored
             and self.assist.wants("contextual_extraction")
-            and not (self.server_reads is not None and self.server_reads(observation, ctx))
         )
 
     async def fill(
@@ -357,7 +352,7 @@ class GapFill:
                 max_tokens=1536,
             )
         ops = None if out is None else out.get("ops")
-        if not isinstance(ops, list):  # no answer, or not the answer asked for
+        if out is None or not isinstance(ops, list):  # no answer, or not the answer asked for
             return None
         sources = [message, *(t.text for t in recent)]
         fills = [

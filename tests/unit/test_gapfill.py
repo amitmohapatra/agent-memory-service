@@ -213,7 +213,7 @@ async def test_calls_in_flight_are_bounded_per_tenant():
     assert peak == gapfill.PER_TENANT
 
 
-async def test_a_person_s_message_is_the_gap_fill_s_unless_a_server_reads_it():
+async def test_a_person_s_message_is_the_gap_fill_s():
     with mocked_gateway() as gateway:
         assist = gateway.assist(uses=["contextual_extraction"])
         said = _obs("I moved to Pune.")
@@ -221,7 +221,6 @@ async def test_a_person_s_message_is_the_gap_fill_s_unless_a_server_reads_it():
         assert not GapFill(assist).wanted(
             said.model_copy(update={"custom_metadata": {"role": "assistant"}}), CTX
         )
-        assert not GapFill(assist, server_reads=lambda o, c: True).wanted(said, CTX)
         assert not GapFill(LLMAssist.disabled()).wanted(said, CTX)
 
 

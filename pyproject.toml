@@ -69,15 +69,13 @@ models = ["sentence-transformers>=6.0", "torch>=2.4", "torchvision>=0.19", "onnx
 eval = ["datasets>=3", "nltk>=3.9"]
 # Load testing
 load = ["locust>=2.46"]
-# Hindsight extraction preview (contextual_extraction with an operator key); imported lazily
-hindsight = ["hindsight-client==0.10.1"]
 # Model endpoints reached with a cloud login rather than a key (LLM_AUTH / Endpoint.auth):
 # a refreshed Google token (Vertex AI) and AWS SigV4 (Bedrock); imported when the auth is built
 google = ["bifrost-sdk[google]"]
 aws = ["bifrost-sdk[aws]"]
 # Everything except dev tooling
 all = [
-  "trellis-memory-service[gcp,docling,models,eval,load,hindsight,google,aws]",
+  "trellis-memory-service[gcp,docling,models,eval,load,google,aws]",
 ]
 
 [dependency-groups]

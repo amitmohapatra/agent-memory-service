@@ -415,7 +415,7 @@ async def test_generated_rewrite_cannot_merge_into_source(
     generated = source.model_copy(
         update={
             "category": generated_kind,
-            "provider": "llm" if generated_kind == "llm" else "hindsight",
+            "provider": "llm" if generated_kind == "llm" else "external",
             "content": source.content if same_text else source.content + " after approval.",
         }
     )

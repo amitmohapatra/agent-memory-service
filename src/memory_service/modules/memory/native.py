@@ -34,7 +34,6 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.ids import content_hash
-from memory_service.domain.language import is_english
 from memory_service.domain.memory import CanonicalMemory, lasting, unverified_representation
 from memory_service.domain.observation import Observation
 from memory_service.domain.predicates import is_single_valued
@@ -56,7 +55,6 @@ from memory_service.modules.memory.statements import (
 from memory_service.modules.memory.subjects import NO_SUBJECT, SubjectMatcher, SubjectPair
 from memory_service.ports.intelligence import (
     ConsolidationOutcome,
-    ContextualExtractor,
     MemoryCandidate,
 )
 from memory_service.ports.models import EmbeddingProvider, NLIProvider, ProviderInfo
@@ -635,7 +633,6 @@ class NativeMemoryIntelligence:
         embedding: EmbeddingProvider | None = None,
         *,
         assist: LLMAssist | None = None,
-        contextual_extractor: ContextualExtractor | None = None,
         labeller: StatementLabeller | None = None,
         subjects: SubjectMatcher | None = None,
         nli: NLIProvider | None = None,
@@ -646,7 +643,6 @@ class NativeMemoryIntelligence:
         #: a stand-in head (``LexicalNLI``) reads no meaning, so it is not used
         self.nli = nli if nli is not None and getattr(nli, "representative", False) else None
         self.assist = assist or LLMAssist.disabled()
-        self.contextual_extractor = contextual_extractor
         #: what each user sentence does (ADR 0037); the lexicon alone unless the wiring gives
         #: it the NLI head
         self.labeller = labeller or StatementLabeller()
@@ -746,7 +742,6 @@ class NativeMemoryIntelligence:
         labels = await self.labeller.label(
             sentences, models=kind is ObservationKind.MESSAGE and not observation.agent_authored
         )
-        contextual = await self._contextual_candidates(observation, ctx, evidence, sentences)
         for sentence, label in zip(sentences, labels, strict=True):
             clauses = split_clauses(sentence)
             for clause in clauses:
@@ -760,13 +755,6 @@ class NativeMemoryIntelligence:
                     continue
                 seen.add(key)
                 out.append(cand)
-        original_key = normalized_hash(text) if self.cfg.keep_verbatim_turns else None
-        for cand in contextual:
-            key = normalized_hash(cand.content)
-            if key in seen or key == original_key:
-                continue
-            seen.add(key)
-            out.append(cand)
         # Kept beside a rule's reading in the same words unless that reading is lasting
         # (``domain.memory.lasting``: a profile attribute, a preference, a standing rule),
         # which already keeps the words for good and is superseded when they change. Any
@@ -800,64 +788,6 @@ class NativeMemoryIntelligence:
             if normalized_hash(turn.content) not in held
         )
         return out
-
-    def server_reads(self, observation: Observation, ctx: MemoryExecutionContext) -> bool:
-        """Whether a Hindsight server (``contextual_extractor``) reads what the rules left of
-        ``observation``: a person's own English message, not under an agent's key - Hindsight
-        cannot revalidate an agent's policy after waiting for a server slot, nor accept its
-        model key. Every other message the model may read is read by its own call,
-        before the rules (``gapfill``)."""
-        return (
-            self.contextual_extractor is not None
-            and observation.kind is ObservationKind.MESSAGE
-            and not observation.agent_authored
-            and not ctx.is_agent
-            and is_english(observation.lang)
-            and self.assist.wants("contextual_extraction")
-        )
-
-    async def _contextual_candidates(
-        self,
-        observation: Observation,
-        ctx: MemoryExecutionContext,
-        evidence: list[EvidenceRef],
-        sentences: list[str],
-    ) -> list[MemoryCandidate]:
-        """The Hindsight server's facts for a message with at least two sentences no rule
-        read (``server_reads``); empty otherwise."""
-        extractor = self.contextual_extractor
-        if extractor is None or not self.server_reads(observation, ctx):
-            return []
-        unread = [
-            sentence
-            for sentence in sentences
-            if not is_question(sentence)
-            and not ACKNOWLEDGEMENT.match(sentence)
-            and any(
-                self._from_sentence(clause, ctx, evidence, kind=observation.kind) is None
-                for clause in split_clauses(sentence)
-            )
-        ]
-        if len(unread) < 2:
-            return []
-        units = await extractor.extract(
-            observation.content.strip(), timestamp=observation.occurred_at
-        )
-        return [
-            MemoryCandidate(
-                content=content,
-                memory_type=MemoryType.OBSERVATION,
-                lifetime=Lifetime.LONG_TERM,
-                subject=_user_subject(ctx),
-                predicate="said",
-                evidence=evidence,
-                importance=0.4,
-                confidence=0.5,
-                category="contextual_fact",
-                provider=extractor.name,
-            )
-            for content in units
-        ]
 
     def _verbatim(
         self,

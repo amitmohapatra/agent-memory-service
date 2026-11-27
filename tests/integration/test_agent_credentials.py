@@ -266,33 +266,26 @@ def test_an_agent_s_key_rotates_and_a_context_read_calls_no_model(client):
 
 
 @pytest.mark.parametrize("registered", [False, True])
-async def test_background_ingestion_uses_owner_key_and_never_hindsight_operator_budget(
-    container, uow_factory, registered
-):
-    from tests.support_hindsight import preview_server
-
+async def test_background_ingestion_uses_the_owners_key(container, uow_factory, registered):
     credentials = service(uow_factory)
     if registered:
         await save(credentials, uow_factory, ALICE, "vk-job-test")
-    async with preview_server(facts=[]) as server:
-        with mocked_gateway([{"kind": "statement", "ops": []}]) as gateway:
-            provider = container.services["memory_provider"]
-            provider.assist = gateway.assist(["contextual_extraction"])
-            # an agent's message is the gap-fill call's, on the owner's key, never Hindsight's
-            container.services["observation_pipeline"].gapfill.assist = provider.assist
-            provider.assist.provider.credentials = credentials
-            provider.contextual_extractor = server.extractor
-            try:
-                ack = await _observe(container, uow_factory, ALICE, MESSAGE)
-                assert ack.observation_id and gateway.route.call_count == 1
-                assert not server.requests
-                headers = gateway.route.calls.last.request.headers
-                assert headers["authorization"] == (
-                    "Bearer vk-job-test" if registered else "Bearer vk-test"
-                )
-                assert current_model_identity() == AMBIENT
-            finally:
-                await provider.assist.provider.close()
+    with mocked_gateway([{"kind": "statement", "ops": []}]) as gateway:
+        provider = container.services["memory_provider"]
+        provider.assist = gateway.assist(["contextual_extraction"])
+        # an agent's message is read by the gap-fill call, on the owner's key
+        container.services["observation_pipeline"].gapfill.assist = provider.assist
+        provider.assist.provider.credentials = credentials
+        try:
+            ack = await _observe(container, uow_factory, ALICE, MESSAGE)
+            assert ack.observation_id and gateway.route.call_count == 1
+            headers = gateway.route.calls.last.request.headers
+            assert headers["authorization"] == (
+                "Bearer vk-job-test" if registered else "Bearer vk-test"
+            )
+            assert current_model_identity() == AMBIENT
+        finally:
+            await provider.assist.provider.close()
 
 
 async def test_document_indexing_uses_recorded_agent_owner_after_key_rotation(

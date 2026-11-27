@@ -461,15 +461,6 @@ class AgentCredentialSettings(BaseModel):
     encryption_keys: dict[str, SecretStr] = Field(default_factory=dict)
 
 
-class HindsightSettings(BaseModel):
-    """Where the Hindsight extraction service is, when a deployment runs one: non-agent
-    contextual extraction goes through it (with the ``[hindsight]`` extra installed). Its
-    tuning is ``constants.HINDSIGHT``."""
-
-    base_url: str | None = None
-    api_key: SecretStr | None = None
-
-
 class ModelsLLMSettings(BaseModel):
     """``MEMORY__MODELS__LLM__*``: how the service's own endpoint is used, and whether an
     agent's registered one is.
@@ -573,7 +564,6 @@ class Settings(BaseSettings):
     authorization: AuthorizationSettings = AuthorizationSettings()
     blob: BlobSettings = BlobSettings()
     search: SearchSettings = SearchSettings()
-    hindsight: HindsightSettings = HindsightSettings()
     agent_credentials: AgentCredentialSettings = AgentCredentialSettings()
     #: A retailer's fiscal calendar (``MEMORY__RETAIL_CALENDAR=454``): ``454``, ``445`` or
     #: ``544``, then optionally the month the year ends in and ``end`` when a year is named by

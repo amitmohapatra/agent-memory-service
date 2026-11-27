@@ -7,6 +7,14 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Removed (service): the Hindsight extraction preview
+
+An optional Hindsight server could read a person's English messages in place of the model
+(`MEMORY__HINDSIGHT__*`, the `[hindsight]` extra). It ran on a model of its own, so it helped
+no deployment without one, and it was in no test or benchmark that is run. Removed: its
+adapter, settings, extra and tests. A person's message is read by the model allowed for the
+tenant (ADR 0047), or, with none, as before.
+
 ### Changed (service): an agent replaces a whole profile block only after it has read it
 
 `profile_edit` with an empty `old` replaced a block whatever it held, and a context no longer

@@ -228,7 +228,6 @@ def test_secrets_are_masked() -> None:
         authorization={"openfga_api_token": "supersecret"},
         authentication={"trusted_dev_api_keys": ["devsecret"]},
         llm_api_key="virtualkey",
-        hindsight={"api_key": "hindsightsecret"},
     )
     dumped = str(s.redacted())
     for secret in (
@@ -238,7 +237,6 @@ def test_secrets_are_masked() -> None:
         "supersecret",
         "devsecret",
         "virtualkey",
-        "hindsightsecret",
     ):
         assert secret not in dumped, secret
     # the adapters still get the real value, in both spellings

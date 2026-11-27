@@ -14,7 +14,6 @@ from memory_service.adapters.models._runner import configure_runners
 from memory_service.application.container import Dependency
 from memory_service.config import constants
 from memory_service.config.constants import FROZEN_MODELS
-from memory_service.domain.errors import DependencyUnavailable
 from memory_service.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -571,24 +570,12 @@ def _wire_memory(container: Container) -> None:
     from memory_service.modules.memory.subjects import SubjectMatcher
 
     cfg = container.tuning.memory_intelligence
-    extractor = None
-    if container.settings.hindsight.base_url is not None:
-        from memory_service.adapters.models.hindsight import HindsightExtractor
-
-        try:
-            extractor = HindsightExtractor(container.settings.hindsight)
-        except DependencyUnavailable as exc:
-            # the optional extra is absent: extraction stays on the native path
-            log.warning("hindsight.unavailable", reason=str(exc))
-        else:
-            container.add_closer("hindsight_extractor", extractor.close)
     # one subject matcher for the provider's slot rules and the pipeline's candidate lookup
     subjects = SubjectMatcher(container.embedding)
     provider = NativeMemoryIntelligence(
         cfg,
         container.embedding,
         assist=container.services.llm_assist,
-        contextual_extractor=extractor,
         # the grounding cascade's NLI head decides what the lexicon leaves open (ADR 0037)
         # with a model, a person's message is the model's to read first (``gapfill``)
         labeller=StatementLabeller(nli=container.nli),
@@ -613,14 +600,8 @@ def _wire_memory(container: Container) -> None:
             _multilingual_encoder(container),
             assist=container.services.llm_assist,
         ),
-        # what the model reads beyond the rules, one call a message, unless a Hindsight
-        # server reads it (``NativeMemoryIntelligence.server_reads``)
-        gapfill=GapFill(
-            container.services.llm_assist,
-            container.embedding,
-            container.nli,
-            server_reads=provider.server_reads,
-        ),
+        # what the model reads of a person's message, one call a message (``gapfill``)
+        gapfill=GapFill(container.services.llm_assist, container.embedding, container.nli),
     )
     container.services.memory = MemoryService(
         container.services.authz,

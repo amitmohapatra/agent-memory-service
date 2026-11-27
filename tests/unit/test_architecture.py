@@ -10,8 +10,6 @@ import pytest
 SRC = Path(__file__).resolve().parents[2] / "src" / "memory_service"
 
 BANNED_IN_CORE = {
-    "hindsight_client",
-    "hindsight_client_api",
     "qdrant_client",
     "redis",
     "google",
@@ -95,8 +93,7 @@ def test_no_llm_provider_sdk_anywhere_under_src() -> None:
 def test_llm_settings_offer_no_way_to_name_a_provider() -> None:
     """No direct model-vendor SDK or caller-selected memory backend.
 
-    Hindsight selects a memory framework's preview API, not a model vendor. Its server
-    owns model routing. Global LLM/use gates still apply (test_memory_feature_wiring).
+    Global LLM/use gates apply (test_memory_feature_wiring).
     """
     from memory_service.config.settings import LLMSettings
 

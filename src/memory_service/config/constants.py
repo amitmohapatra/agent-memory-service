@@ -573,18 +573,6 @@ class LLMTuning:
 
 LLM = LLMTuning()
 
-
-@dataclass(frozen=True)
-class HindsightTuning:
-    """The Hindsight extraction preview (``[hindsight]`` extra, ``MEMORY__HINDSIGHT__*``)."""
-
-    bank_id: str = "extraction-preview"
-    timeout_seconds: float = 30.0
-    max_concurrency: int = 1
-
-
-HINDSIGHT = HindsightTuning()
-
 # ---------------------------------------------------------------------------
 # Stages
 # ---------------------------------------------------------------------------
