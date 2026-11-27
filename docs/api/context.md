@@ -218,14 +218,38 @@ is one prompt-injection away from a problem.
 
 Whether a read consults a model is the tenant's model policy, `read_assist`
 (`PUT /v1/model-key/policy`); a request cannot override it — there is no per-request
-`use_llm`. Even then only the read uses the policy's `uses` name run (`entity_resolution` on
-the graph route, `grounding_judge` for borderline claims in `/v1/verify`); `query_expansion`
+`use_llm`. Even then only the read uses the policy's `uses` name run (`context_check` on
+`/v1/context`, `entity_resolution` on the graph route, `grounding_judge` for borderline
+claims in `/v1/verify`); `query_expansion`
 is still accepted in a policy and ignored (a warning is logged once), and goes with the next
 contract version, and only when a model key can pay
 ([tenancy.md](tenancy.md)); the response header `X-Trellis-LLM-Tokens` says what the request
 spent. Query decomposition was removed in 0.3.0. The pinned sections never call a
 model: summaries, profiles and learned-skill titles are written in the background. With no key,
 the deterministic path answers.
+
+## A model checks what the context attaches from memory
+
+A context is built by similarity, and what is near a request is not always about it. Where
+the policy allows `context_check` (it does by default) and `read_assist` is on, each context
+that is built is read once by the fast model before it is cached or sent: the request,
+today's date, the end of the recent conversation, and what memory would attach, numbered.
+The model names what does not help with the request, and the service removes those from
+every place of the context that states them
+([ADR 0048](../adr/0048-a-model-checks-what-a-context-attaches.md)).
+
+| | |
+|---|---|
+| it can remove | lines of `standing_rules`, `preferences`, `about_user` and of the `user` block the profile job wrote; learned skills; memories; earlier values; graph facts |
+| it cannot remove | a profile block a person or an agent wrote or edited; the people's pages; the conversation and its summary; earlier conversations' answers; document passages and their summaries; working memory; a rule the tool hints already apply to the task; what the best-ranked memory states |
+| it cannot | add, reword or reorder anything; store or forget anything |
+| when it does not answer in 2.5 s (or what the read's deadline leaves), or not in the schema | the context is sent as built |
+| what it costs | one model call for each context that is built; a cached context is not checked again |
+
+`debug: true` shows what happened under `diagnostics.context_check`: `outcome` (`checked`,
+`late`, `no_answer`, `no_time`), `listed`, `ms` and `dropped` (the section and the text of
+each item removed). A tenant turns it off by leaving `context_check` out of its policy's
+`uses`; a tenant whose stored policy lists its uses adds it to get the check.
 
 ## Verifying an answer
 

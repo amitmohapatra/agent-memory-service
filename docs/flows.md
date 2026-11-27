@@ -63,7 +63,7 @@ sequenceDiagram
 language other than English is kept verbatim and indexed in the multilingual dense space; the
 model reads it into facts in its language, as it reads an English one, only when the tenant's
 key and policy allow
-([chapter 8](guide/08-models.md#the-eleven-uses)). `ctx.remember(...)` (`POST /v1/memories`) is
+([chapter 8](guide/08-models.md#the-twelve-uses)). `ctx.remember(...)` (`POST /v1/memories`) is
 the direct path: one memory, stored verbatim, never gated.
 
 ## 2. Context build

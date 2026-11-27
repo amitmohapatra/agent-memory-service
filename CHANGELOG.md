@@ -7,6 +7,48 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added (service; trellis-memory 0.6.7): a model checks what a context attaches from memory
+
+A context is built by similarity, and near is not about. Measured on one run of a retail
+agent (a hand count by the team that ran it, of the 110 entries its context carried): the
+model acted on 1% of the memory text, 12% was on topic and unused, 12% worked against the
+skill being run (a skill's text pasted into a chat the day before, served as a standing rule;
+an instruction given "for now" two days earlier), 59% was about something else, and the rest
+was layout. The run needed about 100 tokens of it and was sent about 9,000.
+
+Where a model may be reached on a read, one call of the fast model now reads each context
+after it is assembled and before it is cached or sent: the request, today's date, the end of
+the recent conversation and, numbered, what memory would attach. It names what does not help
+with the request and the service removes those, from every place of the context that states
+them (a rule is a line of `standing_rules`, a line of the `user` block and a memory at once).
+It only removes: nothing is added, reworded or reordered
+([ADR 0048](docs/adr/0048-a-model-checks-what-a-context-attaches.md)).
+
+- **What it can remove:** lines of `standing_rules`, `preferences`, `about_user` and of the
+  `user` block the profile job wrote, learned skills (the tool hints then lay out no plan of a
+  removed skill), memories, earlier values and graph facts.
+- **What it cannot:** a profile block a person or an agent wrote or edited, the people's pages,
+  the conversation and its summary, earlier conversations' answers, document passages and
+  their summaries, working memory, a rule the tool hints already apply to the task, and what
+  the best-ranked memory states - a wrong answer never leaves a question with nothing.
+- **When it does not answer:** it has 2.5 s (`LLM.check_deadline_seconds`), and never more than
+  the read's own 5 s deadline leaves. Late, unreachable or not in the schema: the context is
+  sent as built. `debug` shows what happened under `diagnostics.context_check` (the outcome,
+  how many items were listed, what was removed, the milliseconds);
+  `memory_context_check_total{outcome}` and `memory_context_check_dropped_total{section}`
+  count it.
+- **Who gets it:** a new use, `context_check`, on the fast model. A tenant with no stored
+  policy has every use, so it is on; a tenant whose stored policy lists its uses adds
+  `context_check` to them, and `read_assist: false` turns it off with every other read call.
+  It costs one model call for each context that is built (a cached one is not checked
+  again).
+- **Not measured yet:** the model's judgement and the call's latency need a paid run. The
+  tests script the model: they prove what is sent, removed, cached and reported.
+- **SDK (trellis-memory 0.6.7):** `LLMUse` names `context_check`, and `ModelUsageDay.use`
+  accepts a use the SDK does not name, so a later use does not make `usage()` raise. An SDK
+  before 0.6.7 raises on a usage row for `context_check`: upgrade it with the service where
+  `usage()` is called.
+
 ### Changed (service): where a model is allowed, it alone reads a person's message, and says whether it is kept
 
 A person's message was read by the word patterns first, and a model, when allowed, could only
@@ -1381,7 +1423,7 @@ is a miss, rewritten by the next read.
   methods and keywords that exist. Run in CI.
 - Dated reports moved out of the user docs to `benchmark/reports/`, design records to
   `design/`; superseded handoffs, plans and logs deleted (git history keeps them). The model
-  uses page merged into [chapter 8](docs/guide/08-models.md#the-eleven-uses).
+  uses page merged into [chapter 8](docs/guide/08-models.md#the-twelve-uses).
 - ADR headers carry their amendments (0004, 0009, 0021, 0022, 0023); ADR 0017 is closed as
   superseded by 0024-0026.
 - `.env.example` lists `MEMORY__RETAIL_CALENDAR`, the one setting it was missing.

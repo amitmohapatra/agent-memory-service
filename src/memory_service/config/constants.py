@@ -529,6 +529,7 @@ class LLMTuning:
         "contextual_extraction",
         "chunk_context",
         "memory_restatement",
+        "context_check",
     )
     #: The most text a call's answer may be (the long uses below aside). The request's limit
     #: is this answer size plus ``thinking_room``.
@@ -554,6 +555,16 @@ class LLMTuning:
     #: ``borderline``, which is what they are without a judge; it sits inside
     #: ``OVERLOAD.verify_deadline_seconds`` so the request answers rather than timing out.
     judge_deadline_seconds: float = 8.0
+    #: The context check's budget (``modules.context.check``): one call of the fast model on
+    #: the path of every context that is built. A model call on a read has been measured
+    #: here twice, at 3.2-12.2 s (query decomposition, removed in 0.3.0) and at about 2 s
+    #: (query expansion, removed since), each against a budget of 250-300 ms it never met.
+    #: This one is given the time such a call takes, inside the read's own deadline
+    #: (``OVERLOAD.read_deadline_seconds`` less ``check_margin_seconds`` and what the build
+    #: took); past it the context is sent as built.
+    check_deadline_seconds: float = 2.5
+    #: what a read keeps of its deadline for everything after the check
+    check_margin_seconds: float = 1.0
 
     def ceiling(self, use: str) -> int:
         """The most output a call of ``use`` may ask for."""

@@ -5499,7 +5499,8 @@
                 "query_expansion",
                 "chunk_context",
                 "memory_restatement",
-                "grounding_judge"
+                "grounding_judge",
+                "context_check"
               ]
             },
             "title": "Models",
@@ -5524,11 +5525,12 @@
                 "query_expansion",
                 "chunk_context",
                 "memory_restatement",
-                "grounding_judge"
+                "grounding_judge",
+                "context_check"
               ],
               "type": "string"
             },
-            "maxItems": 11,
+            "maxItems": 12,
             "title": "Uses",
             "type": "array"
           }
@@ -5592,7 +5594,8 @@
                 "query_expansion",
                 "chunk_context",
                 "memory_restatement",
-                "grounding_judge"
+                "grounding_judge",
+                "context_check"
               ],
               "type": "string"
             },
@@ -7986,7 +7989,8 @@
               "query_expansion",
               "chunk_context",
               "memory_restatement",
-              "grounding_judge"
+              "grounding_judge",
+              "context_check"
             ],
             "title": "Use",
             "type": "string"

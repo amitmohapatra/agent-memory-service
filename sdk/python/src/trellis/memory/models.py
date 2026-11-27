@@ -82,7 +82,8 @@ class ModelUsageDay(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     day: date
-    use: LLMUse
+    #: one of ``LLMUse``; a service newer than this SDK may count a use it does not name
+    use: LLMUse | str
     tokens: int
     calls: int
 
@@ -188,6 +189,7 @@ LLMUse = Literal[
     "chunk_context",
     "memory_restatement",
     "grounding_judge",
+    "context_check",
 ]
 #: What ``keys.whoami`` calls a credential: an issued key's role, or the mode of one that is
 #: not an issued key.

@@ -108,6 +108,20 @@ memory_unread_total = Counter(
     ["outcome"],
     registry=REGISTRY,
 )
+context_check_total = Counter(
+    "memory_context_check_total",
+    "Contexts a model was asked to check before they were sent: it answered (checked), "
+    "answered past its deadline (late), did not answer or not in the schema (no_answer), "
+    "or the request had no time left for it (no_time)",
+    ["outcome"],
+    registry=REGISTRY,
+)
+context_check_dropped_total = Counter(
+    "memory_context_check_dropped_total",
+    "What the context check removed from contexts, by the section it was in",
+    ["section"],
+    registry=REGISTRY,
+)
 memory_replacement_skipped_total = Counter(
     "memory_replacement_skipped_total",
     "User statements stored without the cross-conversation comparison (the NLI head busy)",

@@ -442,6 +442,10 @@ LLMUse = Literal[
     #: (``modules.memory.restatement``, ADR 0027).
     "memory_restatement",
     "grounding_judge",
+    #: One call per context built: the model names what of the memory a context would
+    #: attach does not help with the request, and the service leaves those out
+    #: (``modules.context.check``, ADR 0048). A read's call: it follows ``read_assist``.
+    "context_check",
 ]
 #: Every use: the default tenant policy.
 ALL_LLM_USES: tuple[LLMUse, ...] = get_args(LLMUse)

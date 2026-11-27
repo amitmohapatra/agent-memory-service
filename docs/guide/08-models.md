@@ -163,7 +163,7 @@ conformance suite (`tests/contract/test_llm_conformance.py`) against a stub of i
 ### When a call is allowed
 
 A use runs only when all four hold (`LLMAssist.wants`, `modules/llm/assist.py`; each use is
-in [the eleven uses](#the-eleven-uses)):
+in [the twelve uses](#the-twelve-uses)):
 
 ```mermaid
 flowchart TB
@@ -229,17 +229,18 @@ model-assisted reads, because which uses are active is part of the context cache
 
 ---
 
-## The eleven uses
+## The twelve uses
 
 `LLMUse` in `config/settings.py` names eleven. Each is optional work layered on a
 deterministic path, and any model failure (no endpoint, endpoint error, rate limit, invalid
 output) falls back to that path. The tier is the model the call goes to: `fast`
-(`LLMTuning.fast_model`) for `contextual_extraction`, `query_expansion`, `chunk_context` and
-`memory_restatement`, `strong` (`LLMTuning.model`) for the rest. Both are the endpoint's
+(`LLMTuning.fast_model`) for `contextual_extraction`, `chunk_context`,
+`memory_restatement` and `context_check`, `strong` (`LLMTuning.model`) for the rest. Both are the endpoint's
 model when it names one, and `auto` otherwise; a tenant's policy may name a model per use
 instead (`models: {"memory_restatement": "<model id>"}`).
-`/v1/context` and `/v1/recall` make no model call unless the read is assisted (the policy's
-`read_assist`), and then only `query_expansion`.
+`/v1/recall` makes no model call. `/v1/context` makes one where the read is assisted (the
+policy's `read_assist`) and the policy allows `context_check`: the check of what the context
+attaches from memory ([ADR 0048](../adr/0048-a-model-checks-what-a-context-attaches.md)).
 
 ### Ingestion (background jobs; never on the request that wrote the data)
 
@@ -258,14 +259,15 @@ instead (`models: {"memory_restatement": "<model id>"}`).
 
 | use | when it runs | tier | fallback |
 |---|---|---|---|
-| `query_expansion` | `/v1/context` or `/v1/recall` whose question no rule classified - which includes every question not in English, since the router's cue patterns are English and never route another language (`modules/retrieval/router.py`) | fast | the unexpanded hybrid search (every dense space, BM25, the graph by entity name) |
+| `context_check` | `/v1/context`, once for each context that is built (a cached one is not checked again): the model is sent the request, the date, the end of the recent conversation and what memory would attach, and names what does not help; the service removes those and nothing else ([ADR 0048](../adr/0048-a-model-checks-what-a-context-attaches.md)) | fast | the context as built (also when the model answers past its 2.5 s deadline) |
+| `query_expansion` | accepted in a policy and ignored: retrieval no longer asks the model about a query (it goes with the next contract version) | - | - |
 | `entity_resolution` | `GET /v1/graph/entities?q=` names that match no entity lexically | strong | lexical match only; the retrieval-time graph stage never uses it (it runs under the graph budget) |
 | `grounding_judge` | `/v1/verify`: claims the NLI cascade could not decide | strong | the claim stays undecided |
 
 Reflection and connections are only registered as jobs when a model can be reached
 (`modules/jobs/registry.py`, crons `53 */6 * * *` and `19 */6 * * *`). The read path makes no
-model call unless the policy's `read_assist` is on, and then only `query_expansion`,
-`entity_resolution` on the entity route, and `grounding_judge` in verify; query decomposition
+model call unless the policy's `read_assist` is on, and then only `context_check` on
+`/v1/context`, `entity_resolution` on the entity route, and `grounding_judge` in verify; query decomposition
 was removed in 0.3.0 because a model call on the read path took 3.2–12.2 s against a 300 ms
 budget (`docs/MEASUREMENTS.md` §8.4).
 

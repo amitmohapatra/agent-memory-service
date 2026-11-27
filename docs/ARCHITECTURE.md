@@ -227,7 +227,7 @@ flowchart LR
   md["memory / document"] --> ge["graph.enrich_memories / graph.enrich_document<br/>(once indexed: jobs of their own on the graph queue with a model, in the index job without one):<br/>native entities and edges;<br/>relation_extraction (tenant model)"]
 ```
 
-Where each model use runs, its tier and its fallback: [guide chapter 8, the eleven uses](guide/08-models.md#the-eleven-uses).
+Where each model use runs, its tier and its fallback: [guide chapter 8, the twelve uses](guide/08-models.md#the-twelve-uses).
 
 What each job learns, with the thresholds in the code:
 
@@ -286,7 +286,7 @@ is then consulted only when the gateway is configured, the resolved tenant polic
 (no policy row: every use except the opt-in `memory_restatement`) and a key can pay
 (contextual_extraction, relation_extraction, entity_resolution, conflict_adjudication,
 summaries, reflection, memory_connections, query_expansion, chunk_context,
-memory_restatement, grounding_judge; see [the eleven uses](guide/08-models.md#the-eleven-uses)).
+memory_restatement, grounding_judge, context_check; see [the twelve uses](guide/08-models.md#the-twelve-uses)).
 Any failure returns
 `None`, so the module continues with its native result. Every successful call is counted in
 `llm_usage_daily` (one upsert) and `memory_llm_tokens_total{tenant,use,direction}`. Mem0/LangMem/Graphiti/Cognee provider adapters were removed; comparisons belong

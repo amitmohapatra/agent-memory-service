@@ -159,6 +159,16 @@ def applies(query_stems: set[str], hit_stems: set[str], similarity: float, floor
 _DATED = re.compile(r" \(said \d{4}-\d{2}-\d{2}(?:;.*)?\)$")
 
 
+def stated(line: str) -> tuple[str, str]:
+    """What a listed line states, and the day it says it was said ("" when it says none):
+    ``- Never ... (said 2026-11-03; earlier: ...)`` is ("Never ...", "2026-11-03")."""
+    text = line.removeprefix("- ")
+    dated = _DATED.search(text)
+    if dated is None:
+        return text, ""
+    return text[: dated.start()], dated.group(0)[len(" (said ") :][:10]
+
+
 def listed_rules(profile: Iterable[Any]) -> list[str]:
     """The rules the ``standing_rules`` section of ``profile`` lists (``standing_blocks``): the
     user's current rules that apply to the request, nothing replaced, superseded or

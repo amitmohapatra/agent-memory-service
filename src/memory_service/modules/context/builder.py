@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -17,7 +18,7 @@ from typing import Any, Final, Literal
 
 import orjson
 
-from memory_service.config.constants import ContextSettings, RetrievalSettings
+from memory_service.config.constants import LLM, OVERLOAD, ContextSettings, RetrievalSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.context_bundle import (
     ContextBundle,
@@ -44,6 +45,8 @@ from memory_service.domain.ids import stable_key
 from memory_service.domain.memory import unverified_representation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.service import AuthorizationService
+from memory_service.modules.context.check import NOTE as CHECK_NOTE
+from memory_service.modules.context.check import ContextCheck, without
 from memory_service.modules.context.coverage import unanswered
 from memory_service.modules.context.evidence import NO_SHARED_TERM
 from memory_service.modules.context.handles import BundleRecords, record_of
@@ -408,6 +411,7 @@ class ContextBuilder:
         self.records = records or BundleRecords(cache)
         self._cache_router = QueryRouter()
         self.assist = assist or LLMAssist.disabled()
+        self.check = ContextCheck(self.assist)
         #: cache writes and access flushes still in flight; awaited by drain()
         self._pending: set[asyncio.Task[None]] = set()
         #: tenant -> the memory ids served since the last flush. A set, because a memory
@@ -678,6 +682,7 @@ class ContextBuilder:
     ) -> ContextBundle:
         """Retrieve, window (in the form asked for; ``None``: none - within
         ``conversation_budget``) and assemble - the cache-miss half of a build."""
+        began = time.perf_counter()
         cached, embedding = await self._semantic_lookup(found, query)
         if cached is not None:
             return cached
@@ -776,11 +781,9 @@ class ContextBuilder:
         )
         shown += more
         self._remember_semantic(found, result, bundle)
-        spent = self.assist.tokens_used() - tokens_before
-        return bundle.model_copy(
+        bundle = bundle.model_copy(
             update={
                 "bundle_id": found.bundle_id,
-                "evidence": bundle.evidence.model_copy(update={"llm_tokens": spent}),
                 "token_budget": budget,
                 "token_estimate": bundle.token_estimate + shown,
                 "earlier_chats": said_before,
@@ -791,6 +794,51 @@ class ContextBuilder:
                 "tools": pinned.tools,
             }
         )
+        bundle = await self._checked(query, bundle, result, began)
+        spent = self.assist.tokens_used() - tokens_before
+        return bundle.model_copy(
+            update={"evidence": bundle.evidence.model_copy(update={"llm_tokens": spent})}
+        )
+
+    async def _checked(
+        self, query: str, bundle: ContextBundle, result: RetrievalResult, began: float
+    ) -> ContextBundle:
+        """``bundle`` without what a model says does not help with the question
+        (``modules.context.check``, ADR 0048), within what the read's deadline leaves after
+        a build begun at ``began``; its evidence report describes what is left."""
+        left = OVERLOAD.read_deadline_seconds - LLM.check_margin_seconds
+        dropped, note = await self.check.read(
+            query, bundle, within=left - (time.perf_counter() - began)
+        )
+        if not note:
+            return bundle
+        if dropped:
+            kept = without(bundle, dropped)
+            bundle = kept.model_copy(
+                update={"evidence": self._evidence_left(query, bundle, kept, result)}
+            )
+        return bundle.model_copy(update={"diagnostics": {**bundle.diagnostics, CHECK_NOTE: note}})
+
+    def _evidence_left(
+        self, query: str, before: ContextBundle, after: ContextBundle, result: RetrievalResult
+    ) -> EvidenceReport:
+        """The evidence report of ``before`` for what ``after`` still carries: a memory the
+        check removed was found and is not carried (``unused``, which an answer is still
+        checked against), and the evidence shown is read again for the value the question
+        asks for (``_coverage``)."""
+        kept = {m.item_id for m in after.memories}
+        gone = [
+            UnusedEvidence(item_id=m.item_id, kind="memory", text=m.text)
+            for m in before.memories
+            if m.item_id not in kept and not unverified_representation(m.attributes)
+        ]
+        report = before.evidence.model_copy(
+            update={"unused": [*before.evidence.unused, *gone][:UNUSED_MAX]}
+        )
+        shown = (*after.memories, *after.knowledge, *after.graph_facts, *after.summaries)
+        if not (shown or after.history):
+            return report.model_copy(update={"status": EvidenceStatus.INSUFFICIENT})
+        return self._coverage(report, query, shown, retrieved=[c.text for c in result.candidates])
 
     async def _beliefs(
         self, ctx: MemoryExecutionContext, query: str, visibility: Any, result: RetrievalResult

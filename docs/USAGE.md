@@ -144,6 +144,10 @@ for job_id in ack.job_ids:
   ColBERT arms, then session/speaker/time/period rules (ADR 0026) — nothing to tune per call.
 - No read calls a model unless the tenant policy's `read_assist` is on and a key can pay
   ([§11](#11-model-endpoints-policy-and-spend)); there is no per-request switch.
+- Where it is, each context that is built is read once by the fast model, which names what
+  memory attached that does not help with the request; the service removes those and nothing
+  else (the `context_check` use, on by default:
+  [context.md](api/context.md#a-model-checks-what-the-context-attaches-from-memory)).
 
 ## 6. Profile blocks and standing questions
 
@@ -317,7 +321,7 @@ for day in (await admin.tenant.model_usage()).days:  # GET /v1/model-key/usage
   calls is the policy's, else the endpoint's, else `auto` (chosen from the endpoint's
   `/models` by what it lists, never by a name).
 - Changing a policy or an endpoint invalidates cached model-assisted reads.
-- Each use, its tier and its fallback: [the eleven uses](guide/08-models.md#the-eleven-uses).
+- Each use, its tier and its fallback: [the twelve uses](guide/08-models.md#the-twelve-uses).
 
 ## 12. Tenancy operations
 

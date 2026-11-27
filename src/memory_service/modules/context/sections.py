@@ -32,6 +32,7 @@ from memory_service.domain.context_bundle import (
     summary_section,
     tools_section,
 )
+from memory_service.domain.profile import USER_BLOCK
 from memory_service.domain.tools import StoredProcedure, ToolHints
 from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
@@ -106,6 +107,13 @@ class ToolsRequest(BaseModel):
         names = ",".join(sorted(set(self.available))) if self.available is not None else "*"
         # the default request keeps its key; only an opt-out of hints is a different bundle
         return f"tools:{self.k}:{names}" + ("" if self.hints else ":nohints")
+
+
+class LearnedBlock(ProfileBlockView):
+    """The ``user`` block as the profile job wrote it from the person's memories: a line per
+    fact, derived data. Told apart from one a person or an agent edited, whose words are
+    theirs: the context check (``modules.context.check``) reads only a learned block's
+    lines. The same block to every other reader, and on the wire."""
 
 
 @dataclass
@@ -299,7 +307,12 @@ class ContextSections:
     async def _profile(self, ctx: MemoryExecutionContext) -> list[ProfileBlockView]:
         async with self.uow_factory() as uow:
             blocks = await self.services.profile.blocks(uow, ctx)
-        return [ProfileBlockView(block=b.block, text=b.text, version=b.version) for b in blocks]
+        return [
+            (LearnedBlock if b.block == USER_BLOCK and b.source == "learned" else ProfileBlockView)(
+                block=b.block, text=b.text, version=b.version
+            )
+            for b in blocks
+        ]
 
     async def _people(
         self, ctx: MemoryExecutionContext, visibility: VisibilitySpecification

@@ -1,6 +1,7 @@
 """HTTP read policy with actual retrieval and a mocked, never paid, Bifrost adapter: the read that
-consults a model (graph entity resolution) follows the tenant policy's read_assist; context and
-recall consult none."""
+consults a model (graph entity resolution) follows the tenant policy's read_assist; under a
+policy that names no ``context_check``, context and recall consult none (the context's own
+check, where the policy allows it: ``test_context_check.py``)."""
 
 import pytest
 
@@ -40,8 +41,8 @@ def _configure(client, configured) -> None:
 @pytest.mark.parametrize("route", ["context", "recall"])
 def test_a_context_or_recall_read_calls_no_model_whatever_the_read_policy(client, route):
     """``query_expansion`` in a policy is accepted and ignored: with reads assisted or not, a
-    context or recall read asks the model nothing. The graph route below is the read that
-    follows read_assist."""
+    context or recall read asks the model nothing under a policy that names only it. The
+    graph route below is the read that follows read_assist."""
     with mocked_gateway(
         [{"query_type": "GENERAL_SEMANTIC", "terms": ["telescope"], "identifiers": []}]
     ) as gw:
