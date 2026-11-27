@@ -98,8 +98,12 @@ async def test_context_is_the_prompt_by_default(ctx) -> None:
     assert isinstance(pushed, PromptContext)
     assert pushed.bundle_id == "b1" and pushed.tool_names == ["erp-create_po"]
     assert pushed.tools is not None and pushed.tools[0].confidence == 0.74
+    assert "recall" not in body, "sent only when asked for: an earlier service knows no such field"
     await ctx.context("order paper", tools=["erp-create_po"], hints=False)
     assert _body(route)["tools"] == {"available": ["erp-create_po"], "k": 8, "hints": False}
+    # an agent that searches memory itself asks for what stands alone
+    await ctx.context("order paper", recall=False)
+    assert _body(route)["recall"] is False
 
 
 @respx.mock

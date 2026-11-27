@@ -48,6 +48,7 @@ from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.context.check import NOTE as CHECK_NOTE
 from memory_service.modules.context.check import ContextCheck, without
 from memory_service.modules.context.coverage import unanswered
+from memory_service.modules.context.demand import standing as standing_only
 from memory_service.modules.context.evidence import NO_SHARED_TERM
 from memory_service.modules.context.handles import BundleRecords, record_of
 from memory_service.modules.context.sections import (
@@ -333,6 +334,8 @@ class _Lookup:
     bundle: bytes | None
     semantic_key: str | None = None
     semantic: bytes | None = None
+    #: whether the context carries what retrieval ranks for the request (``demand``)
+    recall: bool = True
 
 
 class _StandingRead:
@@ -447,6 +450,7 @@ class ContextBuilder:
         output: ContextFormat | Literal["record"] = "record",
         *,
         conversation_budget: int | None = None,
+        recall: bool = True,
     ) -> _Lookup:
         """Everything the cache decision needs: one database round trip, one cache read.
 
@@ -483,6 +487,7 @@ class ContextBuilder:
                 if conversation_budget is not None and window is not None
                 else []
             ),
+            *_RECALL_KEYS[recall],
         )
         bundle_id = stable_key(namespace, query)
         cache_key = self._cache_key(ctx, bundle_id)
@@ -513,6 +518,7 @@ class ContextBuilder:
             bundle=bundle_raw,
             semantic_key=semantic,
             semantic=semantic_raw,
+            recall=recall,
         )
 
     async def _revisions(self, ctx: MemoryExecutionContext) -> dict[str, int]:
@@ -569,6 +575,7 @@ class ContextBuilder:
         window: bool = True,
         window_format: WindowFormat = WindowFormat.RENDERED,
         conversation_token_budget: int | None = None,
+        recall: bool = True,
     ) -> ContextBundle:
         """The bundle itself, for in-process readers (the profile job, the benchmarks)."""
         budget = token_budget or self.cfg.token_budget
@@ -587,6 +594,7 @@ class ContextBuilder:
                     tools,
                     form,
                     conversation_budget=conversation_token_budget,
+                    recall=recall,
                 )
             if found.bundle is not None:
                 return ContextBundle.model_validate_json(found.bundle)
@@ -618,6 +626,7 @@ class ContextBuilder:
         output: ContextFormat = "prompt",
         debug: bool = False,
         conversation_token_budget: int | None = None,
+        recall: bool = True,
     ) -> bytes:
         """The context as the API sends it, serialised once.
 
@@ -626,7 +635,8 @@ class ContextBuilder:
         ``debug`` asks for the build's diagnostics, which only a build has: it is never
         served from the cache. Callers that need the ContextBundle itself use ``build``.
         ``conversation_token_budget`` sizes the window (``None``: the service's
-        ``conversation_token_budget``).
+        ``conversation_token_budget``). ``recall`` false: what retrieval ranks for the
+        request is left for the caller to search for (``demand``).
         """
         budget = token_budget or self.cfg.token_budget
         form = window_format if window else None
@@ -645,6 +655,7 @@ class ContextBuilder:
                     form,
                     output,
                     conversation_budget=conversation_token_budget,
+                    recall=recall,
                 )
             if found.bundle is not None and not debug:
                 # on the request path, as a fresh bundle's record is (``_after_build``)
@@ -794,7 +805,7 @@ class ContextBuilder:
                 "tools": pinned.tools,
             }
         )
-        bundle = await self._checked(query, bundle, result, began)
+        bundle = await self._checked(query, _as_asked(found, bundle), result, began)
         spent = self.assist.tokens_used() - tokens_before
         return bundle.model_copy(
             update={"evidence": bundle.evidence.model_copy(update={"llm_tokens": spent})}
@@ -1653,6 +1664,16 @@ def _best_similarity(result: RetrievalResult) -> float:
 
 async def _nothing() -> list[Message]:
     return []
+
+
+#: What a bundle's cache key gains by the caller's ``recall``: a context that leaves what is
+#: ranked to be asked for is another context; one that carries it keeps the key it always had.
+_RECALL_KEYS: Final[dict[bool, tuple[str, ...]]] = {True: (), False: ("recall=off",)}
+
+
+def _as_asked(found: _Lookup, bundle: ContextBundle) -> ContextBundle:
+    """``bundle`` as the caller asked for it: whole, or with what stands alone (``demand``)."""
+    return bundle if found.recall else standing_only(bundle)
 
 
 #: What each window (``None``: none) adds to a bundle's cache key; the rendered form's is the

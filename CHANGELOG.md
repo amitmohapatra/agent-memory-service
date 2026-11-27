@@ -7,6 +7,21 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added (service; trellis-memory 0.6.9): a context for an agent that searches on demand
+
+A context was all or nothing: everything retrieval ranked near the request came with it, or
+(the caller not asking for one) no profile, rule or preference came at all. `/v1/context`
+takes `recall`: `true` (the default) is the context as it was; `false` is for an agent that
+searches memory itself. It then carries what stands for every request - the profile with
+the rules and preferences that apply, the conversation and its summary, the learned skills
+and the tool hints - and leaves out what is ranked for this one: memories, earlier values,
+graph facts, document passages and summaries, earlier conversations' answers. Each of those
+is a kind `/v1/recall` and the `memory_search` tool return. `evidence_status` still says
+whether memory holds something for the query (`INSUFFICIENT`: nothing to search for), and
+the memories found are still what `/v1/verify` checks an answer against. The two contexts
+are cached apart. The SDK's `context()` takes `recall` (trellis-memory 0.6.9)
+([ADR 0051](docs/adr/0051-a-context-carries-what-stands-and-leaves-what-is-ranked-to-be-asked-for.md)).
+
 ### Added (service): a clean-up of what was stored before a model read messages
 
 Reading new messages with a model (ADR 0047) changed nothing about what was stored before:

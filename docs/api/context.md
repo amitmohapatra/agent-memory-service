@@ -254,6 +254,29 @@ a hard rule - belongs in a profile block a person writes
 (`PATCH /v1/profile/{block}`): the check never reads it. A tenant turns it off by leaving `context_check` out of its policy's
 `uses`; a tenant whose stored policy lists its uses adds it to get the check.
 
+## A context for an agent that searches on demand
+
+`recall: false` (`ctx.context(query, recall=False)`) is for an agent that has the
+`memory_search` tool and decides itself what to look up. The context then carries what stands
+for every request and leaves what is ranked for this one to be asked for
+([ADR 0051](../adr/0051-a-context-carries-what-stands-and-leaves-what-is-ranked-to-be-asked-for.md)):
+
+| Carried | Left to a search (`/v1/recall`, `memory_search`) |
+| --- | --- |
+| the profile blocks and the people's pages | memories (`kinds: ["memory"]`) |
+| the standing rules, preferences and what the person said of themselves that apply to the request | earlier values of a memory |
+| the conversation window and the thread's summary | graph facts (`kinds: ["fact"]`) |
+| the learned skills and the tool hints | document passages and summaries (`kinds: ["chunk", "summary"]`) |
+| | what was said in earlier conversations (`kinds: ["message", "episode"]`, or `order: "newest"` / `"oldest"`) |
+
+`evidence_status` keeps its meaning of "what memory holds for the query": `INSUFFICIENT`
+says there is nothing to search for, anything else that a search is worth making. The memories
+the build found are still what `/v1/verify` checks an answer against. Retrieval runs either
+way (the standing sections and the tool hints read it), so this changes what a prompt holds,
+not the read's latency. The two forms of a context are cached apart. The default (`recall:
+true`) is the context as described above; an agent that answers from uploaded documents
+should keep it.
+
 ## Verifying an answer
 
 ```python

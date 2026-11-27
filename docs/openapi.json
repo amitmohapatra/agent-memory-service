@@ -1577,6 +1577,12 @@
             "title": "Query",
             "type": "string"
           },
+          "recall": {
+            "default": true,
+            "description": "carry what retrieval ranks for the query (memories, earlier values, graph facts, document passages and summaries, earlier conversations' answers); false when the agent searches memory itself, on demand: the context then carries what stands for every request - the profile with the rules and preferences that apply, the conversation, the learned skills and the tool hints - and evidence_status still says whether memory holds something for the query (INSUFFICIENT: nothing to search for)",
+            "title": "Recall",
+            "type": "boolean"
+          },
           "scope": {
             "$ref": "#/components/schemas/ScopeBody",
             "description": "The lineage the call acts in (thread, session, turn, work, agent, run). Tenant, workspace and user come from the trusted headers; a value here must agree with them.",

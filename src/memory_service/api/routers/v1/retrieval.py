@@ -193,6 +193,16 @@ class ContextRequest(BaseModel):
         "own history (a LangGraph checkpointer, an OpenAI session). The thread's summary "
         "comes either way",
     )
+    recall: bool = Field(
+        default=True,
+        description="carry what retrieval ranks for the query (memories, earlier values, "
+        "graph facts, document passages and summaries, earlier conversations' answers); "
+        "false when the agent searches memory itself, on demand: the context then carries "
+        "what stands for every request - the profile with the rules and preferences that "
+        "apply, the conversation, the learned skills and the tool hints - and "
+        "evidence_status still says whether memory holds something for the query "
+        "(INSUFFICIENT: nothing to search for)",
+    )
     window_format: WindowFormat = Field(
         default=WindowFormat.RENDERED,
         description="rendered: the window is a section of the rendered text; messages: it "
@@ -285,6 +295,7 @@ async def context(
             output=body.format,
             debug=body.debug,
             conversation_token_budget=body.conversation_token_budget,
+            recall=body.recall,
         )
     # The bundle is opaque bytes here on purpose (see above), so the audit records who asked
     # what under which scope; the records served are in the bundle itself.

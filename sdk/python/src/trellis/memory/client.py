@@ -226,6 +226,7 @@ class MemoryContext:
         debug: bool = ...,
         timeout: float | None = ...,  # noqa: ASYNC109
         conversation_token_budget: int | None = ...,
+        recall: bool = ...,
     ) -> PromptContext: ...
 
     @overload
@@ -243,6 +244,7 @@ class MemoryContext:
         debug: bool = ...,
         timeout: float | None = ...,  # noqa: ASYNC109
         conversation_token_budget: int | None = ...,
+        recall: bool = ...,
     ) -> ContextBundle: ...
 
     async def context(
@@ -259,6 +261,7 @@ class MemoryContext:
         debug: bool = False,
         timeout: float | None = None,  # noqa: ASYNC109 - the request's own timeout
         conversation_token_budget: int | None = None,
+        recall: bool = True,
     ) -> PromptContext | ContextBundle:
         """The context for this turn: the pinned profile, the thread's summary, its recent
         messages (unless ``window=False``: the framework keeps its own history), and the
@@ -279,6 +282,13 @@ class MemoryContext:
         and the answer - and the newest turn whole even past it, with
         ``conversation.over_budget`` set for the caller to trim it.
         ``format="full"`` returns the same content as structured data, without the rendering.
+        ``recall=False`` is for an agent that searches memory itself (``recall``, the
+        ``memory_search`` tool): the context carries what stands for every request - the
+        profile with the rules and preferences that apply, the conversation, the learned
+        skills and the tool hints - and leaves out what is ranked for ``query`` (memories,
+        earlier values, graph facts, document passages, earlier conversations' answers);
+        ``evidence_status`` still says whether memory holds something for it
+        (``INSUFFICIENT``: nothing to search for).
         ``timeout`` replaces the client's for this call, e.g. a turn's own latency budget."""
         payload: dict[str, Any] = {
             "query": query,
@@ -293,6 +303,8 @@ class MemoryContext:
             payload["window_format"] = window_format
         if conversation_token_budget is not None:
             payload["conversation_token_budget"] = conversation_token_budget
+        if not recall:  # sent only when asked for: an earlier service knows no such field
+            payload["recall"] = False
         if document_ids is not None:
             payload["document_ids"] = list(document_ids)
         if tools is not None:
