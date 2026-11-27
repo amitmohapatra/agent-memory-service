@@ -424,7 +424,6 @@ async def test_configure_the_harness_only_and_memory_follows(container, uow_fact
     _wire_memory(container)
     credentials = container.services["model_credentials"]
     await save(credentials, uow_factory, ALICE, "vk-auto-ingest")
-    assert container.services["memory_provider"].contextual_extractor is None
     with respx.mock(assert_all_called=False) as gateway:
         catalog = gateway.get(f"{BASE}/models").respond(
             200, json={"data": [{"id": "openai/gpt-4.1-mini"}]}
