@@ -1,0 +1,1283 @@
+{
+ "noise": {
+  "pasted_skill": {
+   "in": "standing_rules",
+   "text": "save this skill: # Read-Only Mode Use this skill when the user wants to look at allocations without changing them. Never create, update, or delete allocations. Always tell the user which plan you read.",
+   "label": "drop",
+   "why": "pasted",
+   "said": -1,
+   "also": [
+    "memories"
+   ]
+  },
+  "pasted_skill_line": {
+   "in": "user",
+   "text": "Never create, update, or delete allocations.",
+   "label": "drop",
+   "why": "pasted"
+  },
+  "pasted_code": {
+   "in": "standing_rules",
+   "text": "def allocate(store, units): return never_negative(units) # always clamp",
+   "label": "drop",
+   "why": "pasted",
+   "said": -3
+  },
+  "pasted_html": {
+   "in": "memories",
+   "text": "<div class=\"panel\"><svg viewBox=\"0 0 24 24\"><path d=\"M12 2L2 7l10 5 10-5-10-5z\"/></svg> Release notes: the dashboard always shows weekly sales by region.</div>",
+   "label": "drop",
+   "why": "pasted",
+   "said": -5
+  },
+  "pasted_wiki": {
+   "in": "memories",
+   "text": "h2. Onboarding checklist || Step || Owner || | Order laptop | Facilities | | Book induction | HR | Always file the ticket before the first day.",
+   "label": "drop",
+   "why": "pasted",
+   "said": -20
+  },
+  "qa_sheet": {
+   "in": "memories",
+   "text": "QA sheet row 14: login page, expected redirect to /home, status passed on build 4.2.1",
+   "label": "drop",
+   "why": "unrelated",
+   "said": -9
+  },
+  "moment_consent": {
+   "in": "memories",
+   "text": "ok for now skip the fetch_consent_message stage",
+   "label": "drop",
+   "why": "moment",
+   "said": -2
+  },
+  "moment_one_line": {
+   "in": "standing_rules",
+   "text": "For today only, answer in one line.",
+   "label": "drop",
+   "why": "moment",
+   "said": -6
+  },
+  "other_settings": {
+   "in": "memories",
+   "text": "For the markdown plan use brand Coach, channel Outlet, season FA26.",
+   "label": "drop",
+   "why": "other_task",
+   "said": -4
+  },
+  "dentist": {
+   "in": "memories",
+   "text": "My dentist appointment moved to Tuesday at 4pm.",
+   "label": "drop",
+   "why": "unrelated",
+   "said": -8
+  },
+  "sales_rule": {
+   "in": "standing_rules",
+   "text": "Always answer weekly sales reports as a table with columns store, item, units.",
+   "label": "drop",
+   "why": "unrelated",
+   "said": -30
+  },
+  "forecast_review": {
+   "in": "about_user",
+   "text": "Our team reviews forecasts every Monday.",
+   "label": "drop",
+   "why": "unrelated"
+  },
+  "laptops": {
+   "in": "about_user",
+   "text": "Our whole team runs Linux laptops now.",
+   "label": "drop",
+   "why": "unrelated"
+  },
+  "books": {
+   "in": "about_user",
+   "text": "Our accounts are kept in GBP.",
+   "label": "drop",
+   "why": "unrelated"
+  },
+  "coffee": {
+   "in": "preferences",
+   "text": "I prefer oat milk in my coffee.",
+   "label": "drop",
+   "why": "unrelated",
+   "said": -50
+  },
+  "sales_skill": {
+   "in": "skills",
+   "text": "weekly sales forecast",
+   "label": "drop",
+   "why": "other_task",
+   "steps": [
+    "get_sales",
+    "forecast_units",
+    "export_report"
+   ]
+  },
+  "returns_skill": {
+   "in": "skills",
+   "text": "returns processing",
+   "label": "drop",
+   "why": "other_task",
+   "steps": [
+    "open_return",
+    "print_label",
+    "refund_order"
+   ]
+  },
+  "fact_priya": {
+   "in": "graph_facts",
+   "text": "Priya manages store 88",
+   "label": "drop",
+   "why": "unrelated"
+  },
+  "ticket_4400": {
+   "in": "memories",
+   "text": "INC-4400 (badge reader) was closed last week.",
+   "label": "drop",
+   "why": "unrelated",
+   "said": -7
+  }
+ },
+ "cases": [
+  {
+   "id": "alloc-create",
+   "kind": "task",
+   "request": "Create an allocation for the tote at store 12.",
+   "items": [
+    {
+     "in": "user",
+     "text": "Name: Alex; planner for KateSpade and Coach bags, Retail channel.",
+     "label": "either",
+     "why": "identity"
+    },
+    {
+     "in": "about_user",
+     "text": "My default brand is KateSpade and my channel is Retail-Store.",
+     "label": "keep",
+     "why": "default"
+    },
+    {
+     "in": "standing_rules",
+     "text": "Never create an allocation when ATA is 0.",
+     "label": "keep",
+     "why": "applies",
+     "said": -40
+    },
+    {
+     "in": "graph_facts",
+     "text": "KateSpade tote stocked_at store 12",
+     "label": "either",
+     "why": "on_topic"
+    }
+   ],
+   "noise": [
+    "pasted_skill",
+    "pasted_skill_line",
+    "pasted_code",
+    "moment_consent",
+    "other_settings",
+    "sales_rule",
+    "forecast_review",
+    "dentist",
+    "sales_skill"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "alloc-district",
+   "kind": "task",
+   "request": "Allocate 30 units of the Coach wallet to the stores in the north district.",
+   "items": [
+    {
+     "in": "memories",
+     "text": "The north district is stores 12, 40 and 57.",
+     "label": "keep",
+     "why": "asked",
+     "said": -25
+    },
+    {
+     "in": "standing_rules",
+     "text": "Never create an allocation when ATA is 0.",
+     "label": "keep",
+     "why": "applies",
+     "said": -40
+    },
+    {
+     "in": "standing_rules",
+     "text": "Round every allocation to case packs of 6.",
+     "label": "keep",
+     "why": "applies",
+     "said": -33
+    },
+    {
+     "in": "user",
+     "text": "Name: Alex; planner for KateSpade and Coach bags, Retail channel.",
+     "label": "either",
+     "why": "identity"
+    }
+   ],
+   "noise": [
+    "pasted_html",
+    "qa_sheet",
+    "laptops",
+    "coffee",
+    "moment_one_line",
+    "fact_priya"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "alloc-view",
+   "kind": "question",
+   "request": "Show me last week's allocations for store 40.",
+   "items": [
+    {
+     "in": "about_user",
+     "text": "My default brand is KateSpade and my channel is Retail-Store.",
+     "label": "keep",
+     "why": "default"
+    },
+    {
+     "in": "standing_rules",
+     "text": "Never create an allocation when ATA is 0.",
+     "label": "either",
+     "why": "on_topic",
+     "said": -40
+    },
+    {
+     "in": "user",
+     "text": "Name: Alex; planner for KateSpade and Coach bags, Retail channel.",
+     "label": "either",
+     "why": "identity"
+    }
+   ],
+   "noise": [
+    "pasted_skill",
+    "moment_consent",
+    "dentist",
+    "books",
+    "returns_skill"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "sales-report",
+   "kind": "task",
+   "request": "Give me the weekly sales report for the Coach tote.",
+   "items": [
+    {
+     "in": "standing_rules",
+     "text": "Always answer weekly sales reports as a table with columns store, item, units.",
+     "label": "keep",
+     "why": "applies",
+     "said": -30
+    },
+    {
+     "in": "about_user",
+     "text": "My default brand is KateSpade and my channel is Retail-Store.",
+     "label": "either",
+     "why": "on_topic"
+    },
+    {
+     "in": "standing_rules",
+     "text": "Never create an allocation when ATA is 0.",
+     "label": "either",
+     "why": "on_topic",
+     "said": -40
+    },
+    {
+     "in": "skills",
+     "text": "weekly sales forecast",
+     "label": "either",
+     "why": "on_topic",
+     "steps": [
+      "get_sales",
+      "forecast_units",
+      "export_report"
+     ]
+    }
+   ],
+   "noise": [
+    "pasted_code",
+    "laptops",
+    "dentist",
+    "moment_consent",
+    "returns_skill"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "stock-short",
+   "kind": "question",
+   "request": "Which stores are short of the Coach tote this week?",
+   "items": [
+    {
+     "in": "memories",
+     "text": "The Coach tote is short at stores 12 and 40.",
+     "label": "keep",
+     "why": "asked",
+     "said": -2
+    },
+    {
+     "in": "standing_rules",
+     "text": "Always answer stock questions as a table with columns store, item, count.",
+     "label": "keep",
+     "why": "applies",
+     "said": -45
+    },
+    {
+     "in": "graph_facts",
+     "text": "Coach tote short_at store 12",
+     "label": "either",
+     "why": "on_topic"
+    },
+    {
+     "in": "user",
+     "text": "Name: Alex; planner for KateSpade and Coach bags, Retail channel.",
+     "label": "either",
+     "why": "identity"
+    }
+   ],
+   "noise": [
+    "pasted_wiki",
+    "moment_one_line",
+    "coffee",
+    "forecast_review",
+    "dentist"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "markdown-plan",
+   "kind": "task",
+   "request": "Build the markdown plan for outlet.",
+   "items": [
+    {
+     "in": "memories",
+     "text": "For the markdown plan use brand Coach, channel Outlet, season FA26.",
+     "label": "keep",
+     "why": "default",
+     "said": -4
+    },
+    {
+     "in": "standing_rules",
+     "text": "Never mark an item down below a 30% margin.",
+     "label": "keep",
+     "why": "applies",
+     "said": -60
+    },
+    {
+     "in": "standing_rules",
+     "text": "Never create an allocation when ATA is 0.",
+     "label": "either",
+     "why": "on_topic",
+     "said": -40
+    }
+   ],
+   "noise": [
+    "pasted_skill",
+    "moment_consent",
+    "dentist",
+    "sales_skill",
+    "qa_sheet"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "consent-flow",
+   "kind": "task",
+   "request": "Finalize allocation A-4471.",
+   "items": [
+    {
+     "in": "standing_rules",
+     "text": "Always fetch the consent message before you finalize an allocation.",
+     "label": "keep",
+     "why": "applies",
+     "said": -70
+    },
+    {
+     "in": "about_user",
+     "text": "My default brand is KateSpade and my channel is Retail-Store.",
+     "label": "either",
+     "why": "on_topic"
+    }
+   ],
+   "noise": [
+    "moment_consent",
+    "pasted_skill",
+    "qa_sheet",
+    "coffee",
+    "laptops"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "moment-valid",
+   "kind": "task",
+   "request": "Create an allocation for the wallet at store 57.",
+   "items": [
+    {
+     "in": "standing_rules",
+     "text": "For today only, use the Retail-Outlet channel instead of Retail-Store.",
+     "label": "keep",
+     "why": "moment_valid",
+     "said": 0
+    },
+    {
+     "in": "standing_rules",
+     "text": "Never create an allocation when ATA is 0.",
+     "label": "keep",
+     "why": "applies",
+     "said": -40
+    },
+    {
+     "in": "about_user",
+     "text": "My default brand is KateSpade and my channel is Retail-Store.",
+     "label": "either",
+     "why": "on_topic"
+    }
+   ],
+   "noise": [
+    "moment_one_line",
+    "pasted_code",
+    "dentist",
+    "sales_rule"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "follow-up",
+   "kind": "follow_up",
+   "conversation": "user: Show the allocation for the tote at store 12.\nassistant: Store 12 has 40 units of the KateSpade tote allocated.",
+   "request": "Move 10 of them to store 40.",
+   "items": [
+    {
+     "in": "standing_rules",
+     "text": "Never move stock between stores without the district manager's approval.",
+     "label": "keep",
+     "why": "applies",
+     "said": -55
+    },
+    {
+     "in": "memories",
+     "text": "Store 40 is in the north district; its manager is Dana.",
+     "label": "keep",
+     "why": "asked",
+     "said": -18
+    },
+    {
+     "in": "user",
+     "text": "Name: Alex; planner for KateSpade and Coach bags, Retail channel.",
+     "label": "either",
+     "why": "identity"
+    }
+   ],
+   "noise": [
+    "dentist",
+    "pasted_html",
+    "sales_rule",
+    "laptops",
+    "moment_consent"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "follow-up-yes",
+   "kind": "follow_up",
+   "conversation": "user: Can you reorder the Coach wallet for store 57?\nassistant: I can place a reorder of 24 units. Shall I go ahead?",
+   "request": "yes, go ahead",
+   "items": [
+    {
+     "in": "standing_rules",
+     "text": "Never place a reorder above 20 units without asking me for the reason.",
+     "label": "keep",
+     "why": "applies",
+     "said": -35
+    },
+    {
+     "in": "memories",
+     "text": "Reorders for store 57 go through the Leeds warehouse.",
+     "label": "keep",
+     "why": "asked",
+     "said": -22
+    }
+   ],
+   "noise": [
+    "dentist",
+    "coffee",
+    "pasted_wiki",
+    "forecast_review",
+    "returns_skill"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "about-me",
+   "kind": "about_user",
+   "request": "What do you know about me?",
+   "items": [
+    {
+     "in": "user",
+     "text": "Name: Alex; planner for KateSpade and Coach bags, Retail channel.",
+     "label": "keep",
+     "why": "identity"
+    },
+    {
+     "in": "about_user",
+     "text": "My default brand is KateSpade and my channel is Retail-Store.",
+     "label": "keep",
+     "why": "about_user"
+    },
+    {
+     "in": "about_user",
+     "text": "Our whole team runs Linux laptops now.",
+     "label": "keep",
+     "why": "about_user"
+    },
+    {
+     "in": "about_user",
+     "text": "Our accounts are kept in GBP.",
+     "label": "keep",
+     "why": "about_user"
+    },
+    {
+     "in": "preferences",
+     "text": "I prefer oat milk in my coffee.",
+     "label": "keep",
+     "why": "about_user",
+     "said": -50
+    },
+    {
+     "in": "standing_rules",
+     "text": "Never create an allocation when ATA is 0.",
+     "label": "either",
+     "why": "on_topic",
+     "said": -40
+    }
+   ],
+   "noise": [
+    "pasted_skill",
+    "pasted_skill_line",
+    "pasted_code",
+    "pasted_html",
+    "qa_sheet",
+    "moment_consent"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "my-rules",
+   "kind": "about_user",
+   "request": "Which rules have I given you?",
+   "items": [
+    {
+     "in": "standing_rules",
+     "text": "Never create an allocation when ATA is 0.",
+     "label": "keep",
+     "why": "asked",
+     "said": -40
+    },
+    {
+     "in": "standing_rules",
+     "text": "Always answer weekly sales reports as a table with columns store, item, units.",
+     "label": "keep",
+     "why": "asked",
+     "said": -30
+    },
+    {
+     "in": "standing_rules",
+     "text": "Round every allocation to case packs of 6.",
+     "label": "keep",
+     "why": "asked",
+     "said": -33
+    },
+    {
+     "in": "standing_rules",
+     "text": "For today only, answer in one line.",
+     "label": "either",
+     "why": "on_topic",
+     "said": -6
+    }
+   ],
+   "noise": [
+    "pasted_skill",
+    "pasted_skill_line",
+    "pasted_code",
+    "dentist",
+    "qa_sheet"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "hello",
+   "kind": "small_talk",
+   "request": "hi",
+   "items": [
+    {
+     "in": "user",
+     "text": "Name: Alex; planner for KateSpade and Coach bags, Retail channel.",
+     "label": "either",
+     "why": "identity"
+    },
+    {
+     "in": "standing_rules",
+     "text": "Always keep your answers under five lines.",
+     "label": "keep",
+     "why": "general_rule",
+     "said": -80
+    }
+   ],
+   "noise": [
+    "dentist",
+    "sales_rule",
+    "pasted_skill",
+    "moment_consent",
+    "laptops",
+    "sales_skill",
+    "fact_priya"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "thanks",
+   "kind": "small_talk",
+   "conversation": "user: Which stores are short of the tote?\nassistant: Stores 12 and 40.",
+   "request": "thanks, that's all for now",
+   "items": [
+    {
+     "in": "standing_rules",
+     "text": "Always keep your answers under five lines.",
+     "label": "keep",
+     "why": "general_rule",
+     "said": -80
+    },
+    {
+     "in": "memories",
+     "text": "The Coach tote is short at stores 12 and 40.",
+     "label": "either",
+     "why": "on_topic",
+     "said": -2
+    }
+   ],
+   "noise": [
+    "dentist",
+    "coffee",
+    "pasted_code",
+    "other_settings",
+    "books"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "order-summary",
+   "kind": "question",
+   "request": "Summarise the status of order 7781.",
+   "items": [
+    {
+     "in": "standing_rules",
+     "text": "Always end a summary with the next action and who owns it.",
+     "label": "keep",
+     "why": "general_rule",
+     "said": -64
+    },
+    {
+     "in": "memories",
+     "text": "Order 7781 has been held at customs since Monday.",
+     "label": "keep",
+     "why": "asked",
+     "said": -3
+    }
+   ],
+   "noise": [
+    "pasted_wiki",
+    "coffee",
+    "fact_priya",
+    "moment_one_line",
+    "ticket_4400"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "de-question",
+   "kind": "question",
+   "lang": "de",
+   "request": "Wie viele Einheiten der Tote hat Filiale 12?",
+   "items": [
+    {
+     "in": "standing_rules",
+     "text": "Antworte immer auf Deutsch.",
+     "label": "keep",
+     "why": "general_rule",
+     "said": -90
+    },
+    {
+     "in": "memories",
+     "text": "Filiale 12 hat 40 Einheiten der KateSpade Tote zugeteilt.",
+     "label": "keep",
+     "why": "asked",
+     "said": -1
+    },
+    {
+     "in": "memories",
+     "text": "Mein Zahnarzttermin ist am Dienstag um 16 Uhr.",
+     "label": "drop",
+     "why": "unrelated",
+     "said": -8
+    },
+    {
+     "in": "standing_rules",
+     "text": "Nur für heute: antworte in einer Zeile.",
+     "label": "drop",
+     "why": "moment",
+     "said": -6
+    },
+    {
+     "in": "about_user",
+     "text": "Unser ganzes Team nutzt jetzt Linux-Laptops.",
+     "label": "drop",
+     "why": "unrelated"
+    }
+   ],
+   "noise": [
+    "pasted_code",
+    "pasted_html"
+   ]
+  },
+  {
+   "id": "de-report",
+   "kind": "task",
+   "lang": "de",
+   "request": "Erstelle den Wochenbericht für die Coach Tote.",
+   "items": [
+    {
+     "in": "standing_rules",
+     "text": "Wochenberichte immer als Tabelle mit den Spalten Filiale, Artikel, Stück.",
+     "label": "keep",
+     "why": "applies",
+     "said": -30
+    },
+    {
+     "in": "standing_rules",
+     "text": "Nie eine Zuteilung anlegen, wenn ATA 0 ist.",
+     "label": "either",
+     "why": "on_topic",
+     "said": -40
+    },
+    {
+     "in": "memories",
+     "text": "Für jetzt die Stufe fetch_consent_message überspringen.",
+     "label": "drop",
+     "why": "moment",
+     "said": -3
+    },
+    {
+     "in": "about_user",
+     "text": "Unsere Bücher werden in GBP geführt.",
+     "label": "drop",
+     "why": "unrelated"
+    }
+   ],
+   "noise": [
+    "pasted_html",
+    "qa_sheet"
+   ]
+  },
+  {
+   "id": "es-alloc",
+   "kind": "task",
+   "lang": "es",
+   "request": "Crea una asignación para el bolso en la tienda 12.",
+   "items": [
+    {
+     "in": "standing_rules",
+     "text": "Nunca crees una asignación cuando el ATA sea 0.",
+     "label": "keep",
+     "why": "applies",
+     "said": -40
+    },
+    {
+     "in": "about_user",
+     "text": "Mi marca por defecto es KateSpade y mi canal es Retail-Store.",
+     "label": "keep",
+     "why": "default"
+    },
+    {
+     "in": "memories",
+     "text": "Mi cita con el dentista es el martes a las 16.",
+     "label": "drop",
+     "why": "unrelated",
+     "said": -8
+    },
+    {
+     "in": "standing_rules",
+     "text": "guarda esta skill: # Modo de solo lectura Usa esta skill cuando el usuario quiera ver asignaciones sin cambiarlas. Nunca crees, actualices ni elimines asignaciones. Di siempre al usuario qué plan leíste.",
+     "label": "drop",
+     "why": "pasted",
+     "said": -1
+    },
+    {
+     "in": "memories",
+     "text": "Por ahora omite la etapa fetch_consent_message.",
+     "label": "drop",
+     "why": "moment",
+     "said": -3
+    }
+   ],
+   "noise": [
+    "pasted_code"
+   ]
+  },
+  {
+   "id": "hi-alloc",
+   "kind": "task",
+   "lang": "hi",
+   "request": "स्टोर 12 में टोट के लिए आवंटन बनाओ।",
+   "items": [
+    {
+     "in": "standing_rules",
+     "text": "जब ATA 0 हो तो कभी आवंटन मत बनाओ।",
+     "label": "keep",
+     "why": "applies",
+     "said": -40
+    },
+    {
+     "in": "about_user",
+     "text": "मेरा डिफ़ॉल्ट ब्रांड KateSpade है और चैनल Retail-Store है।",
+     "label": "keep",
+     "why": "default"
+    },
+    {
+     "in": "memories",
+     "text": "मेरे दंत चिकित्सक का समय मंगलवार शाम 4 बजे है।",
+     "label": "drop",
+     "why": "unrelated",
+     "said": -8
+    },
+    {
+     "in": "memories",
+     "text": "अभी के लिए fetch_consent_message चरण छोड़ दो।",
+     "label": "drop",
+     "why": "moment",
+     "said": -3
+    }
+   ],
+   "noise": [
+    "pasted_code",
+    "pasted_html"
+   ]
+  },
+  {
+   "id": "it-vpn",
+   "kind": "question",
+   "request": "How do I install the VPN client?",
+   "items": [
+    {
+     "in": "about_user",
+     "text": "Our whole team runs Linux laptops now.",
+     "label": "keep",
+     "why": "default"
+    },
+    {
+     "in": "standing_rules",
+     "text": "Always give me terminal commands, not screenshots.",
+     "label": "keep",
+     "why": "applies",
+     "said": -44
+    },
+    {
+     "in": "memories",
+     "text": "h2. Onboarding checklist || Step || Owner || | Request VPN access | IT | | Order laptop | Facilities |",
+     "label": "either",
+     "why": "on_topic",
+     "said": -20
+    }
+   ],
+   "noise": [
+    "books",
+    "dentist",
+    "sales_rule",
+    "sales_skill",
+    "moment_consent"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "it-ticket",
+   "kind": "question",
+   "request": "What is the status of ticket INC-4471?",
+   "items": [
+    {
+     "in": "memories",
+     "text": "INC-4471 (printer on floor 3) was escalated to the vendor on Monday.",
+     "label": "keep",
+     "why": "asked",
+     "said": -4
+    },
+    {
+     "in": "memories",
+     "text": "INC-4400 (badge reader) was closed last week.",
+     "label": "drop",
+     "why": "near_miss",
+     "said": -7
+    },
+    {
+     "in": "memories",
+     "text": "INC-4417 (floor 3 projector) is waiting for a part.",
+     "label": "drop",
+     "why": "near_miss",
+     "said": -5
+    }
+   ],
+   "noise": [
+    "coffee",
+    "pasted_wiki",
+    "laptops",
+    "fact_priya"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "it-reset",
+   "kind": "task",
+   "request": "Reset the password for user jdoe.",
+   "items": [
+    {
+     "in": "standing_rules",
+     "text": "Never reset a password without a verified callback to the user's manager.",
+     "label": "keep",
+     "why": "applies",
+     "said": -100
+    },
+    {
+     "in": "memories",
+     "text": "For now skip the callback check, the phone system is down.",
+     "label": "drop",
+     "why": "moment",
+     "said": -10
+    },
+    {
+     "in": "about_user",
+     "text": "Our whole team runs Linux laptops now.",
+     "label": "either",
+     "why": "on_topic"
+    }
+   ],
+   "noise": [
+    "dentist",
+    "sales_rule",
+    "pasted_code",
+    "books"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "fin-reminder",
+   "kind": "task",
+   "request": "Draft a payment reminder for the overdue invoice 2207.",
+   "items": [
+    {
+     "in": "about_user",
+     "text": "Our accounts are kept in EUR.",
+     "label": "keep",
+     "why": "default"
+    },
+    {
+     "in": "standing_rules",
+     "text": "Always address customers formally in reminders.",
+     "label": "keep",
+     "why": "applies",
+     "said": -75
+    },
+    {
+     "in": "history",
+     "text": "Our accounts are kept in GBP.",
+     "label": "drop",
+     "why": "stale",
+     "said": -200
+    }
+   ],
+   "noise": [
+    "laptops",
+    "sales_rule",
+    "pasted_code",
+    "dentist",
+    "returns_skill"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "fin-expense",
+   "kind": "question",
+   "request": "Can I expense a taxi to the airport?",
+   "items": [
+    {
+     "in": "memories",
+     "text": "Expense policy: a taxi is reimbursed only when no train runs within 30 minutes.",
+     "label": "keep",
+     "why": "asked",
+     "said": -37
+    },
+    {
+     "in": "about_user",
+     "text": "I am based in Leeds.",
+     "label": "either",
+     "why": "on_topic"
+    }
+   ],
+   "noise": [
+    "dentist",
+    "coffee",
+    "pasted_html",
+    "forecast_review",
+    "ticket_4400"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "hr-leave",
+   "kind": "question",
+   "request": "How many leave days do I have left this year?",
+   "items": [
+    {
+     "in": "memories",
+     "text": "You have 12 leave days left as of 1 November.",
+     "label": "keep",
+     "why": "asked",
+     "said": -26
+    },
+    {
+     "in": "history",
+     "text": "You have 18 leave days left as of 1 June.",
+     "label": "drop",
+     "why": "stale",
+     "said": -179
+    }
+   ],
+   "noise": [
+    "sales_rule",
+    "pasted_wiki",
+    "coffee",
+    "fact_priya",
+    "moment_one_line"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "pa-dinner",
+   "kind": "task",
+   "request": "Book a table for dinner on Friday.",
+   "items": [
+    {
+     "in": "preferences",
+     "text": "I am vegetarian.",
+     "label": "keep",
+     "why": "applies",
+     "said": -120
+    },
+    {
+     "in": "memories",
+     "text": "My partner is allergic to peanuts.",
+     "label": "keep",
+     "why": "applies",
+     "said": -95
+    },
+    {
+     "in": "standing_rules",
+     "text": "For today only, book everything after 8pm.",
+     "label": "drop",
+     "why": "moment",
+     "said": -4
+    }
+   ],
+   "noise": [
+    "sales_rule",
+    "pasted_code",
+    "books",
+    "qa_sheet",
+    "sales_skill"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "pa-gift",
+   "kind": "question",
+   "request": "Suggest a birthday gift for my sister.",
+   "items": [
+    {
+     "in": "memories",
+     "text": "My sister Maya loves pottery and trail running.",
+     "label": "keep",
+     "why": "asked",
+     "said": -140
+    },
+    {
+     "in": "preferences",
+     "text": "I prefer gifts under 50 euros.",
+     "label": "keep",
+     "why": "applies",
+     "said": -110
+    }
+   ],
+   "noise": [
+    "laptops",
+    "books",
+    "ticket_4400",
+    "pasted_html",
+    "moment_consent"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "pa-dentist",
+   "kind": "question",
+   "request": "When is my dentist appointment?",
+   "items": [
+    {
+     "in": "memories",
+     "text": "My dentist appointment moved to Tuesday at 4pm.",
+     "label": "keep",
+     "why": "asked",
+     "said": -8
+    },
+    {
+     "in": "history",
+     "text": "My dentist appointment is on Monday at 9am.",
+     "label": "drop",
+     "why": "stale",
+     "said": -15
+    }
+   ],
+   "noise": [
+    "sales_rule",
+    "pasted_skill",
+    "coffee",
+    "forecast_review",
+    "fact_priya"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "skill-forecast",
+   "kind": "task",
+   "request": "Run the weekly sales forecast.",
+   "items": [
+    {
+     "in": "skills",
+     "text": "weekly sales forecast",
+     "label": "keep",
+     "why": "applies",
+     "steps": [
+      "get_sales",
+      "forecast_units",
+      "export_report"
+     ]
+    },
+    {
+     "in": "about_user",
+     "text": "Our team reviews forecasts every Monday.",
+     "label": "either",
+     "why": "on_topic"
+    }
+   ],
+   "noise": [
+    "returns_skill",
+    "pasted_code",
+    "dentist",
+    "moment_consent",
+    "books"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "skill-return",
+   "kind": "task",
+   "request": "Process the return for order 5521.",
+   "items": [
+    {
+     "in": "skills",
+     "text": "returns processing",
+     "label": "keep",
+     "why": "applies",
+     "steps": [
+      "open_return",
+      "print_label",
+      "refund_order"
+     ]
+    },
+    {
+     "in": "standing_rules",
+     "text": "Never refund an order above 500 euros without my approval.",
+     "label": "keep",
+     "why": "applies",
+     "said": -66
+    }
+   ],
+   "noise": [
+    "sales_skill",
+    "pasted_html",
+    "coffee",
+    "laptops",
+    "moment_one_line"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "window-now",
+   "kind": "temporal",
+   "request": "What is our current return window?",
+   "items": [
+    {
+     "in": "memories",
+     "text": "Our return window is 45 days since 1 October.",
+     "label": "keep",
+     "why": "asked",
+     "said": -57
+    },
+    {
+     "in": "history",
+     "text": "Our return window is 30 days.",
+     "label": "drop",
+     "why": "stale",
+     "said": -300
+    }
+   ],
+   "noise": [
+    "dentist",
+    "sales_rule",
+    "pasted_wiki",
+    "fact_priya"
+   ],
+   "lang": "en"
+  },
+  {
+   "id": "window-before",
+   "kind": "temporal",
+   "request": "What was our return window before October?",
+   "items": [
+    {
+     "in": "history",
+     "text": "Our return window is 30 days.",
+     "label": "keep",
+     "why": "asked",
+     "said": -300
+    },
+    {
+     "in": "memories",
+     "text": "Our return window is 45 days since 1 October.",
+     "label": "either",
+     "why": "on_topic",
+     "said": -57
+    }
+   ],
+   "noise": [
+    "dentist",
+    "coffee",
+    "pasted_code",
+    "laptops"
+   ],
+   "lang": "en"
+  }
+ ]
+}
