@@ -101,6 +101,13 @@ memory_replacements_total = Counter(
     ["grade"],
     registry=REGISTRY,
 )
+memory_unread_total = Counter(
+    "memory_unread_total",
+    "Messages a model that is allowed to read them did not answer for: read again later "
+    "(deferred), or kept as said with nothing read once the retries are spent (gave_up)",
+    ["outcome"],
+    registry=REGISTRY,
+)
 memory_replacement_skipped_total = Counter(
     "memory_replacement_skipped_total",
     "User statements stored without the cross-conversation comparison (the NLI head busy)",

@@ -275,7 +275,7 @@ async def test_background_ingestion_uses_owner_key_and_never_hindsight_operator_
     if registered:
         await save(credentials, uow_factory, ALICE, "vk-job-test")
     async with preview_server(facts=[]) as server:
-        with mocked_gateway([{"ops": []}]) as gateway:
+        with mocked_gateway([{"kind": "statement", "ops": []}]) as gateway:
             provider = container.services["memory_provider"]
             provider.assist = gateway.assist(["contextual_extraction"])
             # an agent's message is the gap-fill call's, on the owner's key, never Hindsight's
@@ -439,7 +439,7 @@ async def test_configure_the_harness_only_and_memory_follows(container, uow_fact
         import json
 
         completion = gateway.post(f"{BASE}/chat/completions").respond(
-            200, json=chat_response(json.dumps({"ops": []}))
+            200, json=chat_response(json.dumps({"kind": "statement", "ops": []}))
         )
         await _observe(container, uow_factory, ALICE, MESSAGE)
         assert catalog.call_count == completion.call_count == 1

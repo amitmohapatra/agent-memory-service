@@ -96,6 +96,7 @@ def test_every_stored_record_carries_its_language() -> None:
 
 def _reply(fact: str, quote: str, *, kind: str = "profile") -> dict:
     return {
+        "kind": "statement",
         "ops": [
             {
                 "op": "add",
@@ -107,7 +108,7 @@ def _reply(fact: str, quote: str, *, kind: str = "profile") -> dict:
                 "confidence": 0.9,
                 "target": 0,
             }
-        ]
+        ],
     }
 
 
@@ -128,8 +129,8 @@ async def test_a_message_the_model_reads_becomes_facts_in_its_language(lang: str
             recent=[],
             known=[],
         )
-    assert fills is not None
-    (extracted,) = fills
+    assert fills is not None and fills.kept
+    (extracted,) = fills.fills
     assert extracted.fact == fact and detect_language(extracted.fact) in (lang, "en")
     assert extracted.memory_type is MemoryType.USER
     (prompt,) = gateway.prompts()

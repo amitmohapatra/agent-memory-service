@@ -2628,6 +2628,13 @@
      "delete",
      "plan"
     ]
+   ],
+   "not_kept": [
+    [
+     "never",
+     "tool",
+     "writes"
+    ]
    ]
   },
   {
@@ -2660,6 +2667,13 @@
     [
      "delete",
      "plan"
+    ]
+   ],
+   "not_kept": [
+    [
+     "never",
+     "tool",
+     "writes"
     ]
    ]
   },
@@ -2750,6 +2764,13 @@
      "cold",
      "room"
     ]
+   ],
+   "not_kept": [
+    [
+     "always",
+     "wear",
+     "gloves"
+    ]
    ]
   },
   {
@@ -2783,6 +2804,12 @@
      "skip",
      "confirmation"
     ]
+   ],
+   "not_kept": [
+    [
+     "skip",
+     "confirmation"
+    ]
    ]
   },
   {
@@ -2802,6 +2829,12 @@
    "ask": [],
    "negative": false,
    "not_theirs": [
+    [
+     "one",
+     "line"
+    ]
+   ],
+   "not_kept": [
     [
      "one",
      "line"
@@ -2880,6 +2913,38 @@
    "keep": [],
    "ask": [],
    "negative": false
+  },
+  {
+   "id": "moment-3",
+   "kind": "moment",
+   "turns": [
+    {
+     "role": "user",
+     "text": "delete this plan",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "show chart too",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false,
+   "not_kept": [
+    [
+     "delete",
+     "plan"
+    ],
+    [
+     "show",
+     "chart"
+    ]
+   ]
   }
  ]
 }

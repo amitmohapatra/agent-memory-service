@@ -37,7 +37,7 @@ from memory_service.domain.memory import (
 )
 from memory_service.domain.observation import AGENT_ROLES, Observation
 from memory_service.modules.authz.visibility import readable_by
-from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
+from memory_service.modules.jobs.names import TASK_MEMORY_INDEX, TASK_PROCESS_OBSERVATION
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.llm.policy import identity_of
 from memory_service.modules.memory.admission import AdmissionGate
@@ -58,6 +58,7 @@ from memory_service.observability.metrics import (
     memory_decisions_total,
     memory_replacement_skipped_total,
     memory_replacements_total,
+    memory_unread_total,
     stage_seconds,
 )
 from memory_service.observability.tracing import span
@@ -387,6 +388,22 @@ def _speaker(observation: Observation) -> str:
     return observation.user_id or observation.agent_id or ""
 
 
+#: A message a model is allowed to read, and did not answer for, is read by nothing else: no
+#: pattern stands in for the model (a pasted "Never ..." would be the person's rule again for
+#: as long as the model is down). It is read again this many seconds later, each time the
+#: model still does not answer - a minute to a day, about 33 hours in all - and after the
+#: last it is kept as it was said, with nothing read from it.
+LATER: Final = (60, 300, 1_800, 7_200, 21_600, 86_400)
+#: The payload key that counts the times a message's model did not answer.
+UNREAD: Final = "unread"
+#: How an observation kept as said, unread by the model allowed to read it, is marked.
+KEPT_UNREAD: Final = "UNREAD"
+
+
+class _UnansweredError(Exception):
+    """The model allowed to read a message did not answer."""
+
+
 @dataclass(frozen=True)
 class Gaps:
     """What the model read from one message (``gapfill``): each candidate with the memory it
@@ -397,6 +414,8 @@ class Gaps:
     fills: list[tuple[MemoryCandidate, CanonicalMemory | None]] = field(default_factory=list)
     known: list[CanonicalMemory] = field(default_factory=list)
     said: list[MemoryCandidate] = field(default_factory=list)
+    #: kept as said because the model never answered (``KEPT_UNREAD``)
+    unread: bool = False
 
     def kept(self, read: list[MemoryCandidate]) -> list[MemoryCandidate]:
         """The message's candidates: the turn as said and ``read``, the model's reading of it
@@ -409,6 +428,12 @@ class Gaps:
             if lasting(c.category, c.memory_type, c.lifetime)
         }
         return [*(t for t in self.said if normalized_hash(t.content) not in held), *read]
+
+    def status(self, candidates: list[MemoryCandidate]) -> str:
+        """How the observation is marked once ``candidates`` are applied."""
+        if self.unread:
+            return KEPT_UNREAD
+        return "PROCESSED" if candidates else "NO_MEMORY"
 
 
 class ObservationPipeline:
@@ -471,7 +496,12 @@ class ObservationPipeline:
                 span("memory.process", tenant_id=tenant_id, kind=observation.kind.value),
                 stage_seconds.labels("memory.process").time(),
             ):
-                gaps, candidates = await self._candidates(observation, ctx, prior)
+                read = await self._candidates(
+                    observation, ctx, prior, unread=int(payload.get(UNREAD, 0))
+                )
+                if read is None:  # put off: the model allowed to read it did not answer
+                    return []
+                gaps, candidates = read
                 if preceding is not None:
                     candidates = [
                         c.model_copy(update={"preceding_turn": preceding}) for c in candidates
@@ -512,8 +542,9 @@ class ObservationPipeline:
                         stored = await uow.memories.get_many(tenant_id, sorted(affected))
                         await bump_memory_revisions(uow, stored)
                         await self._consolidate(uow, stored)
-                    status = "PROCESSED" if candidates else "NO_MEMORY"
-                    await uow.observations.mark_processed(tenant_id, observation_id, status=status)
+                    await uow.observations.mark_processed(
+                        tenant_id, observation_id, status=gaps.status(candidates)
+                    )
                     await uow.commit()
         for o in outcomes:
             memory_decisions_total.labels(o.decision.value).inc()
@@ -567,26 +598,76 @@ class ObservationPipeline:
         return referred
 
     async def _candidates(
-        self, observation: Observation, ctx: MemoryExecutionContext, prior: Observation | None
-    ) -> tuple[Gaps, list[MemoryCandidate]]:
+        self,
+        observation: Observation,
+        ctx: MemoryExecutionContext,
+        prior: Observation | None,
+        *,
+        unread: int = 0,
+    ) -> tuple[Gaps, list[MemoryCandidate]] | None:
         """What ``observation`` teaches, classified: the model's reading of it beside the
-        message as said, when the model read it (``_read``); the patterns' otherwise."""
-        gaps = await self._read(observation, ctx, prior)
+        message as said, where a model is allowed to read it (``_read``); the patterns'
+        otherwise. ``None`` when the model did not answer and the message is put off
+        (``_later``): ``unread`` counts the times it has not, and after ``LATER`` of them the
+        message is kept as said, unread."""
+        try:
+            gaps = await self._read(observation, ctx, prior, last=unread >= len(LATER))
+        except _UnansweredError:
+            await self._later(observation, unread)
+            return None
         if gaps is None:
             read = await self.provider.extract(observation, ctx)
             return Gaps(), await self._classified(read, observation, ctx)
         fills = [c for c, _ in gaps.fills]
         return gaps, gaps.kept(await self._classified(fills, observation, ctx))
 
+    async def _later(self, observation: Observation, unread: int) -> None:
+        """Read ``observation`` again in ``LATER[unread]`` seconds: its model did not answer.
+        Nothing is formed from it meanwhile, and it stays unprocessed."""
+        async with self.uow_factory() as uow:
+            await uow.enqueue(
+                JobSpec(
+                    task_name=TASK_PROCESS_OBSERVATION,
+                    queue=Queue.CHAT_FAST,
+                    payload={
+                        "tenant_id": observation.tenant_id,
+                        "observation_id": observation.observation_id,
+                        UNREAD: unread + 1,
+                    },
+                    idempotency_key=f"unread:{observation.observation_id}:{unread + 1}",
+                    schedule_in_seconds=LATER[unread],
+                    tenant_id=observation.tenant_id,
+                )
+            )
+            await uow.commit()
+        memory_unread_total.labels("deferred").inc()
+        log.warning(
+            "memory.unread",
+            tenant_id=observation.tenant_id,
+            observation_id=observation.observation_id,
+            unread=unread + 1,
+            again_in_seconds=LATER[unread],
+        )
+
     async def _read(
-        self, observation: Observation, ctx: MemoryExecutionContext, prior: Observation | None
+        self,
+        observation: Observation,
+        ctx: MemoryExecutionContext,
+        prior: Observation | None,
+        *,
+        last: bool = False,
     ) -> Gaps | None:
         """What the model reads from a person's message, asked before any pattern reads it
         (``gapfill``): each candidate with the memory it claims to update or contradict, if
-        any, the memories it was shown, and the message as said. ``None`` when the message is
-        not the model's to read (no model allowed, a message by its shape not worth asking
-        about, a provider that keeps no turn as said) or the model did not answer: the
-        patterns read it then, as they do without a model."""
+        any, the memories it was shown, and the message as said when it is kept (a
+        statement: ``gapfill.KINDS``). ``None`` when the message is not the model's to read -
+        no model allowed for it, a provider that keeps no turn as said, nothing said (only
+        questions) - and the patterns read it, as they do without a model.
+
+        Where a model is allowed, no pattern stands in for it: a message by its shape not
+        asked about is kept as said with nothing read; one the model does not answer for
+        raises ``_UnansweredError`` (the caller reads it again later), or on the ``last``
+        try is kept as said, unread."""
         said = getattr(self.provider, "said", None)
         if self.gapfill is None or said is None or not self.gapfill.wanted(observation, ctx):
             return None
@@ -597,7 +678,7 @@ class ObservationPipeline:
         async with self.uow_factory() as uow:
             recent = await self._recent(uow, observation, prior)
             if not worth_asking(split_sentences(observation.content), recent, speaker):
-                return None
+                return Gaps(said=turns)
             # where this message's memories are anchored, a profile fact's (the user's) too
             anchors = [turn, turn.model_copy(update={"memory_type": MemoryType.USER})]
             pool = await uow.memories.list_scope(
@@ -607,7 +688,7 @@ class ObservationPipeline:
                 limit=POOL,
             )
         known = await self.gapfill.nearest(observation.content, pool)
-        fills = await self.gapfill.fill(
+        read = await self.gapfill.fill(
             ctx.tenant_id,
             message=observation.content.strip(),
             speaker=speaker,
@@ -615,25 +696,42 @@ class ObservationPipeline:
             recent=recent,
             known=known,
         )
-        if fills is None:
-            return None
-        return Gaps(
-            [
-                (
-                    gap_candidate(
-                        f,
-                        speaker=turn.subject or speaker,
-                        evidence=turn.evidence,
-                        follows_user=turn.follows_user,
-                        said_by_user=turn.said_by_user,
-                    ),
-                    f.target,
-                )
-                for f in fills
-            ],
-            known,
-            turns,
+        if read is None:
+            return self._unanswered(observation, known, turns, last=last)
+        fills = [
+            (
+                gap_candidate(
+                    f,
+                    speaker=turn.subject or speaker,
+                    evidence=turn.evidence,
+                    follows_user=turn.follows_user,
+                    said_by_user=turn.said_by_user,
+                ),
+                f.target,
+            )
+            for f in read.fills
+        ]
+        return Gaps(fills, known, turns if read.kept else [])
+
+    @staticmethod
+    def _unanswered(
+        observation: Observation,
+        known: list[CanonicalMemory],
+        turns: list[MemoryCandidate],
+        *,
+        last: bool,
+    ) -> Gaps:
+        """The model did not answer: ``_UnansweredError`` for the caller to read the message again
+        later, or on the ``last`` try the message as said, with nothing read from it."""
+        if not last:
+            raise _UnansweredError(observation.observation_id)
+        memory_unread_total.labels("gave_up").inc()
+        log.warning(
+            "memory.kept_unread",
+            tenant_id=observation.tenant_id,
+            observation_id=observation.observation_id,
         )
+        return Gaps([], known, turns, unread=True)
 
     async def _recent(
         self, uow: UnitOfWork, observation: Observation, prior: Observation | None

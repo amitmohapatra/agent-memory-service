@@ -105,6 +105,13 @@ CATEGORIES: Final[dict[str, str]] = {
 }
 SOURCE_FACT: Final = "source_fact"
 RULE: Final = "rule"
+#: What the model says a message is. Only a statement is kept beyond its conversation, as the
+#: turn it was said in: a request and shared material stay in the transcript, where the
+#: conversation's window reads them, and are no memory of the person in their next one ("ok
+#: for now skip the consent stage" and "delete this plan" came back, as things the user
+#: said, in every later conversation about a plan).
+STATEMENT: Final = "statement"
+KINDS: Final = (STATEMENT, "request", "material")
 
 SYSTEM: Final = (
     "You keep a person's long-term memory. You get one MESSAGE the speaker just sent, the "
@@ -152,14 +159,22 @@ SYSTEM: Final = (
     "No operation for small talk, greetings, questions, requests and commands, "
     "instructions for the moment, offers the speaker did not take up, hypotheticals, "
     "material the speaker shares (a named fact aside), or what KNOWN already holds. An "
-    "empty list is the usual answer."
+    "empty list is the usual answer.\n"
+    "Say also what the MESSAGE is, as kind: statement - the speaker tells something worth "
+    "keeping for their later conversations (about themselves, their work or their world, "
+    "an event, a decision, a preference, a rule for every time), with or without a request "
+    "beside it; request - it only asks you to do, show or answer something, or gives an "
+    "instruction for now, for this task or for this conversation; material - it is text "
+    "shared to be worked on, with or without a request about it. Only a statement is kept "
+    "beyond its conversation."
 )
 
 SCHEMA: Final[dict[str, Any]] = {
     "type": "object",
-    "required": ["ops"],
+    "required": ["kind", "ops"],
     "additionalProperties": False,
     "properties": {
+        "kind": {"type": "string", "enum": list(KINDS)},
         "ops": {
             "type": "array",
             "maxItems": MAX_OPS,
@@ -187,7 +202,7 @@ SCHEMA: Final[dict[str, Any]] = {
                     "target": {"type": "integer", "minimum": 0, "maximum": KNOWN},
                 },
             },
-        }
+        },
     },
 }
 
@@ -215,6 +230,15 @@ class Fill:
     day: date | None
     #: the memory an ``update`` or ``contradict`` is about
     target: CanonicalMemory | None
+
+
+@dataclass(frozen=True)
+class Reading:
+    """What the model read from one message: its checked operations, and whether the message
+    is kept beyond its conversation as the turn it was said in (a statement: ``KINDS``)."""
+
+    fills: list[Fill]
+    kept: bool = True
 
 
 _SPACE = re.compile(r"\s+")
@@ -300,11 +324,12 @@ class GapFill:
         said_at: datetime,
         recent: Sequence[Turn],
         known: Sequence[CanonicalMemory],
-    ) -> list[Fill] | None:
+    ) -> Reading | None:
         """What the model reads from ``message``, checked; ``None`` when it did not answer
         (not allowed, not reachable, a failed call, a reply that is not the list of
-        operations asked for): the message is then the patterns' to read. An empty list is
-        its answer too: the message teaches nothing."""
+        operations asked for): the message is then unread. An empty list is its answer too:
+        the message teaches nothing. A reply that does not say what the message is (or says
+        something else) is read as a statement: the turn is kept, as it always was."""
         known = list(known)[:KNOWN]
         slot = self._slots.setdefault(tenant_id, asyncio.Semaphore(PER_TENANT))
         async with slot:
@@ -330,7 +355,10 @@ class GapFill:
             for item in ops[:MAX_OPS]
             if (f := checked(item, sources, said_at, known, speaker)) is not None
         ]
-        return await self._new(fills, known)
+        # kept unless the model says it is a request or material: no kind, or one it made up,
+        # leaves the turn where it always was
+        kept = out.get("kind") not in KINDS or out.get("kind") == STATEMENT
+        return Reading(await self._new(fills, known), kept=kept)
 
     async def says(self, facts: Sequence[str], text: str) -> bool:
         """Whether one of ``facts`` alone says ``text`` (the NLI head at ``SAME_ENTAILMENT``):

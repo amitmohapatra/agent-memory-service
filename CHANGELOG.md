@@ -7,7 +7,7 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
-### Changed (service): with a model, the model reads a person's message first
+### Changed (service): where a model is allowed, it alone reads a person's message, and says whether it is kept
 
 A person's message was read by the word patterns first, and a model, when allowed, could only
 add to that reading. A pattern reads words, not whose they are. Reproduced: a skill's text
@@ -23,14 +23,28 @@ the message as said. It is no longer shown a reading by anything else, and its i
 say whose words count - text a person shares to be worked on is material, not their
 statement - and that an instruction for the moment or a request is not memory. A new type,
 `rule`, is the speaker's lasting rule; what is read of the speaker is filed where the profile,
-the preferences and the standing rules read it from. The patterns read a message only when no
-model answers (not allowed, not reachable, a failed call); an empty answer is an answer
+the preferences and the standing rules read it from
 ([ADR 0047](docs/adr/0047-the-model-reads-a-persons-message-first.md)).
 
+The model also says what the message is: a statement, a request (or an instruction for the
+moment) or shared material. Only a statement is kept beyond its conversation, as the turn it
+was said in; the others stay in the transcript, where that conversation reads them. In a real
+trace "ok for now skip the consent stage and call create_allocation directly", "delete this
+plan" and a pasted block of SVG had come back as things the user said, in a later
+conversation.
+
+No pattern stands in for a model that is allowed. A message the model does not answer for is
+read by nothing and read again 1 minute, 5 minutes, 30 minutes, 2 hours, 6 hours and 24 hours
+later (`memory_unread_total{outcome="deferred"}`); after the last it is kept as said, with
+nothing read (`outcome="gave_up"`, status `UNREAD`). The patterns read a person's message only
+where no model is allowed for it.
+
 Not measured with a real model yet: the tests script the model, so they prove the order, the
-filing and the fallback, not the model's judgement. Unchanged: a tenant with no model (the
+filing and the retries, not the model's judgement. Unchanged: a tenant with no model (the
 three cases above stay as they were); an event, an import and a feedback note, read by the
-patterns with or without a model; what was stored before. No setting, route or SDK call
+patterns with or without a model; what was stored before. A tenant whose model is allowed
+and never answers gets no readings until it does: the counter and the `memory.unread` log
+line say so. No setting, route or SDK call
 changed, and no call is added: it is the one a tenant with a model already made per message.
 
 ### Fixed (service): a counted date in the words people write is the day it names

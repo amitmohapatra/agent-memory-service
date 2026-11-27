@@ -15,6 +15,7 @@ FIRST = "I finally adopted a dog last month."
 SECOND = "Her name is Biscuit, a beagle mix."
 FACT = "u1 adopted a beagle mix named Biscuit."
 OPS = {
+    "kind": "statement",
     "ops": [
         {
             "op": "add",
@@ -26,7 +27,7 @@ OPS = {
             "confidence": 0.9,
             "target": 0,
         }
-    ]
+    ],
 }
 USER = ProcessingHints(visibility=Visibility.USER)
 
@@ -42,7 +43,7 @@ async def test_a_gap_fill_fact_is_stored_recalled_replay_safe_and_forgettable(
     container, uow_factory
 ):
     pipeline = container.services["observation_pipeline"]
-    with mocked_gateway([{"ops": []}, OPS]) as gateway:
+    with mocked_gateway([{"kind": "statement", "ops": []}, OPS]) as gateway:
         pipeline.gapfill = GapFill(gateway.assist(uses=["contextual_extraction"]))
         await _observe(container, uow_factory, U1, FIRST, hints=USER)
         ack = await _observe(container, uow_factory, U1, SECOND, hints=USER)
@@ -91,6 +92,7 @@ async def test_a_sentence_the_model_read_is_held_once_in_its_words(container, uo
     said = "The audit is due the Friday before Christmas."
     resolved = "The audit is due on 2026-12-18."
     ops = {
+        "kind": "statement",
         "ops": [
             {
                 "op": "add",
@@ -102,7 +104,7 @@ async def test_a_sentence_the_model_read_is_held_once_in_its_words(container, uo
                 "confidence": 0.9,
                 "target": 0,
             }
-        ]
+        ],
     }
     pipeline = container.services["observation_pipeline"]
     with mocked_gateway([ops]) as gateway:
@@ -162,6 +164,7 @@ async def test_a_reply_the_model_read_whole_is_not_kept_again_with_its_question(
 
     reply = "In Tacoma. It handles all the West Coast returns."
     ops = {
+        "kind": "statement",
         "ops": [
             {
                 "op": "add",
@@ -174,11 +177,11 @@ async def test_a_reply_the_model_read_whole_is_not_kept_again_with_its_question(
                 "target": 0,
             }
             for fact in facts
-        ]
+        ],
     }
     at = datetime(2026, 10, 30, 9, tzinfo=UTC)
     pipeline = container.services["observation_pipeline"]
-    with mocked_gateway([{"ops": []}, ops]) as gateway:
+    with mocked_gateway([{"kind": "statement", "ops": []}, ops]) as gateway:
         pipeline.gapfill = GapFill(
             gateway.assist(uses=["contextual_extraction"]), nli=_Says("" if referred else facts[0])
         )

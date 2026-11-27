@@ -13,12 +13,16 @@ by turn through the conversation API in process, then read back from the memory 
   person's email) or said for the moment: no current memory filed as the speaker's own - a
   rule, an instruction, a preference or an attribute of theirs - may hold them. A fact about
   the person or thing the text names may;
+* ``not_kept``: words of a request, of an instruction for the moment or of shared text: no
+  current memory at all, the turn as said included, may hold them - they stay in their
+  conversation and are no memory of the person in the next one;
 * ``ask``: a question whose context must carry every word given (multi-hop, temporal);
 * ``negative``: chit-chat - nothing may be read from it.
 
 Metrics: recall (expected facts held), false-fact rate (forbidden facts held, and negative
 cases that stored a reading), misattribution rate (``not_theirs`` words held as the
-speaker's own), duplicate rate (expected facts held twice: by a memory another
+speaker's own), kept-beyond-its-conversation rate (``not_kept`` words held by any memory),
+duplicate rate (expected facts held twice: by a memory another
 memory holding them says all of, as the NLI head reads it - two facts that only share the
 expected words are two), wrong-update rate (stale values still current, kept values closed),
 ask recall.
@@ -156,6 +160,12 @@ async def score_case(
         "stale_current": sum(
             1 for words in case.get("stale", []) if any(_holds(m["content"], words) for m in read)
         ),
+        "not_kept": len(case.get("not_kept", [])),
+        "kept_beyond": sum(
+            1
+            for words in case.get("not_kept", [])
+            if any(_holds(m["content"], words) for m in current)
+        ),
         "keep": len(case.get("keep", [])),
         "keep_lost": sum(
             1
@@ -183,6 +193,7 @@ def summarise(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "recall": ratio("held", "expected"),
         "false_fact_rate": round(false_num / false_den, 4) if false_den else None,
         "misattribution_rate": ratio("misattributed", "not_theirs"),
+        "kept_beyond_rate": ratio("kept_beyond", "not_kept"),
         "duplicate_rate": ratio("duplicated", "held"),
         "wrong_update_rate": round(
             (sum(r["stale_current"] for r in rows) + sum(r["keep_lost"] for r in rows))

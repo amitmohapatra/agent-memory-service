@@ -92,10 +92,17 @@ what it returns is all that is read from the message (ADR 0047):
 - a rule is an instruction for every time ("always ...", "from now on ..."). An instruction
   for now or for this task ("for now skip the check") and a request ("delete the plan") are
   not memory;
-- the message itself is kept as it was said, beside the reading, as before.
+- the model also says what the message is. A statement is kept as it was said, beside the
+  reading, as before. A request ("delete this plan"), an instruction for the moment and
+  shared material are not kept beyond their conversation: they stay in the transcript, where
+  that conversation reads them, and are no memory in the next one.
 
-The word patterns read a message only when no model answers - none allowed, none reachable,
-a failed call - and for an `EVENT`, an import and feedback, which the model does not read.
+No pattern stands in for a model that is allowed. A message the model does not answer for
+(not reachable, a failed call) is read by nothing: it is read again 1 minute, 5 minutes, 30
+minutes, 2 hours, 6 hours and 24 hours later, and after the last is kept as said with nothing
+read from it. Its first job has succeeded by then: `GET /v1/jobs/{job_id}` says the job ran,
+not that the message was read. The word patterns read a person's message only where no model
+is allowed for it, and they read an `EVENT`, an import and feedback, which the model does not.
 What the model decides is its judgement: the checks on its answer (an exact quote, no number
 the quote does not state) bound what it writes, not what it leaves out.
 

@@ -37,7 +37,7 @@ def op(**fields):
 async def fill(replies=(), *, message="Her name is Biscuit, a beagle mix.", known=(), **how):
     with mocked_gateway(replies, **how) as gateway:
         filler = GapFill(gateway.assist(uses=["contextual_extraction"]))
-        out = await filler.fill(
+        read = await filler.fill(
             "t1",
             message=message,
             speaker="Ana",
@@ -45,11 +45,12 @@ async def fill(replies=(), *, message="Her name is Biscuit, a beagle mix.", know
             recent=[Turn("Ana", "I finally adopted a dog last month.")],
             known=list(known),
         )
+        out = None if read is None else read.fills
         return out, gateway
 
 
 async def test_one_call_reads_the_message_with_its_turns_and_known():
-    out, gateway = await fill([{"ops": [op()]}])
+    out, gateway = await fill([{"kind": "statement", "ops": [op()]}])
     assert [f.fact for f in out] == ["Ana adopted a beagle named Biscuit."]
     assert gateway.route.call_count == 1
     sent = gateway.prompts()[0]["messages"]
@@ -64,9 +65,9 @@ async def test_one_call_reads_the_message_with_its_turns_and_known():
 async def test_no_answer_is_not_an_answer_of_nothing():
     """A model that answers "nothing" has read the message; one that cannot be reached, or
     may not read it, has not - the message is then the patterns' to read."""
-    assert (await fill([{"ops": []}]))[0] == []
+    assert (await fill([{"kind": "statement", "ops": []}]))[0] == []
     assert (await fill(failing=True))[0] is None
-    with mocked_gateway([{"ops": [op()]}]) as gateway:
+    with mocked_gateway([{"kind": "statement", "ops": [op()]}]) as gateway:
         unused = GapFill(gateway.assist(uses=[]))
         said = await unused.fill(
             "t1", message="x", speaker="Ana", said_at=SAID, recent=[], known=[]
@@ -164,9 +165,11 @@ def test_an_opinion_is_a_belief_and_an_implied_fact_is_less_sure():
 
 async def test_what_a_memory_holds_is_not_added_again_and_a_fact_is_added_once():
     same = op(fact="Her name is Biscuit.")
-    out, _ = await fill([{"ops": [same, same]}], known=[_known("Her  name is biscuit.")])
+    out, _ = await fill(
+        [{"kind": "statement", "ops": [same, same]}], known=[_known("Her  name is biscuit.")]
+    )
     assert out == []
-    out, _ = await fill([{"ops": [same, same]}])
+    out, _ = await fill([{"kind": "statement", "ops": [same, same]}])
     assert [f.fact for f in out] == ["Her name is Biscuit."]
 
 
@@ -197,7 +200,7 @@ async def test_calls_in_flight_are_bounded_per_tenant():
             peak = max(peak, running)
             await asyncio.sleep(0.01)
             running -= 1
-            return {"ops": []}
+            return {"kind": "statement", "ops": []}
 
     filler = GapFill(Assist())  # type: ignore[arg-type]
     await asyncio.gather(
@@ -255,9 +258,9 @@ async def test_an_add_of_the_words_an_update_rests_on_is_the_update():
     event = op(fact="Priya handed on-call duty over to Marcus.", quote=quote)
     other = op(fact="Ana's team has a new pager.", quote="We also got a new pager")
     entails = {"Priya handed on-call duty over to Marcus.": {"Our on-call lead is now Marcus."}}
-    with mocked_gateway([{"ops": [update, event, other]}]) as gateway:
+    with mocked_gateway([{"kind": "statement", "ops": [update, event, other]}]) as gateway:
         filler = GapFill(gateway.assist(uses=["contextual_extraction"]), nli=_Entails(entails))
-        out = await filler.fill(
+        read = await filler.fill(
             "t1",
             message=f"{quote}. We also got a new pager.",
             speaker="Ana",
@@ -265,6 +268,7 @@ async def test_an_add_of_the_words_an_update_rests_on_is_the_update():
             recent=[],
             known=[_known("Our on-call lead is Priya.")],
         )
+        out = None if read is None else read.fills
     assert [(f.op, f.fact) for f in out] == [
         ("update", "Priya handed on-call duty over to Marcus."),
         ("add", "Ana's team has a new pager."),
@@ -294,12 +298,12 @@ async def test_an_add_that_contradicts_what_a_change_of_its_words_replaces_is_th
     pune = "hi-update पुणे में रहता है।"
     now = op(op="contradict", fact="hi-update अब बेंगलुरु में रहता है।", quote=quote, target=1)
     add = op(fact=other, quote=quote, subject="")
-    with mocked_gateway([{"ops": [now, add]}]) as gateway:
+    with mocked_gateway([{"kind": "statement", "ops": [now, add]}]) as gateway:
         filler = GapFill(
             gateway.assist(uses=["contextual_extraction"]),
             nli=_Entails({}, {(other, pune): (0.01, contradiction)}),
         )
-        out = await filler.fill(
+        read = await filler.fill(
             "t1",
             message=f"{quote}।",
             speaker="hi-update",
@@ -307,6 +311,7 @@ async def test_an_add_that_contradicts_what_a_change_of_its_words_replaces_is_th
             recent=[],
             known=[_known(pune)],
         )
+        out = None if read is None else read.fills
     assert len(out) == kept, out
     assert out[0].op == "contradict" and out[0].target is not None
     assert out[0].target.content == pune
@@ -325,9 +330,9 @@ async def test_an_add_the_head_reads_as_saying_a_change_of_its_words_is_the_chan
     update = op(op="update", fact="Our on-call lead is Marcus.", quote=quote, target=1)
     event = op(fact="Priya handed the on-call duty over to Marcus.", quote=quote)
     scored = {(event["fact"], update["fact"]): (entailment, 0.21)}
-    with mocked_gateway([{"ops": [update, event]}]) as gateway:
+    with mocked_gateway([{"kind": "statement", "ops": [update, event]}]) as gateway:
         filler = GapFill(gateway.assist(uses=["contextual_extraction"]), nli=_Entails({}, scored))
-        out = await filler.fill(
+        read = await filler.fill(
             "t1",
             message=f"{quote}.",
             speaker="Ana",
@@ -335,6 +340,7 @@ async def test_an_add_the_head_reads_as_saying_a_change_of_its_words_is_the_chan
             recent=[],
             known=[_known("Our on-call lead is Priya.")],
         )
+        out = None if read is None else read.fills
     facts = [(f.op, f.fact) for f in out]
     if folded:
         assert facts == [("update", event["fact"])]
@@ -404,11 +410,12 @@ class _Entails:
 async def test_a_fact_another_fact_of_the_message_says_is_not_added_too(facts, entails, kept):
     message = "Since moving I have news. " + " ".join(facts)
     ops = [op(fact=f, quote=message) for f in facts]
-    with mocked_gateway([{"ops": ops}]) as gateway:
+    with mocked_gateway([{"kind": "statement", "ops": ops}]) as gateway:
         filler = GapFill(gateway.assist(uses=["contextual_extraction"]), nli=_Entails(entails))
-        out = await filler.fill(
+        read = await filler.fill(
             "t1", message=message, speaker="Ana", said_at=SAID, recent=[], known=[]
         )
+        out = None if read is None else read.fills
     assert [f.fact for f in out] == kept
 
 
@@ -432,3 +439,29 @@ async def test_a_provider_that_keeps_no_turn_as_said_reads_the_message_itself():
         gapfill=Wanted(),  # type: ignore[arg-type]
     )
     assert await pipeline._read(_obs("I moved to Pune."), CTX, None) is None
+
+
+@pytest.mark.parametrize(
+    ("reply", "kept"),
+    [
+        ({"kind": "statement", "ops": []}, True),
+        ({"kind": "request", "ops": []}, False),
+        ({"kind": "material", "ops": []}, False),
+        ({"ops": []}, True),  # a reply that does not say: kept, as a turn always was
+        ({"kind": "chatter", "ops": []}, True),
+    ],
+)
+async def test_only_a_statement_is_kept_beyond_its_conversation(reply, kept):
+    class Assist:
+        async def structured(self, *args, **kwargs):
+            return reply
+
+    read = await GapFill(Assist()).fill(  # type: ignore[arg-type]
+        "t1", message="delete this plan", speaker="Ana", said_at=SAID, recent=[], known=[]
+    )
+    assert read is not None and read.kept is kept and read.fills == []
+
+
+def test_the_model_is_asked_what_the_message_is():
+    assert gapfill.SCHEMA["required"] == ["kind", "ops"]
+    assert gapfill.SCHEMA["properties"]["kind"]["enum"] == list(gapfill.KINDS)

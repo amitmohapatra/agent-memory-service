@@ -228,3 +228,14 @@ async def test_shared_text_held_as_the_speakers_own_is_a_misattribution():
     assert fine["misattributed"] == 0
     assert summarise([row, fine])["misattribution_rate"] == 0.5
     assert summarise([await score_case(CASE, [], [], Head())])["misattribution_rate"] is None
+
+
+async def test_a_request_held_by_any_memory_is_kept_beyond_its_conversation():
+    """ "delete this plan" as the turn it was said in is a memory of the person in their next
+    conversation; a statement beside it is not counted."""
+    case = {"id": "m1", "kind": "moment", "not_kept": [["delete", "plan"], ["show", "chart"]]}
+    kept = [mem("delete this plan", category="verbatim_turn"), mem("I manage store KS3183.")]
+    row = await score_case(case, kept, [], Head())
+    assert (row["not_kept"], row["kept_beyond"]) == (2, 1)
+    assert (await score_case(case, [mem("I manage store KS3183.")], [], Head()))["kept_beyond"] == 0
+    assert summarise([row])["kept_beyond_rate"] == 0.5
