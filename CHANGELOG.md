@@ -7,6 +7,13 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Fixed (service): an event or a file never becomes the person's rule, preference or profile line
+
+What was read from an event ("Never call the customer after 6pm", posted with `role: EVENT`)
+or a file could be stored as the person's standing rule, preference or profile fact: the
+reading went by the words. The source decides now: only a person's own words make their
+rules, preferences and profile; what a record says is kept as what happened (a fact).
+
 ### Removed (service): the Hindsight extraction preview
 
 An optional Hindsight server could read a person's English messages in place of the model

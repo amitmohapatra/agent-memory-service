@@ -45,10 +45,22 @@ from memory_service.modules.llm.policy import identity_of
 from memory_service.modules.memory.admission import AdmissionGate
 from memory_service.modules.memory.consolidation import CONSOLIDATION_USE, schedule_for
 from memory_service.modules.memory.ephemeral import EphemeralMemory
-from memory_service.modules.memory.gapfill import POOL, RECENT_TURNS, GapFill, Turn, worth_asking
+from memory_service.modules.memory.gapfill import (
+    POOL,
+    RECENT_TURNS,
+    SOURCE_FACT,
+    GapFill,
+    Turn,
+    worth_asking,
+)
 from memory_service.modules.memory.gapfill import TYPES as GAP_TYPES
 from memory_service.modules.memory.gapfill import candidate as gap_candidate
-from memory_service.modules.memory.native import follows_user, normalized_hash, split_sentences
+from memory_service.modules.memory.native import (
+    follows_user,
+    normalized_hash,
+    said_by_user,
+    split_sentences,
+)
 from memory_service.modules.memory.referred import referred_turn
 from memory_service.modules.memory.replacement import CrossConversationReplacement
 from memory_service.modules.memory.restatement import restate
@@ -352,6 +364,38 @@ def _told(observation: Observation) -> bool:
     if str(metadata.get(ORIGIN, MessageOrigin.PERSON.value)) != MessageOrigin.PERSON.value:
         return False
     return str(metadata.get("role", "")).upper() not in AGENT_ROLES
+
+
+#: What only a person's own words make: their rules, preferences and who they are.
+PERSONS: Final = frozenset({"rule", "instruction", "preference", "attribute"})
+
+
+def _as_record(candidate: MemoryCandidate, observation: Observation) -> MemoryCandidate:
+    """What is read from a record the request carried - an event, an import, a file - is
+    kept as what happened, never as the person's rule, preference or profile line, however
+    it is worded: "Never call the customer after 6pm" in an event is not the person's rule.
+    A person's own words (``said_by_user``) and an agent's (``authored_type``) are as read."""
+    if said_by_user(observation) or observation.agent_authored:
+        return candidate
+    if (
+        candidate.category not in PERSONS
+        and candidate.memory_type not in RECORD_TYPES
+        and not candidate.self_description
+    ):
+        return candidate
+    return candidate.model_copy(
+        update={
+            "memory_type": MemoryType.SEMANTIC,
+            "category": SOURCE_FACT,
+            "statement_kind": None,
+            "self_description": False,
+            "predicate": "said" if candidate.predicate == "rule" else candidate.predicate,
+        }
+    )
+
+
+#: The kinds a record is never kept as: the person's profile and preferences.
+RECORD_TYPES: Final = frozenset({MemoryType.USER, MemoryType.PREFERENCE})
 
 
 def authored_type(memory_type: MemoryType, *, by_agent: bool) -> MemoryType:
@@ -890,6 +934,7 @@ class ObservationPipeline:
 
     @staticmethod
     def _apply_hints(c: MemoryCandidate, o: Observation) -> MemoryCandidate:
+        c = _as_record(c, o)
         h = o.hints
         update: dict[str, Any] = {}
         if h.memory_type:

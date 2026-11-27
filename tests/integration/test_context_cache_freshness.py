@@ -27,6 +27,13 @@ from tests.integration.conftest import requires_pg
 
 pytestmark = [pytest.mark.integration, requires_pg]
 
+
+def _carried(bundle) -> bool:
+    """Whether the context carries the memory: as a ranked memory, or as the profile line
+    that states it (a statement is in a context once, ``demand.said_once``)."""
+    return bool(bundle.memories) or any("Kolkata" in b.text for b in bundle.profile)
+
+
 QUERY = "what do we know about SKU-31?"
 
 
@@ -152,7 +159,7 @@ async def test_semantic_cache_uses_real_revisions_and_forget_invalidates_it(cont
     await container.tasks.drain()
     first = await builder.build(ctx, "my timezone?")
     await builder.drain()
-    assert first.memories
+    assert _carried(first)
     second = await builder.build(ctx, "my timezone!")
     assert second.cache_hit and second.query == "my timezone!"
     assert second.bundle_id != first.bundle_id
@@ -165,7 +172,7 @@ async def test_semantic_cache_uses_real_revisions_and_forget_invalidates_it(cont
     await container.tasks.drain()
     third = await builder.build(ctx, "my timezone.")
     assert not third.cache_hit
-    assert not third.memories
+    assert not _carried(third)
 
 
 async def test_semantic_cache_cannot_cross_real_user_scope(container) -> None:
@@ -199,7 +206,7 @@ async def test_forgetting_tenant_memory_invalidates_other_readers_before_and_aft
     builder = container.services["context_builder"]
     first = await builder.build(U2, "my timezone?")
     await builder.drain()
-    assert first.memories
+    assert _carried(first)
     assert await _served(builder, U2, "my timezone?")
     assert (await builder.build(U2, "my timezone!")).cache_hit
     await builder.drain()
@@ -216,7 +223,7 @@ async def test_forgetting_tenant_memory_invalidates_other_readers_before_and_aft
     await container.tasks.drain()
     assert not await _served(builder, U2, "my timezone?")
     final = await builder.build(U2, "my timezone!")
-    assert not final.cache_hit and not final.memories
+    assert not final.cache_hit and not _carried(final)
 
 
 QUESTION = "what did we decide about the dashboard?"
