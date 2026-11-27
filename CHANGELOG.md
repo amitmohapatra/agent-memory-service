@@ -29,8 +29,13 @@ It only removes: nothing is added, reworded or reordered
   removed skill), memories, earlier values and graph facts.
 - **What it cannot:** a profile block a person or an agent wrote or edited, the people's pages,
   the conversation and its summary, earlier conversations' answers, document passages and
-  their summaries, working memory, a rule the tool hints already apply to the task, and what
-  the best-ranked memory states - a wrong answer never leaves a question with nothing.
+  their summaries, working memory. What must reach every context whatever a model says
+  belongs in a block a person writes (`PATCH /v1/profile/{block}`).
+- **A part goes with its whole, and nothing is kept for its rank:** a sentence the context
+  also lists on its own is asked about once, as the turn that says it, and removed or kept
+  with it. Neither the best-ranked memory nor a rule the tool hints already apply is
+  protected: built from the messages of the run above, both were the pasted skill. A removed
+  rule takes the marks it made on tools (`forbidden`) with it.
 - **When it does not answer:** it has 2.5 s (`LLM.check_deadline_seconds`), and never more than
   the read's own 5 s deadline leaves. Late, unreachable or not in the schema: the context is
   sent as built. `debug` shows what happened under `diagnostics.context_check` (the outcome,

@@ -158,7 +158,8 @@ def test_the_model_is_shown_what_memory_attaches_and_nothing_it_may_not_remove()
         ("preferences", "- I prefer daily digests"),
         ("about_user", "- I plan Coach bags for Retail"),
         (SKILLS, "sk_1"),
-        # not the best-ranked memory: it stays whatever the model says
+        # the best-ranked memory too: its rank protects nothing
+        (MEMORIES, "mem_best"),
         (MEMORIES, "mem_old"),
         (MEMORIES, "mem_other"),
         (HISTORY, "mem_was"),
@@ -212,26 +213,84 @@ def test_a_profile_block_someone_wrote_is_not_the_models_to_drop() -> None:
     assert "agent.persona" not in [i.section for i in listed(pinned)]
 
 
-def test_what_the_best_match_states_stays_wherever_it_is_stated() -> None:
-    best = "Always answer stock questions as a table"
-    bundle = _bundle(
-        memories=[_memory("mem_best", best), _memory("mem_other", "My dentist is on Tuesday.")]
-    )
-    assert best not in [i.text for i in listed(bundle)]
-    assert RULE_HOLIDAY in [i.key for i in listed(bundle)]
+PASTED = (
+    "save this skill: # Read-Only Mode Use this skill when the user wants to look at "
+    "allocations without changing them. Never create, update, or delete allocations. "
+    "Always tell the user which plan you read."
+)
 
 
-def test_a_rule_the_tool_hints_already_apply_is_not_the_models_to_drop() -> None:
-    rules = ProfileBlockView(
-        block="standing_rules", text=f"{RULE_READ_ONLY}\n{RULE_TABLE}", version=0
+def _pasted_skill(**update: Any) -> ContextBundle:
+    """What a skill's text pasted into a chat left behind: the turn as a standing rule and
+    as the best-ranked memory, its sentences as lines of the learned ``user`` block, and the
+    tool the request needs forbidden by it."""
+    fields: dict[str, Any] = {
+        "profile": [
+            ProfileBlockView(
+                block="standing_rules", text=f"- {PASTED} (said 2026-11-26)", version=0
+            ),
+            LearnedBlock(
+                block="user",
+                text="- Never create, update, or delete allocations.\n"
+                "- Always tell the user which plan you read.\n"
+                "- Name: Alex",
+                version=4,
+            ),
+        ],
+        "memories": [
+            _memory("mem_pasted", PASTED, said="2026-11-26"),
+            _memory("mem_default", "My default brand is KateSpade."),
+        ],
+        "tools": ToolHints(
+            candidates=[ToolCandidate(name="create_allocation", score=1.0, confidence=0.6)],
+            forbidden={"create_allocation": PASTED},
+        ),
+        "procedures": [
+            _skill("sk_1", "allocate", "create_allocation", forbidden={"create_allocation": PASTED})
+        ],
+    }
+    return _bundle(**{**fields, **update})
+
+
+def test_a_sentence_is_not_shown_apart_from_the_turn_that_says_it() -> None:
+    """On its own "Never create, update, or delete allocations." reads as the person's rule;
+    in the pasted turn it is plainly material. It is asked about once, as the turn."""
+    items = listed(_pasted_skill())
+    texts = [i.text for i in items]
+    assert "Never create, update, or delete allocations." not in texts
+    assert "Always tell the user which plan you read." not in texts
+    assert "Name: Alex" in texts
+    turn = next(i for i in items if i.text == PASTED)
+    assert set(turn.places) == {
+        ("standing_rules", f"- {PASTED} (said 2026-11-26)"),
+        ("user", "- Never create, update, or delete allocations."),
+        ("user", "- Always tell the user which plan you read."),
+        (MEMORIES, "mem_pasted"),
+    }
+    # a word or two is in many texts without being read from any of them
+    short = _bundle(
+        memories=[_memory("m1", "Store 12 is in the north."), _memory("m2", "Store 12")]
     )
-    hints = ToolHints(
-        candidates=[ToolCandidate(name="create_allocation", score=1.0, confidence=0.6)],
-        forbidden={"create_allocation": "Never create allocations"},
-    )
-    items = listed(_bundle(profile=[rules], tools=hints))
-    assert RULE_READ_ONLY not in [i.key for i in items]
-    assert RULE_TABLE in [i.key for i in items]
+    assert [i.key for i in listed(short) if i.section == MEMORIES] == ["m1", "m2"]
+
+
+def test_nothing_is_kept_for_its_rank_or_its_use_and_a_removed_rule_takes_its_marks() -> None:
+    """The ranking put the pasted skill first for the request it blocks, and the tool hints
+    forbade the tool the request needs by it: what has to go is exactly what a guard on the
+    best match or on an applied rule would keep."""
+    bundle = _pasted_skill()
+    turn = next(i for i in listed(bundle) if i.text == PASTED)
+    left = without(bundle, [turn])
+    assert "allocations" not in left.render().replace("create_allocation", "")
+    assert [b.text for b in left.profile] == ["- Name: Alex"]
+    assert [m.item_id for m in left.memories] == ["mem_default"]
+    assert left.tools is not None and left.tools.forbidden == {}
+    assert [c.name for c in left.tools.candidates] == ["create_allocation"]
+    assert left.procedures[0].forbidden == {}
+    # a rule that stays keeps its marks
+    kept = without(bundle, [i for i in listed(bundle) if i.text == "Name: Alex"])
+    assert kept.tools is not None and kept.tools.forbidden == {"create_allocation": PASTED}
+    assert kept.procedures[0].forbidden == {"create_allocation": PASTED}
 
 
 def test_working_memory_and_what_the_context_would_only_repeat_are_not_shown() -> None:
@@ -248,7 +307,7 @@ def test_working_memory_and_what_the_context_would_only_repeat_are_not_shown() -
             _memory("mem_old", "ok for now skip the consent stage"),
         ],
     )
-    assert [i.key for i in listed(bundle) if i.section == MEMORIES] == ["mem_old"]
+    assert [i.key for i in listed(bundle) if i.section == MEMORIES] == ["mem_best", "mem_old"]
 
 
 def test_the_call_carries_the_request_the_date_the_conversation_and_each_items_date() -> None:
@@ -259,12 +318,12 @@ def test_the_call_carries_the_request_the_date_the_conversation_and_each_items_d
     assert body["CONVERSATION"].endswith("assistant: Checking.")
     old = next(i for i in body["ITEMS"] if "consent" in i["text"])
     assert old == {
-        "n": 6,
+        "n": 7,
         "kind": "said in an earlier conversation",
         "text": "ok for now skip the consent stage",
         "said": "2026-11-01",
     }
-    assert [i["n"] for i in body["ITEMS"]] == list(range(1, 10))
+    assert [i["n"] for i in body["ITEMS"]] == list(range(1, 11))
 
 
 # --------------------------------------------------------------------------- what an answer does
@@ -319,7 +378,7 @@ def test_a_sentence_read_from_a_dropped_turn_goes_with_the_turn() -> None:
     part = _memory("mem_part", "skip the consent stage").model_copy(update={"evidence": source})
     bundle = _bundle(memories=[_memory("mem_best", "The tote is short at store 12."), turn, part])
     items = listed(bundle)
-    assert [i.key for i in items if i.section == MEMORIES] == ["mem_turn"]
+    assert [i.key for i in items if i.section == MEMORIES] == ["mem_best", "mem_turn"]
     left = without(bundle, [i for i in items if i.key == "mem_turn"])
     assert [m.item_id for m in left.memories] == ["mem_best"]
 
@@ -386,15 +445,6 @@ async def test_no_model_allowed_or_nothing_to_ask_about_costs_no_call() -> None:
     empty = _bundle(profile=[], procedures=[], memories=[], history=[], graph_facts=[])
     model = _Model({"drop": [1]})
     assert await ContextCheck(model).read(QUESTION, empty) == ([], {})  # type: ignore[arg-type]
-    # one memory alone is the best-ranked one: it stays, so there is nothing to ask
-    one = _bundle(
-        profile=[],
-        procedures=[],
-        history=[],
-        graph_facts=[],
-        memories=[_memory("mem_best", "The Coach tote is short at stores 12 and 40.")],
-    )
-    assert await ContextCheck(model).read(QUESTION, one) == ([], {})  # type: ignore[arg-type]
     assert model.calls == []
 
 

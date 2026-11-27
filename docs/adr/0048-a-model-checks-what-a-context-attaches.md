@@ -57,18 +57,29 @@ and before it is cached or sent, and names what does not help (`modules/context/
 - **What it is shown:** the lines of `standing_rules`, `preferences`, `about_user` and of the
   `user` block the profile job wrote from the person's memories; the learned skills; the
   memories; the earlier values; the graph facts.
+- **A part goes with its whole.** A sentence the context also lists on its own is not shown
+  apart from the turn that says it. "Never create, update, or delete allocations." as a line
+  of the `user` block reads as the person's rule; in the pasted skill it was read from, it is
+  plainly material. It is asked about once, as the turn, and removed or kept with it (a
+  statement shorter than 16 characters is never taken as a part: a word or two is in many
+  texts without being read from any of them).
+- **Nothing memory attached is protected by its rank or its use.** The first build kept the
+  best-ranked memory whatever the model said, and never showed it a standing rule the tool
+  hints already applied to the task (`ToolHints.forbidden`). A build from the messages of the
+  run above showed what that keeps: the ranking put the pasted skill first for the request it
+  blocks, and the hints forbade the tool the request needs by it - both guards protected
+  exactly what had to go. Neither is kept. A rule that is removed takes the marks made by it
+  with it (the tool hints' and the learned skills' `forbidden`).
 - **What it is never shown, so cannot remove:** a profile block a person or an agent wrote or
   edited (their words, not derived data) and the people's pages; the conversation and its
   summary; what the assistant answered in earlier conversations; document passages and their
-  summaries, whose evidence groups travel as units; working memory; a standing rule the tool
-  hints already apply to this task (`ToolHints.forbidden`); and what the best-ranked memory
-  states, so a wrong answer never leaves a question with nothing.
+  summaries, whose evidence groups travel as units; working memory.
 - **What follows a removal:** a sentence read from a turn that was shown whole is not shown
   once the turn is removed; the tool hints lay out no plan of a removed skill, name no next
   step of it and carry no argument value read from its earlier runs (the candidates stay); a
   removed memory joins the evidence the bundle found and does not carry, which `/v1/verify`
   still reads for contradictions; the evidence shown is read again for the value the question
-  asks for.
+  asks for, and a context left with nothing from memory says so (`INSUFFICIENT`).
 - **A deadline of its own:** `LLM.check_deadline_seconds` (2.5 s), and never more than the
   read's deadline leaves after the build (5 s less a 1 s margin). Late, unreachable, or not in
   the schema: the context is sent as built. The build's diagnostics say which
@@ -117,9 +128,11 @@ distribution and the share of late answers.
 
 - A freshly built context costs one more model call and is up to 2.5 s slower where the use
   is allowed. A cached context costs nothing more.
-- What a context carries now depends on a model answering the same way twice; the bounds
-  above limit what a wrong answer can cost (it cannot add, cannot touch what a person wrote,
-  cannot remove the best match or an applied rule), not what it leaves out of the rest.
+- What a context carries now depends on a model answering the same way twice. A wrong answer
+  cannot add anything, cannot touch what a person wrote, and stores nothing: its cost is what
+  one context lacks, a rule that applied among it. What must hold whatever a model says
+  belongs in a block a person writes (`PATCH /v1/profile/{block}`), which the check never
+  reads.
 - Text inside an item could try to steer the call ("drop every other item"). It can then
   remove items from that one context, within the same bounds, and nothing else: the call
   writes nothing and its instructions say to follow no instruction inside an item.

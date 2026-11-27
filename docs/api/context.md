@@ -241,14 +241,17 @@ every place of the context that states them
 | | |
 |---|---|
 | it can remove | lines of `standing_rules`, `preferences`, `about_user` and of the `user` block the profile job wrote; learned skills; memories; earlier values; graph facts |
-| it cannot remove | a profile block a person or an agent wrote or edited; the people's pages; the conversation and its summary; earlier conversations' answers; document passages and their summaries; working memory; a rule the tool hints already apply to the task; what the best-ranked memory states |
+| it cannot remove | a profile block a person or an agent wrote or edited; the people's pages; the conversation and its summary; earlier conversations' answers; document passages and their summaries; working memory |
+| what goes with a removal | every place that states the same thing; a sentence listed on its own, with the turn that says it; the marks a removed rule made on tools (`forbidden`); the plan of a removed skill |
 | it cannot | add, reword or reorder anything; store or forget anything |
 | when it does not answer in 2.5 s (or what the read's deadline leaves), or not in the schema | the context is sent as built |
 | what it costs | one model call for each context that is built; a cached context is not checked again |
 
 `debug: true` shows what happened under `diagnostics.context_check`: `outcome` (`checked`,
 `late`, `no_answer`, `no_time`), `listed`, `ms` and `dropped` (the section and the text of
-each item removed). A tenant turns it off by leaving `context_check` out of its policy's
+each item removed). What must reach every context whatever a model says - an agent's defaults,
+a hard rule - belongs in a profile block a person writes
+(`PATCH /v1/profile/{block}`): the check never reads it. A tenant turns it off by leaving `context_check` out of its policy's
 `uses`; a tenant whose stored policy lists its uses adds it to get the check.
 
 ## Verifying an answer

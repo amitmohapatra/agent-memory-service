@@ -25,13 +25,19 @@ What the call can and cannot do:
   ``standing_rules``, a line of the ``user`` block and a memory at once, and removing it
   from one of the three would leave it in the prompt. What the model names is removed from
   every place that states it.
+- A part goes with its whole. A sentence the context also lists on its own ("Never create,
+  update, or delete allocations.", a line of the ``user`` block) is not shown apart from
+  the turn that says it (the pasted skill it was read from): on its own it reads as the
+  person's rule, in the turn it is plainly material. It is removed, or stays, with the turn.
+- Nothing memory attached is protected from it by its rank or its use: not the best-ranked
+  memory, and not a rule the tool hints apply to this task (``ToolHints.forbidden``). The
+  ranking put a pasted skill first for the request it blocks, and the hints then forbade
+  the tool the request needs by it; a first build that kept both kept exactly what had to
+  go. A rule that is removed takes the marks made by it with it.
 - It is not shown, and so cannot remove: a profile block a person or an agent wrote or
   edited (their words, not derived) and the people's pages, the conversation and its
   summary, what the assistant answered in earlier conversations, document passages and
-  their summaries (their evidence groups travel as units), working memory, a rule the tool
-  hints already apply to this task (``ToolHints.forbidden``, ``SkillView.forbidden``), and
-  what the best-ranked memory states: a wrong answer from the model never leaves a
-  question with nothing.
+  their summaries (their evidence groups travel as units), and working memory.
 - It has a deadline of its own (``LLM.check_deadline_seconds``, and never past the
   request's): a model that is late, down, or answers something other than the schema
   leaves the context as built, and the build's diagnostics say so.
@@ -106,6 +112,9 @@ WINDOW_CHARS: Final = 1200
 #: the answer's size: its JSON, and a number with its comma for each item it could name
 ANSWER_TOKENS: Final = 64
 NUMBER_TOKENS: Final = 4
+#: The shortest statement that is taken as a part of a longer one that contains it: a word or
+#: two ("yes", "store 12") is in many texts without being read from any of them.
+PART_CHARS: Final = 16
 #: the least time worth starting a call for
 MIN_SECONDS: Final = 0.2
 
@@ -172,13 +181,12 @@ class Listed:
 
 def listed(bundle: ContextBundle) -> list[Listed]:
     """What the model is asked about, in the order the context shows it, each statement
-    once (see the module doc for what is left out, and why)."""
+    once and a part with its whole (see the module doc for what is left out, and why)."""
     found: dict[str, Listed] = {}
-    kept = _kept(bundle)
 
     def add(section: str, key: str, text: str, said: str = "") -> None:
         statement = _statement(text)
-        if not statement or statement in kept:
+        if not statement:
             return
         seen = found.get(statement)
         found[statement] = (
@@ -191,14 +199,35 @@ def listed(bundle: ContextBundle) -> list[Listed]:
         if _read_by_line(block):
             for line in block.text.splitlines():
                 add(block.block, line, *stated(line))
-    for skill in bundle.procedures:
-        add(SKILLS, skill.id, _skill(skill))
     repeated = bundle.redundant()
     for name in ITEM_SECTIONS:
         for item in getattr(bundle, name):
             if item.item_id not in repeated and not _working(item):
                 add(name, item.item_id, item.text, _said(item))
-    return list(found.values())
+    items = _with_their_parts(found)
+    # the learned skills are no statements: each is asked about as it is, after the profile
+    skills = [Listed(SKILLS, _skill(s), "", ((SKILLS, s.id),)) for s in bundle.procedures]
+    profile = [i for i in items if i.section not in ITEM_SECTIONS]
+    return [*profile, *skills, *(i for i in items if i.section in ITEM_SECTIONS)]
+
+
+def _with_their_parts(found: dict[str, Listed]) -> list[Listed]:
+    """The statements of ``found`` (by what each states), a part folded into its whole: one
+    that a longer statement contains is not listed apart, and every place that states it
+    becomes a place of the longest statement that contains it."""
+    wholes = dict(found)
+    for statement, item in found.items():
+        if len(statement) < PART_CHARS:
+            continue
+        inside = [other for other in found if other != statement and statement in other]
+        if not inside:
+            continue
+        whole = max(inside, key=len)
+        while whole not in wholes:  # itself a part of a longer one
+            whole = max((w for w in wholes if whole in w), key=len)
+        wholes[whole] = replace(wholes[whole], places=(*wholes[whole].places, *item.places))
+        del wholes[statement]
+    return list(wholes.values())
 
 
 def payload(query: str, bundle: ContextBundle, items: Sequence[Listed], today: datetime) -> str:
@@ -244,11 +273,16 @@ def without(bundle: ContextBundle, dropped: Sequence[Listed]) -> ContextBundle:
     gone = {place for d in dropped for place in d.places}
     profile = [kept for block in bundle.profile if (kept := _lines_left(block, gone)) is not None]
     skills = {key for name, key in gone if name == SKILLS}
+    rules = {_statement(line) for name, line in gone if name == RULES_BLOCK}
     left = bundle.model_copy(
         update={
             "profile": profile,
-            "procedures": [s for s in bundle.procedures if s.id not in skills],
-            "tools": _without_plan(bundle.tools, skills),
+            "procedures": [
+                s.model_copy(update={"forbidden": _still_forbidden(s.forbidden, rules)})
+                for s in bundle.procedures
+                if s.id not in skills
+            ],
+            "tools": _without_rules(_without_plan(bundle.tools, skills), rules),
             **{
                 name: [i for i in getattr(bundle, name) if (name, i.item_id) not in gone]
                 for name in ITEM_SECTIONS
@@ -354,17 +388,21 @@ def _statement(text: str) -> str:
     return " ".join(stated(text)[0].casefold().split())
 
 
-def _kept(bundle: ContextBundle) -> set[str]:
-    """The statements that are never the model's to remove: a standing rule the tool hints
-    or a learned skill already apply to this task, and what the best-ranked memory states
-    (``memories`` is the ranking, best first)."""
-    hints = bundle.tools.forbidden.values() if bundle.tools is not None else ()
-    applied = {*hints, *(rule for s in bundle.procedures for rule in s.forbidden.values())}
-    repeated = bundle.redundant()
-    best = next(
-        (m.text for m in bundle.memories if m.item_id not in repeated and not _working(m)), None
+def _still_forbidden(forbidden: dict[str, str], rules: set[str]) -> dict[str, str]:
+    """``forbidden`` (a tool or a step -> the standing rule that forbids it) without the
+    marks made by a rule that was removed."""
+    return {name: rule for name, rule in forbidden.items() if _statement(rule) not in rules}
+
+
+def _without_rules(hints: ToolHints | None, rules: set[str]) -> ToolHints | None:
+    """The tool hints without the marks of removed rules: a rule that is not the person's,
+    or not about this request, forbids no tool of it."""
+    if hints is None or not rules:
+        return hints
+    left = _still_forbidden(hints.forbidden, rules)
+    return (
+        hints if len(left) == len(hints.forbidden) else hints.model_copy(update={"forbidden": left})
     )
-    return {_statement(text) for text in (*applied, *([best] if best else []))}
 
 
 def _skill(skill: SkillView) -> str:

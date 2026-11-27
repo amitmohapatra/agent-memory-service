@@ -113,13 +113,48 @@ async def test_the_model_is_sent_the_request_and_the_items_not_the_whole_context
     assert [item["n"] for item in sent["ITEMS"]] == list(range(1, len(sent["ITEMS"]) + 1))
 
 
-async def test_the_best_match_stays_whatever_the_model_says(container, uow_factory) -> None:
+async def test_the_model_may_remove_all_it_was_shown_and_the_context_says_so(
+    container, uow_factory
+) -> None:
+    """Nothing memory attached is kept for its rank: a request none of it helps with gets
+    none of it, and the evidence status then says memory holds nothing for it."""
     await _told(container, uow_factory)
     everything = Judge("a", "e", "i", "o", "u")
     body = await _read(container, everything)
-    assert len(body["memories"]) == 1, "a wrong answer never leaves the question with nothing"
-    assert "Coach tote" in _texts(body, "memories")
-    assert _texts(body, "profile") == ""
+    assert "memories" not in body and _texts(body, "profile") == ""
+    assert body["evidence_status"] == "INSUFFICIENT"
+    note = body["diagnostics"][NOTE]
+    assert note["listed"] == len(everything.sent[0]["ITEMS"]) == len(note["dropped"])
+
+
+async def test_a_pasted_skill_goes_whole_with_the_rule_the_person_gave_left_in_place(
+    container, uow_factory
+) -> None:
+    """Stored before a model read messages: a skill's text pasted into a chat is the
+    person's standing rule, its sentences are lines of their ``user`` block, and it ranks
+    first for the request it blocks. Removed once, as the turn, it is gone from all three."""
+    earlier = _chat()
+    pasted = (
+        "save this skill:\n# Read-Only Mode\nUse this skill when the user wants to look at "
+        "allocations without changing them.\nNever create, update, or delete allocations. "
+        "Always tell the user which plan you read."
+    )
+    for said in ("Never create an allocation when ATA is 0.", pasted):
+        await _say(container, uow_factory, earlier, said)
+    await container.services["profile"].refresh_user("acme", "u1")
+    ask = "Create an allocation for the tote at store 12."
+    plain = await _read(container, Judge(allowed=False), ask)
+    assert "Read-Only Mode" in _texts(plain, "profile")
+    assert "Never create, update, or delete allocations." in _texts(plain, "profile")
+
+    judge = Judge("read-only mode")  # names the pasted turn, and only it
+    checked = await _read(container, judge, ask + " ")
+    everywhere = _texts(checked, "profile") + _texts(checked, "memories")
+    assert "Read-Only" not in everywhere and "delete allocations" not in everywhere
+    assert "which plan you read" not in everywhere
+    assert "ATA is 0" in everywhere
+    shown = [item["text"] for item in judge.sent[0]["ITEMS"]]
+    assert "Never create, update, or delete allocations." not in shown, "asked once, as the turn"
 
 
 async def test_the_checked_context_is_what_the_cache_answers_with(container, uow_factory) -> None:
