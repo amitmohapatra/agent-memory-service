@@ -82,17 +82,17 @@ async def test_a_profile_line_goes_with_the_memory_it_was_learned_from(app, runn
     user's stated preference is protected from archiving, so no restore applies here.)"""
     _, harness = await _tenant(app)
     user = harness.bind(user_id="u1")
-    seats = await user.remember("I prefer window seats.", memory_type="PREFERENCE")
-    tea = await user.remember("I prefer green tea.", memory_type="PREFERENCE")
+    seats = await user.remember("My desk is in Berlin.", memory_type="USER")
+    tea = await user.remember("I work on the payments team.", memory_type="USER")
     container = app.state.container
     running.portal.call(container.tasks.drain)
-    assert "window seats" in _user_block(await user.profile())
+    assert "desk is in Berlin" in _user_block(await user.profile())
 
     await user.forget(seats.memory_id)
     running.portal.call(container.tasks.drain)
     held = _user_block(await user.profile())
-    assert "window seats" not in held and "green tea" in held
-    assert "window seats" not in (await user.context("seat preference")).rendered
+    assert "desk is in Berlin" not in held and "payments team" in held
+    assert "desk is in Berlin" not in (await user.context("where is my desk")).rendered
 
     await user.forget(tea.memory_id)  # the last one: nothing of theirs is left to learn from
     running.portal.call(container.tasks.drain)
@@ -112,18 +112,18 @@ async def test_a_line_written_into_the_profile_by_hand_outlives_the_memory_it_re
     by editing."""
     _, harness = await _tenant(app)
     user = harness.bind(user_id="u1")
-    seats = await user.remember("I prefer window seats.", memory_type="PREFERENCE")
+    seats = await user.remember("My desk is in Berlin.", memory_type="USER")
     container = app.state.container
     running.portal.call(container.tasks.drain)
-    assert _user_block(await user.profile()) == "- I prefer window seats."
+    assert _user_block(await user.profile()) == "- My desk is in Berlin."
 
-    written = await user.profile.edit("user", "- I prefer window seats.\n- Call me Sam.")
+    written = await user.profile.edit("user", "- My desk is in Berlin.\n- Call me Sam.")
     await user.forget(seats.memory_id)
     running.portal.call(container.tasks.drain)
     assert _user_block(await user.profile()) == written.text
-    assert "window seats" in (await user.context("seat preference")).rendered
+    assert "desk is in Berlin" in (await user.context("where is my desk")).rendered
 
-    await user.profile.edit("user", "", old="- I prefer window seats.\n")
+    await user.profile.edit("user", "", old="- My desk is in Berlin.\n")
     assert _user_block(await user.profile()) == "- Call me Sam."
 
 
@@ -136,19 +136,19 @@ async def test_a_line_the_job_appends_to_an_edited_block_goes_with_its_memory(ap
     _, harness = await _tenant(app)
     user = harness.bind(user_id="u1")
     written = await user.profile.edit("user", "name: Sam\n- I travel light.")
-    seats = await user.remember("I prefer window seats.", memory_type="PREFERENCE")
-    tea = await user.remember("I prefer green tea.", memory_type="PREFERENCE")
+    seats = await user.remember("My desk is in Berlin.", memory_type="USER")
+    tea = await user.remember("I work on the payments team.", memory_type="USER")
     container = app.state.container
     running.portal.call(container.tasks.drain)
     learned = _user_block(await user.profile()).splitlines()
     assert learned[:2] == written.text.splitlines()
-    assert sorted(learned[2:]) == ["- I prefer green tea.", "- I prefer window seats."]
+    assert sorted(learned[2:]) == ["- I work on the payments team.", "- My desk is in Berlin."]
 
     await user.forget(seats.memory_id)
     running.portal.call(container.tasks.drain)
-    assert _user_block(await user.profile()) == f"{written.text}\n- I prefer green tea."
+    assert _user_block(await user.profile()) == f"{written.text}\n- I work on the payments team."
 
-    await user.profile.edit("user", "- I prefer green tea, no sugar.", old="- I prefer green tea.")
+    await user.profile.edit("user", "- I prefer green tea, no sugar.", old="- I work on the payments team.")
     await user.forget(tea.memory_id)  # the last one: the job has nothing left to learn from
     running.portal.call(container.tasks.drain)
     assert _user_block(await user.profile()) == f"{written.text}\n- I prefer green tea, no sugar."

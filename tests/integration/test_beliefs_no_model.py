@@ -41,8 +41,7 @@ EXPECTED = (
     "- I work as a counselor at a youth center.\n"
     "\n"
     "## Memories\n"
-    "- [m1] 2023-05-08 Mon caroline: I work as a counselor at a youth center.\n"
-    "- [m2] 2023-06-09 Fri melanie: Caroline told me she loves painting sunsets."
+    "- [m1] 2023-06-09 Fri melanie: Caroline told me she loves painting sunsets."
 )
 
 

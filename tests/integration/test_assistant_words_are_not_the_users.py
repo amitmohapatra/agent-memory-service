@@ -62,7 +62,9 @@ async def test_an_assistants_message_is_not_the_users_statement(
     assert not any(word in profile for word in ASSISTANTS_WORDS)
     assert USER_SAID[0] in sections["standing_rules"]
     assert USER_SAID[1] in sections["about_user"]
-    assert USER_SAID[2] in sections["user"]
+    # a preference comes where it applies (this request is no question of answer style),
+    # never in the user block of who they are
+    assert USER_SAID[2] not in sections.get("user", "")
 
     # still in the transcript, and found by a message search
     found = await container.services["agent_tools"].call(

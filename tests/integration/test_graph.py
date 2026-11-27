@@ -217,7 +217,11 @@ async def test_memory_facts_supersession_and_as_of(container, uow_factory, monke
     # Exercise the real graph, canonical SQL, post-stage cut and final context packing.
     monkeypatch.setattr(engine, "_hybrid", AsyncMock(return_value=[]))
     monkeypatch.setattr(engine, "_memories", AsyncMock(return_value=[]))
-    bundle = await container.services["context_builder"].build(ctx, "who works for Globex?")
+    # the graph's recovery alone: no profile line states the fact (a statement is carried once)
+    builder = container.services["context_builder"]
+    monkeypatch.setattr("memory_service.modules.context.builder.STANDING", False)
+    monkeypatch.setattr(builder.sections, "_profile", AsyncMock(return_value=[]))
+    bundle = await builder.build(ctx, "who works for Globex?")
     recovered = next(m for m in bundle.memories if m.item_id == current[0].memory_id)
     assert recovered.expansion_edge == "GRAPH_EVIDENCE"
     assert recovered.citation == f"memory_id:{current[0].memory_id}"
