@@ -7,6 +7,17 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added (service): a rule or preference says when it was said in this conversation
+
+A standing line said when it was said, not where: a rule given an hour ago in this
+conversation and one given weeks ago in another were the same line, and a model asked "what
+did I tell you in this chat?" could not tell them apart. A line of `standing_rules` or
+`preferences` whose statement was said in the conversation the context is for now says so:
+`(said 2026-11-27, this conversation)`. A line from another conversation is unchanged. A rule
+follows its user and is indexed under no conversation, so the mark is read from the message
+the statement was read from (one indexed read, for the lines shown, when the context has a
+conversation). The context check and `listed_rules` read the statement as before.
+
 ### Added (service; trellis-memory 0.6.9): a context for an agent that searches on demand
 
 A context was all or nothing: everything retrieval ranked near the request came with it, or

@@ -494,6 +494,20 @@ class SqlMessageRepository:
         ).scalars()
         return [_row_to_message(r) for r in rows]
 
+    async def in_thread(
+        self, tenant_id: str, thread_id: str, message_ids: Sequence[str]
+    ) -> set[str]:
+        if not message_ids:
+            return set()
+        found = await self.s.execute(
+            select(MessageRow.message_id).where(
+                MessageRow.tenant_id == tenant_id,
+                MessageRow.thread_id == thread_id,
+                MessageRow.message_id.in_(list(message_ids)),
+            )
+        )
+        return set(found.scalars())
+
     async def by_time(
         self,
         tenant_id: str,

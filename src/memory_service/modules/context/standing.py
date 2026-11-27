@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
@@ -160,7 +160,11 @@ def applies(query_stems: set[str], hit_stems: set[str], similarity: float, floor
 #: on is no end
 NO_END_YEAR: Final = 9000
 #: what a listed line says after the statement: when it was said, and what it superseded
-_DATED = re.compile(r" \(said \d{4}-\d{2}-\d{2}(?:;.*)?\)$")
+#: What a dated line says after its statement of where it was said, when that is the
+#: conversation the context is for: a rule given here an hour ago and one given weeks ago
+#: elsewhere are otherwise the same line.
+HERE: Final = ", this conversation"
+_DATED = re.compile(rf" \(said \d{{4}}-\d{{2}}-\d{{2}}(?:{HERE})?(?:;.*)?\)$")
 
 
 def stated(line: str) -> tuple[str, str]:
@@ -283,10 +287,12 @@ async def standing_blocks(
     visibility: Any,
     vectors: Any,
     workspace_id: str | None = None,
+    thread_id: str | None = None,
 ) -> list[ProfileBlockView]:
     """The ``standing_rules``, ``preferences`` and ``about_user`` sections for ``query`` (see
     the module doc). A rule the ``user`` block also lists is still listed here: this section
-    is what applies to the request, the block everything the user keeps."""
+    is what applies to the request, the block everything the user keeps. ``thread_id``: the
+    conversation the context is for; a rule or preference said in it says so (``HERE``)."""
     if vectors is None:
         return []
     lang = detect_language(query)
@@ -316,14 +322,20 @@ async def standing_blocks(
     )
     out: list[ProfileBlockView] = []
     shown: set[tuple] = set()
+    picks = []
     for block, found, floor, most in (
         (RULES_BLOCK, rules, RULE_SIMILARITY, RULES_MAX),
         (PREFERENCES_BLOCK, preferences, PREFERENCE_SIMILARITY, PREFERENCES_MAX),
     ):
         picked, earlier = _choose(found, query_stems, lang, floor)
         chosen = [c for c in picked if _said(c[0]) not in shown]
-        lines = _lines(chosen, earlier)[:most]
         shown |= {_said(hit) for hit, _, _ in chosen}
+        picks.append((block, chosen, earlier, most))
+    here = await _said_here(
+        engine, visibility, thread_id, [c[0] for _, chosen, _, _ in picks for c in chosen]
+    )
+    for block, chosen, earlier, most in picks:
+        lines = _lines(chosen, earlier, here)[:most]
         if lines:
             out.append(ProfileBlockView(block=block, text="\n".join(lines), version=0))
     about, more = _about(setup, shown, lang)
@@ -417,15 +429,39 @@ def _choose(
     return chosen + [c for c in live if c not in chosen and _said(c[0]) in said], earlier
 
 
+async def _said_here(
+    engine: Any, visibility: Any, thread_id: str | None, hits: Sequence[SearchHit]
+) -> set[str]:
+    """Of ``hits``, the ids of the statements said in conversation ``thread_id``: those read
+    from one of its messages. A statement that follows the user is indexed under no
+    conversation, so its message says where it was said (one indexed read, and none for a
+    context with no conversation or no dated line)."""
+    sources = {hit.record_id: _messages(hit) for hit in hits}
+    asked = sorted({message for found in sources.values() for message in found})
+    if not thread_id or not asked:
+        return set()
+    async with engine.uow_factory() as uow:
+        said = await uow.messages.in_thread(visibility.tenant_id, thread_id, asked)
+    return {record for record, found in sources.items() if found & said}
+
+
+def _messages(hit: SearchHit) -> set[str]:
+    """The messages a statement was read from (its evidence, as indexed)."""
+    refs = hit.payload.get("source_refs") or []
+    return {str(r["message_id"]) for r in refs if isinstance(r, dict) and r.get("message_id")}
+
+
 def _lines(
     chosen: Sequence[tuple[SearchHit, set[str], float]],
     earlier: dict[str, SearchHit] | None = None,
+    here: Collection[str] = (),
 ) -> list[str]:
     """One line per statement, in the order chosen, each in its fullest form: a sentence read
     from a turn that the turn itself also brings ("... with columns: Store, SKU, Style. No
     prose before the table.") is not listed apart, so a list or a format comes back whole.
     With ``earlier`` (by a statement's id, the one it superseded) each line says its date, and
-    the earlier statement with its own."""
+    the earlier statement with its own; one of ``here`` (said in the conversation the context
+    is for: ``_said_here``) says so."""
     texts: dict[tuple, list[str]] = {}
     for hit, _, _ in chosen:
         texts.setdefault(_said(hit), []).append(_text(hit))
@@ -433,23 +469,30 @@ def _lines(
     for hit, _, _ in chosen:
         text, same = _text(hit), texts[_said(hit)]
         if not any(text != other and text in other for other in same):
-            dated = "" if earlier is None else _dated(hit, earlier.get(hit.record_id))
+            dated = (
+                ""
+                if earlier is None
+                else _dated(hit, earlier.get(hit.record_id), here=hit.record_id in here)
+            )
             lines.append(f"- {text}{dated}")
     return list(dict.fromkeys(lines))
 
 
-def _dated(hit: SearchHit, old: SearchHit | None) -> str:
-    """`` (said <day>; until <its last day>; earlier: <what it superseded>, said <day>)``, or
-    nothing undated. ``until``: a rule or preference given for a period (ADR 0049) says the
-    last day it holds, so the reader knows it is not for every time."""
+def _dated(hit: SearchHit, old: SearchHit | None, *, here: bool = False) -> str:
+    """`` (said <day>, this conversation; until <its last day>; earlier: <what it
+    superseded>, said <day>)``, or nothing undated. ``this conversation`` (``here``): it was
+    said in the conversation the context is for; an unmarked line was said in another.
+    ``until``: a rule or preference given for a period (ADR 0049) says the last day
+    it holds, so the reader knows it is not for every time."""
     day = _day(hit)
     if not day:
         return ""
+    where = HERE if here else ""
     last = _last_day(hit)
     until = f"; until {last}" if last else ""
     before = _text(old)[:ABOUT_LINE_CHARS] if old is not None else ""
     was = f"; earlier: {before}, said {_day(old)}" if before and _day(old) else ""
-    return f" (said {day}{until}{was})"
+    return f" (said {day}{where}{until}{was})"
 
 
 def _ends(hit: SearchHit) -> datetime | None:

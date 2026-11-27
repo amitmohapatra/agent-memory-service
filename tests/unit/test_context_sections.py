@@ -166,3 +166,61 @@ def test_a_statement_given_for_a_period_says_its_last_day_and_is_left_out_once_o
         "2026-11-27",
     )
     assert "valid_to" in PAYLOAD_FIELDS  # a search returns it, or no section could read it
+
+
+def test_a_dated_line_says_when_it_was_said_in_the_conversation_the_context_is_for() -> None:
+    """``, this conversation`` after the day, for a statement whose message belongs to the
+    conversation asked for; a line from another conversation, or a context with none, is as
+    it was. The mark is part of the date, not of the statement."""
+    from memory_service.modules.context import standing
+    from memory_service.ports.search import SearchHit
+
+    def hit(valid_to: str | None = None, **more: object) -> SearchHit:
+        payload = {
+            "text": "Answer as a table.",
+            "observed_at": "2026-11-27T09:00:00+00:00",
+            **more,
+        }
+        if valid_to is not None:
+            payload["valid_to"] = valid_to
+        return SearchHit(record_id="mem_1", score=0.5, retriever="dense_en", payload=payload)
+
+    here = " (said 2026-11-27, this conversation)"
+    assert standing._dated(hit(), None, here=True) == here
+    assert standing._dated(hit(), None) == " (said 2026-11-27)"
+    until = standing._dated(hit("2026-11-29T00:00:00+00:00"), None, here=True)
+    assert until == " (said 2026-11-27, this conversation; until 2026-11-28)"
+    # the messages a statement was read from, as indexed; a statement with none has no place
+    read = hit(source_refs=[{"source_type": "MESSAGE", "source_id": "o1", "message_id": "msg_1"}])
+    assert standing._messages(read) == {"msg_1"}
+    assert standing._messages(hit()) == set() == standing._messages(hit(source_refs=["x"]))
+    for suffix in (here, until, " (said 2026-11-27)"):
+        assert standing.stated(f"- Answer as a table.{suffix}") == (
+            "Answer as a table.",
+            "2026-11-27",
+        )
+    block = type(
+        "Block", (), {"block": standing.RULES_BLOCK, "text": f"- Answer as a table.{here}"}
+    )
+    assert standing.listed_rules([block]) == ["Answer as a table."]
+
+
+async def test_where_a_statement_was_said_is_read_only_when_there_is_something_to_read() -> None:
+    """No conversation, or no statement read from a message: no read at all."""
+    from memory_service.modules.context import standing
+    from memory_service.ports.search import SearchHit
+
+    class Engine:
+        def uow_factory(self) -> object:
+            raise AssertionError("read without a conversation or a message to look up")
+
+    said = SearchHit(
+        record_id="mem_1",
+        score=0.5,
+        retriever="dense_en",
+        payload={"source_refs": [{"message_id": "msg_1"}]},
+    )
+    unsourced = SearchHit(record_id="mem_2", score=0.5, retriever="dense_en", payload={})
+    assert await standing._said_here(Engine(), None, None, [said]) == set()
+    assert await standing._said_here(Engine(), None, "thread_a", [unsourced]) == set()
+    assert await standing._said_here(Engine(), None, "thread_a", []) == set()

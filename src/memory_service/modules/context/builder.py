@@ -344,17 +344,27 @@ class _StandingRead:
     vectors (``RetrievalEngine.retrieve(on_encoded=...)``): it runs under the ranking."""
 
     def __init__(
-        self, engine: Any, query: str, visibility: Any, workspace_id: str | None = None
+        self,
+        engine: Any,
+        query: str,
+        visibility: Any,
+        workspace_id: str | None = None,
+        thread_id: str | None = None,
     ) -> None:
         self.engine, self.query, self.visibility = engine, query, visibility
-        self.workspace_id = workspace_id
+        self.workspace_id, self.thread_id = workspace_id, thread_id
         self.task: asyncio.Future[list[ProfileBlockView]] | None = None
 
     def start(self, routed: RoutedQuery, vectors: QueryVectors) -> None:
         if STANDING and routed.needs_memories and self.task is None:
             self.task = asyncio.ensure_future(
                 standing_blocks(
-                    self.engine, self.query, self.visibility, vectors, self.workspace_id
+                    self.engine,
+                    self.query,
+                    self.visibility,
+                    vectors,
+                    self.workspace_id,
+                    self.thread_id,
                 )
             )
 
@@ -704,7 +714,7 @@ class ContextBuilder:
         tokens_before = self.assist.tokens_used()
         # the standing rules and preferences need only the route and the query's vectors:
         # read under the ranking, from the moment the vectors exist
-        standing = _StandingRead(self.engine, query, visibility, ctx.workspace_id)
+        standing = _StandingRead(self.engine, query, visibility, ctx.workspace_id, ctx.thread_id)
         encoded = _Encoded(standing)
         # the pinned sections and the thread's recent messages are independent of retrieval:
         # they are read under it
@@ -757,7 +767,7 @@ class ContextBuilder:
             raise
         with timings.stage("similarity"):
             await self._similarity_and_standing(
-                query, visibility, result, pinned, standing.task, ctx.workspace_id
+                query, visibility, result, pinned, standing.task, ctx.workspace_id, ctx.thread_id
             )
         result = await self._followed_up(
             ctx, query, document_ids, visibility, result, asked_before, timings
@@ -872,6 +882,7 @@ class ContextBuilder:
         pinned: Pinned,
         started: asyncio.Future[list[ProfileBlockView]] | None = None,
         workspace_id: str | None = None,
+        thread_id: str | None = None,
     ) -> None:
         """Score the candidates' similarity and, beside it, read the user's standing rules
         and preferences that apply (``standing``) into the profile: one round trip, the
@@ -879,7 +890,9 @@ class ContextBuilder:
         as soon as the retrieval has the query's vectors)."""
         standing = started or (
             asyncio.ensure_future(
-                standing_blocks(self.engine, query, visibility, result.query_vectors, workspace_id)
+                standing_blocks(
+                    self.engine, query, visibility, result.query_vectors, workspace_id, thread_id
+                )
             )
             if STANDING and result.routed.needs_memories
             else None

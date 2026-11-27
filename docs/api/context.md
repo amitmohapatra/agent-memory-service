@@ -152,6 +152,15 @@ it: a question over several conversations is far from some of the turns that ans
 a model. `window=False` leaves the conversation window out, for a framework that keeps its own
 history. The cache key includes the `tools` request.
 
+A line of `standing_rules` or `preferences` ends with when it was said, and what else a reader
+needs to weigh it: `- Answer stock questions as a table. (said 2026-11-27, this conversation;
+until 2026-11-30; earlier: Answer in prose., said 2026-10-02)`. `this conversation` is there
+when the statement was said in the conversation the context is for (a line without it was
+said in another); `until` when it was given for a period
+([ADR 0049](../adr/0049-what-is-said-for-a-period-ends-with-it.md)); `earlier` when it
+replaced another statement. The conversation's id is not printed: a search
+(`/v1/recall`, `memory_search`) returns each item's source.
+
 **The window as the conversation itself (`window_format="messages"`).** An agent whose
 framework replays a conversation as messages — LangGraph, the OpenAI Agents SDK — takes the
 window verbatim instead of as a `## Recent conversation` section: `conversation.messages`, oldest
