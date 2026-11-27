@@ -112,7 +112,7 @@ def _reply(fact: str, quote: str, *, kind: str = "profile") -> dict:
 
 
 @pytest.mark.parametrize("lang", sorted(FIXTURES))
-async def test_a_message_the_rules_cannot_read_becomes_facts_in_its_language(lang: str) -> None:
+async def test_a_message_the_model_reads_becomes_facts_in_its_language(lang: str) -> None:
     message, fact, _, value = FIXTURES[lang]
     observation = _obs(message)
     assert observation.lang == lang
@@ -126,9 +126,9 @@ async def test_a_message_the_rules_cannot_read_becomes_facts_in_its_language(lan
             speaker="u1",
             said_at=NOW,
             recent=[],
-            rules=[],
             known=[],
         )
+    assert fills is not None
     (extracted,) = fills
     assert extracted.fact == fact and detect_language(extracted.fact) in (lang, "en")
     assert extracted.memory_type is MemoryType.USER

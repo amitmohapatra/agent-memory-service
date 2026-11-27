@@ -91,7 +91,7 @@ stores it as `lang` (migration 0018). It decides three things:
 
 | where | English | any other language |
 |---|---|---|
-| memory extraction | the rules, then one gap-fill call for what they missed (`contextual_extraction`, fast tier) | the same gap-fill call: facts in the message's language, each quoting it exactly; a translated fact is dropped |
+| memory extraction | with a model, one call reads the message first and its reading is all that is read (`contextual_extraction`, fast tier; ADR 0047); the rules read it when no model answers | the same call: facts in the message's language, each quoting it exactly; a translated fact is dropped |
 | graph enrichment | rule entities; the model types relations between them | the model names both entities (verbatim in the text) and the relation (`relation_extraction`) |
 | query routing | the cue patterns | GENERAL_SEMANTIC, and query expansion when the read may use the model |
 

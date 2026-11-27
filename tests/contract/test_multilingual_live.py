@@ -60,7 +60,6 @@ async def test_a_real_model_extracts_facts_in_the_source_language(assist, lang) 
         speaker="u1",
         said_at=datetime(2026, 10, 1, tzinfo=UTC),
         recent=[],
-        rules=[],
         known=[],
     )
     if not facts:

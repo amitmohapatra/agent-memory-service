@@ -590,7 +590,7 @@ def _wire_memory(container: Container) -> None:
         assist=container.services.llm_assist,
         contextual_extractor=extractor,
         # the grounding cascade's NLI head decides what the lexicon leaves open (ADR 0037)
-        # what the head leaves open the model reads in the gap-fill call (``gapfill``)
+        # with a model, a person's message is the model's to read first (``gapfill``)
         labeller=StatementLabeller(nli=container.nli),
         subjects=subjects,
         # the same head reads a restatement in other words as the memory already held

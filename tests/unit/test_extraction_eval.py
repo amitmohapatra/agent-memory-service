@@ -206,3 +206,25 @@ def test_a_word_is_held_where_a_word_starts_not_inside_another():
     assert _holds("Pimienta es una gata siamesa.", ["Pimienta", "gat"])
     assert _holds("The Halvorsen Foods renewal is for three years.", ["Halvorsen", "renew"])
     assert _holds("hi-update अब बेंगलुरु में रहता है।", ["बेंगलुरु"])
+
+
+async def test_shared_text_held_as_the_speakers_own_is_a_misattribution():
+    """A pasted skill's "Never call a tool that writes.": held as the speaker's rule or
+    attribute it is misattributed; as a fact about the skill, or in the turn as said, it is
+    not."""
+    case = {"id": "s1", "kind": "shared", "not_theirs": [["never", "tool"], ["priya@example.com"]]}
+    theirs = [
+        mem("Never call a tool that writes.", category="rule"),
+        {**mem("My email is priya@example.com.", category="source_fact"), "memory_type": "USER"},
+    ]
+    row = await score_case(case, theirs, [], Head())
+    assert (row["not_theirs"], row["misattributed"]) == (2, 2)
+    told = [
+        mem("# Read-Only Mode Never call a tool that writes.", category="verbatim_turn"),
+        mem("In Read-Only Mode an agent never calls a tool that writes.", category="source_fact"),
+        mem("Priya's email is priya@example.com.", category="source_fact"),
+    ]
+    fine = await score_case(case, told, [], Head())
+    assert fine["misattributed"] == 0
+    assert summarise([row, fine])["misattribution_rate"] == 0.5
+    assert summarise([await score_case(CASE, [], [], Head())])["misattribution_rate"] is None

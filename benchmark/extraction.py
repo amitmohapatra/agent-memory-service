@@ -9,11 +9,16 @@ by turn through the conversation API in process, then read back from the memory 
 * ``forbid``: false facts no current memory may hold (a turn as said included);
 * ``stale``: an earlier value an update or a contradiction must have closed or marked;
 * ``keep``: a memory a restatement or an unrelated statement must not have closed;
+* ``not_theirs``: words of text the speaker shared to be worked on (a pasted skill, another
+  person's email) or said for the moment: no current memory filed as the speaker's own - a
+  rule, an instruction, a preference or an attribute of theirs - may hold them. A fact about
+  the person or thing the text names may;
 * ``ask``: a question whose context must carry every word given (multi-hop, temporal);
 * ``negative``: chit-chat - nothing may be read from it.
 
 Metrics: recall (expected facts held), false-fact rate (forbidden facts held, and negative
-cases that stored a reading), duplicate rate (expected facts held twice: by a memory another
+cases that stored a reading), misattribution rate (``not_theirs`` words held as the
+speaker's own), duplicate rate (expected facts held twice: by a memory another
 memory holding them says all of, as the NLI head reads it - two facts that only share the
 expected words are two), wrong-update rate (stale values still current, kept values closed),
 ask recall.
@@ -54,6 +59,10 @@ TENANT = "extract-eval"
 #: every case is said relative to this day, so a run is a function of the data alone
 ANCHOR = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 ASK_BUDGET = 2000
+#: how a memory read of the speaker themselves is filed: their rule, a standing or passing
+#: instruction, a preference, an attribute (``native``, ``gapfill.CATEGORIES``)
+OWN_CATEGORIES = frozenset({"rule", "instruction", "preference", "attribute"})
+OWN_TYPES = frozenset({"USER", "PREFERENCE"})
 
 
 def _holds(content: str, words: list[str]) -> bool:
@@ -121,6 +130,7 @@ async def score_case(
 ) -> dict:
     current = [m for m in mems if m["temporal_status"] == "CURRENT" and not m["marked"]]
     read = [m for m in current if m["category"] != "verbatim_turn"]
+    own = [m for m in read if m["category"] in OWN_CATEGORIES or m["memory_type"] in OWN_TYPES]
     holding = [
         [m["content"] for m in read if _holds(m["content"], words)]
         for words in case.get("expect", [])
@@ -136,6 +146,12 @@ async def score_case(
             1 for words in case.get("forbid", []) if any(_holds(m["content"], words) for m in read)
         ),
         "negative_stored": bool(case.get("negative")) and bool(read),
+        "not_theirs": len(case.get("not_theirs", [])),
+        "misattributed": sum(
+            1
+            for words in case.get("not_theirs", [])
+            if any(_holds(m["content"], words) for m in own)
+        ),
         "stale": len(case.get("stale", [])),
         "stale_current": sum(
             1 for words in case.get("stale", []) if any(_holds(m["content"], words) for m in read)
@@ -166,6 +182,7 @@ def summarise(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "cases": len(rows),
         "recall": ratio("held", "expected"),
         "false_fact_rate": round(false_num / false_den, 4) if false_den else None,
+        "misattribution_rate": ratio("misattributed", "not_theirs"),
         "duplicate_rate": ratio("duplicated", "held"),
         "wrong_update_rate": round(
             (sum(r["stale_current"] for r in rows) + sum(r["keep_lost"] for r in rows))

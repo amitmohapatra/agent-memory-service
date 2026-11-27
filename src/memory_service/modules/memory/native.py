@@ -565,6 +565,18 @@ def default_visibility(
     return Visibility.USER if ctx.user_id else Visibility.TENANT
 
 
+def _of(observation: Observation, candidates: list[MemoryCandidate]) -> list[MemoryCandidate]:
+    """``candidates`` with where their observation came from: its user's own words, and
+    whether what is read from it follows that user (``said_by_user``, ``follows_user``)."""
+    origin = {
+        "follows_user": follows_user(observation),
+        "said_by_user": said_by_user(observation),
+    }
+    if not any(origin.values()):
+        return candidates
+    return [c.model_copy(update=origin) for c in candidates]
+
+
 def standing_instruction(label: Any) -> bool:
     """The sentence gives an instruction it says is for every time ("Formatiere Berichte immer
     als Tabelle"), decided a rule or left to a model the deployment may not have (ADR 0041).
@@ -645,14 +657,29 @@ class NativeMemoryIntelligence:
     async def extract(
         self, observation: Observation, ctx: MemoryExecutionContext
     ) -> list[MemoryCandidate]:
-        candidates = await self._extract(observation, ctx)
-        origin = {
-            "follows_user": follows_user(observation),
-            "said_by_user": said_by_user(observation),
-        }
-        if not any(origin.values()):
-            return candidates
-        return [c.model_copy(update=origin) for c in candidates]
+        return _of(observation, await self._extract(observation, ctx))
+
+    async def said(
+        self, observation: Observation, ctx: MemoryExecutionContext
+    ) -> list[MemoryCandidate]:
+        """A person's message as it was said, for a reader other than the patterns (the
+        model, ``modules.memory.gapfill``): every piece of the turn (``_verbatim``), whatever
+        a pattern would have read from it. It carries the change it makes to what was said
+        before - a correction, a status, a start or an end, which the replacement of earlier
+        statements and the search read - and nothing of what it says about its speaker:
+        whether it is their rule or describes them is that reader's to say, so a turn of
+        pasted instructions is not a rule of the person who pasted them."""
+        text = observation.content.strip()
+        if observation.hints.skip_extraction or not text:
+            return []
+        turns = self._verbatim(text, observation, ctx, _evidence(observation))
+        if not turns:
+            return []
+        labels = await self.labeller.label(
+            split_sentences(text), models=not observation.agent_authored
+        )
+        kind = most_salient(label.kind for label in labels if label.kind not in RULE_KINDS)
+        return _of(observation, [t.model_copy(update={"statement_kind": kind}) for t in turns])
 
     async def _extract(
         self, observation: Observation, ctx: MemoryExecutionContext
@@ -778,8 +805,8 @@ class NativeMemoryIntelligence:
         """Whether a Hindsight server (``contextual_extractor``) reads what the rules left of
         ``observation``: a person's own English message, not under an agent's key - Hindsight
         cannot revalidate an agent's policy after waiting for a server slot, nor accept its
-        model key. Every other message the model may read is the gap-fill call's
-        (``gapfill``)."""
+        model key. Every other message the model may read is read by its own call,
+        before the rules (``gapfill``)."""
         return (
             self.contextual_extractor is not None
             and observation.kind is ObservationKind.MESSAGE

@@ -1,6 +1,9 @@
 # ADR 0045: With a model, one gap-fill call reads what the rules missed in a message
 
-Date: 2026-11-09. Status: accepted. Supersedes the narrative units and the non-English typed
+Date: 2026-11-09. Status: accepted; its order (the rules first, then the call for what they
+missed) is superseded by [ADR 0047](0047-the-model-reads-a-persons-message-first.md): with a
+model, the call is made first and its reading is all that is read from the message. The call,
+its operations and the checks on them stand. Supersedes the narrative units and the non-English typed
 facts of `contextual_extraction`, and ADR 0037's model tier of the statement labeller.
 
 ## Context

@@ -32,6 +32,7 @@ from memory_service.domain.memory import (
     CanonicalMemory,
     Scope,
     TemporalState,
+    lasting,
     unverified_representation,
 )
 from memory_service.domain.observation import AGENT_ROLES, Observation
@@ -45,7 +46,6 @@ from memory_service.modules.memory.ephemeral import EphemeralMemory
 from memory_service.modules.memory.gapfill import POOL, RECENT_TURNS, GapFill, Turn, worth_asking
 from memory_service.modules.memory.gapfill import TYPES as GAP_TYPES
 from memory_service.modules.memory.gapfill import candidate as gap_candidate
-from memory_service.modules.memory.gapfill import covered as gap_covered
 from memory_service.modules.memory.native import follows_user, normalized_hash, split_sentences
 from memory_service.modules.memory.referred import referred_turn
 from memory_service.modules.memory.replacement import CrossConversationReplacement
@@ -380,11 +380,6 @@ def said_by_a_person(memory: CanonicalMemory) -> bool:
     )
 
 
-#: the rules' readings that are a sentence as said (not a slot: a preference, an attribute,
-#: a task), which a model's fact of the same words replaces (``Gaps.covered``)
-SENTENCE_READINGS: Final = frozenset({"fact", "event"})
-
-
 def _speaker(observation: Observation) -> str:
     """Who said a message: the agent for its own words, else the person."""
     if observation.agent_authored:
@@ -394,22 +389,26 @@ def _speaker(observation: Observation) -> str:
 
 @dataclass(frozen=True)
 class Gaps:
-    """What ``gapfill`` read from one message: each candidate with the memory it claims to
-    update or contradict, and the memories it was shown."""
+    """What the model read from one message (``gapfill``): each candidate with the memory it
+    claims to update or contradict, the memories it was shown, and the message as it was said
+    (``said``), which is kept beside the reading. With no ``said`` the model did not read the
+    message: the patterns did."""
 
     fills: list[tuple[MemoryCandidate, CanonicalMemory | None]] = field(default_factory=list)
     known: list[CanonicalMemory] = field(default_factory=list)
-    #: the rules' sentence readings the model read again (``gapfill.covered``): held by the
-    #: model's facts, which say them with who and when resolved
-    covered: frozenset[str] = frozenset()
+    said: list[MemoryCandidate] = field(default_factory=list)
 
-    def uncovered(self, candidates: list[MemoryCandidate]) -> list[MemoryCandidate]:
-        """``candidates`` without the sentence readings the model's facts hold."""
-        return [
-            c
-            for c in candidates
-            if c.content not in self.covered or c.category not in SENTENCE_READINGS
-        ]
+    def kept(self, read: list[MemoryCandidate]) -> list[MemoryCandidate]:
+        """The message's candidates: the turn as said and ``read``, the model's reading of it
+        classified. A piece of the turn a lasting reading says in the same words is not kept
+        beside it (as the patterns keep none beside theirs: ``native``): the reading holds
+        the words for good."""
+        held = {
+            normalized_hash(c.content)
+            for c in read
+            if lasting(c.category, c.memory_type, c.lifetime)
+        }
+        return [*(t for t in self.said if normalized_hash(t.content) not in held), *read]
 
 
 class ObservationPipeline:
@@ -427,7 +426,7 @@ class ObservationPipeline:
         gapfill: GapFill | None = None,
     ) -> None:
         self.uow_factory = uow_factory
-        #: the model's one call per user message for what the rules missed (``gapfill``)
+        #: the model's one call per user message: its reader, when it answers (``gapfill``)
         self.gapfill = gapfill
         #: a user's new statement against their earlier ones in other conversations (ADR 0038)
         self.replacement = replacement
@@ -472,12 +471,7 @@ class ObservationPipeline:
                 span("memory.process", tenant_id=tenant_id, kind=observation.kind.value),
                 stage_seconds.labels("memory.process").time(),
             ):
-                candidates = await self._classified(
-                    await self.provider.extract(observation, ctx), observation, ctx
-                )
-                gaps = await self._gaps(observation, ctx, candidates, prior)
-                candidates = gaps.uncovered(candidates)
-                candidates += await self._classified([c for c, _ in gaps.fills], observation, ctx)
+                gaps, candidates = await self._candidates(observation, ctx, prior)
                 if preceding is not None:
                     candidates = [
                         c.model_copy(update={"preceding_turn": preceding}) for c in candidates
@@ -572,26 +566,40 @@ class ObservationPipeline:
                 return []
         return referred
 
-    async def _gaps(
-        self,
-        observation: Observation,
-        ctx: MemoryExecutionContext,
-        candidates: list[MemoryCandidate],
-        prior: Observation | None,
-    ) -> Gaps:
-        """What the model reads from a user's message beyond the rules (``gapfill``): each
-        candidate with the memory it claims to update or contradict, if any, and the memories
-        it was shown."""
-        turn = next((c for c in candidates if c.category == "verbatim_turn"), None)
-        if self.gapfill is None or turn is None or not self.gapfill.wanted(observation, ctx):
-            return Gaps()
-        speaker = _speaker(observation)
+    async def _candidates(
+        self, observation: Observation, ctx: MemoryExecutionContext, prior: Observation | None
+    ) -> tuple[Gaps, list[MemoryCandidate]]:
+        """What ``observation`` teaches, classified: the model's reading of it beside the
+        message as said, when the model read it (``_read``); the patterns' otherwise."""
+        gaps = await self._read(observation, ctx, prior)
+        if gaps is None:
+            read = await self.provider.extract(observation, ctx)
+            return Gaps(), await self._classified(read, observation, ctx)
+        fills = [c for c, _ in gaps.fills]
+        return gaps, gaps.kept(await self._classified(fills, observation, ctx))
+
+    async def _read(
+        self, observation: Observation, ctx: MemoryExecutionContext, prior: Observation | None
+    ) -> Gaps | None:
+        """What the model reads from a person's message, asked before any pattern reads it
+        (``gapfill``): each candidate with the memory it claims to update or contradict, if
+        any, the memories it was shown, and the message as said. ``None`` when the message is
+        not the model's to read (no model allowed, a message by its shape not worth asking
+        about, a provider that keeps no turn as said) or the model did not answer: the
+        patterns read it then, as they do without a model."""
+        said = getattr(self.provider, "said", None)
+        if self.gapfill is None or said is None or not self.gapfill.wanted(observation, ctx):
+            return None
+        turns = await self._classified(await said(observation, ctx), observation, ctx)
+        if not turns:
+            return None
+        turn, speaker = turns[0], _speaker(observation)
         async with self.uow_factory() as uow:
             recent = await self._recent(uow, observation, prior)
             if not worth_asking(split_sentences(observation.content), recent, speaker):
-                return Gaps()
+                return None
             # where this message's memories are anchored, a profile fact's (the user's) too
-            anchors = [*candidates, turn.model_copy(update={"memory_type": MemoryType.USER})]
+            anchors = [turn, turn.model_copy(update={"memory_type": MemoryType.USER})]
             pool = await uow.memories.list_scope(
                 ctx.tenant_id,
                 scope_keys=sorted({scope_for(c, ctx).key() for c in anchors}),
@@ -605,9 +613,10 @@ class ObservationPipeline:
             speaker=speaker,
             said_at=observation.occurred_at,
             recent=recent,
-            rules=[c.content for c in candidates if c.category != "verbatim_turn"],
             known=known,
         )
+        if fills is None:
+            return None
         return Gaps(
             [
                 (
@@ -623,12 +632,7 @@ class ObservationPipeline:
                 for f in fills
             ],
             known,
-            frozenset(
-                gap_covered(
-                    [c.content for c in candidates if c.category in SENTENCE_READINGS],
-                    fills,
-                )
-            ),
+            turns,
         )
 
     async def _recent(

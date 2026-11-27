@@ -1,5 +1,5 @@
-"""The gap-fill call through durable ingestion: stored, scoped, recalled, replay-safe and
-forgettable; and nothing at all without a model."""
+"""The model's reading of a message through durable ingestion: stored, scoped, recalled,
+replay-safe and forgettable; and nothing of it at all without a model."""
 
 import pytest
 
@@ -84,10 +84,10 @@ async def test_without_a_model_the_memories_are_the_rules_alone(container, uow_f
     assert all(category != "source_fact" for _, _, category, _ in wired)
 
 
-async def test_a_rule_reading_the_model_read_again_is_held_once(container, uow_factory):
-    """vdate-4 of the hard eval: the rules read "The audit is due the Friday before
-    Christmas." and the model the same words with the day resolved: one memory, the
-    model's."""
+async def test_a_sentence_the_model_read_is_held_once_in_its_words(container, uow_factory):
+    """vdate-4 of the hard eval: "The audit is due the Friday before Christmas." read by
+    the model with the day resolved is one memory, the model's - the rules, which would have
+    read the same words, do not read a message the model reads."""
     said = "The audit is due the Friday before Christmas."
     resolved = "The audit is due on 2026-12-18."
     ops = {

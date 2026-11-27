@@ -133,9 +133,11 @@ as metadata only and is stored as it was before the labeller.
 
 The labeller (`modules/memory/statements.py`) reads cue words from data packs
 (`modules/memory/lexicon/generic.json` and the default domain pack `retail.json`) and leaves
-what they cannot settle to the grounding model's NLI head (the model reads those sentences,
-with the rest of the message, in the gap-fill call: ADR 0045); when the head fails, the lexicon's label stands and the message is stored as
-usual. Nothing reads the kind yet: retrieval, consolidation and the bundle are unchanged. It
+what they cannot settle to the grounding model's NLI head; when the head fails, the lexicon's label stands and the message is stored as
+usual. With a model allowed, a person's message is read by the model first instead, and its
+reading is all that is read from it (ADR 0047): whether a sentence is the speaker's own rule,
+or text they pasted, is the model's to say, and the labeller then says only what change the
+turn makes to what was said before. Nothing reads the kind yet: retrieval, consolidation and the bundle are unchanged. It
 is recorded so that later stages can act on it.
 
 ### When two statements are about the same thing

@@ -748,8 +748,8 @@ class _Open:
 
 class StatementLabeller:
     """Labels the sentences of one observation: the lexicon for all, the NLI head for the
-    open ones (one batch). What the head leaves open the model reads in the gap-fill call
-    (``gapfill``), with the rest of the message."""
+    open ones (one batch). A message the model reads (``gapfill``) is not read for its rules
+    here: the labeller then says only what change the turn makes (``native.said``)."""
 
     def __init__(
         self,

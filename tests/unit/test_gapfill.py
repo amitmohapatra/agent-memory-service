@@ -1,4 +1,4 @@
-"""The model fills what the rules missed: one call a message, every op checked in code."""
+"""The model reads a person's message: one call a message, every op checked in code."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from memory_service.domain.enums import MemoryType
+from memory_service.domain.enums import MemoryType, StatementKind
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory import gapfill
 from memory_service.modules.memory.gapfill import GapFill, Turn, candidate, checked, worth_asking
@@ -34,8 +34,8 @@ def op(**fields):
     }
 
 
-async def fill(replies, *, message="Her name is Biscuit, a beagle mix.", rules=(), known=()):
-    with mocked_gateway(replies) as gateway:
+async def fill(replies=(), *, message="Her name is Biscuit, a beagle mix.", known=(), **how):
+    with mocked_gateway(replies, **how) as gateway:
         filler = GapFill(gateway.assist(uses=["contextual_extraction"]))
         out = await filler.fill(
             "t1",
@@ -43,22 +43,78 @@ async def fill(replies, *, message="Her name is Biscuit, a beagle mix.", rules=(
             speaker="Ana",
             said_at=SAID,
             recent=[Turn("Ana", "I finally adopted a dog last month.")],
-            rules=list(rules),
             known=list(known),
         )
         return out, gateway
 
 
-async def test_one_call_reads_the_message_with_its_turns_rules_and_known():
-    out, gateway = await fill([{"ops": [op()]}], rules=["Her name is Biscuit."])
+async def test_one_call_reads_the_message_with_its_turns_and_known():
+    out, gateway = await fill([{"ops": [op()]}])
     assert [f.fact for f in out] == ["Ana adopted a beagle named Biscuit."]
     assert gateway.route.call_count == 1
     sent = gateway.prompts()[0]["messages"]
     assert sent[0]["content"].startswith(gapfill.SYSTEM)  # fixed: a cacheable prefix
     payload = json.loads(sent[1]["content"])
     assert payload["turns"] == [{"speaker": "Ana", "text": "I finally adopted a dog last month."}]
-    assert payload["rules"] == ["Her name is Biscuit."]
+    assert payload["message"] == "Her name is Biscuit, a beagle mix."
+    assert "rules" not in payload and "RULES" not in gapfill.SYSTEM  # no reading before its own
     assert payload["said_on"] == "2026-10-01 (Thursday)"
+
+
+async def test_no_answer_is_not_an_answer_of_nothing():
+    """A model that answers "nothing" has read the message; one that cannot be reached, or
+    may not read it, has not - the message is then the patterns' to read."""
+    assert (await fill([{"ops": []}]))[0] == []
+    assert (await fill(failing=True))[0] is None
+    with mocked_gateway([{"ops": [op()]}]) as gateway:
+        unused = GapFill(gateway.assist(uses=[]))
+        said = await unused.fill(
+            "t1", message="x", speaker="Ana", said_at=SAID, recent=[], known=[]
+        )
+        assert said is None and gateway.route.call_count == 0
+
+
+@pytest.mark.parametrize("reply", [{}, {"ops": None}, {"ops": "nothing"}, {"facts": []}])
+async def test_a_reply_that_is_not_the_list_asked_for_is_no_answer(reply):
+    class Assist:
+        async def structured(self, *args, **kwargs):
+            return reply
+
+    said = await GapFill(Assist()).fill(  # type: ignore[arg-type]
+        "t1", message="I moved.", speaker="Ana", said_at=SAID, recent=[], known=[]
+    )
+    assert said is None
+
+
+def test_a_rule_the_speaker_gives_is_their_lasting_rule_in_the_words_given():
+    rule = "Always answer in German."
+    got = checked(op(fact=rule, quote=rule, type="rule", subject=""), [rule], SAID, [], "Ana")
+    assert got is not None and got.kind == "rule"
+    made = candidate(got, speaker="user:ana", evidence=[])
+    assert (made.memory_type, made.category) == (MemoryType.PREFERENCE, "rule")
+    assert (made.predicate, made.object, made.statement_kind) == ("rule", rule, StatementKind.RULE)
+    assert made.subject == "user:ana" and made.provider == "llm"
+
+
+@pytest.mark.parametrize(
+    ("kind", "filed"),
+    [
+        ("profile", (MemoryType.USER, "attribute")),
+        ("preference", (MemoryType.PREFERENCE, "preference")),
+        ("fact", (MemoryType.SEMANTIC, "source_fact")),
+        ("event", (MemoryType.EPISODIC, "source_fact")),
+    ],
+)
+def test_what_is_read_of_the_speaker_is_filed_where_a_context_reads_it(kind, filed):
+    got = checked(op(type=kind), ["Her name is Biscuit."], SAID, [])
+    assert got is not None
+    made = candidate(got, speaker="user:ana", evidence=[])
+    assert (made.memory_type, made.category) == filed
+    assert made.statement_kind is None and made.predicate == "said"
+
+
+def test_a_type_the_model_made_up_drops_the_op():
+    assert checked(op(type="secret"), ["Her name is Biscuit."], SAID, []) is None
 
 
 def test_a_quote_that_is_not_in_the_sources_drops_the_op():
@@ -106,10 +162,12 @@ def test_an_opinion_is_a_belief_and_an_implied_fact_is_less_sure():
     assert got is not None and got.memory_type is MemoryType.BELIEF and got.confidence == 0.9
 
 
-async def test_what_the_rules_already_read_is_not_added_twice():
+async def test_what_a_memory_holds_is_not_added_again_and_a_fact_is_added_once():
     same = op(fact="Her name is Biscuit.")
-    out, _ = await fill([{"ops": [same, same]}], rules=["Her  name is biscuit."])
+    out, _ = await fill([{"ops": [same, same]}], known=[_known("Her  name is biscuit.")])
     assert out == []
+    out, _ = await fill([{"ops": [same, same]}])
+    assert [f.fact for f in out] == ["Her name is Biscuit."]
 
 
 @pytest.mark.parametrize(
@@ -144,9 +202,7 @@ async def test_calls_in_flight_are_bounded_per_tenant():
     filler = GapFill(Assist())  # type: ignore[arg-type]
     await asyncio.gather(
         *(
-            filler.fill(
-                "t1", message="I moved.", speaker="Ana", said_at=SAID, recent=[], rules=[], known=[]
-            )
+            filler.fill("t1", message="I moved.", speaker="Ana", said_at=SAID, recent=[], known=[])
             for _ in range(3 * gapfill.PER_TENANT)
         )
     )
@@ -163,17 +219,6 @@ async def test_a_person_s_message_is_the_gap_fill_s_unless_a_server_reads_it():
         )
         assert not GapFill(assist, server_reads=lambda o, c: True).wanted(said, CTX)
         assert not GapFill(LLMAssist.disabled()).wanted(said, CTX)
-
-
-async def test_a_rule_reading_said_again_with_the_speakers_name_is_not_added():
-    restated = op(fact="Ana's pallet supplier is Uline.", quote="Our pallet supplier is Uline.")
-    resolved = op(fact="Ana's dog is named Biscuit.", quote="Her name is Biscuit.")
-    out, _ = await fill(
-        [{"ops": [restated, resolved]}],
-        message="Our pallet supplier is Uline. Her name is Biscuit.",
-        rules=["Our pallet supplier is Uline.", "Her name is Biscuit."],
-    )
-    assert [f.fact for f in out] == ["Ana's dog is named Biscuit."]
 
 
 # ------------------------------------------------- one memory per fact (the hard eval's duplicates)
@@ -200,24 +245,6 @@ def _known(text: str):
     )
 
 
-async def test_a_change_the_rules_already_read_is_not_stored_again():
-    """contra-4: the rules read "Forklift 4 is back in service since this morning." and closed
-    the earlier value; the model's contradict op restating it was a second memory of it."""
-    back = op(
-        op="contradict",
-        fact="Forklift 4 is back in service.",
-        quote="Forklift 4 is back in service",
-        target=1,
-    )
-    out, _ = await fill(
-        [{"ops": [back]}],
-        message="Forklift 4 is back in service since this morning.",
-        rules=["Forklift 4 is back in service since this morning."],
-        known=[_known("Forklift 4 is out of service.")],
-    )
-    assert out == []
-
-
 async def test_an_add_of_the_words_an_update_rests_on_is_the_update():
     """update-6 / hi-update: "Priya handed on-call over to Marcus this week." read as the new
     value of the lead (update) and again as an event (add) was two memories of one change.
@@ -236,7 +263,6 @@ async def test_an_add_of_the_words_an_update_rests_on_is_the_update():
             speaker="Ana",
             said_at=SAID,
             recent=[],
-            rules=[],
             known=[_known("Our on-call lead is Priya.")],
         )
     assert [(f.op, f.fact) for f in out] == [
@@ -279,7 +305,6 @@ async def test_an_add_that_contradicts_what_a_change_of_its_words_replaces_is_th
             speaker="hi-update",
             said_at=SAID,
             recent=[],
-            rules=[],
             known=[_known(pune)],
         )
     assert len(out) == kept, out
@@ -308,7 +333,6 @@ async def test_an_add_the_head_reads_as_saying_a_change_of_its_words_is_the_chan
             speaker="Ana",
             said_at=SAID,
             recent=[],
-            rules=[],
             known=[_known("Our on-call lead is Priya.")],
         )
     facts = [(f.op, f.fact) for f in out]
@@ -316,40 +340,6 @@ async def test_an_add_the_head_reads_as_saying_a_change_of_its_words_is_the_chan
         assert facts == [("update", event["fact"])]
     else:
         assert facts == [("update", update["fact"]), ("add", event["fact"])]
-
-
-@pytest.mark.parametrize(
-    ("reading", "quotes", "covered"),
-    [
-        # vdate-4: the model read the same words and resolved the day
-        (
-            "The audit is due the Friday before Christmas.",
-            ["The audit is due the Friday before Christmas"],
-            True,
-        ),
-        # opinion-1: the model read the sentence as its two facts
-        (
-            "I think the new CRM is clunky, but the team already migrated to it in May.",
-            ["I think the new CRM is clunky", "the team already migrated to it in May"],
-            True,
-        ),
-        # a fill that read only part of the reading leaves the rest to it
-        (
-            "Forklift 4 is back in service since this morning.",
-            ["Forklift 4 is back in service"],
-            False,
-        ),
-        # a fill of other words
-        ("Our biggest client is renewing.", ["The renewal is for three years"], False),
-    ],
-)
-def test_a_rule_reading_whose_words_the_model_read_is_the_model_s(reading, quotes, covered):
-    fills = [
-        checked(op(fact=f"{q} (resolved).", quote=q), [reading, *quotes], SAID, [], "Ana")
-        for q in quotes
-    ]
-    assert all(fills)
-    assert (gapfill.covered([reading], [f for f in fills if f]) == [reading]) is covered
 
 
 class _Entails:
@@ -417,24 +407,28 @@ async def test_a_fact_another_fact_of_the_message_says_is_not_added_too(facts, e
     with mocked_gateway([{"ops": ops}]) as gateway:
         filler = GapFill(gateway.assist(uses=["contextual_extraction"]), nli=_Entails(entails))
         out = await filler.fill(
-            "t1", message=message, speaker="Ana", said_at=SAID, recent=[], rules=[], known=[]
+            "t1", message=message, speaker="Ana", said_at=SAID, recent=[], known=[]
         )
     assert [f.fact for f in out] == kept
 
 
-async def test_a_fact_the_rules_reading_of_the_message_says_is_not_added():
-    """implied-1 and opinion-1 of the hard eval: the rules kept "I'll have to skip the wine
-    tasting, I'm eight months pregnant." and the model added "The speaker is eight months
-    pregnant.", which that reading says; a fact it does not say is added."""
-    said = "I'll have to skip the wine tasting, I'm eight months pregnant."
-    pregnant = op(fact="The speaker is eight months pregnant.", quote="I'm eight months pregnant")
-    due = op(fact="Ana's baby is due in November.", quote="I'm eight months pregnant")
-    with mocked_gateway([{"ops": [pregnant, due]}]) as gateway:
-        filler = GapFill(
-            gateway.assist(uses=["contextual_extraction"]),
-            nli=_Entails({said: {"The speaker is eight months pregnant."}}),
-        )
-        out = await filler.fill(
-            "t1", message=said, speaker="Ana", said_at=SAID, recent=[], rules=[said], known=[]
-        )
-    assert [f.fact for f in out] == ["Ana's baby is due in November."]
+async def test_a_provider_that_keeps_no_turn_as_said_reads_the_message_itself():
+    """The pipeline asks the model first only where the turn as said can be kept beside its
+    reading (``NativeMemoryIntelligence.said``): another provider's extraction stands."""
+    from memory_service.config.constants import MemoryIntelligenceSettings
+    from memory_service.modules.memory.pipeline import ObservationPipeline
+
+    class Provider:  # extract / classify / consolidate only
+        pass
+
+    class Wanted:
+        def wanted(self, *_):
+            return True
+
+    pipeline = ObservationPipeline(
+        None,  # type: ignore[arg-type]
+        Provider(),  # type: ignore[arg-type]
+        settings=MemoryIntelligenceSettings(),
+        gapfill=Wanted(),  # type: ignore[arg-type]
+    )
+    assert await pipeline._read(_obs("I moved to Pune."), CTX, None) is None

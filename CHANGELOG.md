@@ -7,6 +7,32 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service): with a model, the model reads a person's message first
+
+A person's message was read by the word patterns first, and a model, when allowed, could only
+add to that reading. A pattern reads words, not whose they are. Reproduced: a skill's text
+pasted into a chat ("Never call a tool that writes. Always tell the user which plan you
+read.") became two lasting rules of the person who pasted it, in their profile in every later
+conversation; a colleague's email pasted to be summarised replaced the person's own email,
+role and preference ("What is my email address?" was then answered with the colleague's); and
+"for now skip consent" was kept for good.
+
+When a model is allowed for the message (`contextual_extraction`) and answers, the call is
+now made before any pattern runs and its reading is all that is read from the message, beside
+the message as said. It is no longer shown a reading by anything else, and its instructions
+say whose words count - text a person shares to be worked on is material, not their
+statement - and that an instruction for the moment or a request is not memory. A new type,
+`rule`, is the speaker's lasting rule; what is read of the speaker is filed where the profile,
+the preferences and the standing rules read it from. The patterns read a message only when no
+model answers (not allowed, not reachable, a failed call); an empty answer is an answer
+([ADR 0047](docs/adr/0047-the-model-reads-a-persons-message-first.md)).
+
+Not measured with a real model yet: the tests script the model, so they prove the order, the
+filing and the fallback, not the model's judgement. Unchanged: a tenant with no model (the
+three cases above stay as they were); an event, an import and a feedback note, read by the
+patterns with or without a model; what was stored before. No setting, route or SDK call
+changed, and no call is added: it is the one a tenant with a model already made per message.
+
 ### Fixed (service): a counted date in the words people write is the day it names
 
 A memory's relative dates are resolved at ingest, by dateparser, whose locale data lacks

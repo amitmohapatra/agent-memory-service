@@ -74,6 +74,31 @@ the assistant's side without a run id, and its advice is not the user's rule or 
 `memory_remember` (or `remember`). A person's words, an `EVENT`, a document and an agent's own
 `AGENT_RESULT` observation form memories as before.
 
+### With a model, the model reads a person's message first
+
+Without a model, a person's message is read by word patterns: "always" and "never" make a
+rule, "my email is" an attribute, "I prefer" a preference. A pattern reads words, not whose
+they are: a skill's instructions pasted into the chat become rules of the person who pasted
+them, and a colleague's email pasted to be summarised ("I am the regional manager ... My
+email is ...") replaces what the person said of themselves.
+
+With a model allowed for the tenant (`contextual_extraction`, on by default once an endpoint
+resolves: [tenancy.md](tenancy.md)) the model reads a person's own message **first**, and
+what it returns is all that is read from the message (ADR 0047):
+
+- only what the speaker states in their own voice is theirs. Pasted or forwarded text, a
+  document, the text of a skill or a policy, code and quotations are material: nothing in
+  them becomes the speaker's rule, preference or profile, or changes what is known of them;
+- a rule is an instruction for every time ("always ...", "from now on ..."). An instruction
+  for now or for this task ("for now skip the check") and a request ("delete the plan") are
+  not memory;
+- the message itself is kept as it was said, beside the reading, as before.
+
+The word patterns read a message only when no model answers - none allowed, none reachable,
+a failed call - and for an `EVENT`, an import and feedback, which the model does not read.
+What the model decides is its judgement: the checks on its answer (an exact quote, no number
+the quote does not state) bound what it writes, not what it leaves out.
+
 ## An event versus `remember`
 
 ```python

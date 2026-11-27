@@ -545,3 +545,46 @@ async def test_what_the_user_says_of_their_own_setup_is_a_self_description(nativ
 )
 async def test_questions_rules_requests_and_events_are_no_self_description(native, text) -> None:
     assert not any(c.self_description for c in await _extract(native, text))
+
+
+# ------------------------------------------------- the turn as said, for another reader
+
+
+async def test_the_turn_as_said_is_kept_whatever_a_pattern_would_read(native) -> None:
+    """A standing rule in one sentence: the patterns' reading holds the words for good and
+    keeps no turn beside it; for another reader (the model) the turn is there, and it is no
+    rule and says nothing of its speaker - that is that reader's to say."""
+    rule = "Always answer in German."
+    assert [c.category for c in await native.extract(_obs(rule), CTX)] == ["rule"]
+    [turn] = await native.said(_obs(rule), CTX)
+    assert (turn.category, turn.content) == ("verbatim_turn", rule)
+    assert turn.statement_kind is None and not turn.standing_instruction
+    assert turn.said_by_user and turn.follows_user
+    [setup] = await native.said(_obs("Our books are in EUR."), CTX)
+    assert not setup.self_description
+
+
+async def test_the_turn_as_said_carries_the_change_it_makes_to_what_was_said() -> None:
+    """A correction is read off the turn by the replacement of earlier statements and by the
+    search, so it stays on it - beside a rule in the same message, which does not."""
+    from memory_service.domain.enums import StatementKind
+
+    native = NativeMemoryIntelligence(MemoryIntelligenceSettings())
+    [turn] = await native.said(_obs("No, our system was updated. Always use /shrinkage."), CTX)
+    assert turn.statement_kind is StatementKind.CORRECTION
+
+
+@pytest.mark.parametrize(
+    "observation",
+    [
+        _obs("What time is it?"),  # nothing said: only a question
+        _obs("   "),
+        _obs("I moved to Pune.", skip_extraction=True),
+        _obs("Thinking: check the stock first.").model_copy(
+            update={"custom_metadata": {"role": "assistant"}}  # an agent's own words
+        ),
+        _obs("Stock check returned 95 units.", kind=ObservationKind.EVENT),  # not a message
+    ],
+)
+async def test_nothing_is_said_where_no_turn_is_kept(native, observation) -> None:
+    assert await native.said(observation, CTX) == []

@@ -1,5 +1,5 @@
 {
- "description": "Hard extraction cases: what must be stored, what must not, what an update must close (benchmark/extraction.py).",
+ "description": "Hard extraction cases: what must be stored, what must not, what an update must close (benchmark/extraction.py). The shared, moment and rule kinds (ADR 0047): text a speaker shares to be worked on and an instruction for the moment must not be held as the speaker's own (not_theirs); a rule the speaker gives must be held.",
  "cases": [
   {
    "id": "spread-1",
@@ -2596,6 +2596,290 @@
    "keep": [],
    "ask": [],
    "negative": true
+  },
+  {
+   "id": "shared-1",
+   "kind": "shared",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Here is one of our skills, can you tell me what it does?\n\n# Read-Only Mode\nUse this skill when the user wants to look at plans without changing them.\nNever call a tool that writes. Always tell the user which plan you read. Do not delete a plan in this mode.",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false,
+   "not_theirs": [
+    [
+     "never",
+     "tool",
+     "writes"
+    ],
+    [
+     "always",
+     "tell",
+     "plan"
+    ],
+    [
+     "delete",
+     "plan"
+    ]
+   ]
+  },
+  {
+   "id": "shared-2",
+   "kind": "shared",
+   "turns": [
+    {
+     "role": "user",
+     "text": "# Read-Only Mode\nUse this skill when the user wants to look at plans without changing them.\nNever call a tool that writes. Always tell the user which plan you read. Do not delete a plan in this mode.",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false,
+   "not_theirs": [
+    [
+     "never",
+     "tool",
+     "writes"
+    ],
+    [
+     "always",
+     "tell",
+     "plan"
+    ],
+    [
+     "delete",
+     "plan"
+    ]
+   ]
+  },
+  {
+   "id": "shared-3",
+   "kind": "shared",
+   "turns": [
+    {
+     "role": "user",
+     "text": "I am a demand planner at Acme Retail. My email is alex@example.com. I prefer weekly digests.",
+     "day": -3
+    },
+    {
+     "role": "assistant",
+     "text": "Noted.",
+     "day": -3
+    },
+    {
+     "role": "user",
+     "text": "Can you summarise this email from Priya?\n\nHi team, I am the regional manager at Castor Supply. My email is priya@example.com. I prefer daily digests over weekly ones.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "alex@example.com"
+    ],
+    [
+     "weekly",
+     "digest"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [
+    [
+     "alex@example.com"
+    ],
+    [
+     "demand",
+     "planner"
+    ],
+    [
+     "weekly",
+     "digest"
+    ]
+   ],
+   "ask": [],
+   "negative": false,
+   "not_theirs": [
+    [
+     "priya@example.com"
+    ],
+    [
+     "regional",
+     "manager"
+    ],
+    [
+     "daily",
+     "digest"
+    ]
+   ]
+  },
+  {
+   "id": "shared-4",
+   "kind": "shared",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Translate this notice into German for the store: \"Staff must always wear gloves. Never leave the cold room door open.\"",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false,
+   "not_theirs": [
+    [
+     "always",
+     "wear",
+     "gloves"
+    ],
+    [
+     "never",
+     "cold",
+     "room"
+    ]
+   ]
+  },
+  {
+   "id": "moment-1",
+   "kind": "moment",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Delete the three draft plans.",
+     "day": 0
+    },
+    {
+     "role": "assistant",
+     "text": "This deletes them for good. Do you confirm?",
+     "day": 0
+    },
+    {
+     "role": "user",
+     "text": "Yes. For now skip the confirmation, I have ten more to delete.",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false,
+   "not_theirs": [
+    [
+     "skip",
+     "confirmation"
+    ]
+   ]
+  },
+  {
+   "id": "moment-2",
+   "kind": "moment",
+   "turns": [
+    {
+     "role": "user",
+     "text": "This time answer in one line only.",
+     "day": 0
+    }
+   ],
+   "expect": [],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false,
+   "not_theirs": [
+    [
+     "one",
+     "line"
+    ]
+   ]
+  },
+  {
+   "id": "rule-1",
+   "kind": "rule",
+   "turns": [
+    {
+     "role": "user",
+     "text": "Always answer in German.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "always",
+     "answer",
+     "German"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "rule-2",
+   "kind": "rule",
+   "turns": [
+    {
+     "role": "user",
+     "text": "My rules for you:\n- Always use metric units.\n- Never show prices in USD.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "always",
+     "metric"
+    ],
+    [
+     "never",
+     "prices",
+     "USD"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
+  },
+  {
+   "id": "rule-3",
+   "kind": "rule",
+   "turns": [
+    {
+     "role": "user",
+     "text": "From now on, whenever I ask for a stock audit, give me a table.",
+     "day": 0
+    }
+   ],
+   "expect": [
+    [
+     "stock",
+     "audit",
+     "table"
+    ]
+   ],
+   "forbid": [],
+   "stale": [],
+   "keep": [],
+   "ask": [],
+   "negative": false
   }
  ]
 }
