@@ -7,6 +7,13 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service): an agent replaces a whole profile block only after it has read it
+
+`profile_edit` with an empty `old` replaced a block whatever it held, and a context no longer
+carries a block's every line. On a block that holds text it is now refused, and the refusal
+shows the text (`details.text`); the agent passes the text it replaces. A block that holds
+nothing is written as before.
+
 ### Changed (service): the profile says who the person is; their rules and preferences come where they apply, once
 
 The stored `user` block, sent with every context, was composed from every rule, preference

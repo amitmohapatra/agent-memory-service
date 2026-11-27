@@ -183,8 +183,9 @@ TOOLS: Final = (
     ),
     AgentTool(
         "profile_edit",
-        "Edit a pinned profile block: replace the exact old text with the new text (empty old "
-        "replaces the whole block). Profile blocks are part of every context.",
+        "Edit a pinned profile block: replace the exact old text with the new text. Empty old "
+        "writes a block that holds nothing yet; for one that holds text, the refusal shows it, "
+        "so pass the text you replace.",
         ProfileEditArgs,
     ),
     AgentTool(
@@ -284,6 +285,23 @@ class AgentTools:
 
     async def _profile_edit(self, ctx: MemoryExecutionContext, args: ProfileEditArgs) -> Any:
         async with self.uow_factory() as uow:
+            if not args.old:
+                # a whole block is replaced only by one who has read it: a context may not
+                # carry the block's every line (only who the person is; rules where they apply)
+                held = next(
+                    (
+                        b
+                        for b in await self.services.profile.blocks(uow, ctx)
+                        if b.block == args.block
+                    ),
+                    None,
+                )
+                if held is not None and held.text.strip():
+                    raise ValidationFailed(
+                        f"{args.block} holds text: pass the exact text to replace as old "
+                        "(all of it to replace the block)",
+                        details={"block": args.block, "text": held.text},
+                    )
             block = await self.services.profile.edit(uow, ctx, args.block, args.old, args.new)
             await uow.commit()
         return {"block": block.block, "text": block.text, "version": block.version}

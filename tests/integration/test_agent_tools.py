@@ -119,6 +119,14 @@ async def test_message_search_profile_and_tool_search_tools(container, uow_facto
     )
     assert written["text"] == "name: Ann" and edited["text"] == "name: Ann Lee"
     assert edited["version"] == written["version"] + 1
+    # a block that holds text is not replaced unread: the refusal shows what it holds
+    with pytest.raises(ValidationFailed) as refused:
+        await _call(container, "profile_edit", {"block": "user", "old": "", "new": "x"})
+    assert refused.value.details["text"] == "name: Ann Lee"
+    whole = await _call(
+        container, "profile_edit", {"block": "user", "old": "name: Ann Lee", "new": "name: Ann"}
+    )
+    assert whole["text"] == "name: Ann"
 
     hints = await _call(container, "tool_search", {"task": "order paper"})
     # nothing learned for this task: the tools that fit, and no plan (an absent key is none)
