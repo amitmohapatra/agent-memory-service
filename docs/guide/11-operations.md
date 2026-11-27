@@ -278,6 +278,15 @@ up to the new one, in place and while serving: compose runs it on every `up`
 A tenant that opts into `memory_restatement` restates earlier turns with
 `python -m memory_service.tools.restate --tenant <id> [--limit N] [--force]` (ADR 0027).
 
+**Clean-up after turning a model on.** Messages stored before a model read them were read by
+the word patterns: pasted text became its user's rules, and requests were kept as things they
+said. `python -m memory_service.tools.clean_up --tenant <id> [--user <id>] [--before
+YYYY-MM-DD] [--limit N]` reads them again with the model and reports what it would forget;
+`--apply` forgets it, through the same path as a person's "forget this". One model call per
+message, on the tenant's own policy and the author's key; run it again for the messages it
+counts as `unread`
+([ADR 0050](../adr/0050-what-was-stored-before-a-model-read-messages-is-read-again.md)).
+
 ---
 
 ## Observability

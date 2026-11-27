@@ -7,6 +7,21 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added (service): a clean-up of what was stored before a model read messages
+
+Reading new messages with a model (ADR 0047) changed nothing about what was stored before:
+a skill's text pasted into a chat was still its user's standing rule, "for now skip the
+consent stage" still a memory in every later conversation. `python -m
+memory_service.tools.clean_up --tenant <id> [--user <id>] [--before <day>] [--limit N]
+[--apply]` reads the stored messages again with the model, as ingest now would, and forgets
+what the word patterns made of the ones it says are a request or shared material - the turn
+as said, and the rules, preferences and attributes read from it - the way a person's own
+"forget this" does: the profile is rebuilt and a rule the forgotten one had replaced holds
+again. What the model itself reads from the same words stays (a rule given inside a
+request). Without `--apply` it only reports. It only removes; a message the model does not
+answer for is left as it is and counted
+([ADR 0050](docs/adr/0050-what-was-stored-before-a-model-read-messages-is-read-again.md)).
+
 ### Added (service): what is said for a period is kept until its last day, and no longer
 
 "For today only, use the outlet channel" was either kept for good (no model: the patterns

@@ -381,6 +381,12 @@ def said_by_a_person(memory: CanonicalMemory) -> bool:
     )
 
 
+def _made_from(memory: CanonicalMemory, observation: Observation) -> bool:
+    """Whether ``memory`` rests on ``observation``'s message."""
+    message = observation.message_id
+    return message is not None and any(ref.message_id == message for ref in memory.evidence)
+
+
 def _speaker(observation: Observation) -> str:
     """Who said a message: the agent for its own words, else the person."""
     if observation.agent_authored:
@@ -414,6 +420,8 @@ class Gaps:
     fills: list[tuple[MemoryCandidate, CanonicalMemory | None]] = field(default_factory=list)
     known: list[CanonicalMemory] = field(default_factory=list)
     said: list[MemoryCandidate] = field(default_factory=list)
+    #: the words of the message each of ``fills`` rests on, in their order
+    quotes: list[str] = field(default_factory=list)
     #: kept as said because the model never answered (``KEPT_UNREAD``)
     unread: bool = False
 
@@ -649,6 +657,20 @@ class ObservationPipeline:
             again_in_seconds=LATER[unread],
         )
 
+    async def reading(self, observation: Observation) -> Gaps | None:
+        """What the model reads from a stored message now, asked as ``run`` asks it (bound to
+        the message's author: their key pays, their tenant's policy decides) - and nothing is
+        written. ``None``: the message is not the model's to read. ``Gaps.unread``: it did
+        not answer. For re-reading what was stored before a model read messages
+        (``tools.clean_up``)."""
+        ctx = context_from_observation(observation)
+        prior = await self._prior_message(observation)
+        async with self.assist.bound(identity_of(ctx)):
+            try:
+                return await self._read(observation, ctx, prior, again=True)
+            except _UnansweredError:
+                return Gaps(unread=True)
+
     async def _read(
         self,
         observation: Observation,
@@ -656,6 +678,7 @@ class ObservationPipeline:
         prior: Observation | None,
         *,
         last: bool = False,
+        again: bool = False,
     ) -> Gaps | None:
         """What the model reads from a person's message, asked before any pattern reads it
         (``gapfill``): each candidate with the memory it claims to update or contradict, if
@@ -667,7 +690,9 @@ class ObservationPipeline:
         Where a model is allowed, no pattern stands in for it: a message by its shape not
         asked about is kept as said with nothing read; one the model does not answer for
         raises ``_UnansweredError`` (the caller reads it again later), or on the ``last``
-        try is kept as said, unread."""
+        try is kept as said, unread. ``again``: a stored message is read as it was the
+        first time - what was made from it is not among the memories the model is shown (it
+        adds nothing a memory holds, so it would read nothing from the message)."""
         said = getattr(self.provider, "said", None)
         if self.gapfill is None or said is None or not self.gapfill.wanted(observation, ctx):
             return None
@@ -679,14 +704,7 @@ class ObservationPipeline:
             recent = await self._recent(uow, observation, prior)
             if not worth_asking(split_sentences(observation.content), recent, speaker):
                 return Gaps(said=turns)
-            # where this message's memories are anchored, a profile fact's (the user's) too
-            anchors = [turn, turn.model_copy(update={"memory_type": MemoryType.USER})]
-            pool = await uow.memories.list_scope(
-                ctx.tenant_id,
-                scope_keys=sorted({scope_for(c, ctx).key() for c in anchors}),
-                memory_types=sorted({t.value for t in GAP_TYPES.values()}),
-                limit=POOL,
-            )
+            pool = await self._pool(uow, ctx, turn, None if not again else observation)
         known = await self.gapfill.nearest(observation.content, pool)
         read = await self.gapfill.fill(
             ctx.tenant_id,
@@ -711,7 +729,28 @@ class ObservationPipeline:
             )
             for f in read.fills
         ]
-        return Gaps(fills, known, turns if read.kept else [])
+        return Gaps(fills, known, turns if read.kept else [], [f.quote for f in read.fills])
+
+    @staticmethod
+    async def _pool(
+        uow: UnitOfWork,
+        ctx: MemoryExecutionContext,
+        turn: MemoryCandidate,
+        apart: Observation | None,
+    ) -> list[CanonicalMemory]:
+        """The speaker's memories the model's closest are chosen from: where this message's
+        are anchored, a profile fact's (the user's) too - without what was made from
+        ``apart``, a stored message being read again."""
+        anchors = [turn, turn.model_copy(update={"memory_type": MemoryType.USER})]
+        pool = await uow.memories.list_scope(
+            ctx.tenant_id,
+            scope_keys=sorted({scope_for(c, ctx).key() for c in anchors}),
+            memory_types=sorted({t.value for t in GAP_TYPES.values()}),
+            limit=POOL,
+        )
+        if apart is None:
+            return list(pool)
+        return [m for m in pool if not _made_from(m, apart)]
 
     @staticmethod
     def _unanswered(
