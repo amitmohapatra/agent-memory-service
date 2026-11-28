@@ -18,7 +18,13 @@ from memory_service.domain.errors import NotFound, ValidationFailed
 from memory_service.domain.instants import UtcDateTime
 from memory_service.modules.context.views import hints_view
 from memory_service.modules.retrieval.engine import PointInTime
-from memory_service.modules.retrieval.search import Order, SearchKind, Speaker, default_kinds
+from memory_service.modules.retrieval.search import (
+    DEFAULT_BY_TIME,
+    Order,
+    SearchKind,
+    Speaker,
+    default_kinds,
+)
 from memory_service.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -29,8 +35,13 @@ log = get_logger(__name__)
 #: Candidates ``tool_search`` weighs before it names the next tool.
 TOOL_SEARCH_K: Final = 8
 #: Items a search returns by default, and at most.
-DEFAULT_K: Final = 8
-MAX_K: Final = 20
+#: The most a search names (``k``): as deep as a context ranks memories for a request
+#: (``RetrievalSettings.memory_recall_k``).
+MAX_K: Final = 100
+#: What one search returns at most, in characters of text with the turns around each item:
+#: what a context's memories take at its default budget (8,000 tokens), so a search without
+#: ``k`` sees what a pushed context would, and no more.
+RESULT_CHARS: Final = 32_000
 #: Characters of one returned text.
 TEXT_CHARS: Final = 1000
 #: The tool the caller answers with its own toolbox (``toolbox`` on the call).
@@ -107,11 +118,13 @@ class MemorySearchArgs(_Args):
         description="with newest or oldest: only this conversation (default: every "
         "conversation of the user, this one included)",
     )
-    k: int = Field(
-        default=DEFAULT_K,
+    k: int | None = Field(
+        default=None,
         ge=1,
         le=MAX_K,
-        description=f"how many items (at most {MAX_K}): more for a request about several things",
+        description="how many items: leave it out for everything memory ranks for the request, "
+        "as deep as a context would carry it (best first); set it only to narrow (at most "
+        f"{MAX_K}; with order newest or oldest, {DEFAULT_BY_TIME} unless set)",
     )
 
 
@@ -335,7 +348,9 @@ class AgentTools:
             said_by=args.said_by,
             here=args.here,
         )
-        return [item.model_dump(mode="json", exclude_none=True) for item in found.items]
+        return within_chars(
+            [item.model_dump(mode="json", exclude_none=True) for item in found.items], RESULT_CHARS
+        )
 
     async def _memory_remember(self, ctx: MemoryExecutionContext, args: MemoryRememberArgs) -> Any:
         async with self.uow_factory() as uow:
@@ -407,3 +422,17 @@ class AgentTools:
             visibility=visibility,
         )
         return hints_view(hints)
+
+
+def within_chars(items: list[dict[str, Any]], budget: int) -> list[dict[str, Any]]:
+    """``items`` best first, as many as their text and the turns around them fit ``budget``
+    characters (always the first)."""
+    out: list[dict[str, Any]] = []
+    used = 0
+    for item in items:
+        size = sum(len(str(item.get(f) or "")) for f in ("text", "before", "after"))
+        if out and used + size > budget:
+            break
+        out.append(item)
+        used += size
+    return out

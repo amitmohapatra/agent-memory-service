@@ -66,6 +66,20 @@ def unverified_representation(metadata: Mapping[str, Any]) -> bool:
 #: user said are standing.
 #: A message kept as said, word for word (the turn itself).
 VERBATIM_TURN = "verbatim_turn"
+
+
+def speaker_of(subject: str | None, owner: str | None) -> str | None:
+    """Who said a memory, as a context line names them (``context_bundle._memory_line``):
+    ``assistant`` for an agent's reply, else the subject's user id (``user:caroline`` ->
+    ``caroline``; a turn shared with the tenant keeps no user id of its own). None when
+    neither tells."""
+    if (owner or "").startswith("agent:"):
+        return "assistant"
+    if (subject or "").startswith("user:"):
+        return (subject or "").split(":", 1)[1] or None
+    return None
+
+
 LASTING_CATEGORIES = frozenset({VERBATIM_TURN, "rule"})
 #: Kinds whose LONG_TERM memories are kept for good: what the user said about themselves.
 LASTING_TYPES = frozenset({MemoryType.USER, MemoryType.PREFERENCE})

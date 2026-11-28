@@ -369,6 +369,8 @@ class SearchItem(BaseModel):
     thread_id: str | None = None
     #: true when a later memory replaced this one (only ``as_of``/``known_at`` return those)
     superseded: bool | None = None
+    #: who said it: the person's id, or ``assistant`` for an agent's reply
+    speaker: str | None = None
     #: a turn of a conversation: the turn it replies to, and the reply to it (speaker: text)
     before: str | None = None
     after: str | None = None

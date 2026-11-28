@@ -1142,6 +1142,7 @@
     "kind": "Literal['memory', 'chunk', 'summary', 'episode', 'message', 'fact', 'belief'] (required)",
     "observed_on": "str | None = None",
     "page": "int | None = None",
+    "speaker": "str | None = None",
     "superseded": "bool | None = None",
     "text": "str (required)",
     "thread_id": "str | None = None"
@@ -1495,5 +1496,5 @@
    "signature": "() -> 'MemoryContext | None'"
   }
  },
- "version": "0.6.13"
+ "version": "0.6.14"
 }

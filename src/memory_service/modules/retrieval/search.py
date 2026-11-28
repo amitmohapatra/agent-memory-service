@@ -51,7 +51,12 @@ from memory_service.domain.enums import (
     TemporalStatus,
 )
 from memory_service.domain.graph import BOOKKEEPING_LAYERS, layer_for
-from memory_service.domain.memory import VERBATIM_TURN, CanonicalMemory, statement_kind_of
+from memory_service.domain.memory import (
+    VERBATIM_TURN,
+    CanonicalMemory,
+    speaker_of,
+    statement_kind_of,
+)
 from memory_service.domain.profile import PROFILE_MEMORY_TYPES
 from memory_service.domain.text import SENTENCE_BREAK
 from memory_service.modules.context.window import steps_list, turns, units
@@ -82,6 +87,8 @@ _ROLES: Final = {"user": MessageRole.USER, "assistant": MessageRole.ASSISTANT}
 #: What a search reads when the caller names no kinds. The order is the order the engine
 #: interleaves the per-kind rankings in, so document passages lead (as /v1/recall always did).
 DEFAULT_KINDS: Final[tuple[SearchKind, ...]] = ("chunk", "memory")
+#: How many messages a search by time returns when no limit is given.
+DEFAULT_BY_TIME: Final = 8
 #: The newest messages of the thread one search scores (an indexed, bounded read).
 HISTORY_SCAN: Final = 200
 #: The newest messages of the user's earlier conversations that share a word with the query
@@ -173,6 +180,11 @@ class SearchItem(BaseModel):
         "memory, the message that said it, an assistant reply the user's next message "
         "corrected, or an earlier conversation that holds nothing else of what its speaker "
         "said. Use the newer value; observed_on says when each was said.",
+    )
+    speaker: str | None = Field(
+        default=None,
+        description="who said it: the person's id, or assistant for an agent's reply (for "
+        "a memory read from a message, who said the message) - whose it is",
     )
     before: str | None = Field(
         default=None,
@@ -314,6 +326,9 @@ def candidate_item(c: Candidate, *, debug: bool, text_chars: int | None = None) 
         document_id=c.payload.get("document_id"),
         page=int(page) if isinstance(page, int | float) else None,
         thread_id=c.payload.get("thread_id") if c.kind == "episode" else None,
+        speaker=speaker_of(c.payload.get("subject"), c.payload.get("owner_principal"))
+        if c.kind == "memory"
+        else None,
         superseded=True
         if c.kind == "memory"
         and (c.payload.get("current") is False or c.payload.get("earlier_value"))
@@ -433,7 +448,7 @@ class Searcher:
         query: str,
         *,
         kinds: Sequence[SearchKind] = DEFAULT_KINDS,
-        limit: int,
+        limit: int | None,
         observed: ObservedRange | None = None,
         at: PointInTime | None = None,
         document_ids: Sequence[str] | None = None,
@@ -445,7 +460,14 @@ class Searcher:
     ) -> SearchResult:
         if order != "relevance":
             return await self._by_time(
-                ctx, order, said_by, here, observed, limit, debug=debug, text_chars=text_chars
+                ctx,
+                order,
+                said_by,
+                here,
+                observed,
+                limit or DEFAULT_BY_TIME,
+                debug=debug,
+                text_chars=text_chars,
             )
         wanted: set[SearchKind] = set(kinds)
         ranked = [k for k in kinds if k != "message"]

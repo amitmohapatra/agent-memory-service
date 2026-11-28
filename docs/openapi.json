@@ -6981,6 +6981,18 @@
             "description": "The 1-based page of the document it is on, when the document has pages.",
             "title": "Page"
           },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "who said it: the person's id, or assistant for an agent's reply (for a memory read from a message, who said the message) - whose it is",
+            "title": "Speaker"
+          },
           "superseded": {
             "anyOf": [
               {

@@ -7,6 +7,18 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service, SDK 0.6.14): a search says who said each item and returns what a context would carry
+
+- **`speaker` on a search item** (`memory_search`, `/v1/recall`; SDK `SearchItem.speaker`):
+  the person's id, or `assistant` for an agent's reply, as a context line names them. An
+  agent searching on demand gave Melanie's "I'm a fan of Bach and Mozart" to Caroline and
+  said why: "the entry doesn't name the speaker".
+- **`memory_search` without `k` returns what memory ranks for the request, as deep as a
+  context carries it** (up to 100 items, within 32,000 characters with the turns around
+  each); `k` only narrows (at most 100, was 20; the default was 8). On LoCoMo, an agent
+  searching on demand saw 20 lines in two searches where the pushed context carried a
+  hundred, and found every piece of a many-part answer for 49% of questions against 81%.
+
 ### Changed (service): what a model read from a message finds the message (ADR 0052)
 
 - **A reading found without its turn comes as the turn kept as said**, in the reading's

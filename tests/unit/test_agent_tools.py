@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from memory_service.modules.agent_tools.service import TOOLS, AgentTools
+from memory_service.modules.agent_tools.service import MAX_K, TOOLS, AgentTools
 from memory_service.modules.retrieval.engine import Candidate, _observed_within
 from memory_service.modules.retrieval.search import candidate_item
 
@@ -28,7 +28,7 @@ def test_the_set_is_final_and_every_schema_is_self_contained() -> None:
         assert spec["description"] and spec["description"][0].isupper()
     by_name = {s["name"]: s["input_schema"] for s in specs}
     search = by_name["memory_search"]
-    assert search["required"] == ["query"] and search["properties"]["k"]["maximum"] == 20
+    assert search["required"] == ["query"] and search["properties"]["k"]["maximum"] == MAX_K
     assert "message" in str(search["properties"]["kinds"]), "the history is a kind of search"
     assert by_name["memory_update"]["required"] == ["id", "content"]
     assert by_name["memory_forget"]["required"] == ["id"]

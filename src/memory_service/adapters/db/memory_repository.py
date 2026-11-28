@@ -38,6 +38,7 @@ from memory_service.domain.memory import (
     CanonicalMemory,
     Scope,
     TemporalState,
+    speaker_of,
 )
 from memory_service.domain.subjects import is_identity
 from memory_service.ports.repositories import Neighbour
@@ -1030,15 +1031,9 @@ class SqlMemoryRepository:
 
 
 def _neighbour(subject: str | None, owner: str | None, content: str, keys: Any) -> Neighbour:
-    """A turn around a found one, named by who said it as the context names a turn's speaker
-    (``context_bundle._memory_line``: the subject's user id; a turn shared with the tenant
-    keeps no user id of its own), or ``assistant`` for an agent's reply."""
-    if (owner or "").startswith("agent:"):
-        speaker = "assistant"
-    else:
-        speaker = (subject or "").split(":", 1)[1] if (subject or "").startswith("user:") else ""
+    """A turn around a found one, named by who said it (``speaker_of``)."""
     return Neighbour(
-        speaker=speaker,
+        speaker=speaker_of(subject, owner) or "",
         text=content,
         keys=[str(k) for k in keys] if isinstance(keys, list) else [],
     )

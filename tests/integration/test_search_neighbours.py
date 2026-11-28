@@ -72,3 +72,42 @@ async def test_a_neighbour_names_who_said_it(container, uow_factory) -> None:
     found = await tools.call(U2, "memory_search", {"query": "old tram tour", "k": 5})
     [turn] = [i for i in found if "tram" in i["text"]]
     assert turn["before"] == f"{U1.user_id}: The team offsite is in Lisbon in May.", turn
+
+
+async def test_a_found_turn_names_who_said_it(container, uow_factory) -> None:
+    """A found turn says who said it, as the context's line does ("caroline: ..."): an
+    agent searching on demand gave Melanie's "I'm a fan of Bach and Mozart" to Caroline, and
+    said why - "the entry doesn't name the speaker"."""
+    from memory_service.domain.enums import Visibility
+    from memory_service.domain.observation import ProcessingHints
+    from tests.integration.test_memory import U1, U2, _observe
+
+    shared = ProcessingHints(visibility=Visibility.TENANT)
+    await _observe(container, uow_factory, U1, "I'm a fan of Bach and Mozart.", hints=shared)
+    tools = container.services["agent_tools"]
+    found = await tools.call(U2, "memory_search", {"query": "Bach and Mozart", "k": 5})
+    [turn] = [i for i in found if "Bach" in i["text"]]
+    assert turn["speaker"] == U1.user_id, turn
+
+
+async def test_a_search_without_k_returns_what_a_context_would_carry(
+    container, uow_factory
+) -> None:
+    """Without ``k`` a search returns what memory ranks for the request, as deep as a context
+    would carry it - not eight items. An agent searching on demand saw 20 lines in two
+    searches where the pushed context carried a hundred, and found every piece of a
+    many-part answer half as often."""
+    from memory_service.domain.enums import Visibility
+    from memory_service.domain.observation import ProcessingHints
+    from tests.integration.test_memory import U1, _observe
+
+    shared = ProcessingHints(visibility=Visibility.TENANT)
+    for n in range(30):
+        await _observe(
+            container, uow_factory, U1, f"Trip note {n}: we hiked trail number {n}.", hints=shared
+        )
+    tools = container.services["agent_tools"]
+    narrowed = await tools.call(U1, "memory_search", {"query": "hiking trips", "k": 5})
+    whole = await tools.call(U1, "memory_search", {"query": "hiking trips"})
+    assert len(narrowed) == 5
+    assert len([i for i in whole if "Trip note" in i["text"]]) >= 25, len(whole)
