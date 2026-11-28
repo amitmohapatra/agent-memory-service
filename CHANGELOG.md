@@ -7,6 +7,17 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service): a context says how to read what it shows
+
+- **A legend before the memories** ("How to read memory"): what each handle is (`[m1]` a
+  memory, `[s1]` a summary, `[d1]` a document passage, `[h1]` an earlier value), what a memory
+  line holds (the day it was said, who said it, what was said) and what each marker shown
+  means (worked-out dates and `a..b` ranges, "model-extracted, unverified", "summary created",
+  "earlier value, since replaced") - only for what that context carries, from the table that
+  makes the handles. None of it was explained; a model had to guess what "[h1]" was.
+- **A context line names its speaker by the rule a search item uses** (`speaker_of`): an
+  agent's reply is `assistant`, not the id of the user it answered.
+
 ### Changed (service): `memory_search` keeps one speaker's words in a ranked search too
 
 - **`said_by` takes another person's id** (as items name them in `speaker`) as well as

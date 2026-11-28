@@ -27,6 +27,7 @@ from memory_service.domain.grounding import GroundingReport
 from memory_service.domain.memory import (
     aggregate_statement,
     resolved_dates,
+    speaker_of,
     unverified_representation,
 )
 from memory_service.domain.predicates import is_multi_valued
@@ -55,6 +56,16 @@ _FORBIDDEN = "a standing rule of the user forbids {tool} here"
 #: What produced ``ContextItem.score``; the scales are not comparable across kinds.
 ScoreKind = Literal["fusion", "exact"]
 #: Handle prefix -> the bundle list it numbers (``ContextBundle.handles``).
+#: What each handle is (keyed as ``HANDLE_PREFIXES``), said in a context's legend.
+HANDLE_MEANINGS: dict[str, str] = {
+    "m": "a memory: something said or learned",
+    "f": "a fact from the knowledge graph",
+    "s": "a summary",
+    "d": "a passage of a document",
+    "h": "an earlier value, since replaced",
+}
+#: The heading of a context's legend: how to read what it shows (``legend_section``).
+LEGEND_HEADING = "How to read memory"
 HANDLE_PREFIXES: dict[str, str] = {
     "m": "memories",
     "f": "graph_facts",
@@ -391,8 +402,7 @@ def _memory_line(m: Any, ref: str, *, body: str | None = None) -> str:
     is printed as it is stored.
     """
     day, weekday = _observed(m)
-    subject = str(m.attributes.get("subject") or "")
-    who = subject.split(":", 1)[1] if subject.startswith("user:") else ""
+    who = speaker_of(m.attributes.get("subject"), m.attributes.get("owner_principal")) or ""
     parts = (
         f"- [{ref}]",
         "model-extracted, unverified; source speaker"
@@ -599,6 +609,7 @@ class ContextBundle(BaseModel):
         parts += earlier_chats_section(self.earlier_chats)
         repeated = self.redundant()
         memories = [m for m in self.memories if m.item_id not in repeated]
+        parts += legend_section(memories, self.summaries, self.knowledge, self.history)
         if memories:
             # ``memories`` is the retrieval ranking, best first; the timeline below is a
             # sorted copy, so both orders are available and neither is thrown away.
@@ -654,6 +665,61 @@ class ContextBundle(BaseModel):
             # window carries (and, in the messages form, the caller replays)
             parts.append(f"## {EVIDENCE_HEADING}\n{self.evidence.status}")
         return "\n\n".join(parts)
+
+
+def legend_section(
+    memories: Sequence[ContextItem],
+    summaries: Sequence[ContextItem],
+    knowledge: Sequence[ContextItem],
+    history: Sequence[ContextItem],
+) -> list[str]:
+    """How to read what the context shows, said only for what it carries: what each handle
+    is, what a memory line holds, and what each marker shown means. None when it shows no
+    memory."""
+    shown = {"m": memories, "s": summaries, "d": knowledge, "h": history}
+    kinds = [prefix for prefix, items in shown.items() if items]
+    if not kinds:
+        return []
+    lines = [
+        "- "
+        + "; ".join(f"[{prefix}1] {HANDLE_MEANINGS[prefix]}" for prefix in kinds)
+        + ": cite it by that id, which the memory tools take."
+    ]
+    lined = [*memories, *history]
+    if lined:
+        lines.append(
+            "- A memory line: the day it was said (year-month-day, weekday), who said it "
+            "(their id; assistant for an agent's reply), what was said."
+        )
+    lines += [note for note, shows in _markers(lined) if shows]
+    return [f"## {LEGEND_HEADING}\n" + "\n".join(lines)]
+
+
+def _markers(lined: Sequence[ContextItem]) -> list[tuple[str, bool]]:
+    """Each marker a memory line can carry, and whether one of ``lined`` carries it."""
+    return [
+        (
+            "- In brackets after it: the relative dates it names, worked out (a..b is from a "
+            "to b, both days included).",
+            any(m.attributes.get("dated_mentions") for m in lined),
+        ),
+        (
+            "- model-extracted, unverified: a model read it from a message; it was not said "
+            "in those words.",
+            any(unverified_representation(m.attributes) for m in lined),
+        ),
+        (
+            "- summary created / sources through: when a summary of messages was made, and "
+            "the last message it covers.",
+            any(
+                m.attributes.get("source_observed_to") or m.attributes.get("derived") for m in lined
+            ),
+        ),
+        (
+            "- (earlier value, since replaced): what it said is no longer current.",
+            any(m.attributes.get("earlier_value") for m in lined),
+        ),
+    ]
 
 
 def _contained(memories: Sequence[ContextItem], out: set[str]) -> set[str]:
