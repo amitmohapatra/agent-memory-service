@@ -420,9 +420,8 @@ async def test_a_belief_that_loses_one_of_its_sources_is_hidden_at_once_and_rebu
     assert left[ohio.belief_id].current  # a belief the forget did not touch stays
     assert after != before
     assert progress is not None and progress.last_consolidated_at is None  # rebuilt next
-    # before any job runs (its point still in the index): not on the page, not found
+    # before any job runs (its point still in the index): not found
     builder = container.services["context_builder"]
-    bundle = await builder.build(ASKER, "What are Caroline's cats called?")
     found = await container.services["retrieval"].retrieve(
         ASKER, "cats Luna Sol", kinds=("belief",)
     )
