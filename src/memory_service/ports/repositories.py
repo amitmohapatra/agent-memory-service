@@ -442,6 +442,12 @@ class MemoryRepository(Protocol):
         turn), by the id replied to. One indexed read each, live turns only."""
         ...
 
+    async def turns_of(self, tenant_id: str, messages: Sequence[str]) -> dict[str, str]:
+        """The memory id of the live turn kept as said of each of ``messages`` (message or
+        observation ids) that has one, by that id: where a model's reading of a message
+        finds the message (``RetrievalEngine._said_for_readings``). One indexed read."""
+        ...
+
     async def add(self, memory: CanonicalMemory, *, visibility_keys: Sequence[str]) -> None: ...
     async def current_with_hash(
         self, tenant_id: str, *, scope_key: str, owner_principal: str, normalized_hash: str

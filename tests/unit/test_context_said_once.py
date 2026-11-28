@@ -58,18 +58,20 @@ def test_a_profile_field_states_its_value() -> None:
     assert bundle.memories == []
 
 
-def test_a_message_kept_as_said_goes_when_what_a_model_read_from_it_is_shown() -> None:
-    """A message kept as said and what a model read from it say one thing: the reading is
-    shown, the message is not - and a message nothing was read from stays."""
+def test_what_a_model_read_from_a_message_goes_when_the_message_is_shown_as_said() -> None:
+    """A message kept as said and what a model read from it say one thing: the message is
+    shown as said, the reading is not (the turn holds every reading of it whole, as ranking
+    lets it stand for the statement, ``memory_ranking._standing_for``; LongMemEval: the
+    round, found by its facts, is what is read) - and a reading of a message not shown
+    stays."""
     read = _item("mem_read", ROLE, "msg_1", category="attribute", provider="llm")
     turn = _item("mem_turn", "Hi, I'm Priya. I run allocation for the Northeast district.",
                  "msg_1", category="verbatim_turn")  # fmt: skip
-    replied = _item("mem_replied", "Hi, I'm Priya. (in reply to: Hello!)", "msg_1",
-                    category="referred_turn")  # fmt: skip
-    other = _item("mem_other", "Boston sells nine a week.", "msg_2", category="verbatim_turn")
-    bundle = said_once(_bundle([turn, read, replied, other]))
-    assert [m.item_id for m in bundle.memories] == ["mem_read", "mem_other"]
-    assert bundle.token_estimate == 80
+    other = _item("mem_other", "Boston sells nine a week.", "msg_2", category="source_fact",
+                  provider="llm")  # fmt: skip
+    bundle = said_once(_bundle([read, turn, other]))
+    assert [m.item_id for m in bundle.memories] == ["mem_turn", "mem_other"]
+    assert bundle.token_estimate == 90
 
 
 def test_a_statement_listed_in_the_profile_takes_its_message_with_it() -> None:

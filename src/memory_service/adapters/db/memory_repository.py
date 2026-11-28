@@ -334,6 +334,25 @@ class SqlMemoryRepository:
                 after.setdefault(replied, _neighbour(user_id, content, keys))
         return before, after
 
+    async def turns_of(self, tenant_id: str, messages: Sequence[str]) -> dict[str, str]:
+        if not messages:
+            return {}
+        rows = await self.s.execute(
+            text(
+                "SELECT coalesce(ref ->> 'message_id', ref ->> 'source_id'), m.memory_id "
+                "FROM memories m, jsonb_array_elements(m.evidence::jsonb) AS ref "
+                "WHERE m.tenant_id = :tenant AND m.deleted_at IS NULL "
+                "AND m.system_metadata::jsonb ->> 'category' = :category "
+                "AND coalesce(ref ->> 'message_id', ref ->> 'source_id') = ANY(:ids) "
+                "ORDER BY m.memory_id"
+            ),
+            {"tenant": tenant_id, "category": VERBATIM_TURN, "ids": list(messages)},
+        )
+        out: dict[str, str] = {}
+        for message, memory_id in rows.all():
+            out.setdefault(message, memory_id)
+        return out
+
     async def get_many(self, tenant_id: str, memory_ids: Sequence[str]) -> list[CanonicalMemory]:
         if not memory_ids:
             return []

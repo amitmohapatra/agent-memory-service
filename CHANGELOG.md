@@ -7,6 +7,14 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service): what a model read from a message finds the message (ADR 0052)
+
+- **A reading found without its turn comes as the turn kept as said**, in the reading's
+  place, and a context shows the message as said rather than its readings. A context with
+  the model on carried 32 readings in 136 lines ("model-extracted, unverified"), three of
+  them one thing said twice, while the turns that said them whole were left out; and
+  `said_once` dropped a turn when a reading of it was shown, the opposite of ranking's rule.
+
 ### Added (service, SDK 0.6.13): a found turn comes with the conversation around it
 
 - **`before` and `after` on a search item** (`memory_search`, `/v1/recall`; SDK

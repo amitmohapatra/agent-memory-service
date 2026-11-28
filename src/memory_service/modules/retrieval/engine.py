@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import itertools
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import Any
+from typing import Any, Final
 
 from memory_service.config.constants import RetrievalSettings, derived_k
 from memory_service.domain import glossary
@@ -491,6 +491,7 @@ class RetrievalEngine:
                 candidates = await self._expand_derived_sources(
                     ctx, candidates, visibility, diagnostics
                 )
+                candidates = await self._said_for_readings(ctx, candidates, visibility, diagnostics)
                 if not at and not selected_documents and SECOND_HOP:
                     with timings.stage("second_hop"):
                         candidates = await self._second_hop(
@@ -571,6 +572,44 @@ class RetrievalEngine:
         additions = not_in_hand(additions, candidates)
         diagnostics["derived_sources"] = len(additions)
         return [*candidates, *additions]
+
+    async def _said_for_readings(
+        self,
+        ctx: MemoryExecutionContext,
+        candidates: list[Candidate],
+        visibility: VisibilitySpecification,
+        diagnostics: dict[str, Any],
+    ) -> list[Candidate]:
+        """What a model read from a message is a key to the message, not its stand-in: a
+        reading found without its turn comes as the turn kept as said, in the reading's place
+        and at its score, the reading among its ``duplicates`` - as ranking lets the turn
+        stand for the statement when it found both (``memory_ranking.statements``).
+        LongMemEval: facts as keys find the round; the round is what is read. A reading
+        whose message has no turn the reader may see stays; an exact lookup keeps what it
+        named. One indexed read and one batched fetch."""
+        if not any(_read_from(c) for c in candidates):
+            return candidates
+        held = _turns_held(candidates)
+        wanted = {message for c in candidates for message in _read_from(c) if message not in held}
+        if wanted:
+            async with self.uow_factory() as uow:
+                ids = await uow.memories.turns_of(ctx.tenant_id, sorted(wanted))
+                found = await uow.memories.get_many(ctx.tenant_id, list(set(ids.values())))
+            fetched = {
+                m.memory_id: m
+                for m in found
+                if m.temporal.status.value == "CURRENT"
+                and visibility.allows(m.tenant_id, m.system_metadata.get("visibility_keys", []))
+            }
+            held |= {
+                message: memory_candidate(fetched[mid], retriever="said_for_reading", score=0.0)
+                for message, mid in ids.items()
+                if mid in fetched
+            }
+        out, swapped = _turns_in_place(candidates, held)
+        if swapped:
+            diagnostics["said_for_readings"] = swapped
+        return out
 
     async def _second_hop(
         self,
@@ -1103,6 +1142,75 @@ class RetrievalEngine:
                 update={"must_any": {**flt.must_any, "document_id": list(document_ids)}}
             )
         return collection, flt
+
+
+#: The categories of a message kept as said: a turn, and a referring turn kept with the answer
+#: it refers to (``memory.referred``).
+SAID_AS: Final = frozenset({memory_ranking.TURN, memory_ranking.REFERRED})
+
+
+def _read_from(candidate: Candidate) -> tuple[str, ...]:
+    """The messages a model's reading was read from, or () for anything else: a turn, a
+    pattern's cut, a memory derived from memories, an exact lookup, a reading with any
+    source that is not a message."""
+    payload = candidate.payload
+    refs = payload.get("source_refs") or []
+    if (
+        candidate.kind != "memory"
+        or payload.get("provider") != "llm"
+        or payload.get("category") in SAID_AS
+        or is_derived(candidate)
+        or "exact" in candidate.retrievers
+        or not refs
+        or any(ref.get("source_type") != "message" or not ref.get("source_id") for ref in refs)
+    ):
+        return ()
+    return tuple(str(ref["source_id"]) for ref in refs)
+
+
+def _turns_held(candidates: Sequence[Candidate]) -> dict[str, Candidate]:
+    """The turns kept as said among ``candidates``, by each message they keep."""
+    return {
+        str(ref["source_id"]): c
+        for c in candidates
+        if c.kind == "memory" and c.payload.get("category") in SAID_AS
+        for ref in c.payload.get("source_refs") or []
+        if ref.get("source_type") == "message" and ref.get("source_id")
+    }
+
+
+def _turns_in_place(
+    candidates: Sequence[Candidate], turns: Mapping[str, Candidate]
+) -> tuple[list[Candidate], int]:
+    """``candidates`` with each reading whose every message has a turn in ``turns`` replaced
+    by those turns, at the first place either stood and the reading's score when it came
+    first, the reading named among each turn's ``duplicates``; each turn once. Returns the
+    list and how many readings went."""
+    placed: dict[str, int] = {}
+    out: list[Candidate] = []
+    swapped = 0
+
+    def put(turn: Candidate, *, score: float, reading: str | None) -> None:
+        at = placed.get(turn.record_id)
+        if at is None:
+            placed[turn.record_id] = len(out)
+            out.append(turn if turn.score else replace(turn, score=score))
+            at = placed[turn.record_id]
+        if reading is not None:
+            twins = [*(out[at].payload.get("duplicates") or ()), reading]
+            out[at] = replace(out[at], payload={**out[at].payload, "duplicates": twins})
+
+    for c in candidates:
+        messages = _read_from(c)
+        if messages and all(m in turns for m in messages):
+            for m in messages:
+                put(turns[m], score=c.score, reading=c.record_id)
+            swapped += 1
+        elif c.kind == "memory" and c.payload.get("category") in SAID_AS:
+            put(c, score=c.score, reading=None)
+        else:
+            out.append(c)
+    return out, swapped
 
 
 def _forms_of(candidate: Candidate) -> list[str]:
