@@ -41,11 +41,7 @@ def test_the_set_is_final_and_every_schema_is_self_contained() -> None:
         for name, prop in spec["input_schema"]["properties"].items():
             assert "title" not in prop and prop.get("default", 0) is not None, (spec["name"], name)
             assert {"type": "null"} not in prop.get("anyOf", []), (spec["name"], name)
-    assert search["properties"]["time_from"] == {
-        "description": "observed since",
-        "format": "date-time",
-        "type": "string",
-    }
+    assert search["properties"]["time_from"]["format"] == "date-time"
 
 
 def test_a_time_window_keeps_only_what_was_observed_inside_it() -> None:
@@ -79,3 +75,17 @@ def test_an_item_is_what_a_caller_uses_and_cites() -> None:
         "page": 4,
     }
     assert candidate_item(c, debug=True).debug["score"] == 0.3  # type: ignore[index]
+
+
+def test_every_tool_says_what_each_argument_and_each_value_gives() -> None:
+    """The model learns what memory holds from these descriptions alone: every argument says
+    what it does, and every value an argument may take (each kind, memory kind, scope and
+    order) is named in its description with what it gives, so a model can pick by need."""
+    for spec in AgentTools.specs():
+        assert len(spec["description"]) >= 120, (spec["name"], "say when to use it, and not")
+        for name, prop in spec["input_schema"]["properties"].items():
+            text = prop.get("description", "")
+            assert len(text) >= 20, (spec["name"], name, "say what it takes and gives")
+            values = prop.get("enum") or prop.get("items", {}).get("enum") or []
+            missing = [v for v in values if str(v) not in text]
+            assert not missing, (spec["name"], name, "explain each value", missing)

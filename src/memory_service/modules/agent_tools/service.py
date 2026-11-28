@@ -50,7 +50,7 @@ _VISIBILITY: Final = {
     "group": Visibility.AGENT_GROUP,
     "workspace": Visibility.WORKSPACE,
 }
-_ID: Final = "a memory id, or its handle in the context ([m3] -> m3)"
+_ID: Final = "the memory's id (mem_...) from a search, or its handle in the context ([m3] -> m3)"
 
 
 class _Args(BaseModel):
@@ -58,22 +58,39 @@ class _Args(BaseModel):
 
 
 class MemorySearchArgs(_Args):
-    query: str = Field(..., min_length=1, max_length=2000, description="what to look for")
+    query: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        description="what to look for, in words: the request's own words first, then other "
+        "words for each piece (by meaning; names, codes and numbers match exactly)",
+    )
     kinds: list[SearchKind] | None = Field(
         default=None,
-        description="memory, chunk (document passages), summary, episode (earlier "
-        "conversations), message (what was said, here and in earlier conversations, your "
-        "answers too), fact (relations the knowledge graph holds of what the query names), "
-        "belief (what memory concluded about a person, current values only); default memory "
-        "and chunk",
+        description="memory: what was learned or stated - facts, decisions, rules, preferences. "
+        "message: what was said word for word, here and in earlier conversations, your own "
+        "answers too ('what did I ask yesterday'). episode: an earlier conversation as a whole "
+        "('what did we discuss about X'). fact: relations between people and things the "
+        "knowledge graph holds of what the query names; a 'why' question reads the causal "
+        "ones first ('what drove the drop'). belief: what memory concluded about a person, "
+        "current values only ('where does she work now'). chunk: document passages. summary: "
+        "document summaries. Default memory and chunk.",
     )
-    time_from: UtcDateTime | None = Field(default=None, description="observed since")
-    time_to: UtcDateTime | None = Field(default=None, description="observed until")
+    time_from: UtcDateTime | None = Field(
+        default=None, description="only what was said or seen since this moment (ISO 8601)"
+    )
+    time_to: UtcDateTime | None = Field(
+        default=None, description="only what was said or seen until this moment (ISO 8601)"
+    )
     as_of: UtcDateTime | None = Field(
-        default=None, description="what was true at this moment (includes replaced memories)"
+        default=None,
+        description="what was true at this moment, values replaced since included ('what was "
+        "her address in March')",
     )
     known_at: UtcDateTime | None = Field(
-        default=None, description="what had been learned by this moment"
+        default=None,
+        description="only what had been learned by this moment ('what did we know before "
+        "the meeting')",
     )
     order: Order = Field(
         default="relevance",
@@ -81,29 +98,59 @@ class MemorySearchArgs(_Args):
         "said, whatever the query - the last or the first thing said",
     )
     said_by: Speaker | None = Field(
-        default=None, description="with newest or oldest: only the user's or only your messages"
+        default=None,
+        description="with newest or oldest: user for only what the person said ('what did I "
+        "ask last'), assistant for only what you answered ('what did you tell me last')",
     )
     here: bool = Field(
         default=False,
         description="with newest or oldest: only this conversation (default: every "
         "conversation of the user, this one included)",
     )
-    k: int = Field(default=DEFAULT_K, ge=1, le=MAX_K)
+    k: int = Field(
+        default=DEFAULT_K,
+        ge=1,
+        le=MAX_K,
+        description=f"how many items (at most {MAX_K}): more for a request about several things",
+    )
 
 
 class MemoryRememberArgs(_Args):
-    content: str = Field(..., min_length=1, max_length=4000, description="the statement")
-    kind: MemoryKind = Field(default="SEMANTIC")
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=4000,
+        description="the note, one statement, kept word for word: say who and what in full "
+        "('Option for SKU-2210: move 22 units from Hartford to Boston'), not 'that one'",
+    )
+    kind: MemoryKind = Field(
+        default="SEMANTIC",
+        description="what it is: SEMANTIC a fact; PREFERENCE how the person wants things done; "
+        "EPISODIC something that happened, with when; PROCEDURAL steps that worked; TASK "
+        "something to do or decided to do; USER who the person is; TOOL what a tool needs or "
+        "returned; OUTCOME how a task ended",
+    )
     scope: MemoryScope = Field(
         default="user",
-        description="who may read it: user, agent (this agent for this user), run, thread, "
-        "group (the agent group), workspace",
+        description="who may read it later: user (this person, with any agent); agent (only "
+        "this agent, for this person); run (this run only); thread (this conversation only); "
+        "group (the agents of this agent group); workspace (everyone in the person's team)",
+    )
+    valid_to: UtcDateTime | None = Field(
+        default=None,
+        description="when it stops holding, for something said for a period ('for this week "
+        "only': the end of that week, ISO 8601); after it the note is no longer found",
     )
 
 
 class MemoryUpdateArgs(_Args):
     id: str = Field(..., min_length=1, max_length=200, description=_ID)
-    content: str = Field(..., min_length=1, max_length=4000, description="the new statement")
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=4000,
+        description="the statement that replaces it, whole (not only what changed)",
+    )
 
 
 class MemoryForgetArgs(_Args):
@@ -112,16 +159,32 @@ class MemoryForgetArgs(_Args):
 
 class ProfileEditArgs(_Args):
     block: str = Field(
-        ..., max_length=60, description="user, agent or workspace, optionally .<name>"
+        ...,
+        max_length=60,
+        description="which pinned block: user (who the person is), agent (this agent's own "
+        "notes), workspace (the team's), optionally .<name> for a named block of it",
     )
     old: str = Field(
-        default="", max_length=4000, description="the exact text to replace; empty: all of it"
+        default="",
+        max_length=4000,
+        description="the exact text to replace, copied from the block; empty only for a "
+        "block that holds nothing yet (for one that holds text the refusal shows it)",
     )
-    new: str = Field(..., max_length=4000)
+    new: str = Field(
+        ...,
+        max_length=4000,
+        description="the text that takes its place; empty removes the old text",
+    )
 
 
 class ToolSearchArgs(_Args):
-    task: str = Field(..., min_length=1, max_length=2000, description="the task, in words")
+    task: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        description="the task, in words, with the values it names ('reorder SKU-2210 for "
+        "Boston from Acme')",
+    )
 
 
 Handler = Callable[[MemoryExecutionContext, Any], Awaitable[Any]]
@@ -160,39 +223,58 @@ def lean_schema(schema: dict[str, Any]) -> dict[str, Any]:
 TOOLS: Final = (
     AgentTool(
         "memory_search",
-        "Search what is remembered for this user, agent and conversation, and the documents "
-        "they may read. Returns items with id, kind, text and observed_on; an item a later "
-        "statement replaced is marked superseded. For the last or the first thing said (a "
-        "question, an answer) use order newest or oldest: it reads the messages by time.",
+        "Search this person's long-term memory, their earlier conversations and the documents "
+        "they may read. Use it when the answer depends on something said, decided or uploaded "
+        "before that your context does not show; not for what can change now (a stock "
+        "figure, a price, a status, availability): ask your own tools for that. Returns items "
+        "(id, kind, text, observed_on; superseded when a later statement replaced it): cite "
+        "an item by its id. Pick kinds by what you need (see kinds): what was learned, what "
+        "was said word for word, an earlier conversation, a relation, what memory concluded "
+        "about a person, a document. For the last or first thing said use order newest or "
+        "oldest; for what was true at a past moment, as_of; for a period, time_from and "
+        "time_to. A request about several things is answered from pieces said at different "
+        "times: search for each piece, and again in other words, until nothing new comes "
+        "back.",
         MemorySearchArgs,
     ),
     AgentTool(
         "memory_remember",
-        "Remember a statement verbatim: facts, preferences and decisions worth keeping.",
+        "Note something for later, verbatim: a decision you made, an outcome, a value you "
+        "worked out, or what the person asked you to note. What the person says in the chat "
+        "is kept and read into memory on its own: do not restate it here, it would be stored "
+        "twice.",
         MemoryRememberArgs,
     ),
     AgentTool(
         "memory_update",
-        "Replace a memory with a new statement; the old one stays in its history. Only a "
-        "memory you wrote: what the user said is theirs (use memory_remember for your note).",
+        "Replace a note of yours with a corrected one, when what it says is no longer right "
+        "(a decision changed, a value was wrong). The old one stays in its history (found "
+        "with memory_search as_of a moment before). Only a memory you wrote: what the person "
+        "said is theirs - when they correct themselves, their new words are kept on their own.",
         MemoryUpdateArgs,
     ),
     AgentTool(
         "memory_forget",
-        "Forget a memory you wrote: it is no longer retrieved. What the user said is theirs.",
+        "Forget a note of yours that should not be used again (wrong, or asked to be dropped): "
+        "it is no longer found or attached. Only a memory you wrote: what the person said is "
+        "theirs to forget, through the application, not through you.",
         MemoryForgetArgs,
     ),
     AgentTool(
         "profile_edit",
-        "Edit a pinned profile block: replace the exact old text with the new text. Empty old "
-        "writes a block that holds nothing yet; for one that holds text, the refusal shows it, "
-        "so pass the text you replace.",
+        "Edit a pinned profile block - text that goes with every request (the person's name, "
+        "role, team, language; this agent's standing notes) - when the person tells you to "
+        "change it or it is plainly out of date. Replace the exact old text with the new; a "
+        "block that holds text is never overwritten blind (the refusal shows its text).",
         ProfileEditArgs,
     ),
     AgentTool(
         TOOL_SEARCH,
-        "Which of your tools fit a task, best first, each with a 0-1 confidence, the argument "
-        "values already known and the ones still missing; the next step of the learned plan.",
+        "Which of your own tools fit a task, best first: each with a 0-1 confidence, the "
+        "argument values already known (from memory and the conversation), the ones still "
+        "missing with the question to ask, and the next step of a plan learned from earlier "
+        "runs of the same task. Use it when you are unsure which tool to call or what an "
+        "argument should be; it calls nothing itself.",
         ToolSearchArgs,
     ),
 )
@@ -264,6 +346,7 @@ class AgentTools:
                 memory_type=MemoryType(args.kind),
                 lifetime=Lifetime.LONG_TERM,
                 visibility=_VISIBILITY[args.scope],
+                valid_to=args.valid_to,
             )
             await uow.commit()
         return {"id": ack.memory_id, "deduplicated": ack.deduplicated}
