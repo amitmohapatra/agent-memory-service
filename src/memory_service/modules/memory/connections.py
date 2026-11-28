@@ -44,7 +44,7 @@ from typing import Any, Final
 
 from memory_service.domain.enums import MemoryType
 from memory_service.domain.ids import content_hash
-from memory_service.domain.memory import CanonicalMemory, unverified_representation
+from memory_service.domain.memory import VERBATIM_TURN, CanonicalMemory, unverified_representation
 from memory_service.modules.jobs.names import TASK_MEMORY_INDEX
 from memory_service.modules.llm.assist import LLMAssist
 from memory_service.modules.memory.revisions import bump_memory_revisions
@@ -168,7 +168,7 @@ def _connectable(memory: CanonicalMemory) -> bool:
     """
     return (
         memory.memory_type not in {MemoryType.BELIEF, MemoryType.ENTITY_SUMMARY}
-        and memory.system_metadata.get("category") != "verbatim_turn"
+        and memory.system_metadata.get("category") != VERBATIM_TURN
         and not memory.system_metadata.get("source_revisions")
         and not unverified_representation(memory.system_metadata)
         and bool(_subject_key(memory))

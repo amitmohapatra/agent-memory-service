@@ -65,6 +65,7 @@ from memory_service.domain.enums import (
     Visibility,
 )
 from memory_service.domain.memory import (
+    VERBATIM_TURN,
     CanonicalMemory,
     replaced_by,
     statement_kind_of,
@@ -937,7 +938,7 @@ def slot_changed(new: Slots, old: Slots) -> bool:
 def _units(statements: Sequence[CanonicalMemory]) -> list[CanonicalMemory]:
     """What replaces: the turn as said (each piece of a long one), or what the rules read
     when the turn itself was not kept."""
-    turns = [m for m in statements if m.system_metadata.get("category") == "verbatim_turn"]
+    turns = [m for m in statements if m.system_metadata.get("category") == VERBATIM_TURN]
     return turns or list(statements)
 
 
@@ -1373,7 +1374,7 @@ class CrossConversationReplacement:
         read from it (a fact, an event of the same message, inside the turn's words). A
         reading of one sentence never takes its whole turn with it: the turn may say more."""
         out = [old, *await uow.memories.twins(ctx.tenant_id, old)]
-        if old.system_metadata.get("category") == "verbatim_turn":
+        if old.system_metadata.get("category") == VERBATIM_TURN:
             sources = _sources(old)
             out += [
                 m

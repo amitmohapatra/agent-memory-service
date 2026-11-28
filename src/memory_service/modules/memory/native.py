@@ -34,7 +34,12 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.ids import content_hash
-from memory_service.domain.memory import CanonicalMemory, lasting, unverified_representation
+from memory_service.domain.memory import (
+    VERBATIM_TURN,
+    CanonicalMemory,
+    lasting,
+    unverified_representation,
+)
 from memory_service.domain.observation import Observation
 from memory_service.domain.predicates import is_single_valued
 from memory_service.domain.subjects import SubjectVerdict
@@ -847,7 +852,7 @@ class NativeMemoryIntelligence:
                 # came from, so ranking prefers the answer over the transcript when both match.
                 importance=0.25,
                 confidence=0.99,  # nobody is guessing what was said
-                category="verbatim_turn",
+                category=VERBATIM_TURN,
             )
             for piece in verbatim_windows(text.strip(), self.cfg.verbatim_max_chars)[
                 :VERBATIM_MAX_PIECES
@@ -1215,7 +1220,7 @@ class NativeMemoryIntelligence:
         generated = unverified_representation(
             {"category": candidate.category, "provider": candidate.provider}
         )
-        transcript = candidate.category == "verbatim_turn"
+        transcript = candidate.category == VERBATIM_TURN
         best: ConsolidationOutcome | None = None
         adjudicating = self.assist.wants("conflict_adjudication")
         #: memories the conflict adjudicator may be asked about: neither a duplicate nor a
@@ -1247,7 +1252,7 @@ class NativeMemoryIntelligence:
                 # Never let a generated rewrite reinforce or replace an asserted source,
                 # even when its text happens to be identical.
                 continue
-            if transcript != (mem.system_metadata.get("category") == "verbatim_turn"):
+            if transcript != (mem.system_metadata.get("category") == VERBATIM_TURN):
                 # A turn as said and a rule's reading of it are two memories even in the same
                 # words: the turn is kept beside the fact it yields (``extract``), and either
                 # one reinforcing the other would drop the turn or freeze the fact's clock.
@@ -1266,8 +1271,8 @@ class NativeMemoryIntelligence:
             # relationship can otherwise replace the only surviving source statement.
             if (
                 generated
-                or candidate.category in {"verbatim_turn", "narrative_unit"}
-                or (mem.system_metadata.get("category") in {"verbatim_turn", "narrative_unit"})
+                or candidate.category in {VERBATIM_TURN, "narrative_unit"}
+                or (mem.system_metadata.get("category") in {VERBATIM_TURN, "narrative_unit"})
             ):
                 continue
             # the same subject however it is written ("Forklift 4", "forklift #4"), never

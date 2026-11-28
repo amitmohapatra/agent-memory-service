@@ -13,12 +13,12 @@ import re
 from typing import Final
 
 from memory_service.domain.enums import Lifetime, MemoryType, ObservationKind
+from memory_service.domain.memory import REFERRED_TURN, VERBATIM_TURN
 from memory_service.domain.observation import Observation
 from memory_service.ports.intelligence import MemoryCandidate
 
 #: The category of the turn kept with the answer's headline; recall shows it in place of the
 #: bare turn (``retrieval.memory_ranking.statements``).
-REFERRED: Final = "referred_turn"
 #: A turn this long or longer says what it means itself.
 MAX_CHARS: Final = 200
 #: The headline of the answer kept beside the turn, at most.
@@ -57,7 +57,7 @@ def referred_turn(
         or not REFERS.search(text)
     ):
         return []
-    said = next((c for c in candidates if c.category == "verbatim_turn"), None)
+    said = next((c for c in candidates if c.category == VERBATIM_TURN), None)
     about = headline(prior.content)
     if said is None or not about:
         return []
@@ -69,7 +69,7 @@ def referred_turn(
                 "lifetime": Lifetime.LONG_TERM,
                 # above the bare turn: it says what the bare turn only points at
                 "importance": max(said.importance, 0.5),
-                "category": REFERRED,
+                "category": REFERRED_TURN,
             }
         )
     ]

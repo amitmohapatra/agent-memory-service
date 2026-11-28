@@ -38,7 +38,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 from memory_service.domain.enums import StatementKind
-from memory_service.modules.memory.referred import REFERRED
+from memory_service.domain.memory import REFERRED_TURN, VERBATIM_TURN
 from memory_service.modules.retrieval import periods
 from memory_service.ports.search import SearchHit, VectorName
 
@@ -144,7 +144,6 @@ def _subject_name(hit: SearchHit) -> str:
 #: (``statements``). The other forms ride along as its ``duplicates``.
 GROUP_STATEMENTS = True
 #: the category of a turn kept verbatim (ADR 0036)
-TURN = "verbatim_turn"
 
 
 def _speaker_key(principal: object) -> object:
@@ -226,7 +225,7 @@ def _standing_for(ordered: list[str], pool: ArmPool) -> str | None:
         pool.hits[r].payload.get("statement_kind") == StatementKind.CORRECTION.value
         for r in ordered
     )
-    wanted = (TURN,) if corrects else (REFERRED, TURN)
+    wanted = (VERBATIM_TURN,) if corrects else (REFERRED_TURN, VERBATIM_TURN)
     return next((r for kind in wanted for r in ordered if category[r] == kind), None)
 
 

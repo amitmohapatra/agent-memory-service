@@ -7,6 +7,15 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service, internal): one definition of each turn category
+
+- `verbatim_turn`, `referred_turn` and the set of both are defined once
+  (`domain.memory.VERBATIM_TURN`, `REFERRED_TURN`, `KEPT_AS_SAID`); the ranking, the context
+  builder and checks, the memory pipeline, the indexer and the maintenance tools named their
+  own copies in five constants and twenty literals. The turn lookups share one statement, and
+  the search tool's limits come from the settings they mirror (`memory_recall_k`, the
+  context's token budget).
+
 ### Changed (service): the turn lookups read indexes (migration 0041)
 
 - **`ix_memories_turn_messages`** (GIN over the message and observation ids a live turn

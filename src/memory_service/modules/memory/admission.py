@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 
 from memory_service.config.constants import MemoryIntelligenceSettings
 from memory_service.domain.enums import AdmissionVerdict, DedupDecision, Lifetime, MemoryType
-from memory_service.domain.memory import AdmissionDecision
+from memory_service.domain.memory import VERBATIM_TURN, AdmissionDecision
 from memory_service.ports.intelligence import ConsolidationOutcome, MemoryCandidate
 
 _TYPE_PRIOR: dict[MemoryType, float] = {
@@ -92,7 +92,7 @@ def worthiness_of(candidate: MemoryCandidate, *, hinted: bool = False) -> tuple[
     if (
         _TRANSIENT.search(text)
         and not dated
-        and candidate.category not in ("decision", "verbatim_turn")
+        and candidate.category not in ("decision", VERBATIM_TURN)
     ):
         value *= 0.4
         reasons.append("transient phrasing")

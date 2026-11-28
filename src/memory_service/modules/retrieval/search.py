@@ -531,7 +531,7 @@ class Searcher:
         if not ids:
             return items
         async with self.uow_factory() as uow:
-            turns, said, prior = _turns_of(await uow.memories.get_many(ctx.tenant_id, ids))
+            said, prior = _turns_of(await uow.memories.get_many(ctx.tenant_id, ids))
             before, after = await uow.memories.turns_around(
                 ctx.tenant_id,
                 said=sorted({p for p in prior.values() if p}),
@@ -542,8 +542,9 @@ class Searcher:
         visibility = await self.engine.authz.visibility(ctx)
 
         def shown(n: Neighbour | None) -> str | None:
-            readable = n is not None and visibility.allows(ctx.tenant_id, n.keys)
-            return f"{n.speaker}: {n.text}" if readable and n is not None else None
+            if n is None or not visibility.allows(ctx.tenant_id, n.keys):
+                return None
+            return f"{n.speaker}: {n.text}" if n.speaker else n.text
 
         return [
             i.model_copy(
@@ -552,7 +553,7 @@ class Searcher:
                     "after": shown(after.get(said.get(i.id) or "")),
                 }
             )
-            if i.id in turns
+            if i.id in said
             else i
             for i in items
         ]
@@ -841,19 +842,19 @@ class Searcher:
 
 def _turns_of(
     found: Sequence[CanonicalMemory],
-) -> tuple[set[str], dict[str, str | None], dict[str, str | None]]:
-    """Of ``found``, the turns kept as said; what each was said as; and the turn each
-    replies to (``preceding_turn``)."""
+) -> tuple[dict[str, str | None], dict[str, str | None]]:
+    """Of ``found``, the turns kept as said: what each was said as, and the turn each replies
+    to (``preceding_turn``), by memory id."""
     turns = [m for m in found if (m.system_metadata or {}).get("category") == VERBATIM_TURN]
     said = {m.memory_id: _said_as(m) for m in turns}
     prior = {
         m.memory_id: ((m.system_metadata or {}).get("preceding_turn") or {}).get("source_id")
         for m in turns
     }
-    return {m.memory_id for m in turns}, said, prior
+    return said, prior
 
 
-def _said_as(memory: Any) -> str | None:
+def _said_as(memory: CanonicalMemory) -> str | None:
     """The message (or observation) a turn kept as said is: what the next turn's preceding
     turn names (``preceding_turn.source_id``)."""
     for ref in memory.evidence:

@@ -424,7 +424,8 @@ class Neighbour(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    speaker: str
+    #: who said it (``domain.memory.speaker_of``), when that is known
+    speaker: str | None
     text: str
     keys: list[str]
 

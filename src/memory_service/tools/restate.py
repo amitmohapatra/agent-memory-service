@@ -29,6 +29,7 @@ from memory_service.__about__ import __version__
 from memory_service.adapters.db.orm import MemoryRow
 from memory_service.application.container import Container, build_container
 from memory_service.config.settings import Settings
+from memory_service.domain.memory import VERBATIM_TURN
 from memory_service.modules.memory.restatement import restate
 from memory_service.observability.logging import get_logger
 from memory_service.ports.credentials import ModelIdentity
@@ -84,7 +85,7 @@ async def _turns(
             MemoryRow.tenant_id == tenant_id,
             MemoryRow.temporal_status == "CURRENT",
             MemoryRow.deleted_at.is_(None),
-            MemoryRow.system_metadata["category"].astext == "verbatim_turn",
+            MemoryRow.system_metadata["category"].astext == VERBATIM_TURN,
         )
         .order_by(MemoryRow.observed_at, MemoryRow.memory_id)
     )

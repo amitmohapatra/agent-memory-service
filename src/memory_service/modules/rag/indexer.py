@@ -22,7 +22,7 @@ from memory_service.domain.conversation import Thread
 from memory_service.domain.documents import Chunk, Document, DocumentNode
 from memory_service.domain.enums import Visibility
 from memory_service.domain.ids import content_hash
-from memory_service.domain.memory import CanonicalMemory, earlier_value, replaced_by
+from memory_service.domain.memory import VERBATIM_TURN, CanonicalMemory, earlier_value, replaced_by
 from memory_service.domain.revisions import document_revision_keys
 from memory_service.domain.script import detect_script
 from memory_service.modules.authz.visibility import visibility_keys
@@ -94,7 +94,7 @@ def memory_context_text(m: CanonicalMemory) -> str:
     memory's second key is its first."""
     text = memory_index_text(m)
     prior = m.system_metadata.get("preceding_turn") or {}
-    if m.system_metadata.get("category") == "verbatim_turn" and (said := prior.get("text")):
+    if m.system_metadata.get("category") == VERBATIM_TURN and (said := prior.get("text")):
         speaker = str(prior.get("speaker") or "").split(":", 1)[-1].strip()
         return f"{speaker}: {said}\n{text}" if speaker else f"{said}\n{text}"
     return text

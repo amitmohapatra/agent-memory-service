@@ -30,6 +30,7 @@ from memory_service.domain.fiscal import FiscalCalendar
 from memory_service.domain.memory import (
     LASTING_TYPES,
     SELF_ANYWHERE,
+    VERBATIM_TURN,
     AdmissionDecision,
     CanonicalMemory,
     Scope,
@@ -1067,7 +1068,7 @@ class ObservationPipeline:
     ) -> list[MemoryCandidate]:
         """The verbatim turn among ``candidates`` with its restatement, when the model may
         write one (``memory_restatement``); every other candidate as it was."""
-        turns = [c for c in candidates if c.category == "verbatim_turn"]
+        turns = [c for c in candidates if c.category == VERBATIM_TURN]
         if not turns or observation.kind is not ObservationKind.MESSAGE:
             return candidates
         said = await restate(

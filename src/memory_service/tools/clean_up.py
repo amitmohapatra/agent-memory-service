@@ -47,6 +47,7 @@ from memory_service.adapters.db.orm import MemoryRow, ObservationRow
 from memory_service.application.container import Container, build_container
 from memory_service.config.settings import Settings
 from memory_service.domain.enums import ObservationKind
+from memory_service.domain.memory import VERBATIM_TURN
 from memory_service.modules.memory.pipeline import Gaps, context_from_observation
 from memory_service.observability.logging import get_logger
 
@@ -54,8 +55,7 @@ log = get_logger(__name__)
 
 #: What the patterns made of a message that is the person's own only when the message is
 #: their statement: the turn as said, and what was read of them from it.
-TURN: Final = "verbatim_turn"
-MADE: Final = (TURN, "rule", "instruction", "preference", "attribute")
+MADE: Final = (VERBATIM_TURN, "rule", "instruction", "preference", "attribute")
 #: A standing statement of the person (how they want things done) stays only when the
 #: model's reading of the same words is one too: a fact read from a skill's "never ..."
 #: does not make that sentence the person's rule.
@@ -222,7 +222,7 @@ def _confirmed(category: str, content: str, gaps: Gaps) -> bool:
     """Whether the model's reading of the message says what this memory of it says: a
     reading that quotes the memory's words (``STANDING``: one that is itself the person's
     rule or preference). The turn as said is never confirmed: the message is no statement."""
-    if category == TURN:
+    if category == VERBATIM_TURN:
         return False
     for (read, _), quote in zip(gaps.fills, gaps.quotes, strict=True):
         if category in STANDING and read.category not in OWN:

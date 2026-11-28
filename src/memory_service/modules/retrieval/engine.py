@@ -12,7 +12,7 @@ import itertools
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import Any, Final
+from typing import Any
 
 from memory_service.config.constants import RetrievalSettings, derived_k
 from memory_service.domain import glossary
@@ -22,6 +22,7 @@ from memory_service.domain.errors import DependencyUnavailable
 from memory_service.domain.ids import content_hash
 from memory_service.domain.learning import standing_factor
 from memory_service.domain.memory import (
+    KEPT_AS_SAID,
     CanonicalMemory,
     earlier_value,
     replaced_by,
@@ -601,6 +602,7 @@ class RetrievalEngine:
                 if m.temporal.status.value == "CURRENT"
                 and visibility.allows(m.tenant_id, m.system_metadata.get("visibility_keys", []))
             }
+            # placed only where a reading stood, so it takes that reading's score there
             held |= {
                 message: memory_candidate(fetched[mid], retriever="said_for_reading", score=0.0)
                 for message, mid in ids.items()
@@ -1144,11 +1146,6 @@ class RetrievalEngine:
         return collection, flt
 
 
-#: The categories of a message kept as said: a turn, and a referring turn kept with the answer
-#: it refers to (``memory.referred``).
-SAID_AS: Final = frozenset({memory_ranking.TURN, memory_ranking.REFERRED})
-
-
 def _read_from(candidate: Candidate) -> tuple[str, ...]:
     """The messages a model's reading was read from, or () for anything else: a turn, a
     pattern's cut, a memory derived from memories, an exact lookup, a reading with any
@@ -1158,7 +1155,7 @@ def _read_from(candidate: Candidate) -> tuple[str, ...]:
     if (
         candidate.kind != "memory"
         or payload.get("provider") != "llm"
-        or payload.get("category") in SAID_AS
+        or payload.get("category") in KEPT_AS_SAID
         or is_derived(candidate)
         or "exact" in candidate.retrievers
         or not refs
@@ -1173,7 +1170,7 @@ def _turns_held(candidates: Sequence[Candidate]) -> dict[str, Candidate]:
     return {
         str(ref["source_id"]): c
         for c in candidates
-        if c.kind == "memory" and c.payload.get("category") in SAID_AS
+        if c.kind == "memory" and c.payload.get("category") in KEPT_AS_SAID
         for ref in c.payload.get("source_refs") or []
         if ref.get("source_type") == "message" and ref.get("source_id")
     }
@@ -1183,31 +1180,31 @@ def _turns_in_place(
     candidates: Sequence[Candidate], turns: Mapping[str, Candidate]
 ) -> tuple[list[Candidate], int]:
     """``candidates`` with each reading whose every message has a turn in ``turns`` replaced
-    by those turns, at the first place either stood and the reading's score when it came
-    first, the reading named among each turn's ``duplicates``; each turn once. Returns the
-    list and how many readings went."""
+    by those turns - each turn once, at the first place it or a reading it stands for stood -
+    and how many readings went."""
     placed: dict[str, int] = {}
     out: list[Candidate] = []
     swapped = 0
 
-    def put(turn: Candidate, *, score: float, reading: str | None) -> None:
+    def put(turn: Candidate, reading: Candidate | None) -> None:
+        """``turn`` at its first place: its own, or a reading's (and that reading's score);
+        a reading it stands for is named among its ``duplicates``."""
         at = placed.get(turn.record_id)
         if at is None:
-            placed[turn.record_id] = len(out)
-            out.append(turn if turn.score else replace(turn, score=score))
-            at = placed[turn.record_id]
+            placed[turn.record_id] = at = len(out)
+            out.append(turn if reading is None else replace(turn, score=reading.score))
         if reading is not None:
-            twins = [*(out[at].payload.get("duplicates") or ()), reading]
+            twins = [*(out[at].payload.get("duplicates") or ()), reading.record_id]
             out[at] = replace(out[at], payload={**out[at].payload, "duplicates": twins})
 
     for c in candidates:
         messages = _read_from(c)
         if messages and all(m in turns for m in messages):
             for m in messages:
-                put(turns[m], score=c.score, reading=c.record_id)
+                put(turns[m], c)
             swapped += 1
-        elif c.kind == "memory" and c.payload.get("category") in SAID_AS:
-            put(c, score=c.score, reading=None)
+        elif c.kind == "memory" and c.payload.get("category") in KEPT_AS_SAID:
+            put(c, None)
         else:
             out.append(c)
     return out, swapped

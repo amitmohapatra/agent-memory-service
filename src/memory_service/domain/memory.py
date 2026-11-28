@@ -65,7 +65,11 @@ def unverified_representation(metadata: Mapping[str, Any]) -> bool:
 #: Categories kept for good: the turns every other memory is evidence from, and the rules a
 #: user said are standing.
 #: A message kept as said, word for word (the turn itself).
-VERBATIM_TURN = "verbatim_turn"
+VERBATIM_TURN: Final = "verbatim_turn"
+#: A referring turn kept with the answer it refers to ("Approve it", ``memory.referred``).
+REFERRED_TURN: Final = "referred_turn"
+#: The categories of a message kept as said.
+KEPT_AS_SAID: Final = frozenset({VERBATIM_TURN, REFERRED_TURN})
 
 
 def speaker_of(subject: str | None, owner: str | None) -> str | None:

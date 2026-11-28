@@ -12,10 +12,12 @@ from typing import TYPE_CHECKING, Any, Final, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic import ValidationError as PydanticValidationError
 
+from memory_service.config.constants import ContextSettings, RetrievalSettings
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import Lifetime, MemoryType, Visibility
 from memory_service.domain.errors import NotFound, ValidationFailed
 from memory_service.domain.instants import UtcDateTime
+from memory_service.modules.context.sections import CHARS_PER_TOKEN
 from memory_service.modules.context.views import hints_view
 from memory_service.modules.retrieval.engine import PointInTime
 from memory_service.modules.retrieval.search import (
@@ -35,13 +37,12 @@ log = get_logger(__name__)
 #: Candidates ``tool_search`` weighs before it names the next tool.
 TOOL_SEARCH_K: Final = 8
 #: Items a search returns by default, and at most.
-#: The most a search names (``k``): as deep as a context ranks memories for a request
-#: (``RetrievalSettings.memory_recall_k``).
-MAX_K: Final = 100
+#: The most a search names (``k``): as deep as a context ranks memories for a request.
+MAX_K: Final[int] = RetrievalSettings.model_fields["memory_recall_k"].default
 #: What one search returns at most, in characters of text with the turns around each item:
-#: what a context's memories take at its default budget (8,000 tokens), so a search without
-#: ``k`` sees what a pushed context would, and no more.
-RESULT_CHARS: Final = 32_000
+#: what a context takes at its default budget, so a search without ``k`` sees what a pushed
+#: context would, and no more.
+RESULT_CHARS: Final[int] = ContextSettings.model_fields["token_budget"].default * CHARS_PER_TOKEN
 #: Characters of one returned text.
 TEXT_CHARS: Final = 1000
 #: The tool the caller answers with its own toolbox (``toolbox`` on the call).

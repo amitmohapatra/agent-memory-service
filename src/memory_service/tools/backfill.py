@@ -54,7 +54,7 @@ from memory_service.__about__ import __version__
 from memory_service.adapters.db.orm import MemoryRow
 from memory_service.domain.context import MemoryExecutionContext
 from memory_service.domain.enums import MemoryType, TemporalStatus, Visibility
-from memory_service.domain.memory import CanonicalMemory
+from memory_service.domain.memory import VERBATIM_TURN, CanonicalMemory
 from memory_service.observability.logging import get_logger
 
 log = get_logger(__name__)
@@ -255,7 +255,7 @@ async def read_again(
         if fixed.get("category") != "rule" and meta.get("category") == "rule":
             fixed.pop("standing_instruction", None)
             if not turn_kept:
-                fixed["category"] = "verbatim_turn"
+                fixed["category"] = VERBATIM_TURN
                 fields = dict(_AS_A_TURN)
     if any(standing_instruction(x) for x in lexical):
         fixed["standing_instruction"] = "yes"
@@ -305,7 +305,7 @@ async def _relabel(
 ) -> list[CanonicalMemory]:
     """``memories`` read again (``read_again``), the changed ones stored."""
     out = []
-    turn_kept = any(m.system_metadata.get("category") == "verbatim_turn" for m in memories)
+    turn_kept = any(m.system_metadata.get("category") == VERBATIM_TURN for m in memories)
     for memory in memories:
         fixed = await read_again(memory, labeller, relabel=relabel, turn_kept=turn_kept)
         if fixed is not None:

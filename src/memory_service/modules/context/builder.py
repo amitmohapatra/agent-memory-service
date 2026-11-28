@@ -42,7 +42,7 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.evidence import EvidenceRef, EvidenceSource
 from memory_service.domain.ids import stable_key
-from memory_service.domain.memory import unverified_representation
+from memory_service.domain.memory import VERBATIM_TURN, unverified_representation
 from memory_service.domain.revisions import RevisionKind
 from memory_service.modules.authz.service import AuthorizationService
 from memory_service.modules.context.check import NOTE as CHECK_NOTE
@@ -1664,8 +1664,6 @@ async def _nothing() -> list[Message]:
     return []
 
 
-#: The category of a turn kept as said (``modules.memory.native``).
-VERBATIM_TURN: Final = "verbatim_turn"
 #: What a bundle's cache key gains by the caller's ``recall``: a context that leaves what is
 #: ranked to be asked for is another context; one that carries it keeps the key it always had.
 _RECALL_KEYS: Final[dict[bool, tuple[str, ...]]] = {True: (), False: ("recall=off",)}

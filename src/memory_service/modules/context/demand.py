@@ -27,7 +27,7 @@ from memory_service.domain.context_bundle import (
     earlier_chats_section,
 )
 from memory_service.domain.graph import BOOKKEEPING_LAYERS, layer_for
-from memory_service.domain.memory import unverified_representation
+from memory_service.domain.memory import KEPT_AS_SAID, unverified_representation
 from memory_service.modules.context.standing import stated
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.retrieval.engine import UNUSED_MAX
@@ -39,7 +39,6 @@ RANKED: Final = ("memories", "history", "graph_facts", "knowledge", "summaries")
 #: What the assistant answered in earlier conversations: found by the request too.
 SAID: Final = "earlier_chats"
 #: A message kept as said: the turn itself, and the turn with what it replied to.
-KEPT_AS_SAID: Final = frozenset({"verbatim_turn", "referred_turn"})
 #: What a model read from a message (the memory's ``provider``); word patterns are ``native``.
 READ_BY_MODEL: Final = "llm"
 WORD_PATTERNS: Final = "native"
@@ -81,14 +80,12 @@ def standing(bundle: ContextBundle) -> ContextBundle:
 
 
 def said_once(bundle: ContextBundle) -> ContextBundle:
-    """``bundle`` with each statement once: without the memories a profile line already
-    states, word for word (a rule or preference that applies is listed with its date in the
-    profile, and was in the prompt a second time as a ranked memory), without one of a
-    message kept as said and a memory read from it - the message stays (``_one_of_each_message``)
-    - and a statement the profile lists takes its message with it, and without
-    the graph facts that say nothing new (``_facts_once``). Each memory left out stays
-    evidence the bundle does not carry (``unused``), which an answer is still checked
-    against."""
+    """``bundle`` with each statement once. Left out: a memory a profile line states word for
+    word (a rule or preference that applies is listed, dated, in the profile), with the message
+    it was read from; what a model read from a message, or word patterns cut out of it, when
+    the message is shown as said (``_said_again``); and the graph facts that say nothing new
+    (``_facts_once``). Each memory left out stays evidence the bundle does not carry
+    (``unused``), which an answer is still checked against."""
     shown = {
         said for block in bundle.profile for line in block.text.splitlines() for said in _says(line)
     }
@@ -136,19 +133,19 @@ def _one_of_each_message(memories: Sequence[ContextItem]) -> set[str]:
     (``retrieval.memory_ranking._standing_for``); LongMemEval: the round, found by its
     facts, is what is read. A reading of a message not shown as said stays."""
 
-    def messages(m: ContextItem) -> set[str]:
-        return {e.message_id for e in m.evidence if e.message_id}
-
     as_said = {
-        mid for m in memories if m.attributes.get("category") in KEPT_AS_SAID for mid in messages(m)
+        mid
+        for m in memories
+        if m.attributes.get("category") in KEPT_AS_SAID
+        for mid in _messages(m)
     }
     return {
         m.item_id
         for m in memories
         if m.attributes.get("category") not in KEPT_AS_SAID
         and m.attributes.get("provider") in (READ_BY_MODEL, WORD_PATTERNS)
-        and messages(m)
-        and messages(m) <= as_said
+        and _messages(m)
+        and _messages(m) <= as_said
     }
 
 
@@ -157,9 +154,7 @@ def _said_again(memories: Sequence[ContextItem], shown: set[str]) -> list[Contex
     word for word, with the message it was read from (the turn says it again); and what is
     read from a message shown as said (``_one_of_each_message``)."""
     stated = {m.item_id for m in memories if _plain(m.text) in shown}
-    stated_in = {
-        e.message_id for m in memories if m.item_id in stated for e in m.evidence if e.message_id
-    }
+    stated_in = {mid for m in memories if m.item_id in stated for mid in _messages(m)}
     again = _one_of_each_message(memories)
     return [
         m for m in memories if m.item_id in stated or m.item_id in again or _said_in(m, stated_in)
@@ -169,8 +164,13 @@ def _said_again(memories: Sequence[ContextItem], shown: set[str]) -> list[Contex
 def _said_in(memory: ContextItem, messages: set[str]) -> bool:
     """Whether ``memory`` is a message kept as said, and every message it keeps is one of
     ``messages``."""
-    kept = {e.message_id for e in memory.evidence if e.message_id}
+    kept = _messages(memory)
     return memory.attributes.get("category") in KEPT_AS_SAID and bool(kept) and kept <= messages
+
+
+def _messages(memory: ContextItem) -> set[str]:
+    """The messages ``memory`` was read from or keeps."""
+    return {e.message_id for e in memory.evidence if e.message_id}
 
 
 def _plain(text: str) -> str:

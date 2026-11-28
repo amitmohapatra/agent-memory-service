@@ -34,6 +34,7 @@ from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.language import detect_language
 from memory_service.domain.memory import (
     UNVERIFIED_MEMORY_CATEGORIES,
+    VERBATIM_TURN,
     CanonicalMemory,
     Scope,
     TemporalState,
@@ -302,28 +303,12 @@ class SqlMemoryRepository:
     async def turns_around(
         self, tenant_id: str, *, said: Sequence[str], replying_to: Sequence[str]
     ) -> tuple[dict[str, Neighbour], dict[str, Neighbour]]:
-        # each read names its index's expression and predicate word for word (migration 0041:
-        # ix_memories_turn_messages, ix_memories_turn_replies)
         before: dict[str, Neighbour] = {}
-        if said:
-            rows = await self.s.execute(
-                text(
-                    "SELECT said.id, m.subject, m.owner_principal, m.content, m.visibility_keys "
-                    "FROM memories m, jsonb_array_elements_text("
-                    "jsonb_path_query_array(m.evidence, '$[*].message_id')"
-                    " || jsonb_path_query_array(m.evidence, '$[*].source_id')) AS said(id) "
-                    "WHERE m.tenant_id = :tenant "
-                    "AND deleted_at IS NULL AND (system_metadata ->> 'category') = 'verbatim_turn' "
-                    "AND (jsonb_path_query_array(evidence, '$[*].message_id')"
-                    " || jsonb_path_query_array(evidence, '$[*].source_id'))"
-                    " ?| CAST(:ids AS text[]) AND said.id = ANY(:ids)"
-                ),
-                {"tenant": tenant_id, "ids": list(said)},
-            )
-            for said_as, subject, owner, content, keys in rows.all():
-                before.setdefault(said_as, _neighbour(subject, owner, content, keys))
+        for said_as, _, subject, owner, content, keys in await self._turns_kept_as(tenant_id, said):
+            before.setdefault(said_as, _neighbour(subject, owner, content, keys))
         after: dict[str, Neighbour] = {}
         if replying_to:
+            # names ix_memories_turn_replies' expression and predicate word for word (0041)
             rows = await self.s.execute(
                 text(
                     "SELECT ((system_metadata -> 'preceding_turn') ->> 'source_id'), "
@@ -339,25 +324,32 @@ class SqlMemoryRepository:
         return before, after
 
     async def turns_of(self, tenant_id: str, messages: Sequence[str]) -> dict[str, str]:
-        if not messages:
-            return {}
+        out: dict[str, str] = {}
+        for message, memory_id, *_ in await self._turns_kept_as(tenant_id, messages):
+            out.setdefault(message, memory_id)
+        return out
+
+    async def _turns_kept_as(self, tenant_id: str, ids: Sequence[str]) -> list[Any]:
+        """The live turns kept as said that keep one of ``ids`` (a message or observation id),
+        one row per id kept: (that id, memory id, subject, owner, content, visibility keys).
+        Names ix_memories_turn_messages' expression and predicate word for word (0041)."""
+        if not ids:
+            return []
         rows = await self.s.execute(
             text(
-                "SELECT said.id, m.memory_id FROM memories m, jsonb_array_elements_text("
+                "SELECT said.id, m.memory_id, m.subject, m.owner_principal, m.content, "
+                "m.visibility_keys FROM memories m, jsonb_array_elements_text("
                 "jsonb_path_query_array(m.evidence, '$[*].message_id')"
                 " || jsonb_path_query_array(m.evidence, '$[*].source_id')) AS said(id) "
                 "WHERE m.tenant_id = :tenant "
                 "AND deleted_at IS NULL AND (system_metadata ->> 'category') = 'verbatim_turn' "
                 "AND (jsonb_path_query_array(evidence, '$[*].message_id')"
-                " || jsonb_path_query_array(evidence, '$[*].source_id')) ?| CAST(:ids AS text[]) "
-                "AND said.id = ANY(:ids) ORDER BY m.memory_id"
+                " || jsonb_path_query_array(evidence, '$[*].source_id'))"
+                " ?| CAST(:ids AS text[]) AND said.id = ANY(:ids) ORDER BY m.memory_id"
             ),
-            {"tenant": tenant_id, "ids": list(messages)},
+            {"tenant": tenant_id, "ids": list(ids)},
         )
-        out: dict[str, str] = {}
-        for message, memory_id in rows.all():
-            out.setdefault(message, memory_id)
-        return out
+        return list(rows.all())
 
     async def get_many(self, tenant_id: str, memory_ids: Sequence[str]) -> list[CanonicalMemory]:
         if not memory_ids:
@@ -543,7 +535,7 @@ class SqlMemoryRepository:
                     MemoryRow.tenant_id == tenant_id,
                     MemoryRow.thread_id.in_(sorted(set(thread_ids))),
                     MemoryRow.deleted_at.is_(None),
-                    meta["category"].astext == "verbatim_turn",
+                    meta["category"].astext == VERBATIM_TURN,
                     *([marked if replaced else ~marked] if replaced is not None else []),
                     *([meta["statement_kind"].astext == kind.value] if kind else []),
                 )
@@ -589,7 +581,7 @@ class SqlMemoryRepository:
         # 0036), so one window over both held half as many readings as before, and a turn
         # still belongs in it - the memories at hand are what a tenant's own definitions
         # ("the cross-dock facility (CDF)") are learned from.
-        turn = MemoryRow.system_metadata["category"].astext == "verbatim_turn"
+        turn = MemoryRow.system_metadata["category"].astext == VERBATIM_TURN
         kinds = (turn.is_(False) | turn.is_(None), turn.is_(True))
         exact: list[MemoryRow] = []
         if normalized_hash:
@@ -967,7 +959,7 @@ class SqlMemoryRepository:
         if not include_derived:
             source_categories = ["narrative_unit"]
             if include_verbatim:
-                source_categories.append("verbatim_turn")
+                source_categories.append(VERBATIM_TURN)
             stmt = stmt.where(
                 _asserted_source_filter(),
                 or_(
@@ -1038,7 +1030,7 @@ class SqlMemoryRepository:
 def _neighbour(subject: str | None, owner: str | None, content: str, keys: Any) -> Neighbour:
     """A turn around a found one, named by who said it (``speaker_of``)."""
     return Neighbour(
-        speaker=speaker_of(subject, owner) or "",
+        speaker=speaker_of(subject, owner),
         text=content,
         keys=[str(k) for k in keys] if isinstance(keys, list) else [],
     )

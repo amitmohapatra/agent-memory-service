@@ -46,6 +46,11 @@ The facts help find the round; the round is what the reader should read.
 
 ## Measurements
 
-To be filled from the LoCoMo arms with the model on (push and on-demand), strict judge,
-against `locomo-r1-push-llm-c2` (89.7% of real questions) and `locomo-r1-ondemand-llm-c2`
-(84.1%).
+LoCoMo conversations 0-1 (304 questions), Haiku 5.5 answering and judging under the strict
+rules, the model's store, memory attached, read-first and decline-first notes: 88.4% of real
+questions (83.6% overall) with this decision, against 89.7% (86.2%) before it. A repeated
+arm differs by 1-2 points, so this is within noise on real questions; the overall gap is the
+questions about the wrong person (74.7% -> 67.6%, five questions). The decision stands on
+what it removes (19% of a context in paraphrases, and a rule that contradicted ranking's);
+the arms that search memory on demand, where a found reading now arrives as its turn with
+its speaker, are not measured yet.
