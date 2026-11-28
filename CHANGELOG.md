@@ -7,6 +7,15 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service): `memory_search` keeps one speaker's words in a ranked search too
+
+- **`said_by` takes another person's id** (as items name them in `speaker`) as well as
+  `user` and `assistant`, and applies to a ranked search, not only one by time: the subject
+  is filtered in the store before ranking, and each item is checked by its speaker. A
+  conversation of two people about one thing gave one's words to the other, and the agent
+  could not ask for one person's alone. By time (`newest`, `oldest`) it stays `user` or
+  `assistant`.
+
 ### Changed (service, SDK 0.6.15): a found memory says the dates it names; a fetched turn keeps them
 
 - **`dates` on a search item** (`memory_search`, `/v1/recall`; SDK `SearchItem.dates`): the

@@ -151,3 +151,22 @@ async def test_a_turn_fetched_by_id_keeps_the_dates_it_names(container, uow_fact
     ]
     fetched = memory_candidate(turn, retriever="exact", score=1.0)
     assert fetched.payload["dated_mentions"] == turn.system_metadata["dated_mentions"]
+
+
+async def test_a_search_can_keep_one_persons_words(container, uow_factory) -> None:
+    """``said_by`` keeps what one person said in a ranked search too: another person's id
+    as items name them (``speaker``), ``user`` for the person asking. A conversation of two
+    people about one thing gave one's words to the other; the agent could not ask for one
+    person's alone."""
+    from memory_service.domain.enums import Visibility
+    from memory_service.domain.observation import ProcessingHints
+    from tests.integration.test_memory import U1, U2, _observe
+
+    shared = ProcessingHints(visibility=Visibility.TENANT)
+    await _observe(container, uow_factory, U1, "I'm a fan of Bach and Mozart.", hints=shared)
+    await _observe(container, uow_factory, U2, "I love Bach's cello suites.", hints=shared)
+    tools = container.services["agent_tools"]
+    theirs = await tools.call(U1, "memory_search", {"query": "Bach", "said_by": U2.user_id})
+    mine = await tools.call(U1, "memory_search", {"query": "Bach", "said_by": "user"})
+    assert theirs and {i.get("speaker") for i in theirs} == {U2.user_id}, theirs
+    assert mine and {i.get("speaker") for i in mine} == {U1.user_id}, mine

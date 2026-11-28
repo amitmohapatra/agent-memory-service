@@ -24,7 +24,6 @@ from memory_service.modules.retrieval.search import (
     DEFAULT_BY_TIME,
     Order,
     SearchKind,
-    Speaker,
     default_kinds,
 )
 from memory_service.observability.logging import get_logger
@@ -109,10 +108,12 @@ class MemorySearchArgs(_Args):
         description="relevance: by meaning. newest or oldest: the messages by when they were "
         "said, whatever the query - the last or the first thing said",
     )
-    said_by: Speaker | None = Field(
+    said_by: str | None = Field(
         default=None,
-        description="with newest or oldest: user for only what the person said ('what did I "
-        "ask last'), assistant for only what you answered ('what did you tell me last')",
+        description="only what one speaker said: user for the person you help ('what did I "
+        "ask last'), assistant for what you answered ('what did you tell me last'), or "
+        "another person's id as items name them in speaker ('what did Melanie say about "
+        "Bach'); with newest or oldest, user or assistant only",
     )
     here: bool = Field(
         default=False,

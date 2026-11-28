@@ -33,7 +33,7 @@ import asyncio
 import itertools
 import math
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Final, Literal, cast
@@ -462,14 +462,14 @@ class Searcher:
         debug: bool = False,
         text_chars: int | None = None,
         order: Order = "relevance",
-        said_by: Speaker | None = None,
+        said_by: str | None = None,
         here: bool = False,
     ) -> SearchResult:
         if order != "relevance":
             return await self._by_time(
                 ctx,
                 order,
-                said_by,
+                _role(said_by),
                 here,
                 observed,
                 limit or DEFAULT_BY_TIME,
@@ -492,6 +492,7 @@ class Searcher:
                     document_ids=document_ids,
                     observed=observed,
                     at=at,
+                    subject=_subject(ctx, said_by),
                 )
 
         async def history() -> list[tuple[SearchItem, Message]]:
@@ -512,12 +513,7 @@ class Searcher:
                     if _asked_for(c, wanted)
                 ],
             )
-        merged = [
-            item
-            for pair in itertools.zip_longest(items, messages)
-            for item in pair
-            if item is not None
-        ]
+        merged = _merged(items, messages, lambda item: _said_by(item, ctx, said_by))
         return SearchResult(
             items=await self._with_neighbours(
                 ctx, await self._mark_replaced(ctx, merged[:limit], replies)
@@ -845,6 +841,42 @@ class Searcher:
                 since=since,
                 until=until,
             )
+
+
+def _merged(
+    items: Sequence[SearchItem], messages: Sequence[SearchItem], keep: Callable[[SearchItem], bool]
+) -> list[SearchItem]:
+    """The ranked items and the messages interleaved by rank, those ``keep`` accepts."""
+    return [
+        item
+        for pair in itertools.zip_longest(items, messages)
+        for item in pair
+        if item is not None and keep(item)
+    ]
+
+
+def _role(said_by: str | None) -> Speaker | None:
+    """``said_by`` as a role, for a search by time: only ``user`` and ``assistant`` are."""
+    if said_by in (None, "user", "assistant"):
+        return cast(Speaker | None, said_by)
+    raise ValueError("with order newest or oldest, said_by is user or assistant")
+
+
+def _subject(ctx: MemoryExecutionContext, said_by: str | None) -> str | None:
+    """The subject a ranked search keeps for ``said_by``: the person asking for ``user``,
+    another person by their id; none for ``assistant`` (an agent's reply is its user's
+    subject), which ``_said_by`` keeps."""
+    if said_by is None or said_by == "assistant":
+        return None
+    return f"user:{ctx.user_id if said_by == 'user' else said_by}"
+
+
+def _said_by(item: SearchItem, ctx: MemoryExecutionContext, said_by: str | None) -> bool:
+    """Whether ``item`` was said by ``said_by``: the person asking for ``user``, the
+    assistant, or another person by their id; anything when no one is named."""
+    if said_by is None:
+        return True
+    return item.speaker == (ctx.user_id if said_by == "user" else said_by)
 
 
 def _turns_of(

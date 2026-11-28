@@ -277,10 +277,13 @@ class RetrievalEngine:
         at: PointInTime | None = None,
         on_encoded: Callable[[RoutedQuery, QueryVectors], None] | None = None,
         follow_up: str | None = None,
+        subject: str | None = None,
     ) -> RetrievalResult:
-        """Ranked candidates for ``query``. ``follow_up``: the conversation's previous question,
-        when ``query`` follows it up ("and the second one?"): it widens the search text the way
-        expansion's terms do, while the route and the coverage stay the question's own.
+        """Ranked candidates for ``query``. ``subject`` keeps the memories of one subject
+        (``user:<id>``: what that person said), filtered in the store before ranking.
+        ``follow_up``: the conversation's previous question, when ``query`` follows it up
+        ("and the second one?"): it widens the search text the way expansion's terms do,
+        while the route and the coverage stay the question's own.
         ``observed`` keeps only what was observed within
         the range, filtered in the store before ranking (a record with no observation time,
         a document passage, is out). ``at`` searches memories as of a past moment
@@ -392,6 +395,7 @@ class RetrievalEngine:
                                 diagnostics=diagnostics,
                                 observed=observed,
                                 at=at,
+                                subject=subject,
                             )
                             for kind in wanted
                         )
@@ -748,6 +752,7 @@ class RetrievalEngine:
         diagnostics: dict[str, Any],
         observed: ObservedRange | None = None,
         at: PointInTime | None = None,
+        subject: str | None = None,
     ) -> list[Candidate]:
         """Ranked candidates of one kind: the store's hybrid search, fused with any extra
         chunk retrievers, or for memories the learned fusion (``_memories``). One of these
@@ -762,6 +767,7 @@ class RetrievalEngine:
                     diagnostics=diagnostics,
                     observed=observed,
                     at=at,
+                    subject=subject,
                 )
             )
         hits = await self._hybrid(
@@ -829,11 +835,12 @@ class RetrievalEngine:
         diagnostics: dict[str, Any],
         observed: ObservedRange | None,
         at: PointInTime | None,
+        subject: str | None = None,
     ) -> list[Candidate]:
         """The memories ranked by ``memory_ranking``: every arm in one round trip, fused by
         reciprocal rank, then the session, speaker and time rules (ADR 0026). No model call
         beyond the query's encoders, so a memory search costs what the arms cost."""
-        collection, flt = self._scope("memory", visibility, None, observed, at, None)
+        collection, flt = self._scope("memory", visibility, None, observed, at, subject)
         sparse = {}
         if encoded.sparse is not None:
             sparse = {VectorName.BM25: encoded.sparse, VectorName.BM25_CTX: encoded.sparse}
