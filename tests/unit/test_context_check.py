@@ -100,7 +100,6 @@ def _bundle(**update: Any) -> ContextBundle:
             ProfileBlockView(block="about_user", text="- I plan Coach bags for Retail", version=0),
             ProfileBlockView(block="user", text="Name: Alex\nRole: planner", version=0),
         ],
-        "people": [ProfileBlockView(block="Priya", text="- regional manager", version=0)],
         "procedures": [_skill("sk_1", "sales forecast", "get_sales", "forecast")],
         "memories": [
             _memory("mem_best", "The Coach tote is short at stores 12 and 40."),
@@ -473,3 +472,23 @@ async def test_the_check_never_runs_past_what_the_request_has_left() -> None:
     dropped, note = await check.read(QUESTION, _bundle(), within=0.05)
     assert dropped == [] and note["outcome"] == NO_TIME
     assert len(model.calls) == asked
+
+
+async def test_a_linked_memory_is_kept_or_dropped_with_the_one_it_came_with() -> None:
+    """A memory retrieval brought in through another (a second hop, the turn a sentence was
+    read from, a linked turn: ``expanded_from``) answers with it: "Charlotte's Web, I loved
+    it" means nothing apart from the question it replies to. The model's verdict on either
+    is the pair's: one kept keeps both, and only both named go."""
+    asked = _memory("mem_asked", "What books do you read with your kids?")
+    replied = _memory("mem_replied", "Charlotte's Web, they loved it.").model_copy(
+        update={"expanded_from": "mem_asked", "expansion_edge": "SECOND_HOP"}
+    )
+    bundle = _bundle(memories=[asked, replied, _memory("mem_other", "My dentist is on Tuesday.")])
+    items = listed(bundle)
+    for named_ in (["mem_replied"], ["mem_asked"]):
+        model = _Model({"drop": _numbers(items, *named_, "mem_other")})
+        dropped, _ = await ContextCheck(model).read(QUESTION, bundle)  # type: ignore[arg-type]
+        assert [d.key for d in dropped] == ["mem_other"], named_
+    model = _Model({"drop": _numbers(items, "mem_asked", "mem_replied")})
+    dropped, _ = await ContextCheck(model).read(QUESTION, bundle)  # type: ignore[arg-type]
+    assert {d.key for d in dropped} == {"mem_asked", "mem_replied"}
