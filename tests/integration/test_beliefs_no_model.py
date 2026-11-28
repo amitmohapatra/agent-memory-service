@@ -1,7 +1,6 @@
-"""Without the model, beliefs change nothing: the rendered context is today's, byte for byte.
-
-The expected text was captured from ``origin/main`` before beliefs existed (the same scenario,
-the same code path); a deployment without a model must keep producing exactly it.
+"""Without the model, beliefs change nothing: the rendered context is the memories as said,
+byte for byte - and what Caroline said of herself is something she said, never the asker's
+own profile line (it was, before a profile was read from the asker's own audiences only).
 """
 
 from __future__ import annotations
@@ -33,15 +32,12 @@ SAID = [
     ("melanie", "I took my kids camping last weekend.", datetime(2023, 6, 9, 9, 5, tzinfo=UTC)),
 ]
 
-#: ``ContextBuilder.build(ASKER, QUESTION).render()`` on origin/main (371c1ae)
+#: ``ContextBuilder.build(ASKER, QUESTION).render()``
 QUESTION = "What does Caroline do for work, and what does she love?"
 EXPECTED = (
-    "## Profile\n"
-    "### about_user\n"
-    "- I work as a counselor at a youth center.\n"
-    "\n"
     "## Memories\n"
-    "- [m1] 2023-06-09 Fri melanie: Caroline told me she loves painting sunsets."
+    "- [m1] 2023-05-08 Mon caroline: I work as a counselor at a youth center.\n"
+    "- [m2] 2023-06-09 Fri melanie: Caroline told me she loves painting sunsets."
 )
 
 
