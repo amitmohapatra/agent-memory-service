@@ -35,6 +35,12 @@ SAID = [
 #: ``ContextBuilder.build(ASKER, QUESTION).render()``
 QUESTION = "What does Caroline do for work, and what does she love?"
 EXPECTED = (
+    "## How to read memory\n"
+    "- [m1] a memory: something said or learned: cite it by that id, which the memory tools "
+    "take.\n"
+    "- A memory line: the day it was said (year-month-day, weekday), who said it (their id; "
+    "assistant for an agent's reply), what was said.\n"
+    "\n"
     "## Memories\n"
     "- [m1] 2023-05-08 Mon caroline: I work as a counselor at a youth center.\n"
     "- [m2] 2023-06-09 Fri melanie: Caroline told me she loves painting sunsets."
