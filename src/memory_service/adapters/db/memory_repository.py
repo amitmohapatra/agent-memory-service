@@ -307,8 +307,8 @@ class SqlMemoryRepository:
         if said:
             rows = await self.s.execute(
                 text(
-                    "SELECT coalesce(ref ->> 'message_id', ref ->> 'source_id'), m.user_id, "
-                    "m.content, m.visibility_keys FROM memories m, "
+                    "SELECT coalesce(ref ->> 'message_id', ref ->> 'source_id'), m.subject, "
+                    "m.owner_principal, m.content, m.visibility_keys FROM memories m, "
                     "jsonb_array_elements(m.evidence::jsonb) AS ref "
                     "WHERE m.tenant_id = :tenant AND m.deleted_at IS NULL "
                     "AND m.system_metadata::jsonb ->> 'category' = :category "
@@ -316,22 +316,22 @@ class SqlMemoryRepository:
                 ),
                 {**params, "ids": list(said)},
             )
-            for said_as, user_id, content, keys in rows.all():
-                before.setdefault(said_as, _neighbour(user_id, content, keys))
+            for said_as, subject, owner, content, keys in rows.all():
+                before.setdefault(said_as, _neighbour(subject, owner, content, keys))
         after: dict[str, Neighbour] = {}
         if replying_to:
             rows = await self.s.execute(
                 text(
                     "SELECT m.system_metadata::jsonb -> 'preceding_turn' ->> 'source_id', "
-                    "m.user_id, m.content, m.visibility_keys FROM memories m "
+                    "m.subject, m.owner_principal, m.content, m.visibility_keys FROM memories m "
                     "WHERE m.tenant_id = :tenant AND m.deleted_at IS NULL "
                     "AND m.system_metadata::jsonb ->> 'category' = :category "
                     "AND m.system_metadata::jsonb -> 'preceding_turn' ->> 'source_id' = ANY(:ids)"
                 ),
                 {**params, "ids": list(replying_to)},
             )
-            for replied, user_id, content, keys in rows.all():
-                after.setdefault(replied, _neighbour(user_id, content, keys))
+            for replied, subject, owner, content, keys in rows.all():
+                after.setdefault(replied, _neighbour(subject, owner, content, keys))
         return before, after
 
     async def turns_of(self, tenant_id: str, messages: Sequence[str]) -> dict[str, str]:
@@ -1029,9 +1029,16 @@ class SqlMemoryRepository:
         return True
 
 
-def _neighbour(user_id: str | None, content: str, keys: Any) -> Neighbour:
+def _neighbour(subject: str | None, owner: str | None, content: str, keys: Any) -> Neighbour:
+    """A turn around a found one, named by who said it as the context names a turn's speaker
+    (``context_bundle._memory_line``: the subject's user id; a turn shared with the tenant
+    keeps no user id of its own), or ``assistant`` for an agent's reply."""
+    if (owner or "").startswith("agent:"):
+        speaker = "assistant"
+    else:
+        speaker = (subject or "").split(":", 1)[1] if (subject or "").startswith("user:") else ""
     return Neighbour(
-        speaker=user_id or "",
+        speaker=speaker,
         text=content,
         keys=[str(k) for k in keys] if isinstance(keys, list) else [],
     )

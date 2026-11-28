@@ -50,3 +50,25 @@ async def test_a_neighbour_the_asker_may_not_read_is_left_out(container, uow_fac
     found = await tools.call(U2, "memory_search", {"query": "team offsite Lisbon", "k": 5})
     shared = [i for i in found if "offsite" in i["text"]]
     assert shared and all("90k" not in (i.get("before") or "") for i in shared)
+
+
+async def test_a_neighbour_names_who_said_it(container, uow_factory) -> None:
+    """A turn shared with the tenant keeps no user id of its own; its speaker is its subject
+    (``user:u1``), as the context names it. "That's awesome, Caroline!" with no speaker
+    left an agent unable to tell whose line it was - what a question about the wrong person
+    turns on."""
+    from memory_service.domain.enums import Visibility
+    from memory_service.domain.observation import ProcessingHints
+    from tests.integration.test_memory import U1, U2, _observe
+
+    shared = ProcessingHints(visibility=Visibility.TENANT)
+    await _observe(
+        container, uow_factory, U1, "The team offsite is in Lisbon in May.", hints=shared
+    )
+    await _observe(
+        container, uow_factory, U1, "We booked the old tram tour for day two.", hints=shared
+    )
+    tools = container.services["agent_tools"]
+    found = await tools.call(U2, "memory_search", {"query": "old tram tour", "k": 5})
+    [turn] = [i for i in found if "tram" in i["text"]]
+    assert turn["before"] == f"{U1.user_id}: The team offsite is in Lisbon in May.", turn
