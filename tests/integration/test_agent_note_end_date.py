@@ -1,5 +1,5 @@
-"""An agent's note for a period ends with it: ``memory_remember`` takes ``valid_to``, and once
-it has passed the note is no longer found. "For this week only, no Acme orders" was kept as
+"""An agent's note for a period ends with it: ``memory_remember`` takes ``valid_to``, it is the
+note's expiry, and the hourly expiry retires it from search once it has passed (ADR 0049). "For this week only, no Acme orders" was kept as
 the agent's note with no end, and would have been followed after the week."""
 
 from __future__ import annotations
@@ -36,6 +36,8 @@ async def test_a_note_for_a_period_is_not_found_after_it(container) -> None:
         "memory_remember",
         {"content": holds, "kind": "TASK", "valid_to": (now + timedelta(days=6)).isoformat()},
     )
+    await container.tasks.drain()
+    await container.tasks.run_periodic("periodic.memory_expire")
     await container.tasks.drain()
     found = await _found(tools, "Which suppliers are on a shipping hold?")
     assert holds in found, found

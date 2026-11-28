@@ -11,7 +11,7 @@ import asyncio
 import itertools
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from memory_service.config.constants import RetrievalSettings, derived_k
@@ -198,16 +198,9 @@ def _narrowed(
 
 def point_in_time_filter(flt: SearchFilter, at: PointInTime) -> SearchFilter:
     """The memory filter for ``at``: history is in, then cut to the moment asked about.
-    Without ``at`` it is the ordinary ``current`` filter, less what was said for a period that
-    is over (``valid_to`` passed): the hourly expiry retires it from the index, and until it
-    runs nothing finds it either, as the standing sections already leave it out (ADR 0049)."""
+    Without ``at`` it is the ordinary ``current`` filter."""
     if not at:
-        return flt.model_copy(
-            update={
-                "must": {**flt.must, "current": True},
-                "within": _narrowed(dict(flt.within), "valid_to", datetime.now(UTC), None),
-            }
-        )
+        return flt.model_copy(update={"must": {**flt.must, "current": True}})
     within = dict(flt.within)
     if at.as_of is not None:
         within = _narrowed(within, "valid_from", None, at.as_of)

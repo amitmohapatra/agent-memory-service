@@ -25,7 +25,7 @@ def test_recall_with_an_unknown_kind_is_422(client: TestClient) -> None:
     assert error["code"] == "VALIDATION"
     assert error["details"]["errors"][0]["loc"] == ["body", "kinds", "0"]
     assert (
-        "'memory', 'chunk', 'summary', 'episode', 'message' or 'fact'"
+        "'memory', 'chunk', 'summary', 'episode', 'message', 'fact' or 'belief'"
         in error["details"]["errors"][0]["msg"]
     )
 

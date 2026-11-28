@@ -7,6 +7,16 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service): the memory tools say what each kind and option gives
+
+- **Every memory tool describes when to use it and when not, what it returns, and every
+  argument and value** (each search kind, memory kind, scope and order) with what it gives;
+  a test holds each value to being explained. `memory_search` says to search for each piece
+  of a several-part request, and to ask the agent's own tools for what can change now.
+- **`memory_remember` takes `valid_to`:** a note for a period ("this week only") ends with
+  it - the note's expiry, retired by the hourly expiry (ADR 0049). It also says that what
+  the person says is kept on its own, so the agent does not store it a second time.
+
 ### Added (service, SDK 0.6.12): an agent searches beliefs
 
 - **`kinds: ["belief"]`** on `memory_search` and `/v1/recall` (SDK `SearchKind` gains
