@@ -107,9 +107,15 @@ class MessageRepository(Protocol):
     async def add(self, message: Message) -> None: ...
     async def get(self, tenant_id: str, message_id: str) -> Message | None: ...
     async def in_thread(
-        self, tenant_id: str, thread_id: str, message_ids: Sequence[str]
+        self,
+        tenant_id: str,
+        thread_id: str,
+        message_ids: Sequence[str],
+        *,
+        through: int | None = None,
     ) -> set[str]:
-        """Of ``message_ids``, the ones that are messages of ``thread_id``."""
+        """Of ``message_ids``, the ones that are messages of ``thread_id`` (with ``through``:
+        at or before that position in it)."""
         ...
 
     async def delete_thread(self, tenant_id: str, thread_id: str) -> int:

@@ -818,7 +818,7 @@ class ContextBuilder:
                 "tools": pinned.tools,
             }
         )
-        bundle = await self._without_this_chat(ctx, bundle)
+        bundle = await self._without_this_chat(ctx, bundle, window)
         bundle = await self._checked(query, _as_asked(found, bundle), result, began)
         spent = self.assist.tokens_used() - tokens_before
         return bundle.model_copy(
@@ -952,24 +952,24 @@ class ContextBuilder:
         pinned.procedures = ruled(pinned.procedures, query, pinned.profile, pinned.tools)
 
     async def _without_this_chat(
-        self, ctx: MemoryExecutionContext, bundle: ContextBundle
+        self, ctx: MemoryExecutionContext, bundle: ContextBundle, window: WindowFormat | None
     ) -> ContextBundle:
-        """``bundle`` without the turns of the conversation it is for, kept as said: the
-        conversation's window and summary carry them, and as memories they were the same
-        words a second time ("Turn 0 about quotes" in the summary and among the memories).
-        What was read from them (a rule, a fact) stays, and so does every other
-        conversation's turn. One indexed read, and none without a conversation."""
+        """``bundle`` without the turns of the conversation it is for that the conversation
+        already carries, kept as said: as memories they were the same words a second time
+        ("Turn 0 about quotes" in the summary and among the memories). A caller that keeps
+        its own conversation (``window`` None) carries every turn; otherwise the window
+        carries its messages and the summary those it covers, and an older turn neither
+        carries stays, as any memory that bears on the question. What was read from a turn
+        (a rule, a fact) stays, and so does every other conversation's turn. At most one
+        indexed read, and none without a conversation."""
         turns = {
             m.item_id: {ref.message_id for ref in m.evidence if ref.message_id}
             for m in bundle.memories
             if m.attributes.get("category") == VERBATIM_TURN
         }
-        asked = sorted({message for found in turns.values() for message in found})
-        if not ctx.thread_id or not asked:
-            return bundle
-        async with self.uow_factory() as uow:
-            here = await uow.messages.in_thread(ctx.tenant_id, ctx.thread_id, asked)
-        gone = {item for item, found in turns.items() if found and found <= here}
+        asked = {message for found in turns.values() for message in found}
+        carried = await self._carried(ctx, bundle, window, asked)
+        gone = {item for item, found in turns.items() if found and found <= carried}
         if not gone:
             return bundle
         return bundle.model_copy(
@@ -982,6 +982,27 @@ class ContextBuilder:
                 ),
             }
         )
+
+    async def _carried(
+        self,
+        ctx: MemoryExecutionContext,
+        bundle: ContextBundle,
+        window: WindowFormat | None,
+        asked: set[str],
+    ) -> set[str]:
+        """Of the messages ``asked`` about, those the conversation carries: every one of the
+        thread for a caller that keeps its own (``window`` None), else the window's and those
+        the thread summary covers."""
+        carried = set(bundle.conversation.message_ids) if window is not None else set()
+        rest = sorted(asked - carried)
+        summary = bundle.thread_summary
+        if not ctx.thread_id or not rest or (window is not None and summary is None):
+            return carried
+        through = summary.covers_to_sequence if window is not None and summary else None
+        async with self.uow_factory() as uow:
+            return carried | await uow.messages.in_thread(
+                ctx.tenant_id, ctx.thread_id, rest, through=through
+            )
 
     async def _semantic_lookup(
         self, found: _Lookup, query: str

@@ -24,6 +24,26 @@ async def test_this_chats_turns_are_not_memories_of_it(container, uow_factory) -
     assert any(TURNS[1] in m.text for m in other.memories), "another chat recalls them"
 
 
+async def test_a_turn_past_the_window_is_a_memory_again(container, uow_factory) -> None:
+    """A turn the window no longer shows, and no summary carries (none without a model),
+    comes back as a memory when it bears on the question; a caller that keeps its own
+    conversation (no window) has every turn, and none comes back."""
+    from memory_service.config.constants import CONTEXT
+
+    here = _chat()
+    await _say(container, uow_factory, here, TURNS[1])
+    for n in range(CONTEXT.conversation_max_messages):
+        await _say(container, uow_factory, here, f"Shelf label batch {n} is printed.")
+    builder = container.services["context_builder"]
+    question = "Which quote is the first one?"
+    bundle = await builder.build(here, question)
+    assert not any(TURNS[1] in m.text for m in bundle.conversation.messages), "past the window"
+    assert bundle.thread_summary is None
+    assert any(TURNS[1] in m.text for m in bundle.memories), "no longer carried: a memory again"
+    kept = await builder.build(here, question, window=False)
+    assert not any(TURNS[1] in m.text for m in kept.memories), "the caller has every turn"
+
+
 async def test_a_summary_written_without_a_model_is_not_carried(container, uow_factory) -> None:
     """Without a model the "summary" is the earlier turns pieced together - the turns again:
     the context carries the latest turns in the window and no such summary; a search finds the

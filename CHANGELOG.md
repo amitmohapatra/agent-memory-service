@@ -16,8 +16,11 @@ each entry says which one moved. Decisions behind each change are in the
 - **`## Tools` says only what the tool list does not:** argument values already known, the
   ones missing with the question to ask, the next step, a step a rule forbids. No tool by name
   alone, no confidence numbers; a learned skill spells out its own steps.
-- **This conversation's own turns are not repeated as memories:** its window and summary carry
-  them; what was read from them, and every other conversation's turns, still come.
+- **This conversation's own turns are not repeated as memories:** only the ones it already
+  carries are left out: those in its window and those its summary covers, or all of them for a
+  caller that keeps its own conversation (`window: false`). A turn past the window that no
+  summary covers comes back as a memory when it bears on the question. What was read from
+  any turn, and every other conversation's turns, still come.
 - **No summary written without a model:** pieced together from the turns it was the turns
   again; the window carries the latest, a search the rest.
 - **An identifier's digits are never an amount:** "SKU-22" filled a price of -22 (a currency
