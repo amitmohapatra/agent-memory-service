@@ -34,7 +34,6 @@ from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.language import detect_language
 from memory_service.domain.memory import (
     UNVERIFIED_MEMORY_CATEGORIES,
-    VERBATIM_TURN,
     CanonicalMemory,
     Scope,
     TemporalState,
@@ -303,19 +302,23 @@ class SqlMemoryRepository:
     async def turns_around(
         self, tenant_id: str, *, said: Sequence[str], replying_to: Sequence[str]
     ) -> tuple[dict[str, Neighbour], dict[str, Neighbour]]:
-        params = {"tenant": tenant_id, "category": VERBATIM_TURN}
+        # each read names its index's expression and predicate word for word (migration 0041:
+        # ix_memories_turn_messages, ix_memories_turn_replies)
         before: dict[str, Neighbour] = {}
         if said:
             rows = await self.s.execute(
                 text(
-                    "SELECT coalesce(ref ->> 'message_id', ref ->> 'source_id'), m.subject, "
-                    "m.owner_principal, m.content, m.visibility_keys FROM memories m, "
-                    "jsonb_array_elements(m.evidence::jsonb) AS ref "
-                    "WHERE m.tenant_id = :tenant AND m.deleted_at IS NULL "
-                    "AND m.system_metadata::jsonb ->> 'category' = :category "
-                    "AND coalesce(ref ->> 'message_id', ref ->> 'source_id') = ANY(:ids)"
+                    "SELECT said.id, m.subject, m.owner_principal, m.content, m.visibility_keys "
+                    "FROM memories m, jsonb_array_elements_text("
+                    "jsonb_path_query_array(m.evidence, '$[*].message_id')"
+                    " || jsonb_path_query_array(m.evidence, '$[*].source_id')) AS said(id) "
+                    "WHERE m.tenant_id = :tenant "
+                    "AND deleted_at IS NULL AND (system_metadata ->> 'category') = 'verbatim_turn' "
+                    "AND (jsonb_path_query_array(evidence, '$[*].message_id')"
+                    " || jsonb_path_query_array(evidence, '$[*].source_id'))"
+                    " ?| CAST(:ids AS text[]) AND said.id = ANY(:ids)"
                 ),
-                {**params, "ids": list(said)},
+                {"tenant": tenant_id, "ids": list(said)},
             )
             for said_as, subject, owner, content, keys in rows.all():
                 before.setdefault(said_as, _neighbour(subject, owner, content, keys))
@@ -323,13 +326,13 @@ class SqlMemoryRepository:
         if replying_to:
             rows = await self.s.execute(
                 text(
-                    "SELECT m.system_metadata::jsonb -> 'preceding_turn' ->> 'source_id', "
-                    "m.subject, m.owner_principal, m.content, m.visibility_keys FROM memories m "
-                    "WHERE m.tenant_id = :tenant AND m.deleted_at IS NULL "
-                    "AND m.system_metadata::jsonb ->> 'category' = :category "
-                    "AND m.system_metadata::jsonb -> 'preceding_turn' ->> 'source_id' = ANY(:ids)"
+                    "SELECT ((system_metadata -> 'preceding_turn') ->> 'source_id'), "
+                    "subject, owner_principal, content, visibility_keys FROM memories "
+                    "WHERE tenant_id = :tenant "
+                    "AND deleted_at IS NULL AND (system_metadata ->> 'category') = 'verbatim_turn' "
+                    "AND ((system_metadata -> 'preceding_turn') ->> 'source_id') = ANY(:ids)"
                 ),
-                {**params, "ids": list(replying_to)},
+                {"tenant": tenant_id, "ids": list(replying_to)},
             )
             for replied, subject, owner, content, keys in rows.all():
                 after.setdefault(replied, _neighbour(subject, owner, content, keys))
@@ -340,14 +343,16 @@ class SqlMemoryRepository:
             return {}
         rows = await self.s.execute(
             text(
-                "SELECT coalesce(ref ->> 'message_id', ref ->> 'source_id'), m.memory_id "
-                "FROM memories m, jsonb_array_elements(m.evidence::jsonb) AS ref "
-                "WHERE m.tenant_id = :tenant AND m.deleted_at IS NULL "
-                "AND m.system_metadata::jsonb ->> 'category' = :category "
-                "AND coalesce(ref ->> 'message_id', ref ->> 'source_id') = ANY(:ids) "
-                "ORDER BY m.memory_id"
+                "SELECT said.id, m.memory_id FROM memories m, jsonb_array_elements_text("
+                "jsonb_path_query_array(m.evidence, '$[*].message_id')"
+                " || jsonb_path_query_array(m.evidence, '$[*].source_id')) AS said(id) "
+                "WHERE m.tenant_id = :tenant "
+                "AND deleted_at IS NULL AND (system_metadata ->> 'category') = 'verbatim_turn' "
+                "AND (jsonb_path_query_array(evidence, '$[*].message_id')"
+                " || jsonb_path_query_array(evidence, '$[*].source_id')) ?| CAST(:ids AS text[]) "
+                "AND said.id = ANY(:ids) ORDER BY m.memory_id"
             ),
-            {"tenant": tenant_id, "category": VERBATIM_TURN, "ids": list(messages)},
+            {"tenant": tenant_id, "ids": list(messages)},
         )
         out: dict[str, str] = {}
         for message, memory_id in rows.all():

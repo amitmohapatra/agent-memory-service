@@ -7,6 +7,14 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service): the turn lookups read indexes (migration 0041)
+
+- **`ix_memories_turn_messages`** (GIN over the message and observation ids a live turn
+  keeps) and **`ix_memories_turn_replies`** (the turn a live turn replies to): a search's
+  neighbours and what a model's reading finds (ADR 0052) looked turns up inside JSON no
+  index covered, reading every live turn of the tenant per search. Built online
+  (`CREATE INDEX CONCURRENTLY`).
+
 ### Changed (service, SDK 0.6.14): a search says who said each item and returns what a context would carry
 
 - **`speaker` on a search item** (`memory_search`, `/v1/recall`; SDK `SearchItem.speaker`):

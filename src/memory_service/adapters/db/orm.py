@@ -28,6 +28,9 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+#: A live turn kept as said: what the turn lookups read (``turns_around``, ``turns_of``).
+TURN_ROWS = "deleted_at IS NULL AND (system_metadata ->> 'category') = 'verbatim_turn'"
+
 
 class Base(DeclarativeBase):
     type_annotation_map = {dict[str, Any]: JSONB, datetime: DateTime(timezone=True)}
@@ -675,6 +678,24 @@ class MemoryRow(Base):
             "scope_key",
             text("lower(subject)"),
             postgresql_where=text("deleted_at IS NULL"),
+        ),
+        # the turns a message is kept as, and the turn a turn replies to: a search's
+        # neighbours and what a model's reading finds (``turns_around``, ``turns_of``;
+        # migration 0041)
+        Index(
+            "ix_memories_turn_messages",
+            text(
+                "(jsonb_path_query_array(evidence, '$[*].message_id')"
+                " || jsonb_path_query_array(evidence, '$[*].source_id'))"
+            ),
+            postgresql_using="gin",
+            postgresql_where=text(TURN_ROWS),
+        ),
+        Index(
+            "ix_memories_turn_replies",
+            "tenant_id",
+            text("((system_metadata -> 'preceding_turn') ->> 'source_id')"),
+            postgresql_where=text(TURN_ROWS),
         ),
         Index("ix_memories_tenant_user", "tenant_id", "user_id", "created_at"),
         Index("ix_memories_tenant_thread", "tenant_id", "thread_id"),
