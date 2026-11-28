@@ -46,6 +46,7 @@ async def rescore(
     llm = container.llm
     if not getattr(llm, "enabled", False):
         raise SystemExit("rescoring needs a generative model: BENCH_LLM=on and LLM_BASE_URL")
+    judged_by = await llm.resolve_model("grounding_judge")
     pacer = _Pacer(calls_per_minute)
     out = copy.deepcopy(result)
     by_cat: dict[str, list[bool]] = {}
@@ -74,7 +75,7 @@ async def rescore(
             repaired = {k: v for k, v in judged.items() if k not in ("error", "detail")}
             rec["judged"] = {**repaired, **verdict}
             rec["judge_ruler"] = ruler
-            rec["judge_model"] = llm.model_for("grounding_judge")
+            rec["judge_model"] = judged_by
             hit = judged_hit(rec["category"], rec["judged"])
             rec["hit"] = hit
             by_cat.setdefault(rec["category"], []).append(bool(hit))
@@ -91,7 +92,7 @@ async def rescore(
     }
     out["judge_failures"] = failures
     out["judge_ruler"] = ruler
-    out["judge_model"] = llm.model_for("grounding_judge")
+    out["judge_model"] = judged_by
     return out
 
 
