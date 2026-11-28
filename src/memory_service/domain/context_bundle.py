@@ -441,6 +441,8 @@ def _resolved_dates(m: Any) -> str:
 #:
 #: Two is the floor because a "group" of one is just the memory's own line.
 AGGREGATE_MIN_MEMBERS = 2
+#: The predicate of a turn kept as said (``modules.memory``): never gathered as a slot.
+SAID = "said"
 
 
 def _aggregate_key(m: Any) -> tuple[str, str] | None:
@@ -454,7 +456,9 @@ def _aggregate_key(m: Any) -> tuple[str, str] | None:
         return None
     subject = str(m.attributes.get("subject") or "")
     predicate = str(m.attributes.get("predicate") or "")
-    if not subject or not is_multi_valued(predicate):
+    # a turn kept as said is no slot of the speaker: two unrelated sentences are not two
+    # values of one thing ("said" accumulates everything they ever said)
+    if not subject or predicate == SAID or not is_multi_valued(predicate):
         return None
     return subject, predicate
 

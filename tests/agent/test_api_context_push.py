@@ -106,9 +106,15 @@ async def test_every_section_arrives_when_it_should_and_is_about_the_task(app, r
     # what answers the task
     assert any("1200 EUR" in m.text for m in bundle.memories), bundle.memories
     assert any("approver" in k.text for k in bundle.knowledge), bundle.knowledge
-    # a fact about the task (a "mentions" fact whose object the text already shows is dropped)
-    about = {"Q-1183", "EMEA", "SKU-22"}
-    assert any({f.subject, f.object} & about for f in bundle.graph_facts), bundle.graph_facts
+    # what the graph knows of the task, said once: as the memory it was read from, a fact
+    # beside it only when it says something the context does not (no "mentions" fact)
+    assert any("owns quote Q-1183" in m.text for m in bundle.memories), bundle.memories
+    shown = " ".join(m.text.casefold() for m in bundle.memories)
+    assert not any(
+        f.object and f.object.casefold() in shown
+        for f in bundle.graph_facts
+        if f.subject and f.subject.casefold() in shown and f.predicate == "mentions"
+    )
     # what the agent learned to do
     assert bundle.skills[0].steps == [LOOKUP, UPDATE]
     lookup = bundle.tools[0]
@@ -131,7 +137,8 @@ async def test_every_section_arrives_when_it_should_and_is_about_the_task(app, r
         "## Recent conversation",
     ]
     assert [rendered.index(h) for h in order] == sorted(rendered.index(h) for h in order)
-    assert "## Knowledge" in rendered and "## Facts" in rendered
+    # a Facts section only for what the memories above do not already say
+    assert "## Knowledge" in rendered
 
     # A framework that keeps its own history asks without the window: the summary stays.
     own = await agent.context(TASK, token_budget=6000, window=False, format="full")

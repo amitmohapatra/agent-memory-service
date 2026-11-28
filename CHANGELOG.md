@@ -7,6 +7,17 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service): a context says each statement once, one line each
+
+A context could carry one statement three ways: as a memory, as a graph fact read from it
+("[f3] u1 prefers answers as a table ..."), and as a profile line; it carried the graph's
+bookkeeping ("u1 mentions Priya"); and turns kept as said were gathered under one header
+("user:u1 - said (source statements):") as if "said" were a slot, so unrelated sentences
+read as values of one thing. Now a fact read from a memory the context carries, or whose
+words a line of it holds, is not shown again; bookkeeping facts are left out, as a search
+leaves them out; and a turn as said is its own line. Values of a real slot ("went to",
+"likes") are still gathered, which LoCoMo's multi-hop questions need (ADR 0024).
+
 ### Fixed (service): an event or a file never becomes the person's rule, preference or profile line
 
 What was read from an event ("Never call the customer after 6pm", posted with `role: EVENT`)

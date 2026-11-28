@@ -287,6 +287,8 @@ def candidate_to_item(c: Candidate) -> ContextItem:
                 "object",
                 "attributes",
                 "contradicts",
+                # a graph fact's source memory: not shown again beside it (``demand``)
+                "memory_id",
                 # typed connections written by the background pass (supersedes / contradicts /
                 # relates): a caller that reads one memory can see what it was linked to
                 # a later statement of the same user replaced it (ADR 0038)

@@ -16,6 +16,7 @@ left out of what is carried. Everything left out is one search away (``/v1/recal
 
 from __future__ import annotations
 
+import re
 from typing import Final
 
 from memory_service.domain.context_bundle import (
@@ -23,6 +24,7 @@ from memory_service.domain.context_bundle import (
     UnusedEvidence,
     earlier_chats_section,
 )
+from memory_service.domain.graph import BOOKKEEPING_LAYERS, layer_for
 from memory_service.domain.memory import unverified_representation
 from memory_service.modules.context.standing import stated
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
@@ -70,15 +72,21 @@ def standing(bundle: ContextBundle) -> ContextBundle:
 
 
 def said_once(bundle: ContextBundle) -> ContextBundle:
-    """``bundle`` without the memories a profile line already states, word for word (a rule
-    or preference that applies is listed with its date in the profile, and was in the
-    prompt a second time as a ranked memory). Each stays evidence the bundle does not carry
-    (``unused``), which an answer is still checked against."""
+    """``bundle`` with each statement once: without the memories a profile line already
+    states, word for word (a rule or preference that applies is listed with its date in the
+    profile, and was in the prompt a second time as a ranked memory), and without the graph
+    facts that say nothing new (``_facts_once``). Each memory left out stays evidence the
+    bundle does not carry (``unused``), which an answer is still checked against."""
     shown = {
         _plain(stated(line)[0]) for block in bundle.profile for line in block.text.splitlines()
     }
     shown.discard("")
     twice = [m for m in bundle.memories if _plain(m.text) in shown]
+    bundle = _facts_once(
+        bundle,
+        {m.item_id for m in bundle.memories},
+        [*shown, *(_plain(m.text) for m in bundle.memories)],
+    )
     if not twice:
         return bundle
     gone = {m.item_id for m in twice}
@@ -104,3 +112,38 @@ def said_once(bundle: ContextBundle) -> ContextBundle:
 
 def _plain(text: str) -> str:
     return " ".join(text.split()).casefold().strip(" .!?;:,")
+
+
+def _facts_once(bundle: ContextBundle, stated: set[str], lines: list[str]) -> ContextBundle:
+    """``bundle`` without the graph facts that say nothing new: one read from a memory the
+    context carries (``stated``: the ranked memories, those a profile line states among
+    them), one whose words a line of it already holds (``lines``: a fact the graph built with
+    no link back to its memory), and the graph's bookkeeping ("u1 mentions Dana": where a name
+    appears, ``BOOKKEEPING_LAYERS``), as a search leaves it out
+    (``retrieval.search._asked_for``)."""
+    kept = [
+        f
+        for f in bundle.graph_facts
+        if str(f.attributes.get("memory_id") or "") not in stated
+        and layer_for(str(f.attributes.get("predicate") or "")) not in BOOKKEEPING_LAYERS
+        and not _held(_plain(_DAY.sub("", f.text, count=1)), lines)
+    ]
+    if len(kept) == len(bundle.graph_facts):
+        return bundle
+    saved = sum(f.token_estimate for f in bundle.graph_facts) - sum(f.token_estimate for f in kept)
+    return bundle.model_copy(
+        update={"graph_facts": kept, "token_estimate": max(0, bundle.token_estimate - saved)}
+    )
+
+
+#: The day a fact's text opens with (``2026-11-28 coach tote is short ...``)
+_DAY: Final = re.compile(r"^\s*\d{4}-\d{2}-\d{2}\s+")
+#: A fact shorter than this is held by a line only when equal: a word or two is in many lines
+#: without being read from any of them (as ``context.check.PART_CHARS``).
+PART_CHARS: Final = 16
+
+
+def _held(fact: str, lines: list[str]) -> bool:
+    return bool(fact) and any(
+        fact == line or (len(fact) >= PART_CHARS and fact in line) for line in lines
+    )
