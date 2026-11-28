@@ -7,6 +7,26 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service): the context is the agreed sections, each statement once
+
+- **No People section and no beliefs in a context:** a person's beliefs are still written and
+  searched (`kinds: ["belief"]`), but a context no longer pins a page per person or adds
+  recalled beliefs under `## Summaries`. They said again what the profile and the memories
+  said ("Priya runs allocation for the Northeast district" five times in one context).
+- **One of a message kept as said and what was read from it:** where a model's reading of a
+  message is shown (as a memory, or as a dated profile line), the message itself is not shown
+  again; where word patterns cut a sentence out of a message that is shown, the sentence is
+  left out (the message says it, with what was said around it). A profile `field: value`
+  line states its value, so the memory with the same words goes too.
+- **Profile rules, preferences and setup are the asker's own:** read only from what they said
+  for themselves or wrote, never from what another person made readable to the tenant (a
+  shared conversation listed one speaker's "Keep it up!" as whoever asked's rule).
+- **A tool call in the recent conversation is the step it took:** `ASSISTANT: called
+  stock_level(sku="SKU-2210", store="Boston")`, where an empty `ASSISTANT:` line said nothing.
+- **The LoCoMo scorer runs again:** it named its judge with a `model_for` the model client no
+  longer has, and stopped on the first row; it now asks the client (`resolve_model`), and a
+  test holds it to the client's real interface.
+
 ### Changed (service): the prompt form carries what the model needs, dated, and nothing it has
 
 - **Recent conversation is timed:** the day on a line of its own when it changes, each

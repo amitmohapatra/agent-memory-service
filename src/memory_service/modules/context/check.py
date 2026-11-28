@@ -35,7 +35,7 @@ What the call can and cannot do:
   the tool the request needs by it; a first build that kept both kept exactly what had to
   go. A rule that is removed takes the marks made by it with it.
 - It is not shown, and so cannot remove: a profile block a person or an agent wrote or
-  edited (their words, not derived) and the people's pages, the conversation and its
+  edited (their words, not derived), the conversation and its
   summary, what the assistant answered in earlier conversations, document passages and
   their summaries (their evidence groups travel as units), and working memory.
 - It has a deadline of its own (``LLM.check_deadline_seconds``, and never past the

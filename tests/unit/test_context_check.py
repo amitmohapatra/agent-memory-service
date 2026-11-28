@@ -354,7 +354,7 @@ def test_what_the_model_names_is_removed_and_nothing_else_changes() -> None:
         "about_user",
         "user",
     ]
-    assert left.people == bundle.people and left.knowledge == bundle.knowledge
+    assert left.knowledge == bundle.knowledge
     assert left.conversation == bundle.conversation
     assert left.memories[0] is bundle.memories[0]
     assert left.token_estimate < bundle.token_estimate

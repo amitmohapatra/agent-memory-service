@@ -178,6 +178,7 @@ async def test_every_field_the_standing_searches_filter_on_is_indexed():
 
     from memory_service.adapters.search.qdrant_store import _PAYLOAD_INDEXES
     from memory_service.domain.script import Script
+    from memory_service.modules.authz.visibility import VisibilitySpecification
     from memory_service.modules.context import standing
     from memory_service.modules.retrieval.engine import QueryVectors
     from memory_service.ports.search import SearchFilter, SparseVector, VectorName
@@ -200,7 +201,8 @@ async def test_every_field_the_standing_searches_filter_on_is_indexed():
         sparse=SparseVector(indices=[1], values=[1.0]),
         script=Script.LATIN,
     )
-    await standing.standing_blocks(engine, "Always send reports as a table", None, vectors)
+    asker = VisibilitySpecification(tenant_id="acme", keys=frozenset({"user:acme/u1"}))
+    await standing.standing_blocks(engine, "Always send reports as a table", asker, vectors)
     fields = {key for flt in filters for key in (*flt.must_any, *flt.should_any)}
     # rules and preferences: a dense and a keyword search each; the user's own setup: dense
     assert len(filters) == 5 and fields

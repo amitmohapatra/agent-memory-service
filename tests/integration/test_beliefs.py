@@ -18,7 +18,6 @@ from sqlalchemy import text
 
 from memory_service.adapters.models.llm import EndpointLLM
 from memory_service.domain.context import MemoryExecutionContext
-from memory_service.domain.context_bundle import people_section
 from memory_service.domain.enums import Visibility
 from memory_service.domain.observation import ProcessingHints
 from memory_service.domain.revisions import RevisionKind
@@ -258,12 +257,12 @@ async def test_keep_update_retire_add_skip_and_the_page_with_earlier_values(
     await settle(container)
     painted = {x.text: x for x in await beliefs(uow_factory, current=False)}["Paints sunsets."]
     assert painted.valid_to == DAY + timedelta(days=90)
-    bundle = await container.services["context_builder"].build(ASKER, "Where does Caroline work?")
-    page = next(b.text for b in bundle.people if b.block == "caroline")
-    current, _, earlier = page.partition("Earlier values (since replaced):")
-    assert "Works at Google" in current and "Microsoft" not in current
-    assert "Microsoft" in earlier and "Paints sunsets." in earlier
-    assert "### caroline" in bundle.render()
+    # what a person is believed to be is searched for, never carried in a context
+    asked = "Where does Caroline work?"
+    found = await container.services["retrieval"].retrieve(ASKER, asked, kinds=("belief",))
+    assert any("Works at Google" in c.text for c in found.candidates)
+    bundle = await container.services["context_builder"].build(ASKER, asked)
+    assert "### caroline" not in bundle.render() and "Works at Google" not in bundle.render()
     assert service is container.services["consolidation"]
 
 
@@ -342,7 +341,7 @@ async def test_unchanged_sources_make_no_call_and_a_new_fact_calls_for_its_perso
 # -- 5./6. the page and recall hits in the context, no model call on the read ---------------
 
 
-async def test_the_context_pins_the_page_and_recalls_beliefs_without_a_model_call(
+async def test_a_belief_is_searched_for_never_carried_and_no_read_calls_the_model(
     container, uow_factory, wired
 ) -> None:
     long = "Volunteers at the animal shelter every Saturday morning " + "and more " * 36
@@ -357,13 +356,12 @@ async def test_the_context_pins_the_page_and_recalls_beliefs_without_a_model_cal
     await settle(container)
     builder = container.services["context_builder"]
     calls = sum(gw_stub.calls.values())
-    pinned = await builder.build(ASKER, "What does Caroline do on Saturdays?")
-    assert any(b.block == "caroline" for b in pinned.people)
-    assert not pinned.summaries  # pinned already: not repeated as a recall hit
-    small = await builder.build(ASKER, "animal shelter Saturday volunteers", token_budget=200)
-    assert not any(b.block == "caroline" for b in small.people)  # over the pinned share
-    assert [s.text for s in small.summaries] == [long.strip()]
-    assert "[s1]" in small.render()
+    built = await builder.build(ASKER, "What does Caroline do on Saturdays?")
+    assert long.strip() not in built.render() and "### caroline" not in built.render()
+    found = await container.services["retrieval"].retrieve(
+        ASKER, "animal shelter Saturday volunteers", kinds=("belief",)
+    )
+    assert [c.text for c in found.candidates] == [long.strip()]
     assert sum(gw_stub.calls.values()) == calls  # the read path never calls the model
 
 
@@ -425,9 +423,6 @@ async def test_a_belief_that_loses_one_of_its_sources_is_hidden_at_once_and_rebu
     # before any job runs (its point still in the index): not on the page, not found
     builder = container.services["context_builder"]
     bundle = await builder.build(ASKER, "What are Caroline's cats called?")
-    page = people_section(bundle.people) or ""
-    assert "Luna" not in page and "Grew up in Ohio." in page
-    assert not any("Luna" in s.text for s in bundle.summaries)
     found = await container.services["retrieval"].retrieve(
         ASKER, "cats Luna Sol", kinds=("belief",)
     )
@@ -466,8 +461,10 @@ async def test_without_a_model_a_belief_that_lost_a_source_stays_deleted(
     async with uow_factory() as uow:
         [dropped] = await uow.beliefs.get_many(T, [cats.belief_id])
     assert dropped.deleted_at is not None and dropped.text == ""
-    bundle = await container.services["context_builder"].build(ASKER, "Caroline's cats?")
-    assert not bundle.people and "Luna" not in "".join(s.text for s in bundle.summaries)
+    found = await container.services["retrieval"].retrieve(
+        ASKER, "Caroline's cats?", kinds=("belief",)
+    )
+    assert not any("Luna" in c.text for c in found.candidates)
 
 
 # -- pruning: the newest superseded versions of a belief stay -------------------------------
@@ -509,13 +506,15 @@ async def test_a_reader_who_cannot_see_a_cited_memory_does_not_see_the_belief(
         container, uow_factory, "caroline", "I am allergic to peanuts.", visibility=Visibility.USER
     )
     await settle(container)
-    builder = container.services["context_builder"]
-    theirs = await builder.build(ASKER, "Is Caroline allergic to anything?")
-    assert not any(b.block == "caroline" for b in theirs.people)
-    own = await builder.build(
-        ASKER.model_copy(update={"user_id": "caroline"}), "What am I allergic to?"
+    retrieval = container.services["retrieval"]
+    theirs = await retrieval.retrieve(ASKER, "Is Caroline allergic to anything?", kinds=("belief",))
+    assert not any("peanuts" in c.text for c in theirs.candidates)
+    own = await retrieval.retrieve(
+        ASKER.model_copy(update={"user_id": "caroline"}),
+        "What am I allergic to?",
+        kinds=("belief",),
     )
-    assert any("peanuts" in b.text for b in own.people if b.block == "caroline")
+    assert any("peanuts" in c.text for c in own.candidates)
 
 
 # -- 10. two workers, and a retry after a crash ---------------------------------------------
@@ -578,29 +577,6 @@ async def test_a_tenant_ingested_without_beliefs_is_consolidated_through_the_job
     rebuilt = await consolidate_tenant(container, T, rebuild=True)
     assert rebuilt["current_beliefs"] == report["current_beliefs"]
     assert not before & {b.belief_id for b in await beliefs(uow_factory)}  # replaced
-
-
-async def test_over_the_pinned_share_a_page_keeps_the_lines_the_question_finds(
-    container, uow_factory, wired
-) -> None:
-    filler = " and kept a note of it in her travel journal for later"
-
-    def answer(prompt: str) -> list[dict]:
-        return [entry("add", [s], t + filler, facet="hobbies") for t, s in ids(prompt).items()]
-
-    wired(StubModel(answer))
-    said = [f"I visited harbour market number {i} and bought a souvenir." for i in range(12)]
-    for text_ in [*said, "I play the theremin every Tuesday evening."]:
-        await say(container, uow_factory, "caroline", text_)
-    await settle(container)
-    assert len(await beliefs(uow_factory)) == 13
-    builder = container.services["context_builder"]
-    whole = await builder.build(ASKER, "What does Caroline do?")
-    assert len(next(b for b in whole.people if b.block == "caroline").text.splitlines()) == 13
-    small = await builder.build(ASKER, "theremin Tuesday evening", token_budget=600)
-    page = next(b.text for b in small.people if b.block == "caroline").splitlines()
-    assert 0 < len(page) < 13  # over the share: trimmed, not dropped
-    assert any("theremin" in line for line in page)  # the line the question is about stays
 
 
 async def test_a_search_index_rebuild_restores_the_beliefs(container, uow_factory, wired) -> None:

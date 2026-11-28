@@ -648,3 +648,18 @@ def test_a_message_the_summary_does_not_cover_does_not_keep_it() -> None:
     )
     covered = msgs[-2].sequence  # the summary ends before the newest question
     assert replays_summary(replay_window("thr", msgs, 100_000), msgs, covered)
+
+
+def test_a_call_with_no_words_is_the_step_it_took_never_an_empty_line() -> None:
+    """An assistant message that only calls tools has no text: the recent conversation shows
+    the call it made, with its arguments, where an empty ``ASSISTANT:`` line said nothing."""
+    from memory_service.modules.context.window import timed
+
+    shown = timed([_m(U, "What's the stock?"), _m(A, calls=("c1", "c2")), _m(A, "14 units.")])
+    said = [line.split("] ", 1)[1] for line in shown.splitlines()[1:]]
+    assert said == [
+        "USER: What's the stock?",
+        'ASSISTANT: called lookup(q="c1"), lookup(q="c2")',
+        "ASSISTANT: 14 units.",
+    ]
+    assert timed([_m(A)]).splitlines()[1:] == []  # nothing said, nothing called: no line

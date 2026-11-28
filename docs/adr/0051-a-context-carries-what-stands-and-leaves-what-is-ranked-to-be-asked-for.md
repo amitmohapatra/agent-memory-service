@@ -34,7 +34,7 @@ the profile, the rules and the preferences with it.
 
 `/v1/context` takes `recall` (default `true`: the context as it was).
 
-- **`recall: false` carries what stands** - the profile blocks and the people's pages, the
+- **`recall: false` carries what stands** - the profile blocks, the
   standing rules, preferences and what the person said of themselves that apply to the
   request, the conversation window and the thread's summary, the learned skills, the tool
   hints - **and leaves out what is ranked** (`modules/context/demand.py`): `memories`,

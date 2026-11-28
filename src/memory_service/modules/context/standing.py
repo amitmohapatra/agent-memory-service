@@ -37,11 +37,14 @@ from memory_service.domain.context_bundle import ProfileBlockView, profile_secti
 from memory_service.domain.language import detect_language
 from memory_service.domain.memory import SELF_ANYWHERE
 from memory_service.domain.profile import PROFILE_MEMORY_TYPES
+from memory_service.modules.authz.visibility import VISIBILITY_FIELD
 from memory_service.modules.context.evidence import content_terms, stemmed_terms
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.memory.replacement import _function_words
 from memory_service.ports.search import SearchHit
 
+#: The audience keys that are one person's own (``modules.authz.visibility``).
+OWN_AUDIENCES: Final = ("user:", "principal:")
 RULES_BLOCK: Final = "standing_rules"
 PREFERENCES_BLOCK: Final = "preferences"
 #: What the user said of their own lasting setup ("Our whole team is on MacBooks", "Our books
@@ -548,11 +551,20 @@ async def _search(
     keyword: bool = True,
     limit: int = SEARCH_K,
 ) -> list[tuple[SearchHit, float]]:
-    """The user's current memories the filter admits, each with its dense similarity to the
-    query (0 for one only the keyword search found), best first."""
+    """The user's own current memories the filter admits, each with its dense similarity to
+    the query (0 for one only the keyword search found), best first. Their own: what they
+    said for themselves or wrote (``_own``), never what another person made readable to more
+    people - that is something the other person said, a memory when it bears on the
+    question, not the asker's rule, preference or setup."""
+    own = _own(visibility)
+    if not own:
+        return []
     collection, flt = engine.memory_scope(visibility)
     flt = flt.model_copy(
-        update={"must_any": {**flt.must_any, **(must_any or {})}, "should_any": should_any or {}}
+        update={
+            "must_any": {**flt.must_any, VISIBILITY_FIELD: own, **(must_any or {})},
+            "should_any": should_any or {},
+        }
     )
     primary = engine.indexer.spaces.primary_space.name
     dense = (
@@ -573,3 +585,10 @@ async def _search(
             if hit.record_id not in scored or similarity > scored[hit.record_id][1]:
                 scored[hit.record_id] = (hit, similarity)
     return sorted(scored.values(), key=lambda pair: -pair[1])
+
+
+def _own(visibility: Any) -> list[str]:
+    """The asker's own audiences among those they may read: what they said for themselves
+    (``user:``) and what they wrote (``principal:``) - not the tenant's, a workspace's or a
+    thread's, which hold other people's words too."""
+    return sorted(k for k in visibility.keys if k.startswith(OWN_AUDIENCES))

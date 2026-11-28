@@ -17,10 +17,12 @@ left out of what is carried. Everything left out is one search away (``/v1/recal
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from typing import Final
 
 from memory_service.domain.context_bundle import (
     ContextBundle,
+    ContextItem,
     UnusedEvidence,
     earlier_chats_section,
 )
@@ -36,6 +38,13 @@ NOTE: Final = "recall"
 RANKED: Final = ("memories", "history", "graph_facts", "knowledge", "summaries")
 #: What the assistant answered in earlier conversations: found by the request too.
 SAID: Final = "earlier_chats"
+#: A message kept as said: the turn itself, and the turn with what it replied to.
+KEPT_AS_SAID: Final = frozenset({"verbatim_turn", "referred_turn"})
+#: What a model read from a message (the memory's ``provider``); word patterns are ``native``.
+READ_BY_MODEL: Final = "llm"
+WORD_PATTERNS: Final = "native"
+#: A profile block's ``field: value`` line (the ``user`` block): the value is the statement.
+_FIELD: Final = re.compile(r"^[\w-]{1,40}: ")
 
 
 def standing(bundle: ContextBundle) -> ContextBundle:
@@ -74,14 +83,21 @@ def standing(bundle: ContextBundle) -> ContextBundle:
 def said_once(bundle: ContextBundle) -> ContextBundle:
     """``bundle`` with each statement once: without the memories a profile line already
     states, word for word (a rule or preference that applies is listed with its date in the
-    profile, and was in the prompt a second time as a ranked memory), and without the graph
-    facts that say nothing new (``_facts_once``). Each memory left out stays evidence the
-    bundle does not carry (``unused``), which an answer is still checked against."""
+    profile, and was in the prompt a second time as a ranked memory), without one of a
+    message kept as said and a memory read from it (``_one_of_each_message``), and without
+    the graph facts that say nothing new (``_facts_once``). Each memory left out stays
+    evidence the bundle does not carry (``unused``), which an answer is still checked
+    against."""
     shown = {
-        _plain(stated(line)[0]) for block in bundle.profile for line in block.text.splitlines()
+        said for block in bundle.profile for line in block.text.splitlines() for said in _says(line)
     }
     shown.discard("")
-    twice = [m for m in bundle.memories if _plain(m.text) in shown]
+    stated_twice = {m.item_id for m in bundle.memories if _plain(m.text) in shown}
+    twice = [
+        m
+        for m in bundle.memories
+        if m.item_id in stated_twice or m.item_id in _one_of_each_message(bundle.memories)
+    ]
     bundle = _facts_once(
         bundle,
         {m.item_id for m in bundle.memories},
@@ -108,6 +124,35 @@ def said_once(bundle: ContextBundle) -> ContextBundle:
             "token_estimate": max(0, bundle.token_estimate - sum(m.token_estimate for m in twice)),
         }
     )
+
+
+def _says(line: str) -> tuple[str, ...]:
+    """What a profile line states, plain: the line, and a ``field: value`` line's value."""
+    text = stated(line)[0]
+    field = _FIELD.match(text)
+    return (_plain(text), _plain(text[field.end() :])) if field else (_plain(text),)
+
+
+def _one_of_each_message(memories: Sequence[ContextItem]) -> set[str]:
+    """The memories that say again what another shown memory of the same message says: a
+    message kept as said where a model's reading of it is shown (the model kept what the
+    message said worth keeping), and a sentence word patterns cut out of a message that is
+    shown as said (the message says it, with what was said around it)."""
+
+    def messages(m: ContextItem) -> set[str]:
+        return {e.message_id for e in m.evidence if e.message_id}
+
+    turns = [m for m in memories if m.attributes.get("category") in KEPT_AS_SAID]
+    read = [m for m in memories if m.attributes.get("category") not in KEPT_AS_SAID]
+    by_model = {
+        mid for m in read if m.attributes.get("provider") == READ_BY_MODEL for mid in messages(m)
+    }
+    as_said = {mid for m in turns for mid in messages(m)}
+    return {m.item_id for m in turns if messages(m) and messages(m) <= by_model} | {
+        m.item_id
+        for m in read
+        if m.attributes.get("provider") == WORD_PATTERNS and messages(m) and messages(m) <= as_said
+    }
 
 
 def _plain(text: str) -> str:

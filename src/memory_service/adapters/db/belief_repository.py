@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import Text, delete, func, or_, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy import text as sql_text
-from sqlalchemy.dialects.postgresql import array, insert
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memory_service.adapters.db.orm import BeliefProgressRow, BeliefRow, BeliefSourceRow
@@ -309,63 +309,6 @@ class SqlBeliefRepository:
             .returning(BeliefRow.belief_id)
         )
         return await self.get_many(tenant_id, sorted(cleared.scalars()))
-
-    async def visible(
-        self,
-        tenant_id: str,
-        keys: Sequence[str],
-        *,
-        scope_keys: Sequence[str],
-        people: int,
-        history: int,
-    ) -> list[Belief]:
-        readable = (
-            BeliefRow.tenant_id == tenant_id,
-            BeliefRow.scope_key.in_(list(scope_keys)),
-            BeliefRow.deleted_at.is_(None),
-            BeliefRow.visibility_keys.op("?|")(array(list(keys), type_=Text)),
-        )
-        current = (
-            BeliefRow.superseded_by.is_(None),
-            BeliefRow.valid_to.is_(None),
-            BeliefRow.stale_since.is_(None),
-        )
-        ranked = (
-            select(BeliefRow.person_key)
-            .where(*readable, *current)
-            .group_by(BeliefRow.person_key)
-            .order_by(func.sum(BeliefRow.proof_count).desc(), BeliefRow.person_key)
-            .limit(people)
-        )
-        persons = list(await self.s.scalars(ranked))
-        if not persons:
-            return []
-        now = (
-            await self.s.scalars(
-                select(BeliefRow).where(*readable, *current, BeliefRow.person_key.in_(persons))
-            )
-        ).all()
-        newest = func.row_number().over(
-            partition_by=BeliefRow.person_key,
-            order_by=func.coalesce(BeliefRow.valid_to, BeliefRow.updated_at).desc(),
-        )
-        earlier = (
-            select(BeliefRow, newest.label("n"))
-            .where(
-                *readable,
-                BeliefRow.person_key.in_(persons),
-                or_(BeliefRow.superseded_by.is_not(None), BeliefRow.valid_to.is_not(None)),
-            )
-            .subquery()
-        )
-        old = (
-            await self.s.scalars(
-                select(BeliefRow)
-                .join(earlier, BeliefRow.belief_id == earlier.c.belief_id)
-                .where(earlier.c.n <= history)
-            )
-        ).all()
-        return await self._with_sources([*now, *old])
 
     async def get_many(self, tenant_id: str, belief_ids: Sequence[str]) -> list[Belief]:
         if not belief_ids:

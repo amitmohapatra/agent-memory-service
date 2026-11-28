@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 
 from memory_service.domain.context_bundle import ProfileBlockView
+from memory_service.modules.authz.visibility import VisibilitySpecification
 from memory_service.modules.context import standing
 from memory_service.modules.context.sections import Pinned, _profile_that_fits, within_budget
 from memory_service.ports.search import Retriever, SearchFilter, SearchHit, SparseVector, VectorName
@@ -68,6 +69,10 @@ class _Engine:
         return "memories", SearchFilter(tenant_id="t", must_any={"visibility_keys": ["user:t/u"]})
 
 
+#: the asker the fake engine's scope reads for: their own memories carry ``user:t/u``
+ASKER = VisibilitySpecification(tenant_id="t", keys=frozenset({"tenant:t", "user:t/u"}))
+
+
 class _Vectors:
     dense = {VectorName.DENSE_ML: [1.0, 0.0]}
     sparse = SparseVector(indices=[1], values=[1.0])
@@ -92,7 +97,7 @@ RULES = [
 async def test_the_rules_that_apply_and_the_newest_of_one_subject() -> None:
     engine = _Engine(RULES)
     blocks = await standing.standing_blocks(
-        engine, "Run the stockout audit for region 5", None, _Vectors()
+        engine, "Run the stockout audit for region 5", ASKER, _Vectors()
     )
     rules = next(b for b in blocks if b.block == standing.RULES_BLOCK).text
     # the later rule on the subject, dated, with the earlier one it superseded and its date
@@ -121,7 +126,7 @@ async def test_what_was_said_with_an_applying_preference_comes_with_it() -> None
         _hit("p3", "I like hiking.", "preference"),
     ]
     blocks = await standing.standing_blocks(
-        _Engine(hits), "Which styles should I look at this week?", None, _Vectors()
+        _Engine(hits), "Which styles should I look at this week?", ASKER, _Vectors()
     )
     prefs = blocks[0].text.splitlines()
     assert prefs == [
@@ -134,7 +139,7 @@ async def test_what_was_said_with_an_applying_preference_comes_with_it() -> None
 async def test_a_rule_applies_by_shared_words_in_another_language() -> None:
     hits = [_hit("r1", "Nie einen Transfer anlegen, wenn ATA 0 ist.", "rule")]
     blocks = await standing.standing_blocks(
-        _Engine(hits), "Leg einen Transfer an, ATA ist 0", None, _Vectors()
+        _Engine(hits), "Leg einen Transfer an, ATA ist 0", ASKER, _Vectors()
     )
     assert blocks and "Transfer" in blocks[0].text
 
@@ -143,7 +148,7 @@ async def test_a_rule_applies_by_shared_words_in_another_language() -> None:
 async def test_an_earlier_value_never_applies() -> None:
     hits = [_hit("r1", "Never create a transfer when ATA is 0.", "rule", earlier_value=True)]
     assert not await standing.standing_blocks(
-        _Engine(hits), "create a transfer, ATA is 0", None, _Vectors()
+        _Engine(hits), "create a transfer, ATA is 0", ASKER, _Vectors()
     )
 
 
@@ -167,7 +172,7 @@ async def test_a_restated_rule_or_preference_with_new_values_keeps_only_the_newe
     blocks = {
         b.block: b.text
         for b in await standing.standing_blocks(
-            _Engine(hits), "Schedule my store visit on weekdays", None, _Vectors()
+            _Engine(hits), "Schedule my store visit on weekdays", ASKER, _Vectors()
         )
     }
     # the newest form applies; the earlier one is said with it, so the agent can ask which holds
@@ -214,9 +219,9 @@ async def test_a_replaced_never_rule_is_not_listed_and_forbids_nothing() -> None
         _hit("a", "Never create a stock rule at store S40.", "rule", day="2026-09-01"),
         _hit("b", newer, "rule", day="2026-10-01"),
     ]
-    blocks = await standing.standing_blocks(_Engine(hits), STOCK_RULE_TASK, None, _Vectors())
+    blocks = await standing.standing_blocks(_Engine(hits), STOCK_RULE_TASK, ASKER, _Vectors())
     assert standing.listed_rules(blocks) == [newer]
     assert not standing.forbids(newer, "create_stock_rule", [STOCK_RULE_TASK])
     earlier = [_hit("a", "Never create a stock rule at store S40.", "rule", earlier_value=True)]
-    blocks = await standing.standing_blocks(_Engine(earlier), STOCK_RULE_TASK, None, _Vectors())
+    blocks = await standing.standing_blocks(_Engine(earlier), STOCK_RULE_TASK, ASKER, _Vectors())
     assert standing.listed_rules(blocks) == []

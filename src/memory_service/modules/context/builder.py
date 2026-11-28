@@ -53,11 +53,9 @@ from memory_service.modules.context.demand import standing as standing_only
 from memory_service.modules.context.evidence import NO_SHARED_TERM
 from memory_service.modules.context.handles import BundleRecords, record_of
 from memory_service.modules.context.sections import (
-    PEOPLE_CHARGED,
     ContextSections,
     Pinned,
     ToolsRequest,
-    people_tokens,
     within_budget,
 )
 from memory_service.modules.context.semantic_cache import SemanticBundleCache, semantic_key
@@ -177,54 +175,6 @@ _EVIDENCE_SOURCE = {
     "fact": EvidenceSource.GRAPH_FACT,
     "belief": EvidenceSource.MEMORY,
 }
-#: Recalled beliefs a context shows as summaries besides the pages: those no page shows (a
-#: person the reader has no page for, a line a page left out).
-BELIEF_HITS_MAX: Final = 4
-
-
-def _belief_ranks(beliefs: list[Candidate]) -> dict[str, int]:
-    """The beliefs this question's search found, best first: what a person's page over the
-    pinned share keeps."""
-    return {c.record_id: rank for rank, c in enumerate(beliefs)}
-
-
-def _not_pinned(beliefs: list[Candidate], pages: Sequence[ProfileBlockView]) -> list[Candidate]:
-    """A recalled belief a pinned person page already shows is not shown twice."""
-    shown = "\n".join(page.text for page in pages)
-    return [c for c in beliefs if c.text not in shown]
-
-
-def _with_beliefs(
-    bundle: ContextBundle,
-    beliefs: list[Candidate],
-    pages: Sequence[ProfileBlockView],
-    left: int,
-) -> tuple[ContextBundle, int]:
-    """``bundle`` with the recalled beliefs no page shows after its summaries, and the tokens
-    the beliefs add to the prompt beyond what the budget already counts: on top of
-    everything else, pages included, or within the ``left`` tokens of the budget (less what
-    the bundle took) when the people's pages are charged (``PEOPLE_CHARGED``). Never in a
-    memory's place."""
-    room = left - bundle.token_estimate if PEOPLE_CHARGED else None
-    items: list[ContextItem] = []
-    cost = 0
-    for item in (candidate_to_item(c) for c in beliefs[:BELIEF_HITS_MAX]):
-        if room is not None and cost + item.token_estimate > room:
-            break
-        items.append(item)
-        cost += item.token_estimate
-    if not PEOPLE_CHARGED:
-        cost += people_tokens(pages)  # on top of the budget, still in the prompt
-    if items:
-        bundle = bundle.model_copy(update={"summaries": [*bundle.summaries, *items]})
-    return bundle, cost
-
-
-def _charged(shown: int, pages: Sequence[ProfileBlockView]) -> int:
-    """Of the ``shown`` tokens a context carries beside its packed evidence, those that come
-    out of its token budget: all of them, less the people's pages while those are on top of
-    it (``PEOPLE_CHARGED``)."""
-    return shown if PEOPLE_CHARGED else shown - people_tokens(pages)
 
 
 def candidate_to_item(c: Candidate) -> ContextItem:
@@ -778,30 +728,20 @@ class ContextBuilder:
         await self._add_extras(ctx, query, tools, visibility, result, pinned, timings)
         # the engine's own stage split, plus what happened around it
         result.diagnostics.setdefault("timings_ms", {}).update(timings.ms)
-        beliefs = await self._beliefs(ctx, query, visibility, result)
-        pinned, pinned_tokens = within_budget(pinned, budget, _belief_ranks(beliefs))
+        pinned, pinned_tokens = within_budget(pinned, budget)
         said_before, said_tokens = _within(answered_before, budget - pinned_tokens)
         bundle = self._assemble(
             query, result, conversation, budget - pinned_tokens - said_tokens, found.revision_fp
         )
-        # the beliefs come after everything the context had without them, never in its place
-        bundle, shown = _with_beliefs(
-            bundle,
-            _not_pinned(beliefs, pinned.pages),
-            pinned.pages,
-            budget - pinned_tokens - said_tokens,
-        )
-        shown += pinned_tokens + said_tokens
+        shown = pinned_tokens + said_tokens
         # the further about_user lines take only what the memories left of the budget
         pinned.profile, more = with_more_about(
-            pinned.profile, budget - bundle.token_estimate - _charged(shown, pinned.pages)
+            pinned.profile, budget - bundle.token_estimate - shown
         )
         shown += more
         # and then the earlier answers' passages and further answers, from what is still left
         said_before, more = _roomier(
-            said_before,
-            answered_before,
-            budget - bundle.token_estimate - _charged(shown, pinned.pages),
+            said_before, answered_before, budget - bundle.token_estimate - shown
         )
         shown += more
         self._remember_semantic(found, result, bundle)
@@ -812,7 +752,6 @@ class ContextBuilder:
                 "token_estimate": bundle.token_estimate + shown,
                 "earlier_chats": said_before,
                 "profile": pinned.profile,
-                "people": pinned.pages,
                 "thread_summary": pinned.thread_summary,
                 "procedures": pinned.procedures,
                 "tools": pinned.tools,
@@ -864,19 +803,6 @@ class ContextBuilder:
         if not (shown or after.history):
             return report.model_copy(update={"status": EvidenceStatus.INSUFFICIENT})
         return self._coverage(report, query, shown, retrieved=[c.text for c in result.candidates])
-
-    async def _beliefs(
-        self, ctx: MemoryExecutionContext, query: str, visibility: Any, result: RetrievalResult
-    ) -> list[Candidate]:
-        """The beliefs the question finds, best first, where a model can be reached (they
-        exist nowhere else): a search of their own on the query's vectors, so a belief never
-        takes a memory's place in the ranking, and the memories are what they are without
-        beliefs."""
-        if not (self.assist.available and result.query_vectors and result.routed.needs_memories):
-            return []
-        return await self.engine.search_beliefs(
-            ctx, result.routed, query, visibility, result.query_vectors
-        )
 
     async def _similarity_and_standing(
         self,

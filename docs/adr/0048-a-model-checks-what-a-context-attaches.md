@@ -71,7 +71,7 @@ and before it is cached or sent, and names what does not help (`modules/context/
   exactly what had to go. Neither is kept. A rule that is removed takes the marks made by it
   with it (the tool hints' and the learned skills' `forbidden`).
 - **What it is never shown, so cannot remove:** a profile block a person or an agent wrote or
-  edited (their words, not derived data) and the people's pages; the conversation and its
+  edited (their words, not derived data); the conversation and its
   summary; what the assistant answered in earlier conversations; document passages and their
   summaries, whose evidence groups travel as units; working memory.
 - **What follows a removal:** a sentence read from a turn that was shown whole is not shown

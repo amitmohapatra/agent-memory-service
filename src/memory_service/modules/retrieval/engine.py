@@ -756,29 +756,6 @@ class RetrievalEngine:
         ]
         return candidates
 
-    async def search_beliefs(
-        self,
-        ctx: MemoryExecutionContext,
-        routed: RoutedQuery,
-        query: str,
-        visibility: VisibilitySpecification,
-        vectors: QueryVectors,
-    ) -> list[Candidate]:
-        """The beliefs ``query`` finds, best first, on vectors a retrieval already encoded:
-        a search of their own, so they never take a place in that retrieval's ranking
-        (``ContextBuilder``), and only those a reader may be shown (``_validate_beliefs``)."""
-        found = await self._search_kind(
-            ctx,
-            routed,
-            query,
-            visibility,
-            kind="belief",
-            document_ids=None,
-            encoded=vectors,
-            diagnostics={},
-        )
-        return await self._validate_beliefs(ctx, found, visibility)
-
     async def _validate_beliefs(
         self,
         ctx: MemoryExecutionContext,

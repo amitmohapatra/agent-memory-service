@@ -331,12 +331,24 @@ def timed(messages: Sequence[Message]) -> str:
     lines: list[str] = []
     day = None
     for m in messages:
+        said = m.content or _called(m)
+        if not said:
+            continue
         at = m.occurred_at.astimezone(UTC)
         if at.date() != day:
             day = at.date()
             lines.append(f"{at:%a %Y-%m-%d} (UTC)")
-        lines.append(f"[{at:%H:%M}] {m.role.value}: {m.content}")
+        lines.append(f"[{at:%H:%M}] {m.role.value}: {said}")
     return "\n".join(lines)
+
+
+def _called(m: Message) -> str:
+    """A message that only calls tools, as the step it took (the steps list's call form)."""
+    calls = ", ".join(
+        f"{c.name}({', '.join(f'{k}={_short(v)}' for k, v in c.arguments.items())})"
+        for c in m.tool_calls
+    )
+    return f"called {calls}" if calls else ""
 
 
 def _shown(m: Message, *, calls: bool) -> WindowMessage:

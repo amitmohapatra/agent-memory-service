@@ -69,20 +69,6 @@ class BeliefRepository(Protocol):
         then has weighed the newer values); returns them."""
         ...
 
-    async def visible(
-        self,
-        tenant_id: str,
-        keys: Sequence[str],
-        *,
-        scope_keys: Sequence[str],
-        people: int,
-        history: int,
-    ) -> list[Belief]:
-        """The beliefs of these units a reader with ``keys`` may read, of the ``people``
-        most-cited people: every current one, and the newest ``history`` earlier ones per
-        person."""
-        ...
-
     async def get_many(self, tenant_id: str, belief_ids: Sequence[str]) -> list[Belief]: ...
 
     async def mark_indexed(self, belief_ids: Sequence[str], *, fingerprint: str) -> None: ...

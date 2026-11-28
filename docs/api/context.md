@@ -256,7 +256,7 @@ every place of the context that states them
 | | |
 |---|---|
 | it can remove | lines of `standing_rules`, `preferences`, `about_user` and of the `user` block the profile job wrote; learned skills; memories; earlier values; graph facts |
-| it cannot remove | a profile block a person or an agent wrote or edited; the people's pages; the conversation and its summary; earlier conversations' answers; document passages and their summaries; working memory |
+| it cannot remove | a profile block a person or an agent wrote or edited; the conversation and its summary; earlier conversations' answers; document passages and their summaries; working memory |
 | what goes with a removal | every place that states the same thing; a sentence listed on its own, with the turn that says it; the marks a removed rule made on tools (`forbidden`); the plan of a removed skill |
 | it cannot | add, reword or reorder anything; store or forget anything |
 | when it does not answer in 2.5 s (or what the read's deadline leaves), or not in the schema | the context is sent as built |
@@ -278,7 +278,7 @@ for every request and leaves what is ranked for this one to be asked for
 
 | Carried | Left to a search (`/v1/recall`, `memory_search`) |
 | --- | --- |
-| the profile blocks and the people's pages | memories (`kinds: ["memory"]`) |
+| the profile blocks | memories (`kinds: ["memory"]`) |
 | the standing rules, preferences and what the person said of themselves that apply to the request | earlier values of a memory |
 | the conversation window and the thread's summary | graph facts (`kinds: ["fact"]`) |
 | the learned skills and the tool hints | document passages and summaries (`kinds: ["chunk", "summary"]`) |

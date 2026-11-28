@@ -100,6 +100,13 @@ def section(rendered: str, heading: str) -> str:
     return found.group(1) if found else ""
 
 
+async def believed(container, query: str) -> str:
+    """What a belief search finds for ``query``: a person's beliefs are searched for, never
+    carried in a context (it has no People section)."""
+    found = await container.services["retrieval"].retrieve(ME, query, kinds=("belief",))
+    return "\n".join(c.text for c in found.candidates)
+
+
 async def jobs_but_consolidation(container, uow_factory) -> None:
     """Every queued job but consolidation's (the index jobs, as on main): a run finds no
     model, so the beliefs stay as the write left them."""
@@ -113,7 +120,7 @@ async def jobs_but_consolidation(container, uow_factory) -> None:
 
 
 @pytest.mark.parametrize("how", ["api", "chat"])
-async def test_what_is_remembered_is_in_the_context_at_once_and_later_on_the_page(
+async def test_what_is_remembered_is_in_the_context_at_once_and_later_a_belief(
     container, uow_factory, api, how
 ) -> None:
     if how == "api":
@@ -124,8 +131,10 @@ async def test_what_is_remembered_is_in_the_context_at_once_and_later_on_the_pag
     now = (await context(api, "Where does my sister live?"))["rendered"]
     assert "Anna lives in Lisbon" in now and not section(now, "People")
     await consolidate_all(container.services["consolidation"], uow_factory)
+    await jobs_but_consolidation(container, uow_factory)  # the beliefs' index points
     later = (await context(api, "Where does my sister live?"))["rendered"]
-    assert "Anna" in section(later, "People")
+    assert "Anna" in await believed(container, "Where does my sister live?")
+    assert not section(later, "People")
 
 
 # -- forget ---------------------------------------------------------------------------------
@@ -155,30 +164,27 @@ async def forget_by_tool(api, container, memory_id: str) -> None:
 
 
 @pytest.mark.parametrize("forget", [forget_by_api, forget_by_handle, forget_by_tool])
-async def test_what_is_forgotten_leaves_the_page_and_the_search_before_any_rebuild(
+async def test_what_is_forgotten_leaves_the_beliefs_found_before_any_rebuild(
     container, uow_factory, api, forget
 ) -> None:
     sister = await remember(api, SISTER)
     await remember(api, DOG)
     await remember(api, HIKING)
     await settle(container)
-    page = section((await context(api, "Tell me about my family"))["rendered"], "People")
+    page = await believed(container, "sister Anna dog Rex hiking")
     assert "Has a sister Anna in Lisbon and a dog named Rex." in page and HIKING in page
 
     await forget(api, container, sister)
     # in the forget's own commit, before any job: the line citing it is hidden though it
     # also cites the dog, the line that does not stays
-    shown = await context(api, "Tell me about Anna and Rex")
-    page = section(shown["rendered"], "People")
+    page = await believed(container, "sister Anna dog Rex hiking")
     assert "Anna" not in page and "Rex" not in page and HIKING in page
-    assert "Anna" not in section(shown["rendered"], "Summaries")
-    found = await container.services["retrieval"].retrieve(ME, "sister Anna", kinds=("belief",))
-    assert not any("Anna" in c.text for c in found.candidates)
     # the index jobs run (the memory's own point goes, as on main), no rebuild yet
     await jobs_but_consolidation(container, uow_factory)
     assert "Anna" not in (await context(api, "Where does Anna live?"))["rendered"]
-    await consolidate_all(container.services["consolidation"], uow_factory)  # the rebuild
-    page = section((await context(api, "Tell me about my family"))["rendered"], "People")
+    await consolidate_all(container.services["consolidation"], uow_factory)
+    await jobs_but_consolidation(container, uow_factory)  # the rebuild, indexed
+    page = await believed(container, "sister Anna dog Rex hiking")
     assert "Has a dog named Rex." in page and HIKING in page and "Anna" not in page
 
 
@@ -196,7 +202,7 @@ async def test_forgetting_every_memory_of_the_user_leaves_no_belief(
     assert await beliefs(uow_factory) == []  # in the forgets' own commits
     await settle(container)
     assert await beliefs(uow_factory) == []
-    assert not section((await context(api, "Tell me about me"))["rendered"], "People")
+    assert not await believed(container, "sister Anna dog Rex hiking")
 
 
 # -- correct --------------------------------------------------------------------------------
@@ -207,39 +213,39 @@ async def test_a_corrected_value_is_current_at_once_and_the_old_one_only_an_earl
 ) -> None:
     old = await remember(api, "My manager is Priya.")
     await settle(container)
-    assert "Manager: Priya." in section(
-        (await context(api, "Who is my manager?"))["rendered"], "People"
-    )
+    assert "Manager: Priya." in await believed(container, "Who is my manager?")
     r = await api.post(
         f"/v1/memories/{old}/supersede",
         headers=HEADERS,
         json={"scope": SCOPE, "content": "My manager is now Ravi."},
     )
     assert r.status_code == 200, r.text
-    # before consolidation: the memories' own supersession says who it is now, and no page
-    # still says the old name
+    # before consolidation: the memories' own supersession says who it is now, and no belief
+    # found still says the old name
     await jobs_but_consolidation(container, uow_factory)
     before = (await context(api, "Who is my manager?"))["rendered"]
-    assert "Priya" not in section(before, "People")
+    assert "Priya" not in await believed(container, "Who is my manager?")
     current = section(before, "Memories") + section(before, "Most relevant")
     assert "Ravi" in current and "Priya" not in current
-    # consolidated: the page says Ravi, and Priya only under its earlier values
+    # consolidated: the belief found says Ravi
     await consolidate_all(container.services["consolidation"], uow_factory)
-    page = section((await context(api, "Who is my manager?"))["rendered"], "People")
-    now, _, earlier = page.partition("Earlier values (since replaced):")
-    assert "Manager: Ravi." in now and "Priya" not in now and "Manager: Priya." in earlier
+    await jobs_but_consolidation(container, uow_factory)  # the beliefs' index points
+    now = await believed(container, "Who is my manager?")
+    assert "Manager: Ravi." in now and "Priya" not in now
 
 
 # -- the profile heading the harness keys on ------------------------------------------------
 
 
-async def test_a_page_alone_does_not_make_a_context_look_as_if_it_had_a_profile(
+async def test_a_belief_does_not_make_a_context_look_as_if_it_had_a_profile(
     container, uow_factory, api
 ) -> None:
     await remember(api, HIKING)
     await settle(container)
     rendered = (await context(api, "What do I like?"))["rendered"]
-    assert HIKING in section(rendered, "People")
+    assert HIKING in await believed(container, "What do I like?") and not section(
+        rendered, "People"
+    )
     assert HARNESS_PROFILE not in rendered  # no note on remembered rules switched on
     full = await api.post(
         "/v1/context",
@@ -250,19 +256,16 @@ async def test_a_page_alone_does_not_make_a_context_look_as_if_it_had_a_profile(
     assert "profile" not in full.json()  # the profile blocks are the user's, as on main
 
 
-# -- the pages come on top of the memories --------------------------------------------------
+# -- a context carries no beliefs ----------------------------------------------------------
 
 
 async def test_the_memories_are_byte_identical_with_and_without_beliefs(
     container, uow_factory, api
 ) -> None:
-    """With the pages not charged (the default), what the context had on main is untouched:
-    the same memories, in the same order, for the same question and budget, whether or not
-    the person has beliefs. More facts than the memories' count limit, each also a belief
-    the question's search finds, so a belief that took a memory's place would show."""
-    from memory_service.modules.context import sections
-
-    assert sections.PEOPLE_CHARGED is False
+    """A context carries no beliefs: the same memories, in the same order, for the same
+    question and budget, whether or not the person has beliefs. More facts than the
+    memories' count limit, each also a belief the question's search finds, so a belief that
+    took a memory's place would show."""
     for n in range(110):
         # a day each: a distinct date orders the timeline and breaks the ranking's ties,
         # which are in no fixed order between two builds, beliefs or not
@@ -272,7 +275,7 @@ async def test_the_memories_are_byte_identical_with_and_without_beliefs(
     await settle(container)
     question = "Which museums in Lisbon did I visit?"
     with_beliefs = (await context(api, question))["rendered"]
-    assert len(await beliefs(uow_factory)) == 110 and section(with_beliefs, "People")
+    assert len(await beliefs(uow_factory)) == 110 and not section(with_beliefs, "People")
     async with uow_factory() as uow:  # the same memories, no belief (as on main)
         rows = await uow.session.execute(text("SELECT DISTINCT scope_key FROM beliefs"))
         for (scope,) in rows.all():
