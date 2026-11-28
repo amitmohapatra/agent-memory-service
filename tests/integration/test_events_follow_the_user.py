@@ -172,7 +172,10 @@ async def test_what_a_replaced_value_said_is_not_served_as_current(
         await _say(container, uow_factory, chat, said, role=role)
     bundle = await _context(container, chats[-1], "What's the status of PO-88120?")
     current = [i.text for i in (*bundle.memories, *bundle.knowledge, *bundle.graph_facts)]
-    assert any("DC-2" in t for t in current), current
+    # the newest value was said in this conversation: its window carries it (not repeated
+    # as a memory of it); the replaced one is in neither
+    window = [m.text for m in bundle.conversation.messages]
+    assert any("DC-2" in t for t in (*current, *window)), (current, window)
     assert not any("has shipped" in t for t in current), current
 
 

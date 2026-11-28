@@ -99,7 +99,9 @@ async def test_every_section_arrives_when_it_should_and_is_about_the_task(app, r
     bundle = await agent.context(TASK, token_budget=6000, tools=TOOLBOX, format="full")
     # the pinned sections
     assert [b.block for b in bundle.profile] == ["user"]
-    assert bundle.thread_summary, "a long thread is summarised"
+    # no summary without a model (pieced from the turns it is the turns again): the window
+    # carries the latest of them
+    assert bundle.thread_summary is None
     # the window carries what the summary does not cover yet
     assert bundle.conversation is not None and bundle.conversation.messages
     assert any("reprice Q-1183" in m.text for m in bundle.conversation.messages)
@@ -131,7 +133,6 @@ async def test_every_section_arrives_when_it_should_and_is_about_the_task(app, r
     rendered = prompt.rendered
     order = [
         "## Profile",
-        "## Conversation summary",
         "## Learned skills for this task",
         "## Tools",
         "## Recent conversation",
@@ -140,10 +141,11 @@ async def test_every_section_arrives_when_it_should_and_is_about_the_task(app, r
     # a Facts section only for what the memories above do not already say
     assert "## Knowledge" in rendered
 
-    # A framework that keeps its own history asks without the window: the summary stays.
+    # A framework that keeps its own history asks without the window (a summary would stay;
+    # this one, pieced together without a model, is not carried at all).
     own = await agent.context(TASK, token_budget=6000, window=False, format="full")
     assert own.conversation is None, "an absent section is none"
-    assert own.thread_summary and own.tools == [] and own.skills == []
+    assert own.thread_summary is None and own.tools == [] and own.skills == []
     bare = await agent.context(TASK, token_budget=6000, window=False)
     assert "## Recent conversation" not in bare.rendered and bare.tools is None
 
@@ -166,6 +168,9 @@ async def test_the_arguments_nothing_can_fill_are_asked_for(app, running) -> Non
     bundle = await agent.context(TASK, token_budget=6000, tools=TOOLBOX, format="full")
     update = next(t for t in bundle.tools if t.next)
     assert update.name == UPDATE and update.args["quote"] == "Q-1183"
-    assert [m.arg for m in update.missing] == ["approver"] and update.missing[0].question
+    # an identifier's digits are no price ("SKU-22" once filled price = -22); with no source
+    # for a price it is asked for, beside the approver
+    assert update.args.get("price") != -22
+    assert "approver" in [m.arg for m in update.missing] and update.missing[0].question
     prompt = await agent.context(TASK, token_budget=6000, tools=TOOLBOX)
     assert "missing approver" in prompt.rendered

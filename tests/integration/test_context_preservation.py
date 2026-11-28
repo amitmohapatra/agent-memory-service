@@ -205,7 +205,12 @@ async def test_bundle_report_reflects_budget(container, uow_factory) -> None:
     assert not ({k.page for k in small.knowledge} & seed_pages) or small.evidence.missing_groups
 
 
-async def test_global_summary_and_the_durable_thread_summary(container, uow_factory) -> None:
+async def test_global_summary_and_the_durable_thread_summary(
+    container, uow_factory, monkeypatch
+) -> None:
+    # the summary and window mechanics, whoever wrote the summary (one pieced together without
+    # a model is not carried: ``ContextSections._summary``)
+    monkeypatch.setattr("memory_service.modules.context.sections.EXTRACTIVE", "-")
     await _ingest(container, uow_factory)
     engine = container.services["retrieval"]
     res = await engine.retrieve(U1, "give me a summary of the main points of the report")
@@ -239,12 +244,15 @@ async def test_global_summary_and_the_durable_thread_summary(container, uow_fact
 
 
 async def test_a_summary_the_replayed_turns_say_word_for_word_is_left_out(
-    container, uow_factory
+    container, uow_factory, monkeypatch
 ) -> None:
     """A caller that replays the thread as its model's own conversation (the messages form)
     is sent the turns the summary covers too, word for word: the summary would say them a
     second time, so it is left out - only when every message it was folded from is replayed.
     The rendered form, whose window starts after the summary, keeps it as it always did."""
+    # the summary and window mechanics, whoever wrote the summary (one pieced together without
+    # a model is not carried: ``ContextSections._summary``)
+    monkeypatch.setattr("memory_service.modules.context.sections.EXTRACTIVE", "-")
     register_handlers(container)
     thread = new_id("thread")
     ctx = U1.model_copy(
