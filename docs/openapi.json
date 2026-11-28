@@ -6889,6 +6889,30 @@
       "SearchItem": {
         "description": "One result: enough to use it and cite it.",
         "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "for a turn of a conversation: the reply to it (speaker: text), when the reader may read it - the answer to a question it asked, what came of it",
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "for a turn of a conversation: the turn it replies to (speaker: text), when the reader may read it - what 'yes', 'we' or 'that one' refers to",
+            "title": "Before"
+          },
           "debug": {
             "anyOf": [
               {

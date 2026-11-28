@@ -51,7 +51,7 @@ from memory_service.domain.enums import (
     TemporalStatus,
 )
 from memory_service.domain.graph import BOOKKEEPING_LAYERS, layer_for
-from memory_service.domain.memory import CanonicalMemory, statement_kind_of
+from memory_service.domain.memory import VERBATIM_TURN, CanonicalMemory, statement_kind_of
 from memory_service.domain.profile import PROFILE_MEMORY_TYPES
 from memory_service.domain.text import SENTENCE_BREAK
 from memory_service.modules.context.window import steps_list, turns, units
@@ -67,6 +67,7 @@ from memory_service.modules.retrieval.engine import (
     RetrievalResult,
 )
 from memory_service.modules.retrieval.router import points_to_earlier_chat
+from memory_service.ports.repositories import Neighbour
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 
 SearchKind = Literal["memory", "chunk", "summary", "episode", "message", "fact", "belief"]
@@ -172,6 +173,16 @@ class SearchItem(BaseModel):
         "memory, the message that said it, an assistant reply the user's next message "
         "corrected, or an earlier conversation that holds nothing else of what its speaker "
         "said. Use the newer value; observed_on says when each was said.",
+    )
+    before: str | None = Field(
+        default=None,
+        description="for a turn of a conversation: the turn it replies to (speaker: text), "
+        "when the reader may read it - what 'yes', 'we' or 'that one' refers to",
+    )
+    after: str | None = Field(
+        default=None,
+        description="for a turn of a conversation: the reply to it (speaker: text), when the "
+        "reader may read it - the answer to a question it asked, what came of it",
     )
     debug: dict[str, Any] | None = Field(
         default=None, description="ranking detail; only with debug=true"
@@ -479,11 +490,50 @@ class Searcher:
             if item is not None
         ]
         return SearchResult(
-            items=await self._mark_replaced(ctx, merged[:limit], replies),
+            items=await self._with_neighbours(
+                ctx, await self._mark_replaced(ctx, merged[:limit], replies)
+            ),
             query_type=retrieved.routed.query_type if retrieved else QueryType.CONVERSATION_HISTORY,
             diagnostics=retrieved.diagnostics if retrieved else {},
             retrieval=retrieved,
         )
+
+    async def _with_neighbours(
+        self, ctx: MemoryExecutionContext, items: list[SearchItem]
+    ) -> list[SearchItem]:
+        """``items`` with each turn of a conversation it holds beside the turn it replies to
+        and the reply to it (``before``, ``after``), as a reader of the conversation has them:
+        a found turn alone ("We went to the Tate Modern together.") does not say who "we" are
+        or what came of it. Only a neighbour the reader may read; two indexed reads."""
+        ids = [i.id for i in items if i.kind == "memory"]
+        if not ids:
+            return items
+        async with self.uow_factory() as uow:
+            turns, said, prior = _turns_of(await uow.memories.get_many(ctx.tenant_id, ids))
+            before, after = await uow.memories.turns_around(
+                ctx.tenant_id,
+                said=sorted({p for p in prior.values() if p}),
+                replying_to=sorted({s for s in said.values() if s}),
+            )
+        if not before and not after:
+            return items
+        visibility = await self.engine.authz.visibility(ctx)
+
+        def shown(n: Neighbour | None) -> str | None:
+            readable = n is not None and visibility.allows(ctx.tenant_id, n.keys)
+            return f"{n.speaker}: {n.text}" if readable and n is not None else None
+
+        return [
+            i.model_copy(
+                update={
+                    "before": shown(before.get(prior.get(i.id) or "")),
+                    "after": shown(after.get(said.get(i.id) or "")),
+                }
+            )
+            if i.id in turns
+            else i
+            for i in items
+        ]
 
     async def _in_workspace(
         self, ctx: MemoryExecutionContext, items: list[SearchItem]
@@ -765,3 +815,26 @@ class Searcher:
                 since=since,
                 until=until,
             )
+
+
+def _turns_of(
+    found: Sequence[CanonicalMemory],
+) -> tuple[set[str], dict[str, str | None], dict[str, str | None]]:
+    """Of ``found``, the turns kept as said; what each was said as; and the turn each
+    replies to (``preceding_turn``)."""
+    turns = [m for m in found if (m.system_metadata or {}).get("category") == VERBATIM_TURN]
+    said = {m.memory_id: _said_as(m) for m in turns}
+    prior = {
+        m.memory_id: ((m.system_metadata or {}).get("preceding_turn") or {}).get("source_id")
+        for m in turns
+    }
+    return {m.memory_id for m in turns}, said, prior
+
+
+def _said_as(memory: Any) -> str | None:
+    """The message (or observation) a turn kept as said is: what the next turn's preceding
+    turn names (``preceding_turn.source_id``)."""
+    for ref in memory.evidence:
+        if ref.message_id or ref.source_id:
+            return ref.message_id or ref.source_id
+    return None

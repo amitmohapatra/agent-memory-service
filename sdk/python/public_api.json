@@ -1134,6 +1134,8 @@
     "BaseModel"
    ],
    "fields": {
+    "after": "str | None = None",
+    "before": "str | None = None",
     "debug": "dict[str, Any] | None = None",
     "document_id": "str | None = None",
     "id": "str (required)",
@@ -1493,5 +1495,5 @@
    "signature": "() -> 'MemoryContext | None'"
   }
  },
- "version": "0.6.12"
+ "version": "0.6.13"
 }

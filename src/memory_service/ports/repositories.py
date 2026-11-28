@@ -419,10 +419,28 @@ class OutboxRepository(Protocol):
         ...
 
 
+class Neighbour(BaseModel):
+    """A turn of a conversation next to a found one, with what a reader is checked against."""
+
+    model_config = ConfigDict(frozen=True)
+
+    speaker: str
+    text: str
+    keys: list[str]
+
+
 @runtime_checkable
 class MemoryRepository(Protocol):
     """Canonical memories (M7). Rows are never physically deleted by application code:
     ``forget`` soft-deletes and later purge is an operator task."""
+
+    async def turns_around(
+        self, tenant_id: str, *, said: Sequence[str], replying_to: Sequence[str]
+    ) -> tuple[dict[str, Neighbour], dict[str, Neighbour]]:
+        """The turns kept as said whose message (or observation) is one of ``said``, by that
+        id; and the turns kept as said that reply to one of ``replying_to`` (their preceding
+        turn), by the id replied to. One indexed read each, live turns only."""
+        ...
 
     async def add(self, memory: CanonicalMemory, *, visibility_keys: Sequence[str]) -> None: ...
     async def current_with_hash(

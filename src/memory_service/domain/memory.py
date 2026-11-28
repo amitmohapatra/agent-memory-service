@@ -64,7 +64,9 @@ def unverified_representation(metadata: Mapping[str, Any]) -> bool:
 
 #: Categories kept for good: the turns every other memory is evidence from, and the rules a
 #: user said are standing.
-LASTING_CATEGORIES = frozenset({"verbatim_turn", "rule"})
+#: A message kept as said, word for word (the turn itself).
+VERBATIM_TURN = "verbatim_turn"
+LASTING_CATEGORIES = frozenset({VERBATIM_TURN, "rule"})
 #: Kinds whose LONG_TERM memories are kept for good: what the user said about themselves.
 LASTING_TYPES = frozenset({MemoryType.USER, MemoryType.PREFERENCE})
 

@@ -7,6 +7,14 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added (service, SDK 0.6.13): a found turn comes with the conversation around it
+
+- **`before` and `after` on a search item** (`memory_search`, `/v1/recall`; SDK
+  `SearchItem`): for a turn of a conversation, the turn it replies to and the reply to it
+  (speaker: text), as a reader of the conversation has them - only those the reader may
+  read. An agent searching on demand got isolated lines ("We went to the Tate Modern
+  together.") where the attached context had the conversation.
+
 ### Changed (service): the memory tools say what each kind and option gives
 
 - **Every memory tool describes when to use it and when not, what it returns, and every

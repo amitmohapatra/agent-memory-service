@@ -34,11 +34,13 @@ from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.language import detect_language
 from memory_service.domain.memory import (
     UNVERIFIED_MEMORY_CATEGORIES,
+    VERBATIM_TURN,
     CanonicalMemory,
     Scope,
     TemporalState,
 )
 from memory_service.domain.subjects import is_identity
+from memory_service.ports.repositories import Neighbour
 
 
 def _asserted_source_filter() -> ColumnElement[bool]:
@@ -296,6 +298,41 @@ class SqlMemoryRepository:
         if r is None or r.tenant_id != tenant_id or r.deleted_at is not None or _invalid_derived(r):
             return None
         return _to_domain(r)
+
+    async def turns_around(
+        self, tenant_id: str, *, said: Sequence[str], replying_to: Sequence[str]
+    ) -> tuple[dict[str, Neighbour], dict[str, Neighbour]]:
+        params = {"tenant": tenant_id, "category": VERBATIM_TURN}
+        before: dict[str, Neighbour] = {}
+        if said:
+            rows = await self.s.execute(
+                text(
+                    "SELECT coalesce(ref ->> 'message_id', ref ->> 'source_id'), m.user_id, "
+                    "m.content, m.visibility_keys FROM memories m, "
+                    "jsonb_array_elements(m.evidence::jsonb) AS ref "
+                    "WHERE m.tenant_id = :tenant AND m.deleted_at IS NULL "
+                    "AND m.system_metadata::jsonb ->> 'category' = :category "
+                    "AND coalesce(ref ->> 'message_id', ref ->> 'source_id') = ANY(:ids)"
+                ),
+                {**params, "ids": list(said)},
+            )
+            for said_as, user_id, content, keys in rows.all():
+                before.setdefault(said_as, _neighbour(user_id, content, keys))
+        after: dict[str, Neighbour] = {}
+        if replying_to:
+            rows = await self.s.execute(
+                text(
+                    "SELECT m.system_metadata::jsonb -> 'preceding_turn' ->> 'source_id', "
+                    "m.user_id, m.content, m.visibility_keys FROM memories m "
+                    "WHERE m.tenant_id = :tenant AND m.deleted_at IS NULL "
+                    "AND m.system_metadata::jsonb ->> 'category' = :category "
+                    "AND m.system_metadata::jsonb -> 'preceding_turn' ->> 'source_id' = ANY(:ids)"
+                ),
+                {**params, "ids": list(replying_to)},
+            )
+            for replied, user_id, content, keys in rows.all():
+                after.setdefault(replied, _neighbour(user_id, content, keys))
+        return before, after
 
     async def get_many(self, tenant_id: str, memory_ids: Sequence[str]) -> list[CanonicalMemory]:
         if not memory_ids:
@@ -971,3 +1008,11 @@ class SqlMemoryRepository:
         await self.s.flush()
         await self._invalidate_dependents(tenant_id, [memory_id])
         return True
+
+
+def _neighbour(user_id: str | None, content: str, keys: Any) -> Neighbour:
+    return Neighbour(
+        speaker=user_id or "",
+        text=content,
+        keys=[str(k) for k in keys] if isinstance(keys, list) else [],
+    )
