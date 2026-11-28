@@ -216,7 +216,7 @@ def write_result(name: str, payload: dict[str, Any]) -> Path:
 
 
 async def reset_store(container: object, tenant_id: str) -> dict[str, int]:
-    """Clear everything a benchmark wrote, in *both* stores.
+    """Clear everything a benchmark wrote for ``tenant_id``, in *both* stores.
 
     Every harness here began with ``TRUNCATE`` over the SQL tables and stopped there — and the
     vector store is a separate server that a SQL truncation does not touch. So each run left
@@ -243,8 +243,25 @@ async def reset_store(container: object, tenant_id: str) -> dict[str, int]:
     engine = container.database.engine  # type: ignore[attr-defined]
     dedicated_database(str(engine.url.render_as_string(hide_password=True)))
 
+    # the tenant's rows only: a second corpus under its own tenants shares the database, and a
+    # TRUNCATE wiped the first one's rows while its vectors stayed. A table with no tenant of
+    # its own (a message's attachments) goes with its parent's rows (ON DELETE CASCADE).
     async with engine.begin() as conn:
-        await conn.execute(text(f"TRUNCATE {TABLES} RESTART IDENTITY CASCADE"))
+        owned = set(
+            (
+                await conn.execute(
+                    text(
+                        "SELECT table_name FROM information_schema.columns "
+                        "WHERE column_name = 'tenant_id' AND table_schema = current_schema()"
+                    )
+                )
+            ).scalars()
+        )
+        for table in (t.strip() for t in TABLES.split(",")):
+            if table in owned:
+                await conn.execute(
+                    text(f"DELETE FROM {table} WHERE tenant_id = :tenant"), {"tenant": tenant_id}
+                )
 
     removed: dict[str, int] = {}
     indexer = container.services["indexer"]  # type: ignore[attr-defined]
