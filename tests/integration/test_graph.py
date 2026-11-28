@@ -118,7 +118,8 @@ async def test_document_graph_and_multi_hop_stage(container, uow_factory) -> Non
     )
     assert bundle.graph_facts and bundle.graph_facts[0].citation.startswith("relation_id:rel_")
     assert bundle.graph_facts[0].evidence[0].source_type == "graph_fact"
-    assert "## Facts" in bundle.render()
+    # carried for the citations and the graph's recovery, not as lines: one search away
+    assert "## Facts" not in bundle.render()
     # Semantic queries without an entity match retrieve no graph facts.
     plain = await engine.retrieve(U1, "unrelated quantum badminton enquiry")
     assert not [c for c in plain.candidates if c.kind == "fact"]

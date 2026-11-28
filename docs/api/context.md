@@ -62,7 +62,7 @@ retrievers found an item) are not sent: `debug=true` adds them as `diagnostics`.
 ```json
 {
   "bundle_id": "6f1c0e2a9b",
-  "rendered": "## Tools\n- erp-create_po (confidence 0.74, next step): amount = 700, cost_centre = 'CC-7'; missing supplier_id: erp-create_po needs 'supplier id': what should it be?\n\n## Recent conversation\nUSER: …\n\n## Memories\n- [m1] …",
+  "rendered": "## Tools\n- erp-create_po: next step; amount = 700, cost_centre = 'CC-7'; missing supplier_id: erp-create_po needs 'supplier id': what should it be?\n\n## Recent conversation\nUSER: …\n\n## Memories\n- [m1] …",
   "token_estimate": 180,
   "evidence_status": "COMPLETE",
   "tools": [{"name": "erp-create_po", "confidence": 0.74}, {"name": "erp-get_budget", "confidence": 0.74}]

@@ -276,8 +276,9 @@ def test_a_skill_offered_for_a_request_says_how_closely_its_task_matches() -> No
 
 def test_the_learned_plan_is_spelled_out_once() -> None:
     """B7: the plan was rendered in full under Learned skills and again, as its tools, under
-    Tools. Its steps are now the tools listed first under Tools, in its order; its skill line
-    keeps the name, the track record and the fixes. Another skill is shown in full."""
+    Tools. Tools now lists only what the model's own tool list does not say (known values,
+    missing ones, the next step), so the skill line spells its steps once, with its track
+    record and fixes; the plan's tools are not listed again by name."""
     plan = skill_view(_procedure())
     other = skill_view(_procedure(procedure_id="prc_2", **_with_skill_steps()))
     hints = ToolHints(
@@ -290,16 +291,12 @@ def test_the_learned_plan_is_spelled_out_once() -> None:
         next="lookup_price",
     )
     skills, tools = pinned_sections([], None, [plan, other], hints)
-    assert "lookup_price -> update_quote" not in skills
-    assert "- update-quote-with-price-for: the first 2 tools under Tools, in that order" in (skills)
+    assert "- update-quote-with-price-for: lookup_price -> update_quote" in skills
+    assert "update_quote" not in tools and "lookup_price: next step" in tools
     assert "  - if update_quote on Locked: ask the owner to unlock it" in skills
     assert "- adds to your skill refund-policy: find_order -> refund" in skills
-    lines = tools.splitlines()[1:]
-    assert [line.split(" (")[0] for line in lines] == [
-        "- lookup_price",
-        "- update_quote",
-        "- search",
-    ]
+    # only what the tool list does not say: the next step (nothing is known or missing here)
+    assert tools.splitlines()[1:] == ["- lookup_price: next step"]
 
 
 # --- which toolbox earns tool hints ------------------------------------------------------

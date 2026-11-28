@@ -109,6 +109,8 @@ class WindowMessage(BaseModel):
     message_id: str
     role: str
     text: str
+    #: when it was said
+    said_at: datetime | None = None
     #: an ASSISTANT message's tool calls; a TOOL message's call (``WindowFormat.MESSAGES``)
     tool_calls: list[MessageToolCall] = Field(default_factory=list)
     tool_call_id: str | None = None
@@ -607,7 +609,6 @@ class ContextBundle(BaseModel):
         parts += earlier_chats_section(self.earlier_chats)
         repeated = self.redundant()
         memories = [m for m in self.memories if m.item_id not in repeated]
-        facts = [f for f in self.graph_facts if f.item_id not in repeated]
         if memories:
             # ``memories`` is the retrieval ranking, best first; the timeline below is a
             # sorted copy, so both orders are available and neither is thrown away.
@@ -640,8 +641,9 @@ class ContextBundle(BaseModel):
                     )
                 )
             )
-        if facts:
-            parts.append("## Facts\n" + "\n".join(f"- [{refs[f.item_id]}] {f.text}" for f in facts))
+        # graph facts are not carried as lines: what they say is in the memories they were
+        # read from, and a search asks for them (``kinds: ["fact"]``); the graph's work here
+        # is the memories it brings in (``GRAPH_EVIDENCE``)
         if self.summaries:
             parts.append(
                 "## Summaries\n"
@@ -731,12 +733,9 @@ def skills_section(skills: Sequence[SkillView], tools: ToolHints | None = None) 
     tool hints) says so, with the rule: what the runs did is no step to take against it."""
     if not skills:
         return None
-    laid_out = tools.plan.id if tools is not None and tools.plan and planned(tools) else None
     lines = []
     for skill in skills:
         steps = " -> ".join(skill.steps)
-        if skill.id == laid_out:
-            steps = f"the first {len(skill.steps)} tools under Tools, in that order"
         what = f"adds to your skill {skill.with_skill}" if skill.with_skill else skill.name
         record = f"worked {skill.success_rate:.0%} of {skill.support} runs"
         lines.append(f"- {what}: {steps} ({record}{_match(skill)})")
@@ -764,33 +763,28 @@ def planned(hints: ToolHints | None) -> bool:
 
 
 def tools_section(hints: ToolHints | None) -> str | None:
-    """The tools that fit - the learned plan's steps first, in its order, then the best of
-    the rest - each with its confidence, the arguments already found and the required ones
-    nothing found: what the model acts on and what it must ask."""
+    """What the model's own tool list does not say of the tools that fit: the argument values
+    already known, the required ones nothing found (and the question to ask), the next step,
+    and a step a standing rule forbids. A tool with nothing to add is not listed: the model
+    has its tools, with their descriptions, from its framework."""
     if hints is None or not hints.candidates:
         return None
-    steps = hints.plan.steps if planned(hints) and hints.plan is not None else []
-    ranked = sorted(
-        hints.candidates, key=lambda c: steps.index(c.name) if c.name in steps else len(steps)
-    )
-    room = max(TOOLS_SHOWN_MAX, len(steps))
-    shown = [c for i, c in enumerate(ranked) if i < room or c.name == hints.next]
-    return "## Tools\n" + "\n".join(_tool_line(c, hints) for c in shown)
+    lines = [line for c in hints.candidates if (line := _tool_line(c, hints))]
+    return "## Tools\n" + "\n".join(lines) if lines else None
 
 
-def _tool_line(candidate: ToolCandidate, hints: ToolHints) -> str:
+def _tool_line(candidate: ToolCandidate, hints: ToolHints) -> str | None:
     prefix = f"{candidate.name}."
     found = {
         k.removeprefix(prefix): p.value for k, p in hints.prefill.items() if k.startswith(prefix)
     }
     absent = [m for m in hints.missing if m.tool == candidate.name]
-    head = f"- {candidate.name} (confidence {candidate.confidence:.2f}"
-    head += ", next step)" if candidate.name == hints.next else ")"
-    details = [", ".join(f"{arg} = {value!r}" for arg, value in found.items())] if found else []
+    details = ["next step"] if candidate.name == hints.next else []
+    details += [", ".join(f"{arg} = {value!r}" for arg, value in found.items())] if found else []
     details += [f"missing {m.arg}: {m.question}" for m in absent]
     if candidate.name in hints.forbidden:
         details.append(f"{_FORBIDDEN.format(tool='this')}: {hints.forbidden[candidate.name]}")
-    return head + (": " + "; ".join(details) if details else "")
+    return f"- {candidate.name}: " + "; ".join(details) if details else None
 
 
 def pinned_sections(

@@ -153,7 +153,10 @@ def test_render_window_keeps_recent_visible_messages_within_budget() -> None:
     w = render_window("thr", msgs, token_budget=40)
     assert w.thread_id == "thr"
     assert "hidden" not in w.rendered and "old" not in w.rendered
-    assert w.rendered.splitlines() == ["USER: recent 0", "USER: recent 1", "USER: recent 2"]
+    # each message with the time it was said, under the day it was said on
+    said = [line.split("] ", 1)[1] for line in w.rendered.splitlines() if line.startswith("[")]
+    assert said == ["USER: recent 0", "USER: recent 1", "USER: recent 2"]
+    assert w.rendered.splitlines()[0].endswith("(UTC)")
     assert w.message_ids == [m.message_id for m in msgs[2:]]
     assert 0 < w.token_estimate <= 40
     # a single oversized message is still kept (never an empty window when there is content)

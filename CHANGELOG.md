@@ -7,6 +7,22 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service): the prompt form carries what the model needs, dated, and nothing it has
+
+- **Recent conversation is timed:** the day on a line of its own when it changes, each
+  message with the time it was said (UTC). A window message carries `said_at`.
+- **No `## Facts` lines:** a fact says what the memory it was read from says; the structured
+  form keeps them, and a search asks for them (`kinds: ["fact"]`).
+- **`## Tools` says only what the tool list does not:** argument values already known, the
+  ones missing with the question to ask, the next step, a step a rule forbids. No tool by name
+  alone, no confidence numbers; a learned skill spells out its own steps.
+- **This conversation's own turns are not repeated as memories:** its window and summary carry
+  them; what was read from them, and every other conversation's turns, still come.
+- **No summary written without a model:** pieced together from the turns it was the turns
+  again; the window carries the latest, a search the rest.
+- **An identifier's digits are never an amount:** "SKU-22" filled a price of -22 (a currency
+  code counts only standing apart from the number, "EUR 1,200").
+
 ### Changed (service): a context says each statement once, one line each
 
 A context could carry one statement three ways: as a memory, as a graph fact read from it

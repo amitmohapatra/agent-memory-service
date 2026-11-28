@@ -45,11 +45,9 @@ flowchart LR
    cosine when no word of the request names it. The second is the weaker match and the two
    are not one scale; the structured form carries both as `match` and `matched_by`.
 
-   When the context also carries tool hints and the best skill is their plan (every step a
-   candidate), its steps are spelled out once: they are the tools listed first under `## Tools`,
-   in its order, with their arguments and the next step, and its line here keeps the name, the
-   track record and the fixes (`- refund-an-order: the first 2 tools under Tools, in that order
-   (worked 95% of 40 runs; task match 0.83)`).
+   Its steps are spelled out here, once. `## Tools` lists no tool by name alone: only what the
+   model's own tool list does not say - the argument values already known, the ones missing
+   (with the question to ask) and the next step.
 
    The `tool_search` memory tool returns the best one as its `plan`. Nothing to load, nothing
    to install: the harness puts the context in front of the model, and every framework gets it.

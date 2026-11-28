@@ -324,11 +324,27 @@ def steps_list(
     )
 
 
+def timed(messages: Sequence[Message]) -> str:
+    """The recent conversation as the prompt reads it: the day on a line of its own whenever
+    it changes, each message with the time it was said (UTC) - a chat that spans days, a tool
+    result from hours ago and "what did I ask this morning" all need it."""
+    lines: list[str] = []
+    day = None
+    for m in messages:
+        at = m.occurred_at.astimezone(UTC)
+        if at.date() != day:
+            day = at.date()
+            lines.append(f"{at:%a %Y-%m-%d} (UTC)")
+        lines.append(f"[{at:%H:%M}] {m.role.value}: {m.content}")
+    return "\n".join(lines)
+
+
 def _shown(m: Message, *, calls: bool) -> WindowMessage:
     return WindowMessage(
         message_id=m.message_id,
         role=m.role.value,
         text=m.content,
+        said_at=m.occurred_at,
         tool_calls=list(m.tool_calls) if calls else [],
         tool_call_id=m.tool_call_id if calls else None,
         run_record=_facts(m) or None,

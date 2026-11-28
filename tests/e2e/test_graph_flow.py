@@ -83,7 +83,7 @@ def test_graph_query_and_context_facts(client) -> None:
         headers=H,
         json={"scope": scope, "query": "Why did Adjusted EBITDA increase despite lower revenue?"},
     ).json()
-    assert "## Facts" in prompt["rendered"]
+    assert "## Facts" not in prompt["rendered"]  # one search away (kinds ["fact"])
     pages = {k.get("page") for k in bundle["knowledge"]}
     assert {11, 14, 20} <= pages, pages
     # layer restriction: structural edges only

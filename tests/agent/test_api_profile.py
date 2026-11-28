@@ -148,7 +148,9 @@ async def test_a_line_the_job_appends_to_an_edited_block_goes_with_its_memory(ap
     running.portal.call(container.tasks.drain)
     assert _user_block(await user.profile()) == f"{written.text}\n- I work on the payments team."
 
-    await user.profile.edit("user", "- I prefer green tea, no sugar.", old="- I work on the payments team.")
+    await user.profile.edit(
+        "user", "- I prefer green tea, no sugar.", old="- I work on the payments team."
+    )
     await user.forget(tea.memory_id)  # the last one: the job has nothing left to learn from
     running.portal.call(container.tasks.drain)
     assert _user_block(await user.profile()) == f"{written.text}\n- I prefer green tea, no sugar."

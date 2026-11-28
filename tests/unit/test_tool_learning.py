@@ -1058,8 +1058,8 @@ async def test_a_tool_that_changes_something_gets_no_argument_for_a_question(tas
     assert not [k for k in hints.prefill if k.startswith("create_stock_rule.")]
     assert not [m for m in hints.missing if m.tool == "create_stock_rule"]
     assert hints.prefill["store_demand.store"].value == "S12", "the read is still prefilled"
-    line = next(x for x in (tools_section(hints) or "").splitlines() if "create_stock_rule" in x)
-    assert "min_units" not in line and "missing" not in line and "store" not in line
+    # nothing is found or asked for it, so the Tools section has nothing to say of it
+    assert not [x for x in (tools_section(hints) or "").splitlines() if "create_stock_rule" in x]
 
 
 async def test_a_tool_that_changes_something_is_prefilled_when_asked_to_act() -> None:
@@ -1144,3 +1144,24 @@ async def test_a_number_from_memory_or_profile_fills_a_number_argument() -> None
     assert (found.value, found.source) == (2, "memory")
     half = Prefill(tool="create_stock_rule", value="2.5", source="memory")
     assert _as_declared(half, RULE, "min_units") is None, "no whole number for an integer"
+
+
+@pytest.mark.parametrize(
+    ("value", "amount"),
+    [
+        ("EUR 1,200.50", 1200.5),
+        ("1200 EUR", 1200.0),
+        ("$1,200", 1200.0),
+        ("-5", -5.0),
+        ("SKU-22", None),
+        ("ST-101", None),
+        ("Q-1183", None),
+        ("ZZ999999", None),
+    ],
+)
+def test_an_identifiers_digits_are_never_an_amount(value: str, amount: float | None) -> None:
+    """A currency code standing apart from the number is an amount ("EUR 1,200.50"); one joined
+    to digits is an identifier, however few its letters: "SKU-22" filled a price of -22."""
+    from memory_service.modules.tools.hints import _number
+
+    assert _number(value) == amount

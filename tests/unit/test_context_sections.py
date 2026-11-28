@@ -69,13 +69,15 @@ def test_each_section_costs_what_it_renders_to() -> None:
             "candidates": [
                 ToolCandidate(name=f"tool_{i}", score=0.5, why="matches the task " * 5)
                 for i in range(20)
-            ]
+            ],
+            "next": "tool_0",
         }
     )
     cost = estimate_tokens(tools_section(many) or "")
     only_tools = Pinned(tools=many)
     kept, used = within_budget(only_tools, cost * 2)
-    assert kept.tools is not None and kept.tools.next == "erp-create_po" and used == cost
+    # the tools with nothing to add are not listed: only the next step costs anything
+    assert kept.tools is not None and kept.tools.next == "tool_0" and used == cost
 
 
 def test_a_summary_over_its_share_is_truncated_not_dropped() -> None:
@@ -126,10 +128,9 @@ def test_the_prompt_starts_from_the_pinned_sections() -> None:
     positions = [rendered.index(heading) for heading in order]
     assert positions == sorted(positions)
     assert "- order-paper: erp-get_stock -> erp-create_po (worked 90% of 10 runs)" in rendered
-    assert (
-        "- erp-create_po (confidence 0.00, next step): supplier = 'Acme'; "
-        "missing qty: How many?" in rendered
-    ), rendered
+    assert "- erp-create_po: next step; supplier = 'Acme'; missing qty: How many?" in rendered, (
+        rendered
+    )
     assert "step 2" not in rendered, "the why is for the full form, not the prompt"
     assert "[m1] Acme supplies paper" in rendered
 

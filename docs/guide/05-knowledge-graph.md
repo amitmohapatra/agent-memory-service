@@ -266,8 +266,10 @@ predicate the question cues first ("exclude" → `excludes`, "drove" or "why" �
 Copies of one document yield the same triple under different ids, and only one is kept.
 
 **What enters the context.** Facts become `kind="fact"` candidates in the bundle's
-`graph_facts` (cited `f1`, `f2`, …), appended after the ranked evidence so they never displace
-it. The chunks the facts cite are inserted right after the ranked evidence and before the
+`graph_facts` (the structured form carries them, with their citations), appended after the
+ranked evidence so they never displace it. The rendered prompt has no `## Facts` lines: what a
+fact says is in the memory it was read from, and a search asks for facts by kind (`kinds:
+["fact"]`). The chunks the facts cite are inserted right after the ranked evidence and before the
 facts; conversation relations point at memories, which are fetched under their own bound.
 Everything pulled in is checked against the same audience specification the store used.
 

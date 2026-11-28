@@ -35,6 +35,7 @@ from memory_service.domain.context_bundle import (
 from memory_service.domain.profile import USER_BLOCK
 from memory_service.domain.tools import ToolHints
 from memory_service.modules.authz.visibility import VisibilitySpecification
+from memory_service.modules.conversation.summary import EXTRACTIVE
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.profile.service import PersonPage
 from memory_service.modules.retrieval.engine import QueryVectors
@@ -331,7 +332,9 @@ class ContextSections:
             return None
         async with self.uow_factory() as uow:
             summary = await uow.summaries.latest(ctx.tenant_id, ctx.thread_id)
-        if summary is None:
+        # pieced together from the turns without a model it is the turns again, not a
+        # summary: the window carries the latest of them, a search the rest
+        if summary is None or summary.model == EXTRACTIVE:
             return None
         return ThreadSummaryView(
             text=summary.text,

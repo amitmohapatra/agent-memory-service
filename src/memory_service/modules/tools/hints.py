@@ -782,11 +782,17 @@ def _worded(job: _Resolution, arg: str) -> bool:
     return bool(_declared(job.tool, arg).get("description"))
 
 
+#: An amount: a number, with thousands separators, and a currency code standing apart from it
+#: ("EUR 1,200.50", "1200 EUR"). A code joined to digits ("SKU-22", "ST-101") is an identifier.
+_AMOUNT: Final = re.compile(r"(?:[A-Za-z]{3}\s+)?([-+]?\d[\d,]*(?:\.\d+)?)(?:\s+[A-Za-z]{3})?")
+
+
 def _number(value: str) -> float | None:
     """The number ``value`` is, with a currency and thousands separators around it ("EUR
-    1,200.50"); None for anything else - an identifier's digits ("ST-101") are no number."""
-    bare = re.sub(r"\b[A-Za-z]{3}\b|[$€£,\s]", "", value)
-    return float(bare) if re.fullmatch(r"-?\d+(?:\.\d+)?", bare) else None
+    1,200.50"); None for anything else - an identifier's digits ("ST-101", "SKU-22") are no
+    number, however few letters it has."""
+    found = _AMOUNT.fullmatch(re.sub(r"[$€£]", "", value).strip())
+    return float(found.group(1).replace(",", "")) if found else None
 
 
 def _asks_identifier(arg: str) -> bool:

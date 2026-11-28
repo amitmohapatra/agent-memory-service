@@ -371,8 +371,8 @@ was folded from (`modules/context/window.py`,
   text and resolved relative dates; a memory already shown above stands as a one-line
   pointer, so every body appears exactly once, and two or more values of one multi-valued
   slot ("participated in" on four days) are gathered into one dated block;
-- `## Facts`, `## Summaries`, `## Knowledge` — graph facts, summaries and document passages
-  with their section paths;
+- `## Summaries`, `## Knowledge` — summaries and document passages with their section paths
+  (graph facts are in the structured form only; a search asks for them by kind);
 - `## Evidence status (long-term memory)` — only when it is not `COMPLETE`, and no hinted tool
   answers the question (a tool candidate at confidence 0.5 or more). It is about what memory
   holds for the question, never the conversation.

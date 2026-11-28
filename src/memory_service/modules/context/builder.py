@@ -63,7 +63,7 @@ from memory_service.modules.context.sections import (
 from memory_service.modules.context.semantic_cache import SemanticBundleCache, semantic_key
 from memory_service.modules.context.standing import standing_blocks, with_more_about
 from memory_service.modules.context.views import full_view, prompt_view
-from memory_service.modules.context.window import replay_window, replays_summary
+from memory_service.modules.context.window import replay_window, replays_summary, timed
 from memory_service.modules.conversation.service import ConversationService
 from memory_service.modules.ingestion.hierarchy import estimate_tokens
 from memory_service.modules.llm.assist import LLMAssist
@@ -818,6 +818,7 @@ class ContextBuilder:
                 "tools": pinned.tools,
             }
         )
+        bundle = await self._without_this_chat(ctx, bundle)
         bundle = await self._checked(query, _as_asked(found, bundle), result, began)
         spent = self.assist.tokens_used() - tokens_before
         return bundle.model_copy(
@@ -949,6 +950,38 @@ class ContextBuilder:
                     vectors=result.query_vectors,
                 )
         pinned.procedures = ruled(pinned.procedures, query, pinned.profile, pinned.tools)
+
+    async def _without_this_chat(
+        self, ctx: MemoryExecutionContext, bundle: ContextBundle
+    ) -> ContextBundle:
+        """``bundle`` without the turns of the conversation it is for, kept as said: the
+        conversation's window and summary carry them, and as memories they were the same
+        words a second time ("Turn 0 about quotes" in the summary and among the memories).
+        What was read from them (a rule, a fact) stays, and so does every other
+        conversation's turn. One indexed read, and none without a conversation."""
+        turns = {
+            m.item_id: {ref.message_id for ref in m.evidence if ref.message_id}
+            for m in bundle.memories
+            if m.attributes.get("category") == VERBATIM_TURN
+        }
+        asked = sorted({message for found in turns.values() for message in found})
+        if not ctx.thread_id or not asked:
+            return bundle
+        async with self.uow_factory() as uow:
+            here = await uow.messages.in_thread(ctx.tenant_id, ctx.thread_id, asked)
+        gone = {item for item, found in turns.items() if found and found <= here}
+        if not gone:
+            return bundle
+        return bundle.model_copy(
+            update={
+                "memories": [m for m in bundle.memories if m.item_id not in gone],
+                "token_estimate": max(
+                    0,
+                    bundle.token_estimate
+                    - sum(m.token_estimate for m in bundle.memories if m.item_id in gone),
+                ),
+            }
+        )
 
     async def _semantic_lookup(
         self, found: _Lookup, query: str
@@ -1613,12 +1646,14 @@ def render_window(
         chosen.append(m)
         used += t
     chosen.reverse()
-    rendered = "\n".join(f"{m.role.value}: {m.content}" for m in chosen)
+    rendered = timed(chosen)
     return ConversationWindow(
         thread_id=thread_id,
         message_ids=[m.message_id for m in chosen],
         messages=[
-            WindowMessage(message_id=m.message_id, role=m.role.value, text=m.content)
+            WindowMessage(
+                message_id=m.message_id, role=m.role.value, text=m.content, said_at=m.occurred_at
+            )
             for m in chosen
         ],
         rendered=rendered,
@@ -1682,6 +1717,8 @@ async def _nothing() -> list[Message]:
     return []
 
 
+#: The category of a turn kept as said (``modules.memory.native``).
+VERBATIM_TURN: Final = "verbatim_turn"
 #: What a bundle's cache key gains by the caller's ``recall``: a context that leaves what is
 #: ranked to be asked for is another context; one that carries it keeps the key it always had.
 _RECALL_KEYS: Final[dict[bool, tuple[str, ...]]] = {True: (), False: ("recall=off",)}
