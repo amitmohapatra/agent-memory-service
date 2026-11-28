@@ -36,27 +36,32 @@ async def _plan(conn, statement: str, parameters: object) -> str:
     return "\n".join(r[0] for r in rows)
 
 
-async def test_no_turn_lookup_reads_the_whole_table(container, uow_factory) -> None:
-    sent = await _sent(container, uow_factory)
-    assert len(sent) == 3
-    async with container.database.engine.connect() as conn:
-        await conn.exec_driver_sql("SET enable_seqscan = off")
-        for statement, parameters in sent:
-            plan = await _plan(conn, statement, parameters)
-            assert "Seq Scan on memories" not in plan, plan
+#: The indexes the turn lookups are built to read (migration 0041).
+OURS = ("ix_memories_turn_messages", "ix_memories_turn_replies")
 
 
-async def test_the_lookups_by_message_read_the_message_index(container, uow_factory) -> None:
-    """On an empty table the tenant's replies index costs least for every lookup; with it set
-    aside (in a transaction rolled back), the lookups by message read the index built for
-    them - their expression and predicate match it."""
+async def test_each_turn_lookup_can_read_its_index(container, uow_factory) -> None:
+    """Each lookup's expression and predicate match its index: with every other index of
+    the table set aside (in a transaction rolled back) and sequential scans off, the lookups
+    by message read ix_memories_turn_messages and the one by reply ix_memories_turn_replies.
+    Which index the planner picks among several depends on the table's statistics; whether a
+    query can use the one built for it does not."""
     by_message, replying, read_from = await _sent(container, uow_factory)
     async with container.database.engine.connect() as conn:
         held = await conn.begin()
         try:
+            others = await conn.exec_driver_sql(
+                "SELECT c.relname FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid "
+                "WHERE i.indrelid = 'memories'::regclass AND NOT i.indisprimary "
+                "AND NOT EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid = i.indexrelid)"
+            )
+            for (name,) in others.all():
+                if name not in OURS:
+                    await conn.exec_driver_sql(f'DROP INDEX "{name}"')
             await conn.exec_driver_sql("SET LOCAL enable_seqscan = off")
             assert "ix_memories_turn_replies" in await _plan(conn, *replying)
-            await conn.exec_driver_sql("DROP INDEX ix_memories_turn_replies")
+            # the replies index leads with the tenant too: aside, as the others are
+            await conn.exec_driver_sql('DROP INDEX "ix_memories_turn_replies"')
             for statement, parameters in (by_message, read_from):
                 plan = await _plan(conn, statement, parameters)
                 assert "ix_memories_turn_messages" in plan, plan
