@@ -152,7 +152,7 @@ JobStatus = Literal["PENDING", "RUNNING", "SUCCEEDED", "FAILED", "RETRYING", "CA
 DocumentStatus = Literal["STAGED", "READY", "FAILED"]
 ArchiveStatus = Literal["STAGED", "ARCHIVING", "ARCHIVED", "PURGED"]
 #: What ``search`` reads: memories, document passages, document summaries, thread messages.
-SearchKind = Literal["memory", "chunk", "summary", "episode", "message", "fact"]
+SearchKind = Literal["memory", "chunk", "summary", "episode", "message", "fact", "belief"]
 ClaimVerdictValue = Literal["supported", "unsupported", "contradicted", "borderline"]
 GroundingMethod = Literal["citation", "nli", "judge"]
 ToolStatus = Literal["ok", "error", "timeout", "rejected", "cancelled"]

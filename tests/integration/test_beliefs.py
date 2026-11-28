@@ -595,3 +595,24 @@ async def test_a_search_index_rebuild_restores_the_beliefs(container, uow_factor
     assert report.ok and any(name.startswith("beliefs_") for name in report.dropped)
     found = await container.services["retrieval"].retrieve(ASKER, "bees balcony", kinds=("belief",))
     assert held.belief_id in {c.record_id for c in found.candidates}
+
+
+async def test_an_agent_reaches_beliefs_with_its_memory_tool(container, uow_factory, wired) -> None:
+    """A context carries no beliefs: what memory concluded about a person is what an agent
+    searches for (``memory_search`` with ``kinds: ["belief"]``), and only what it may read -
+    a belief that cites a memory hidden from the reader is hidden too."""
+
+    def answer(prompt: str) -> list[dict]:
+        return [entry("add", [short], text) for text, short in ids(prompt).items()]
+
+    wired(StubModel(answer))
+    await say(
+        container, uow_factory, "caroline", "I am allergic to peanuts.", visibility=Visibility.USER
+    )
+    await settle(container)
+    tools = container.services["agent_tools"]
+    asked = {"query": "Is Caroline allergic to anything?", "kinds": ["belief"]}
+    own = await tools.call(ASKER.model_copy(update={"user_id": "caroline"}), "memory_search", asked)
+    assert any("peanuts" in i["text"] and i["kind"] == "belief" for i in own), own
+    theirs = await tools.call(ASKER, "memory_search", asked)
+    assert not any("peanuts" in i["text"] for i in theirs)

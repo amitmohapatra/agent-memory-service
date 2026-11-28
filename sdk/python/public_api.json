@@ -1137,7 +1137,7 @@
     "debug": "dict[str, Any] | None = None",
     "document_id": "str | None = None",
     "id": "str (required)",
-    "kind": "Literal['memory', 'chunk', 'summary', 'episode', 'message', 'fact'] (required)",
+    "kind": "Literal['memory', 'chunk', 'summary', 'episode', 'message', 'fact', 'belief'] (required)",
     "observed_on": "str | None = None",
     "page": "int | None = None",
     "superseded": "bool | None = None",
@@ -1493,5 +1493,5 @@
    "signature": "() -> 'MemoryContext | None'"
   }
  },
- "version": "0.6.11"
+ "version": "0.6.12"
 }

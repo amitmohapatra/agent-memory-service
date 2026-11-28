@@ -7,6 +7,13 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Added (service, SDK 0.6.12): an agent searches beliefs
+
+- **`kinds: ["belief"]`** on `memory_search` and `/v1/recall` (SDK `SearchKind` gains
+  `"belief"`): what memory concluded about a person from what was said, current values only,
+  and only those a reader may see (a belief citing a memory hidden from the reader is hidden
+  too). A context no longer carries beliefs, so a search is how an agent reaches them.
+
 ### Changed (service): the context is the agreed sections, each statement once
 
 - **No People section and no beliefs in a context:** a person's beliefs are still written and

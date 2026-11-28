@@ -69,10 +69,10 @@ from memory_service.modules.retrieval.engine import (
 from memory_service.modules.retrieval.router import points_to_earlier_chat
 from memory_service.ports.uow import UnitOfWork, UnitOfWorkFactory
 
-SearchKind = Literal["memory", "chunk", "summary", "episode", "message", "fact"]
+SearchKind = Literal["memory", "chunk", "summary", "episode", "message", "fact", "belief"]
 #: The kinds the index holds. A ``fact`` is no record of it: the knowledge graph gives the
 #: relations of what the query names, beside whatever the index is searched for.
-_INDEXED: Final = ("chunk", "memory", "summary", "episode")
+_INDEXED: Final = ("chunk", "memory", "summary", "episode", "belief")
 #: How a search orders what it returns: by meaning, or the messages by when they were said.
 Order = Literal["relevance", "newest", "oldest"]
 #: Whose messages a search by time keeps.
@@ -146,8 +146,9 @@ class SearchItem(BaseModel):
     kind: SearchKind = Field(
         description="What the item is: memory (something learned or stated), chunk (a "
         "document passage), summary (a document summary), episode (an earlier conversation "
-        "of this user), message (what was said, here or in an earlier conversation) or fact "
-        "(a relation the knowledge graph holds)."
+        "of this user), message (what was said, here or in an earlier conversation), fact "
+        "(a relation the knowledge graph holds) or belief (what memory concluded about a "
+        "person from what was said, current values only)."
     )
     text: str = Field(description="The item's text (clipped for long passages).")
     observed_on: str | None = Field(
