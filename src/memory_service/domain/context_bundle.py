@@ -24,7 +24,11 @@ from memory_service.domain.enums import (
 )
 from memory_service.domain.evidence import EvidenceRef
 from memory_service.domain.grounding import GroundingReport
-from memory_service.domain.memory import aggregate_statement, unverified_representation
+from memory_service.domain.memory import (
+    aggregate_statement,
+    resolved_dates,
+    unverified_representation,
+)
 from memory_service.domain.predicates import is_multi_valued
 from memory_service.domain.tools import SkillView, ToolCandidate, ToolHints
 
@@ -413,18 +417,12 @@ def _memory_line(m: Any, ref: str, *, body: str | None = None) -> str:
 
 
 def _resolved_dates(m: Any) -> str:
-    """``(three days ago = 2023-05-05)``: the relative dates the text names, resolved at
-    ingest against the day it was said, so the reader never does that arithmetic.
-
-    Named and counted offsets only, never weekday phrases like "last Tuesday" - see
-    ``modules.memory.temporal`` for why guessing those is worse than leaving them."""
-    mentions = m.attributes.get("dated_mentions") or ()
-    pairs = [
-        f"{mention.get('text')} = {mention.get('date')}"
-        for mention in mentions
-        if isinstance(mention, dict) and mention.get("text") and mention.get("date")
-    ]
-    return f"({'; '.join(pairs)})" if pairs else ""
+    """``(three days ago = 2023-05-05)``: the relative dates the text names, resolved
+    (``domain.memory.resolved_dates``). Named and counted offsets only, never weekday phrases
+    like "last Tuesday" - see ``modules.memory.temporal`` for why guessing those is worse
+    than leaving them."""
+    dates = resolved_dates(m.attributes.get("dated_mentions"))
+    return f"({dates})" if dates else ""
 
 
 #: How many memories of one multi-valued slot it takes before they are gathered into a single

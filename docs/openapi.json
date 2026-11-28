@@ -6913,6 +6913,18 @@
             "description": "for a turn of a conversation: the turn it replies to (speaker: text), when the reader may read it - what 'yes', 'we' or 'that one' refers to",
             "title": "Before"
           },
+          "dates": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the relative dates the text names, resolved against the day it was said ('yesterday = 2023-05-07; last week = 2023-04-24..2023-04-30')",
+            "title": "Dates"
+          },
           "debug": {
             "anyOf": [
               {

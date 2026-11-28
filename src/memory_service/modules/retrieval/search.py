@@ -54,6 +54,7 @@ from memory_service.domain.graph import BOOKKEEPING_LAYERS, layer_for
 from memory_service.domain.memory import (
     VERBATIM_TURN,
     CanonicalMemory,
+    resolved_dates,
     speaker_of,
     statement_kind_of,
 )
@@ -185,6 +186,11 @@ class SearchItem(BaseModel):
         default=None,
         description="who said it: the person's id, or assistant for an agent's reply (for "
         "a memory read from a message, who said the message) - whose it is",
+    )
+    dates: str | None = Field(
+        default=None,
+        description="the relative dates the text names, resolved against the day it was said "
+        "('yesterday = 2023-05-07; last week = 2023-04-24..2023-04-30')",
     )
     before: str | None = Field(
         default=None,
@@ -329,6 +335,7 @@ def candidate_item(c: Candidate, *, debug: bool, text_chars: int | None = None) 
         speaker=speaker_of(c.payload.get("subject"), c.payload.get("owner_principal"))
         if c.kind == "memory"
         else None,
+        dates=resolved_dates(c.payload.get("dated_mentions")) or None,
         superseded=True
         if c.kind == "memory"
         and (c.payload.get("current") is False or c.payload.get("earlier_value"))

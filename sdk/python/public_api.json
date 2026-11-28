@@ -1136,6 +1136,7 @@
    "fields": {
     "after": "str | None = None",
     "before": "str | None = None",
+    "dates": "str | None = None",
     "debug": "dict[str, Any] | None = None",
     "document_id": "str | None = None",
     "id": "str (required)",
@@ -1496,5 +1497,5 @@
    "signature": "() -> 'MemoryContext | None'"
   }
  },
- "version": "0.6.14"
+ "version": "0.6.15"
 }

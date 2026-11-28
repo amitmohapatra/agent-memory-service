@@ -111,3 +111,43 @@ async def test_a_search_without_k_returns_what_a_context_would_carry(
     whole = await tools.call(U1, "memory_search", {"query": "hiking trips"})
     assert len(narrowed) == 5
     assert len([i for i in whole if "Trip note" in i["text"]]) >= 25, len(whole)
+
+
+async def test_a_found_turn_says_the_dates_it_names(container, uow_factory) -> None:
+    """A found turn carries its relative dates resolved against the day it was said, as the
+    context's line does ("yesterday = 2023-05-07"): the agent searching on demand otherwise
+    works them out itself, from the day alone."""
+    from datetime import UTC, datetime, timedelta
+
+    from memory_service.domain.enums import Visibility
+    from memory_service.domain.observation import ProcessingHints
+    from tests.integration.test_memory import U1, _observe
+
+    shared = ProcessingHints(visibility=Visibility.TENANT)
+    await _observe(container, uow_factory, U1, "I went to a pottery class yesterday.", hints=shared)
+    tools = container.services["agent_tools"]
+    found = await tools.call(U1, "memory_search", {"query": "pottery class", "k": 5})
+    [turn] = [i for i in found if "pottery" in i["text"]]
+    yesterday = (datetime.now(UTC) - timedelta(days=1)).date().isoformat()
+    assert turn["dates"] == f"yesterday = {yesterday}", turn
+
+
+async def test_a_turn_fetched_by_id_keeps_the_dates_it_names(container, uow_factory) -> None:
+    """A turn the engine fetches by id - what a reading finds, a replacement, a derived
+    memory's source - carries its resolved dates as an indexed hit does: the context printed
+    "(yesterday = ...)" for a turn found by search and nothing for the same turn fetched."""
+    from memory_service.domain.enums import Visibility
+    from memory_service.domain.memory import VERBATIM_TURN
+    from memory_service.domain.observation import ProcessingHints
+    from memory_service.modules.retrieval.engine import memory_candidate
+    from tests.integration.test_memory import U1, _memories, _observe
+
+    shared = ProcessingHints(visibility=Visibility.TENANT)
+    await _observe(container, uow_factory, U1, "I went to a pottery class yesterday.", hints=shared)
+    [turn] = [
+        m
+        for m in await _memories(uow_factory, U1, container)
+        if m.system_metadata.get("category") == VERBATIM_TURN
+    ]
+    fetched = memory_candidate(turn, retriever="exact", score=1.0)
+    assert fetched.payload["dated_mentions"] == turn.system_metadata["dated_mentions"]

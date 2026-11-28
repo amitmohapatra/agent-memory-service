@@ -85,6 +85,19 @@ def speaker_of(subject: str | None, owner: str | None) -> str | None:
 
 
 LASTING_CATEGORIES = frozenset({VERBATIM_TURN, "rule"})
+
+
+def resolved_dates(mentions: Any) -> str:
+    """``three days ago = 2023-05-05; last week = ...``: the relative dates a text names,
+    resolved at ingest against the day it was said (``modules.memory.temporal``), so the
+    reader never does that arithmetic. Empty when it names none."""
+    return "; ".join(
+        f"{mention.get('text')} = {mention.get('date')}"
+        for mention in mentions or ()
+        if isinstance(mention, dict) and mention.get("text") and mention.get("date")
+    )
+
+
 #: Kinds whose LONG_TERM memories are kept for good: what the user said about themselves.
 LASTING_TYPES = frozenset({MemoryType.USER, MemoryType.PREFERENCE})
 

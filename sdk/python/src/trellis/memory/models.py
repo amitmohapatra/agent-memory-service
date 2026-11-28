@@ -371,6 +371,8 @@ class SearchItem(BaseModel):
     superseded: bool | None = None
     #: who said it: the person's id, or ``assistant`` for an agent's reply
     speaker: str | None = None
+    #: the relative dates the text names, resolved against the day it was said
+    dates: str | None = None
     #: a turn of a conversation: the turn it replies to, and the reply to it (speaker: text)
     before: str | None = None
     after: str | None = None

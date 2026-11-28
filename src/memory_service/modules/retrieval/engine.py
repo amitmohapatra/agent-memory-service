@@ -127,6 +127,8 @@ def memory_candidate(memory: CanonicalMemory, *, retriever: str, score: float) -
             # who wrote it: what tells two copies of one statement from equal words of others
             "owner_principal": memory.owner_principal,
             "observed_at": memory.temporal.observed_at.isoformat(),
+            # the relative dates the text names, resolved at ingest, as the index carries them
+            "dated_mentions": list(memory.system_metadata.get("dated_mentions", [])),
             "valid_from": memory.temporal.valid_from.isoformat()
             if memory.temporal.valid_from
             else None,

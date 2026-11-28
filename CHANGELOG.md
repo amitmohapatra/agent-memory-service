@@ -7,6 +7,17 @@ each entry says which one moved. Decisions behind each change are in the
 
 ## Unreleased
 
+### Changed (service, SDK 0.6.15): a found memory says the dates it names; a fetched turn keeps them
+
+- **`dates` on a search item** (`memory_search`, `/v1/recall`; SDK `SearchItem.dates`): the
+  relative dates the text names, resolved against the day it was said ("yesterday =
+  2023-05-07"), as a context line prints them. An agent searching on demand worked them out
+  itself from the day alone.
+- **A turn fetched by id keeps its resolved dates** (what a model's reading finds, a
+  replacement, a derived memory's source): the context printed "(yesterday = ...)" for a turn
+  the search found and nothing for the same turn fetched. One formatter for both
+  (`domain.memory.resolved_dates`).
+
 ### Changed (service, internal): one definition of each turn category
 
 - `verbatim_turn`, `referred_turn` and the set of both are defined once
